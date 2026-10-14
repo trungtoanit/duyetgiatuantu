@@ -24,6 +24,14 @@
     true,
   );
 
+  // panel.js (world tách biệt) nhờ chuyển trang trong app CRM: phải chạy ở world MAIN thì router mới nhận
+  document.addEventListener('dg:navigate', (e) => {
+    const path = String(e.detail || '');
+    if (!path.startsWith('/')) return;
+    history.pushState({}, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
+  });
+
   const API = /:8080\/v1\/admin\//;
   const emit = (kind, data) =>
     document.dispatchEvent(new CustomEvent('dg:data', { detail: JSON.stringify({ kind, data }) }));

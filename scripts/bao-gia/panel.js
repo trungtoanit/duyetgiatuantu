@@ -733,7 +733,7 @@ Quy tắc:
     }
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
-    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav><b>${esc(q?.code || c.code)}</b>${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
       <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
@@ -751,7 +751,7 @@ Quy tắc:
       ? `<h3>Báo giá chưa đọc – ${esc(state.unreadOf)}</h3><div class="box unread">${
           byStaff[state.unreadOf].unread
             .sort((a, b) => b.createdAt - a.createdAt)
-            .map((q) => `<a href="/co-hoi/update/${q.id}" data-nav><b>${esc(q.code)}</b> · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
+            .map((q) => `<a href="/co-hoi/update/${q.id}" data-nav data-code="${esc(q.code)}"><b>${esc(q.code)}</b> · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
             .join('') || '<span class="muted">Không có</span>'
         }</div>`
       : '';
@@ -810,9 +810,14 @@ Quy tắc:
     const a = e.target.closest('a[data-nav]');
     if (a && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
-      history.pushState({}, '', a.getAttribute('href'));
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      const href = a.getAttribute('href');
+      const code = a.dataset.code;
+      document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
+      // App không chuyển được (vd. router không nhận) → tải hẳn trang báo giá đó
+      setTimeout(() => {
+        if (location.pathname !== href || (code && !document.title.includes(code))) location.assign(href);
+      }, 3500);
       return render();
     }
     const b = e.target.closest('[data-act]');
