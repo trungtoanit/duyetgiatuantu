@@ -606,6 +606,8 @@ Quy tắc:
     .spinner { width: 22px; height: 22px; border: 3px solid #dbe4ff; border-top-color: #1d4ed8; border-radius: 50%;
       animation: dgspin .8s linear infinite; }
     @keyframes dgspin { to { transform: rotate(360deg); } }
+    .kh { display: inline-block; background: #fff1e6; color: #b45309; border: 1px solid #fcd9b6; border-radius: 4px;
+      padding: 0 6px; font-size: 12px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -677,6 +679,10 @@ Quy tắc:
       : `<span class="ava ini" style="width:${size}px;height:${size}px">${esc(initials)}</span>`;
   };
 
+  // Nhãn mã khách hàng (vd. "NPT VH"), di chuột để xem tên đầy đủ
+  const custTag = (q) =>
+    q?.customer?.code ? ` <span class="kh" title="${esc(q.customer.name || '')}">${esc(q.customer.code)}</span>` : '';
+
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
 
@@ -740,7 +746,7 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b> – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${mode === 'hoiNhanh' ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đạt chưa.</div>` : ''}
@@ -759,7 +765,7 @@ Quy tắc:
     }
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
-    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
       <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
@@ -777,7 +783,7 @@ Quy tắc:
       ? `<h3>Báo giá chưa đọc – ${esc(state.unreadOf)}</h3><div class="box unread">${
           byStaff[state.unreadOf].unread
             .sort((a, b) => b.createdAt - a.createdAt)
-            .map((q) => `<a href="/co-hoi/update/${q.id}" data-nav data-code="${esc(q.code)}"><b>${esc(q.code)}</b> · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
+            .map((q) => `<a href="/co-hoi/update/${q.id}" data-nav data-code="${esc(q.code)}"><b>${esc(q.code)}</b>${custTag(q)} · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
             .join('') || '<span class="muted">Không có</span>'
         }</div>`
       : '';

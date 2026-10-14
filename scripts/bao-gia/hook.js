@@ -50,7 +50,7 @@
     // Đã lên đơn hàng Misa (tình trạng báo giá có thể vẫn để Bản thảo)
     hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length),
     staff: person(o.staff),
-    customer: o.customer ? { id: o.customer.id, name: o.customer.name } : undefined,
+    customer: o.customer ? { id: o.customer.id, code: o.customer.code || undefined, name: o.customer.name } : undefined,
   });
   const slimComment = (f) => ({
     id: f.id,
