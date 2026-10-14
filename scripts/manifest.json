@@ -1,12 +1,19 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scripts": [
     {
-      "id": "example",
-      "files": ["lib/utils.js", "example.js"],
-      "matches": ["https://example.com/*"],
-      "runAt": "document_idle",
+      "id": "bao-gia-hook",
+      "files": ["bao-gia/hook.js"],
+      "matches": ["https://sale.tuantu.com.vn/*"],
+      "runAt": "document_start",
       "world": "MAIN"
+    },
+    {
+      "id": "bao-gia-panel",
+      "files": ["bao-gia/panel.js"],
+      "matches": ["https://sale.tuantu.com.vn/*"],
+      "runAt": "document_start",
+      "world": "USER_SCRIPT"
     }
   ]
 }

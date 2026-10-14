@@ -59,6 +59,8 @@ async function downloadBundle(cfg, sha) {
 
 async function register(bundle) {
   if (!userScriptsAvailable()) throw new Error('USER_SCRIPTS_DISABLED');
+  // Cho script ở world USER_SCRIPT gọi chrome.runtime.sendMessage về background.
+  await chrome.userScripts.configureWorld({ messaging: true });
   await chrome.userScripts.unregister();
   const list = bundle.scripts
     .filter((s) => s.enabled !== false)
@@ -129,6 +131,70 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
     await scheduleAlarm();
     await sync(true);
   }
+});
+
+// ---- Dịch vụ cho các script trên git (lưu trữ + gọi Claude) ----
+// Script chạy trong trang chỉ gọi qua đây, nên API key không bao giờ lộ ra trang web.
+
+let kvQueue = Promise.resolve();
+function kvSerial(fn) {
+  const p = kvQueue.then(fn);
+  kvQueue = p.catch(() => {});
+  return p;
+}
+const kvKey = (key) => `kv:${key}`;
+
+async function kvGet(key) {
+  const o = await chrome.storage.local.get(kvKey(key));
+  return o[kvKey(key)] ?? null;
+}
+
+async function callClaude({ system, prompt, maxTokens = 16000 }) {
+  const cfg = await getConfig();
+  if (!cfg.anthropicKey) throw new Error('Chưa nhập Anthropic API key trong popup của extension.');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': cfg.anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'server-side-fallback-2026-07-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: cfg.model || 'claude-opus-5-5',
+      max_tokens: maxTokens,
+      fallbacks: 'default',
+      output_config: { effort: 'medium' },
+      system,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error?.message || `Claude API lỗi ${res.status}`);
+  if (j.stop_reason === 'refusal') throw new Error('Claude từ chối xử lý yêu cầu này.');
+  return j.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+}
+
+const services = {
+  'kv.get': ({ key }) => kvGet(key),
+  'kv.set': ({ key, value }) => kvSerial(() => chrome.storage.local.set({ [kvKey(key)]: value })),
+  // Gộp nông một object map (vd. quotes theo id) – chạy tuần tự để không mất dữ liệu.
+  'kv.merge': ({ key, patch }) =>
+    kvSerial(async () => {
+      const cur = (await kvGet(key)) || {};
+      await chrome.storage.local.set({ [kvKey(key)]: Object.assign(cur, patch) });
+    }),
+  claude: callClaude,
+};
+
+chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {
+  const fn = services[msg?.type];
+  if (!fn) return false;
+  Promise.resolve(fn(msg))
+    .then((result) => sendResponse({ result }))
+    .catch((e) => sendResponse({ error: String(e.message || e) }));
+  return true;
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
