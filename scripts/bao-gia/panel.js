@@ -869,17 +869,19 @@ Quy tắc:
       e.preventDefault();
       const href = a.getAttribute('href');
       const code = a.dataset.code;
-      document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
       showLoading(code, (await kvGet('quotes'))[Number(href.match(/(\d+)$/)?.[1])]);
+      // Từ trang chi tiết báo giá sang báo giá khác: app CRM giữ dữ liệu cũ → phải tải hẳn trang mới
+      if (/^\/co-hoi\/update\//.test(location.pathname)) return location.assign(href);
+      document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       const arrived = () => location.pathname === href && (!code || document.title.includes(code));
       const started = Date.now();
       const timer = setInterval(() => {
         if (arrived()) {
           clearInterval(timer);
           hideLoading();
-        } else if (Date.now() - started > 3500 && location.pathname !== href) {
-          // App không chuyển được (vd. router không nhận) → tải hẳn trang báo giá đó
+        } else if (Date.now() - started > 3500) {
+          // App không chuyển được, hoặc chuyển URL nhưng vẫn hiện báo giá cũ → tải hẳn trang báo giá đó
           clearInterval(timer);
           location.assign(href);
         } else if (Date.now() - started > 15000) {
