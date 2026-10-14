@@ -303,7 +303,7 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
 
 BỘ CÂU HỎI NHÂN VIÊN
 
-TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó (có thể gộp thêm 1 câu "luôn cân nhắc hỏi" nếu chưa được trả lời), bỏ qua chế độ hỏi nhanh/chào lại:
+TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách), bỏ qua chế độ hỏi nhanh/chào lại:
 ${tinhHuongText()}
 
 Câu luôn cân nhắc hỏi (bỏ qua nếu luồng bình luận đã có câu trả lời):
