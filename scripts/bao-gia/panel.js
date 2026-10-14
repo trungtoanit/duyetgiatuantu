@@ -345,6 +345,10 @@ Yêu cầu:
         hoi: 'Xin giá khách làm bên kia là bao nhiêu để lần sau chào lại.',
       },
       {
+        khi: 'NVKD đã báo khách hứa / đồng ý lên đơn (vd. "nếu ok thì lên đơn luôn", "tuần sau khách đặt hàng", "Sếp lên đơn giúp em") mà báo giá vẫn CHƯA có đơn hàng',
+        hoi: 'Khách hứa lên đơn mà sao chưa lên vậy em, lý do gì em?',
+      },
+      {
         khi: 'NVKD báo đã xin giá mong muốn mà khách KHÔNG cho giá / không phản hồi giá mong muốn (vd. "em có xin giá nhưng khách không có phản hồi ạ")',
         hoi: 'Để anh cho giá mới nhé em.',
       },
@@ -897,6 +901,8 @@ Quy tắc:
     .knd.flexo { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
     .knd.offset { background: #faf5ff; color: #7e22ce; border-color: #e9d5ff; }
     .knd.both { background: linear-gradient(90deg, #eff6ff, #faf5ff); color: #5b21b6; border-color: #c4b5fd; }
+    .prm { margin-left: 6px; display: inline-block; background: #fefce8; color: #a16207; border: 1px solid #fde68a; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1098,6 +1104,24 @@ Quy tắc:
     return t ? ` <span class="crd" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">🧾 Xin công nợ${t.days ? ` ${t.days} ngày` : ''}</span>` : '';
   };
 
+  // Khách hứa lên đơn ("nếu ok thì lên đơn luôn", "tuần sau đặt hàng", "khách sẽ chốt đơn"…) mà báo giá chưa có đơn
+  const PROMISE_RE =
+    /(lên|len|đặt|dat|chốt|chot|xuống|xuong|ra)\s*(đơn|don)(?![\p{L}])|hứa\s*(lên|đặt|chốt|lấy)|(sẽ|se)\s*(lên|đặt|chốt|lấy)\s*(đơn|hàng)|(thứ\s*\d|tuần\s*sau|ngày\s*mai|mai)[^.!?]{0,50}(lên|đặt|chốt|lấy)\s*(đơn|hàng)/iu;
+  function promiseInfo(q, c) {
+    if (q?.hasOrder || hasOrder(q, c) || CLOSED.has(q?.quoteStatus)) return null;
+    let hit = null;
+    const walk = (t) => {
+      if (t.staff?.name !== meName && PROMISE_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
+  }
+  const promiseTag = (q, c) => {
+    const t = promiseInfo(q, c);
+    return t ? ` <span class="prm" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">🤝 Hứa lên đơn</span>` : '';
+  };
+
   // Nhận diện khách chưa / không chịu cọc
   const NO_DEPOSIT_RE = /(chưa|chua|không|khong|ko|k|hông|chẳng)\s*(chịu\s*|muốn\s*|đồng ý\s*|dong y\s*)?(đặt\s*|dat\s*)?(cọc|coc)\b|(cọc|coc)\s*(chưa|không|khong|ko)\b/i;
   function noDepositInfo(c) {
@@ -1167,6 +1191,12 @@ Quy tắc:
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
     if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {
       return { icon: '📭', why: 'Chưa có bình luận nào', text: `Báo giá này chưa có thông tin gì, tình hình khách sao rồi ${p}?` };
+    }
+    // Khách hứa lên đơn mà quá 1 ngày vẫn chưa lên
+    const pr = promiseInfo(q, c);
+    if (pr && hoursSince(pr.at) >= 24) {
+      const lead0 = hoursSince(pr.at) >= 72 ? `${humanDuration(hoursSince(pr.at))} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
+      return { icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: `${lead0}Khách hứa lên đơn mà sao chưa lên vậy ${p}, lý do gì ${p}?` };
     }
     if (noPrice(q)) return null;
     const last = lastComment(c);
@@ -1293,7 +1323,7 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
@@ -1325,6 +1355,7 @@ Quy tắc:
       nodep: ({ c }) => noDepositInfo(c),
       high: ({ c }) => highPriceInfo(c),
       credit: ({ c }) => creditInfo(c),
+      promise: ({ q, c }) => promiseInfo(q, c),
       lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
       flexo: ({ q }) => kindOf(q) === 'flexo',
       offset: ({ q }) => kindOf(q) === 'offset',
@@ -1340,6 +1371,7 @@ Quy tắc:
       const nodep = items.filter(({ c }) => noDepositInfo(c)).length;
       const high = items.filter(({ c }) => highPriceInfo(c)).length;
       const credit = items.filter(({ c }) => creditInfo(c)).length;
+      const promise = items.filter(({ q, c }) => promiseInfo(q, c)).length;
       const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
       const kinds = { flexo: 0, offset: 0, both: 0 };
       items.forEach(({ q }) => { const k = kindOf(q); if (k) kinds[k]++; });
@@ -1349,12 +1381,13 @@ Quy tắc:
         (nodep ? filterChip('nodep', 'nodep', `🚫 ${nodep} chưa cọc`) : '') +
         (high ? filterChip('high', 'hip', `💸 ${high} giá cao`) : '') +
         (credit ? filterChip('credit', 'crd', `🧾 ${credit} xin công nợ`) : '') +
+        (promise ? filterChip('promise', 'prm', `🤝 ${promise} hứa lên đơn`) : '') +
         (lowm ? filterChip('lowm', 'mgn low', `📈 ${lowm} bán dưới 30%`) : '') +
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
     const overdueBox = `
