@@ -172,6 +172,18 @@
     return listByMode(quotes, comments, 'chaoLai').filter(({ q }) => !active.has(custKey(q)));
   }
 
+  // Báo giá chưa có bình luận nào (bộ thu thập đã mở xem mà không thấy luồng nào), chưa chốt, tạo đã hơn 1 ngày
+  function noCommentList(quotes, comments, collected) {
+    return Object.values(quotes)
+      .filter(
+        (q) =>
+          q.id && collected[q.id] && !comments[q.id]?.threads?.length && q.quoteStatus && !CLOSED.has(q.quoteStatus) &&
+          !q.hasOrder && !isExcluded(q.staff?.name) && q.createdAt && hoursSince(q.createdAt) >= 24,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((q) => ({ q, c: { id: q.id, code: q.code, threads: [] }, last: null }));
+  }
+
   const ago = (sec) => {
     const h = hoursSince(sec);
     return h >= 48 ? `${Math.floor(h / 24)} ngày trước` : `${Math.floor(h)} giờ trước`;
@@ -1002,7 +1014,13 @@ Quy tắc:
 
   // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
   function quickQuestion(q, c, mode, p) {
-    if (noPrice(q) || !q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
+    if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
+    // Chưa có bình luận nào (đã mở xem/ thu thập mà không thấy) → hỏi NVKD vì sao chưa có thông tin
+    const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
+    if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {
+      return { icon: '📭', why: 'Chưa có bình luận nào', text: `Báo giá này chưa có thông tin gì, tình hình khách sao rồi ${p}?` };
+    }
+    if (noPrice(q)) return null;
     const last = lastComment(c);
     const h = last ? hoursSince(last.createdAt) : 0;
     const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
@@ -1036,7 +1054,7 @@ Quy tắc:
       ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
     </div>`;
   };
-  let renderCtx = { comments: {}, quotes: {}, quickSent: {}, quickDraft: {} };
+  let renderCtx = { comments: {}, quotes: {}, collected: {}, quickSent: {}, quickDraft: {} };
 
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
@@ -1067,6 +1085,7 @@ Quy tắc:
     ]);
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = staleList(quotes, comments, overdue);
+    const silent = noCommentList(quotes, comments, collected);
     const fab = root.querySelector('.fab');
     const alertCount = overdue.length;
     fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">⏰ ${alertCount}</span>` : ''}`;
@@ -1076,7 +1095,7 @@ Quy tắc:
     const editing = root.activeElement?.classList;
     if (editing?.contains('suggest-edit') || editing?.contains('quick-edit')) return; // đang sửa – không vẽ lại
     avatars = avatarIndex(quotes);
-    renderCtx = { comments, quotes, quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    renderCtx = { comments, quotes, collected, quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
 
 
@@ -1137,7 +1156,7 @@ Quy tắc:
     };
     const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
       <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${targetTag(c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
-        <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
+        <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})${revenueHtml(overdue)}</h3>
@@ -1148,6 +1167,9 @@ Quy tắc:
         : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}
       ${stale.length
         ? `<h3>💤 Cần chào lại khách (${stale.length})${revenueHtml(stale)}</h3><div class="box unread">${applyFilter(stale).slice(0, state.filter ? 200 : 20).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        : ''}
+      ${silent.length
+        ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${applyFilter(silent).slice(0, state.filter ? 300 : 30).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : ''}`;
 
 
