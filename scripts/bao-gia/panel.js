@@ -1046,7 +1046,14 @@ Quy tắc:
     .side:has(details[open]) { width: min(560px, calc(100vw - 32px)); }
     .side table td, .side table th { white-space: normal; }
     .warnx { color: #b45309; font-weight: 700; font-size: 12px; }
-    .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; cursor: move; user-select: none; touch-action: none; }
+    .side .grip { color: #94a3b8; font-size: 14px; }
+    .side-btn { margin-left: auto; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; width: 24px; height: 22px; cursor: pointer; font-size: 12px; line-height: 1; }
+    .side.collapsed { width: auto; padding: 8px 10px; }
+    .side.collapsed .side-h { margin-bottom: 0; }
+    .side-mini { font-weight: 700; font-size: 13px; margin-left: 6px; }
+    .side-mini b.good { color: #047857; } .side-mini b.bad { color: #b91c1c; }
+    .side.dragging { opacity: .85; box-shadow: 0 16px 40px rgba(15,23,42,.3); }
     .side-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
     .side-row b { font-size: 22px; font-weight: 800; }
     .side-row b.good { color: #047857; } .side-row b.bad { color: #b91c1c; }
@@ -1076,6 +1083,7 @@ Quy tắc:
       if (!p.hidden) render();
     };
     root.querySelector('.panel').addEventListener('click', onClick);
+    wireSide(root.querySelector('.side'));
     resumeLoading();
     maybeAutoOpen();
     let saveTimer;
@@ -1577,6 +1585,73 @@ Quy tắc:
   };
   const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
 
+  const lsGet = (k) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  };
+  const lsSet = (k, v) => {
+    try {
+      v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v);
+    } catch {}
+  };
+  // Áp vị trí đã lưu cho thẻ (giữ trong màn hình)
+  function placeSide(el) {
+    let pos = null;
+    try {
+      pos = JSON.parse(lsGet('dgSidePos') || 'null');
+    } catch {}
+    if (!pos) {
+      el.style.left = el.style.top = '';
+      el.style.right = '16px';
+      el.style.top = '130px';
+      return;
+    }
+    const w = el.offsetWidth || 280;
+    const h = el.offsetHeight || 60;
+    el.style.right = 'auto';
+    el.style.left = `${Math.max(0, Math.min(window.innerWidth - w, pos.left))}px`;
+    el.style.top = `${Math.max(0, Math.min(window.innerHeight - Math.min(h, 60), pos.top))}px`;
+  }
+  function wireSide(el) {
+    let drag = null;
+    el.addEventListener('pointerdown', (e) => {
+      const h = e.target.closest('.side-h');
+      if (!h || e.target.closest('button')) return;
+      const r = el.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      el.setPointerCapture(e.pointerId);
+      el.classList.add('dragging');
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      lsSet('dgSidePos', JSON.stringify({ left: e.clientX - drag.dx, top: e.clientY - drag.dy }));
+      placeSide(el);
+    });
+    const end = () => {
+      if (!drag) return;
+      drag = null;
+      el.classList.remove('dragging');
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('dblclick', (e) => {
+      if (!e.target.closest('.side-h') || e.target.closest('button')) return;
+      lsSet('dgSidePos', null);
+      placeSide(el);
+    });
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-side="toggle"]')) {
+        lsSet('dgSideCollapsed', lsGet('dgSideCollapsed') === '1' ? '0' : '1');
+        render();
+      }
+    });
+    window.addEventListener('resize', () => placeSide(el));
+  }
+
   function renderSide(q) {
     const el = root?.querySelector('.side');
     if (!el) return;
@@ -1590,11 +1665,25 @@ Quy tắc:
     const oldFx = renderCtx.margins?.[q.code]?.flexo && renderCtx.margins[q.code].flexo.mode !== 'sum';
     if (IS_TOP && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
     const open = el.querySelector('details')?.open;
+    const collapsed = lsGet('dgSideCollapsed') === '1';
     el.hidden = false;
-    el.innerHTML = `<div class="side-h">📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}</div>
+    el.classList.toggle('collapsed', collapsed);
+    const mini = [
+      kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '–'}` : '',
+      kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
+    ].filter(Boolean).join(' · ');
+    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="grip">⠿</span>📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}
+      ${collapsed ? `<span class="side-mini">${mini}</span>` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
+    if (collapsed) {
+      el.innerHTML = header;
+      placeSide(el);
+      return;
+    }
+    el.innerHTML = `${header}
       ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>`) : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
       ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
       ${marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`)}`;
+    placeSide(el);
   }
 
   const marginBox = (q, compact = false) => {
