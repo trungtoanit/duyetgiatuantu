@@ -924,8 +924,8 @@ Quy tắc:
     @keyframes dgbounce { 0%, 70%, 100% { transform: translateY(0); } 76% { transform: translateY(-7px); } 82% { transform: translateY(0); }
       88% { transform: translateY(-3px); } 94% { transform: translateY(0); } }
     @keyframes dgbadge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
-    .panel { position: fixed; left: 16px; bottom: 64px; z-index: 2147483647; width: min(1200px, calc(100vw - 32px));
-      max-height: calc(100vh - 88px); overflow: auto; background: #fff; color: #1f2328; border-radius: 12px; font-size: 14px;
+    .panel { position: fixed; left: 16px; top: 12px; bottom: 60px; z-index: 2147483647; width: min(1760px, calc(100vw - 32px));
+      max-height: none; overflow: auto; background: #fff; color: #1f2328; border-radius: 12px; font-size: 14px;
       box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 18px 22px; }
     .panel[hidden] { display: none; }
     h2 { font-size: 15px; margin: 0 0 4px; }
