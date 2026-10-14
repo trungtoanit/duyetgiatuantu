@@ -456,7 +456,8 @@ Quy tắc:
   const collect = { running: false, done: 0, total: 0, current: '', suggested: 0, lastRun: 0 };
   const TAB_ID = Math.random().toString(36).slice(2);
 
-  const getSettings = async () => ({ auto: true, ...(await kvGet('settings')) });
+  // auto: thu thập ngầm; autoOpen: tự mở bảng khi vào trang báo giá
+  const getSettings = async () => ({ auto: true, autoOpen: false, ...(await kvGet('settings')) });
 
   function pickQueue(quotes, comments, collected) {
     const now = Date.now() / 1000;
@@ -736,6 +737,7 @@ Quy tắc:
     };
     root.querySelector('.panel').addEventListener('click', onClick);
     resumeLoading();
+    maybeAutoOpen();
     let saveTimer;
     root.querySelector('.panel').addEventListener('input', (e) => {
       const ta = e.target.closest('textarea.suggest-edit');
@@ -941,6 +943,9 @@ Quy tắc:
           : `<button class="act" data-act="collect-now">Chạy ngay</button>
              <span class="muted">${collect.lastRun ? `lần cuối ${new Date(collect.lastRun).toLocaleTimeString('vi-VN')} · ${collect.done} báo giá, ${collect.suggested} gợi ý` : `tự chạy mỗi ${COLLECT.everyMin} phút`} · đã thu thập ${Object.keys(collected).length}</span>`}
       </div>
+      <div class="collector">📂 Tự mở bảng khi vào báo giá:
+        <button class="act" data-act="toggle-autoopen">${settings.autoOpen ? 'Đang bật' : 'Đang tắt'}</button>
+      </div>
       ${spend ? `<div class="spendline">💳 Claude: hôm nay <b>$${spend.today.toFixed(2)}</b> · tháng này <b>$${spend.month.toFixed(2)}</b>${spend.remaining != null ? ` · còn lại khoảng <b class="${spend.remaining < 5 ? 'bad' : 'good'}">$${spend.remaining.toFixed(2)}</b>` : ' · <span class="muted">nhập số dư trong popup extension để xem số còn lại</span>'}</div>` : ''}
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
@@ -1005,7 +1010,11 @@ Quy tắc:
     }
     else if (act === 'eval-quote') evaluateQuote(id);
     else if (act === 'suggest') suggestComment(id);
-    else if (act === 'toggle-auto') {
+    else if (act === 'toggle-autoopen') {
+      const cur = await getSettings();
+      await call({ type: 'kv.set', key: 'settings', value: { ...cur, autoOpen: !cur.autoOpen } });
+      render();
+    } else if (act === 'toggle-auto') {
       const cur = await getSettings();
       await call({ type: 'kv.set', key: 'settings', value: { ...cur, auto: !cur.auto } });
       if (!cur.auto) runCollector();
@@ -1027,11 +1036,20 @@ Quy tắc:
   setInterval(render, 5 * 60 * 1000);
 
   // ERP là SPA: theo dõi đổi trang để cập nhật mục "Báo giá đang mở"
+  // Vào trang báo giá + bật "Tự mở bảng" → mở bảng
+  async function maybeAutoOpen() {
+    if (!root || !currentQuoteId()) return;
+    if (!(await getSettings().catch(() => ({}))).autoOpen) return;
+    root.querySelector('.panel').hidden = false;
+    render();
+  }
+
   let lastPath = location.pathname;
   setInterval(() => {
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;
       render();
+      maybeAutoOpen();
     }
   }, 1000);
 
