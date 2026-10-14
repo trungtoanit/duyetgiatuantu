@@ -778,8 +778,9 @@ Quy tắc:
     .warn.quick { display: grid; gap: 6px; }
     .quick-why { font-weight: 600; }
     .quick-row { display: flex; align-items: center; gap: 12px; }
-    .quick-text { flex: 1; font-size: 16px; font-weight: 700; color: #1f2328; background: #fff; border-radius: 8px; padding: 8px 12px;
-      border: 1px dashed #d4a72c; }
+    .quick-text { flex: 1; font: inherit; font-size: 16px; font-weight: 700; color: #1f2328; background: #fff; border-radius: 8px;
+      padding: 8px 12px; border: 1px dashed #d4a72c; resize: vertical; min-height: 44px; line-height: 1.4; }
+    .quick-text:focus { outline: 2px solid #fcd34d; border-style: solid; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -800,6 +801,15 @@ Quy tắc:
     maybeAutoOpen();
     let saveTimer;
     root.querySelector('.panel').addEventListener('input', (e) => {
+      const qe = e.target.closest('textarea.quick-edit');
+      if (qe) {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          const id = Number(qe.dataset.id);
+          kvMerge('quickDraft', { [id]: { base: quickCtx[id]?.base, text: qe.value } });
+        }, 400);
+        return;
+      }
       const ta = e.target.closest('textarea.suggest-edit');
       if (!ta) return;
       clearTimeout(saveTimer);
@@ -897,20 +907,23 @@ Quy tắc:
   // Xưng hô với NVKD: đoán từ các bình luận cũ của quản lý gửi chính NVKD đó (chị / anh / em)
   function addressFor(staff, comments, quotes) {
     if (!staff) return 'em';
-    let chi = 0, anh = 0;
+    // Quản lý hay tự xưng ở đầu câu ("A cho em…", "E cho chị…") và gọi NVKD ở phía sau,
+    // nên lấy đại từ (chị/anh/em) xuất hiện CUỐI CÙNG trong mỗi bình luận làm cách gọi NVKD.
+    const votes = { chị: 0, anh: 0, em: 0 };
     for (const c of Object.values(comments)) {
       if (staffOf(quotes[c.id], c) !== staff) continue;
       const walk = (t) => {
         if (t.staff?.name === meName) {
-          const txt = ` ${(t.text || '').toLowerCase()} `;
-          chi += (txt.match(/\schị[\s,.?!]/g) || []).length;
-          anh += (txt.match(/\sanh[\s,.?!]/g) || []).length;
+          const words = (t.text || '').toLowerCase().match(/[\p{L}]+/gu) || [];
+          const last = [...words].reverse().find((w) => w in votes);
+          if (last) votes[last]++;
         }
         (t.children || []).forEach(walk);
       };
       (c.threads || []).forEach(walk);
     }
-    return chi > anh && chi > 0 ? 'chị' : anh > 0 ? 'anh' : 'em';
+    const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+    return best[1] > 0 ? best[0] : 'em';
   }
 
   // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
@@ -936,18 +949,20 @@ Quy tắc:
     const qq = quickQuestion(q, c, mode, p);
     if (!qq) return '';
     const id = q.id;
-    quickCtx[id] = qq.text;
+    const draft = renderCtx.quickDraft[id];
+    const text = draft?.base === qq.text ? draft.text : qq.text; // giữ bản đã sửa nếu câu gốc chưa đổi
+    quickCtx[id] = { base: qq.text, text };
     const sent = renderCtx.quickSent[id];
     const key = `quick:${id}`;
     return `<div class="warn quick">
-      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý:</div>
-      <div class="quick-row"><div class="quick-text">“${esc(qq.text)}”</div>
+      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:</div>
+      <div class="quick-row"><textarea class="quick-text quick-edit" data-id="${id}" rows="2">${esc(text)}</textarea>
         <button class="act primary" data-act="quick-send" data-id="${id}" ${state.busy.has(key) ? 'disabled' : ''}>
           ${state.busy.has(key) ? '<span class="spinner light"></span> Đang gửi…' : sent ? '📨 Gửi lại' : '📨 Bình luận ngay'}</button></div>
       ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
     </div>`;
   };
-  let renderCtx = { comments: {}, quotes: {}, quickSent: {} };
+  let renderCtx = { comments: {}, quotes: {}, quickSent: {}, quickDraft: {} };
 
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
@@ -984,9 +999,10 @@ Quy tắc:
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     if (!isOpen()) return;
-    if (root.activeElement?.classList?.contains('suggest-edit')) return; // đang sửa gợi ý – không vẽ lại
+    const editing = root.activeElement?.classList;
+    if (editing?.contains('suggest-edit') || editing?.contains('quick-edit')) return; // đang sửa – không vẽ lại
     avatars = avatarIndex(quotes);
-    renderCtx = { comments, quotes, quickSent: await kvGet('quickSent') };
+    renderCtx = { comments, quotes, quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
 
 
@@ -1119,7 +1135,7 @@ Quy tắc:
     else if (act === 'quick-send') {
       const key = `quick:${id}`;
       if (state.busy.has(key) || !quickCtx[id]) return;
-      const text = quickCtx[id];
+      const text = (root.querySelector(`textarea.quick-edit[data-id="${id}"]`)?.value ?? quickCtx[id].text).trim();
       setBusy(key, true);
       try {
         await sendComment(text, (await kvGet('quotes'))[id]?.code || document.title.match(/#(BG\d+)/)?.[1]);
