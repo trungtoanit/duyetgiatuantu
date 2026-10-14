@@ -288,10 +288,12 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
       'Đã có giá nhưng chưa gửi khách: đã gửi báo giá cho khách chưa, khi nào gửi?',
       'Đã gửi giá: khách phản hồi thế nào – giá ok chưa, chê cao thì giá mục tiêu bao nhiêu, đang so với bên nào?',
       'Khách đồng ý: khi nào lên đơn, cọc/thanh toán thế nào, ngày giao, đã duyệt mẫu/maket chưa?',
-      'Khách chê/chưa chốt: cần điều chỉnh gì (quy cách, số lượng, giao hàng) để chốt được?',
+      'Khách chê/chưa chốt: "Nếu giá vẫn chưa tới, khách tăng số lượng được không để anh tính lại cho sát?" (giữ nguyên ý và cách nói này, chỉ đổi xưng hô cho đúng)',
     ],
     // Chế độ hỏi nhanh: đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt
     hoiNhanh: ['Giá cả ok chưa, khách đồng ý chốt chưa?'],
+    // Câu kết ở gợi ý bình thường (thay cho kiểu hẹn giờ "phản hồi trước 11h")
+    ketThuc: 'Làm việc với khách xong báo cáo lại cho anh.',
     // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
     chaoLai: ['Chào lại khách hàng này chưa? Khách còn các dự án thùng khác không?'],
     // Tình huống đặc biệt nhận ra từ nội dung bình luận – ưu tiên hơn các chế độ trên
@@ -338,7 +340,8 @@ Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
 - Tuyệt đối không viết giọng văn mẫu, công sở hay "AI". Không mở đầu bằng lời chào dài, không cảm ơn, không ký tên. Nếu quản lý hay viết ngắn gọn thì viết ngắn gọn.
 - Chỉ đánh số câu hỏi nếu thật cần (từ 3 ý trở lên); 1–2 ý thì viết liền tự nhiên như nhắn tin.
-- Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã gặp/hẹn gặp hoặc đã audit khách thì không hỏi lại). Tối đa 3 ý hỏi; nên có mốc thời gian phản hồi nếu hợp văn phong.
+- Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã gặp/hẹn gặp hoặc đã audit khách thì không hỏi lại). Tối đa 3 ý hỏi.
+- Ở gợi ý bình thường (không phải hỏi nhanh / chào lại / tình huống đặc biệt): kết thúc bằng câu "${BO_CAU_HOI.ketThuc}" (chỉ đổi xưng hô cho đúng). KHÔNG hẹn giờ cụ thể kiểu "phản hồi trước 11h hôm nay".
 - Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
 - Chỉ trả về đúng nội dung bình luận, không giải thích, không dùng markdown.`;
 
@@ -460,7 +463,10 @@ Quy tắc:
     .good { color: #1a7f37; } .mid { color: #9a6700; } .bad { color: #cf222e; }
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
-    .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 2px 0; }
+    .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
+    .unread a:last-child { border-bottom: 0; }
+    textarea.suggest-edit { width: 100%; min-height: 110px; border: 1px solid #c8d6f5; border-radius: 8px; padding: 10px;
+      background: #eef4ff; font: inherit; line-height: 1.5; resize: vertical; margin-top: 8px; color: inherit; }
     .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .warn { background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
     .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
@@ -483,6 +489,17 @@ Quy tắc:
       if (!p.hidden) render();
     };
     root.querySelector('.panel').addEventListener('click', onClick);
+    let saveTimer;
+    root.querySelector('.panel').addEventListener('input', (e) => {
+      const ta = e.target.closest('textarea.suggest-edit');
+      if (!ta) return;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        const id = Number(ta.dataset.id);
+        const cur = (await kvGet('suggests'))[id] || {};
+        await kvMerge('suggests', { [id]: { ...cur, text: ta.value } });
+      }, 500);
+    });
     render();
   }
 
@@ -523,6 +540,7 @@ Quy tắc:
     const stale = listByMode(quotes, comments, 'chaoLai');
     root.querySelector('.fab').textContent = `📊 Đánh giá NVKD${overdue.length ? ` · ⏰ ${overdue.length}` : ''}`;
     if (!isOpen()) return;
+    if (root.activeElement?.classList?.contains('suggest-edit')) return; // đang sửa gợi ý – không vẽ lại
     const all = Object.values(quotes);
 
     // Gom theo NVKD
@@ -563,7 +581,7 @@ Quy tắc:
             ${btn('eval-quote', `q:${qid}`, '🤖 Đánh giá NVKD', 'Đang đánh giá…', `data-id="${qid}"`)}
           </div>
           ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')}${sg.styleFrom ? ` · học văn phong từ ${sg.styleFrom} bình luận của bạn` : ''})</span></div>
-            <div class="result suggest">${esc(sg.text)}</div>
+            <textarea class="suggest-edit" data-id="${qid}">${esc(sg.text)}</textarea>
             <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}">Chèn vào bình luận</button>
               <button class="act" data-act="copy" data-id="${qid}">Copy</button>
               <span class="muted">Tự mở "Trả lời" ở luồng của báo giá này (nếu có). Xem lại rồi tự bấm gửi.</span></div>` : ''}
@@ -571,7 +589,8 @@ Quy tắc:
         </div>`;
     }
 
-    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}"><b>${esc(q?.code || c.code)}</b> · ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))}
+    const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
+    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav><b>${esc(q?.code || c.code)}</b>${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br>${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))}
       <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
@@ -589,7 +608,7 @@ Quy tắc:
       ? `<h3>Báo giá chưa đọc – ${esc(state.unreadOf)}</h3><div class="box unread">${
           byStaff[state.unreadOf].unread
             .sort((a, b) => b.createdAt - a.createdAt)
-            .map((q) => `<a href="/co-hoi/update/${q.id}"><b>${esc(q.code)}</b> · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
+            .map((q) => `<a href="/co-hoi/update/${q.id}" data-nav><b>${esc(q.code)}</b> · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
             .join('') || '<span class="muted">Không có</span>'
         }</div>`
       : '';
@@ -627,6 +646,14 @@ Quy tắc:
   }
 
   async function onClick(e) {
+    // Link trong bảng: chuyển trang ngay trong ứng dụng CRM (không tải lại cả trang)
+    const a = e.target.closest('a[data-nav]');
+    if (a && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      history.pushState({}, '', a.getAttribute('href'));
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return render();
+    }
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
@@ -636,7 +663,8 @@ Quy tắc:
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'eval-staff') evaluateStaff(b.dataset.staff);
     else if (act === 'insert' || act === 'copy') {
-      const text = (await kvGet('suggests'))[id]?.text || '';
+      // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
+      const text = root.querySelector(`textarea.suggest-edit[data-id="${id}"]`)?.value ?? ((await kvGet('suggests'))[id]?.text || '');
       const code = (await kvGet('quotes'))[id]?.code || document.title.match(/#(BG\d+)/)?.[1];
       if (act === 'insert') await insertComment(text, code);
       else {
