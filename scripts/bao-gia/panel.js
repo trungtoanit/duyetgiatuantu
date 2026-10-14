@@ -282,12 +282,25 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
     hoiNhanh: ['Giá cả ok chưa, khách đồng ý chốt chưa?'],
     // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
     chaoLai: ['Chào lại khách hàng này chưa? Khách còn các dự án thùng khác không?'],
+    // Tình huống đặc biệt nhận ra từ nội dung bình luận – ưu tiên hơn các chế độ trên
+    tinhHuong: [
+      {
+        khi: 'NVKD đã báo khách hẹn đặt sau / để sau / đợi (vd. "khách xem báo giá trước, đợi hàng bớt kho đặt hàng sau", "khách hẹn tuần sau báo lại")',
+        hoi: 'Kết quả của báo giá này sao rồi?',
+      },
+    ],
   };
+  const tinhHuongText = () =>
+    BO_CAU_HOI.tinhHuong.map((t) => `- Khi ${t.khi}:\n  → hỏi: ${t.hoi}`).join('\n');
+
   const list = (arr) => arr.map((q) => `- ${q}`).join('\n');
 
   const SUGGEST_SYSTEM = `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
 
 BỘ CÂU HỎI NHÂN VIÊN
+
+TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó (có thể gộp thêm 1 câu "luôn cân nhắc hỏi" nếu chưa được trả lời), bỏ qua chế độ hỏi nhanh/chào lại:
+${tinhHuongText()}
 
 Câu luôn cân nhắc hỏi (bỏ qua nếu luồng bình luận đã có câu trả lời):
 ${list(BO_CAU_HOI.luonHoi)}
@@ -330,10 +343,10 @@ Quy tắc:
           ? `Bình luận cuối: ${Math.floor(hours)} giờ trước, của ${last.staff?.name || '?'}.`
           : 'Chưa có bình luận nào.',
         mode === 'hoiNhanh'
-          ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh.`
+          ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
           : '',
         mode === 'chaoLai'
-          ? `CHẾ ĐỘ CHÀO LẠI: báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng đã ${Math.floor(hours / 24)} ngày`} – nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.`
+          ? `CHẾ ĐỘ CHÀO LẠI: báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng đã ${Math.floor(hours / 24)} ngày`} – nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
           : '',
       ]
         .filter(Boolean)
