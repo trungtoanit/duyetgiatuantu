@@ -251,21 +251,42 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
   }
 
   // ---------- Bộ câu hỏi nhân viên trong báo giá ----------
+  // ===== BỘ CÂU HỎI NHÂN VIÊN TRONG BÁO GIÁ =====
+  // Muốn nạp thêm câu hỏi: thêm 1 dòng vào đúng nhóm rồi push lên git.
+  const BO_CAU_HOI = {
+    // Luôn cân nhắc hỏi (nếu luồng bình luận chưa có câu trả lời), kể cả ở chế độ hỏi nhanh
+    luonHoi: ['Đã hẹn gặp khách hàng này chưa?', 'Đã tới audit khách hàng này chưa?'],
+    // Hỏi theo giai đoạn của báo giá
+    theoGiaiDoan: [
+      'Chưa đủ thông tin để tính giá: còn thiếu gì (số lượng, quy cách, số lớp/định lượng, in hay không, địa chỉ giao, VAT/hóa đơn, ngày cần hàng)?',
+      'Đã có giá nhưng chưa gửi khách: đã gửi báo giá cho khách chưa, khi nào gửi?',
+      'Đã gửi giá: khách phản hồi thế nào – giá ok chưa, chê cao thì giá mục tiêu bao nhiêu, đang so với bên nào?',
+      'Khách đồng ý: khi nào lên đơn, cọc/thanh toán thế nào, ngày giao, đã duyệt mẫu/maket chưa?',
+      'Khách chê/chưa chốt: cần điều chỉnh gì (quy cách, số lượng, giao hàng) để chốt được?',
+    ],
+    // Chế độ hỏi nhanh: đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt
+    hoiNhanh: ['Giá cả ok chưa, khách đồng ý chốt chưa?'],
+  };
+  const list = (arr) => arr.map((q) => `- ${q}`).join('\n');
+
   const SUGGEST_SYSTEM = `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
 
-Bộ câu hỏi nhân viên theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
-- Chưa đủ thông tin để tính giá: còn thiếu gì (số lượng, quy cách, số lớp/định lượng, in hay không, địa chỉ giao, VAT/hóa đơn, ngày cần hàng)?
-- Đã có giá nhưng chưa gửi khách: đã gửi báo giá cho khách chưa, khi nào gửi?
-- Đã gửi giá: khách phản hồi thế nào – giá ok chưa, chê cao thì giá mục tiêu bao nhiêu, đang so với bên nào?
-- Khách đồng ý: khi nào lên đơn, cọc/thanh toán thế nào, ngày giao, đã duyệt mẫu/maket chưa?
-- Khách chê/chưa chốt: cần điều chỉnh gì (quy cách, số lượng, giao hàng) để chốt được?
-- Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết đúng 1 câu ngắn hỏi giá cả ok chưa, khách đồng ý chốt chưa. Không hỏi thêm gì khác, không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ.
+BỘ CÂU HỎI NHÂN VIÊN
+
+Câu luôn cân nhắc hỏi (bỏ qua nếu luồng bình luận đã có câu trả lời):
+${list(BO_CAU_HOI.luonHoi)}
+
+Câu hỏi theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
+${list(BO_CAU_HOI.theoGiaiDoan)}
+
+Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn gộp các ý sau, không hỏi thêm gì khác, không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
+${list([...BO_CAU_HOI.hoiNhanh, ...BO_CAU_HOI.luonHoi])}
 
 Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
 - Tuyệt đối không viết giọng văn mẫu, công sở hay "AI". Không mở đầu bằng lời chào dài, không cảm ơn, không ký tên. Nếu quản lý hay viết ngắn gọn thì viết ngắn gọn.
 - Chỉ đánh số câu hỏi nếu thật cần (từ 3 ý trở lên); 1–2 ý thì viết liền tự nhiên như nhắn tin.
-- Không hỏi lại những điều đã được trả lời trong luồng. Tối đa 3 ý hỏi; nên có mốc thời gian phản hồi nếu hợp văn phong.
+- Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã gặp/hẹn gặp hoặc đã audit khách thì không hỏi lại). Tối đa 3 ý hỏi; nên có mốc thời gian phản hồi nếu hợp văn phong.
 - Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
 - Chỉ trả về đúng nội dung bình luận, không giải thích, không dùng markdown.`;
 
@@ -289,7 +310,7 @@ Quy tắc:
           ? `Bình luận cuối: ${Math.floor(hours)} giờ trước, của ${last.staff?.name || '?'}.`
           : 'Chưa có bình luận nào.',
         overdue
-          ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu hỏi giá cả ok chưa, khách đồng ý chốt chưa.`
+          ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh.`
           : '',
       ]
         .filter(Boolean)
