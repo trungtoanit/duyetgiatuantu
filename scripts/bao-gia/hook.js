@@ -4,6 +4,7 @@
 (() => {
   if (window.__dgHooked) return;
   window.__dgHooked = true;
+  const COLLECTOR_FRAME = window.name === 'dg-collector';
 
   // CRM vừa cập nhật bản mới mà trình duyệt còn giữ trang HTML cũ trong cache → file main.*.js cũ
   // bị 404 → trang trắng. Khi gặp, làm mới cache rồi tải lại trang (tối đa 1 lần / phút).
@@ -23,6 +24,53 @@
     },
     true,
   );
+
+  // ---- Chiết giá (Ctrl+Shift+G): CRM vẽ bảng vào iframe#printWindow rồi gọi in ----
+  // Đọc "Đang bán (X%)" + giá + số lượng + quy cách và gửi cho panel.js lưu lại.
+  // Trong khung thu thập ngầm: chặn lệnh in để không bật hộp thoại.
+  if (COLLECTOR_FRAME) window.print = () => {};
+  let lastChiet = '';
+  function readChiet(f) {
+    try {
+      if (COLLECTOR_FRAME && f.contentWindow) f.contentWindow.print = () => {};
+      const t = f.contentDocument?.body?.innerText || '';
+      const pct = t.match(/Đang bán\s*\((\d+(?:[.,]\d+)?)%\)/);
+      const code = t.match(/CHIẾT GIÁ\s*#?(BG\d+)/i);
+      if (!pct || !code || t === lastChiet) return;
+      lastChiet = t;
+      // Giá ở cột "Đang bán": lấy hàng "Giá 1 thùng" theo đúng vị trí cột
+      let price = null;
+      const tables = [...f.contentDocument.querySelectorAll('table')];
+      for (const tb of tables) {
+        const rows = [...tb.rows];
+        const head = rows.find((r) => /Đang bán/.test(r.innerText));
+        const row = rows.find((r) => /Giá 1/.test(r.innerText));
+        if (head && row) {
+          const idx = [...head.cells].findIndex((c) => /Đang bán/.test(c.innerText));
+          price = row.cells[idx]?.innerText.trim() || null;
+          break;
+        }
+      }
+      const val = (re) => (t.match(re)?.[1] || '').trim();
+      emit('margin', {
+        code: code[1].toUpperCase(),
+        pct: Number(pct[1].replace(',', '.')),
+        price,
+        spec: val(/Quy cách:\s*([^\n]+)/),
+        qty: val(/Số lượng đặt:\s*([^\n]+)/),
+        reprint: val(/Tái bản:\s*([^\n]+)/),
+        at: Math.floor(Date.now() / 1000),
+      });
+    } catch {}
+  }
+  new MutationObserver(() => {
+    const f = document.getElementById('printWindow');
+    if (f && !f.__dgWatch) {
+      f.__dgWatch = true;
+      f.addEventListener('load', () => setTimeout(() => readChiet(f), 300));
+      const tick = setInterval(() => (f.isConnected ? readChiet(f) : clearInterval(tick)), 700);
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
 
   // panel.js (world tách biệt) nhờ chuyển trang trong app CRM: phải chạy ở world MAIN thì router mới nhận
   document.addEventListener('dg:navigate', (e) => {
@@ -51,6 +99,7 @@
     hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length),
     // Đơn tái bản: sản phẩm đã có mã SP (republishType = REPUBLISH)
     isReprint: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => p.republishType === 'REPUBLISH') : undefined,
+    offset: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => /OFFSET/i.test(p.productType || '')) : undefined,
     staff: person(o.staff),
     customer: o.customer ? { id: o.customer.id, code: o.customer.code || undefined, name: o.customer.name } : undefined,
   });
@@ -138,7 +187,7 @@
   const send = XMLHttpRequest.prototype.send;
   // Khung thu thập ngầm (iframe name="dg-collector", do panel.js tạo): CHỈ ĐỌC.
   // Chặn mọi lệnh ghi và lệnh đánh dấu đã đọc, để báo giá chưa đọc vẫn in đậm và không có gì bị sửa.
-  const COLLECTOR = window.name === 'dg-collector';
+  const COLLECTOR = COLLECTOR_FRAME;
   const blocked = (method, url) =>
     COLLECTOR && (String(method || 'GET').toUpperCase() !== 'GET' || /\/opportunity\/\d+\/read\b/.test(String(url)));
 

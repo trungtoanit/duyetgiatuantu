@@ -75,7 +75,11 @@ tick **Dùng chung cho cả nhóm** → các máy khác tự dùng. Không chia 
 **📦 Thu thập toàn bộ** (popup): đọc tất cả trang danh sách + bình luận mọi báo giá, chạy liên tục
 50 báo giá/lượt tới khi xong; các máy chia nhau nhờ dữ liệu "đã thu thập" được đồng bộ.
 
-Nhãn trên danh sách (bấm nhãn trên tiêu đề để lọc): 💲 Khách cho giá, 🚫 Chưa cọc, ⚠️ Chưa cho giá.
+Nhãn trên danh sách (bấm nhãn trên tiêu đề để lọc, bộ lọc giữ lại sau F5): 💲 Khách cho giá, 💸 Giá cao, 🧾 Xin công nợ,
+🚫 Chưa cọc, ⚠️ Chưa cho giá, 📈 Đang bán X% (Offset – đọc từ bảng chiết giá Ctrl+Shift+G, đỏ khi dưới 30%).
+
+🛒 Lịch sử mua hàng của khách: tự đọc trang khách hàng → đơn hàng khi mở báo giá và khi thu thập ngầm; đưa vào
+đánh giá NVKD và gợi ý của Claude.
 
 ## Cài đặt trên mỗi máy (một lần)
 

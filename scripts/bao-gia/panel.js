@@ -211,6 +211,12 @@
     } else if (kind === 'quote') {
       const cur = await kvGet('quotes');
       await kvMerge('quotes', { [data.id]: { ...cur[data.id], ...definedOnly(data) } });
+    } else if (kind === 'margin') {
+      const all = await kvGet('margins');
+      const cur = all[data.code] || { products: {} };
+      cur.products[data.spec || 'sản phẩm'] = { pct: data.pct, price: data.price, qty: data.qty, reprint: data.reprint, at: data.at };
+      cur.at = data.at;
+      await kvMerge('margins', { [data.code]: cur });
     } else if (kind === 'orders') {
       await kvMerge('orders', { [data.customerId]: { ...data, at: Math.floor(Date.now() / 1000) } });
     } else if (kind === 'comments') {
@@ -527,7 +533,7 @@ Quy tắc:
       .slice(0, full ? COLLECT.fullPerRun : COLLECT.perRun);
   }
 
-  async function loadInFrame(id, url = `/co-hoi/update/${id}`, readyRe = /\/fileAttach\?/) {
+  async function loadInFrame(id, url = `/co-hoi/update/${id}`, readyRe = /\/fileAttach\?/, onReady = null) {
     const f = document.createElement('iframe');
     f.name = 'dg-collector';
     f.setAttribute('aria-hidden', 'true');
@@ -544,6 +550,7 @@ Quy tắc:
         } catch {}
         if (done) {
           await sleep(2500); // chờ panel.js trong iframe lưu xong
+          if (onReady) await onReady(f).catch(() => {});
           break;
         }
       }
@@ -610,6 +617,41 @@ Quy tắc:
     }
   }
 
+  // Báo giá Offset: trong khung ẩn, bấm số lượng từng sản phẩm → mở "Tính giá offset" → Ctrl+Shift+G.
+  // hook.js trong khung đọc bảng chiết giá (iframe#printWindow) và gửi "Đang bán (X%)" về để lưu. Lệnh in bị chặn.
+  async function readOffsetMargins(f) {
+    const doc = f.contentDocument;
+    if (!doc) return;
+    const visModals = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
+    const closeModals = async () => {
+      for (let i = 0; i < 4 && visModals().length; i++) {
+        doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+        visModals().forEach((m) => m.querySelector('.ant-modal-close')?.click());
+        await sleep(400);
+      }
+    };
+    // Cột "Số lượng" của bảng sản phẩm
+    const table = [...doc.querySelectorAll('.ant-table')].find((t) => [...t.querySelectorAll('th')].some((th) => th.innerText.trim() === 'Số lượng'));
+    if (!table) return;
+    const idx = [...table.querySelectorAll('thead th')].findIndex((th) => th.innerText.trim() === 'Số lượng');
+    const rows = [...table.querySelectorAll('.ant-table-tbody tr')].filter((tr) => tr.cells.length > idx);
+    for (const tr of rows.slice(0, 10)) {
+      const btn = tr.cells[idx]?.querySelector('button');
+      if (!btn) continue;
+      btn.click();
+      let modal = null;
+      for (let i = 0; i < 20 && !modal; i++) {
+        await sleep(250);
+        modal = visModals().find((m) => /Tính giá offset/i.test(m.innerText));
+      }
+      if (modal) {
+        doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'G', code: 'KeyG', ctrlKey: true, shiftKey: true, bubbles: true }));
+        await sleep(2500); // hook.js đọc bảng chiết giá
+      }
+      await closeModals();
+    }
+  }
+
   async function takeLock() {
     const lock = await kvGet('collectLock');
     if (lock?.tab && lock.tab !== TAB_ID && Date.now() - lock.at < 90000) return false; // tab khác đang chạy
@@ -643,7 +685,8 @@ Quy tắc:
         if (!force && !(await getSettings()).auto) break;
         collect.current = q.code;
         progress();
-        await loadInFrame(q.id);
+        const needMargin = q.offset && !(await kvGet('margins'))[q.code];
+        await loadInFrame(q.id, undefined, undefined, needMargin ? readOffsetMargins : null);
         await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
         // Lịch sử mua hàng của khách: tối đa 1 lần / ngày / khách
         const cid = q.customer?.id;
@@ -712,7 +755,7 @@ Quy tắc:
   }
 
   // ---------- Giao diện ----------
-  const state = { busy: new Set(), error: null };
+  const state = { busy: new Set(), error: null, filter: (() => { try { return localStorage.getItem('dgFilter') || ''; } catch { return ''; } })() };
   let host, root;
 
   const CSS = `
@@ -843,6 +886,13 @@ Quy tắc:
     .orders { margin-top: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
     .orders summary { cursor: pointer; }
     .orders table { margin-top: 6px; font-size: 12px; }
+    .hip { margin-left: 6px; display: inline-block; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .mgn { margin-left: 6px; display: inline-block; background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .mgn.low { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+    .crd { margin-left: 6px; display: inline-block; background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -985,6 +1035,54 @@ Quy tắc:
       : '';
   };
 
+  // Nhận diện "giá cao / chưa được giá" (khách chê giá, bên khác rẻ hơn…) – chỉ xét lời NVKD
+  const HIGH_PRICE_RE =
+    /(giá|gia)\s*(bên\s*)?(mình|minh|em|mình\s*báo)?\s*(hơi\s*|còn\s*|quá\s*|khá\s*|rất\s*)?(cao|đắt|mắc)|chê\s*(giá\s*)?(cao|đắt|mắc)|(cao|đắt|mắc)\s*(quá|hơn)|chưa\s*(được|đc|dc|tới|đạt|tốt)\s*(giá|gia)(?![\p{L}])|(giá|gia)\s*(vẫn\s*)?chưa\s*(được|đc|dc|tới|đạt|tốt)|(rẻ|re)\s*hơn|bên\s*kia\s*(rẻ|re)/iu;
+  function highPriceInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      if (t.staff?.name !== meName && HIGH_PRICE_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
+  }
+  const highPriceTag = (c) => {
+    const t = highPriceInfo(c);
+    return t ? ` <span class="hip" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">💸 Giá cao</span>` : '';
+  };
+
+  // "Đang bán (X%)" từ bảng chiết giá Offset (Ctrl+Shift+G) – thấp nhất trong các sản phẩm của báo giá
+  const marginOf = (q) => {
+    const m = q?.code && renderCtx.margins?.[q.code];
+    const list = m ? Object.values(m.products || {}) : [];
+    return list.length ? Math.min(...list.map((x) => x.pct)) : null;
+  };
+  const marginTag = (q) => {
+    const pct = marginOf(q);
+    if (pct == null) return '';
+    const items = Object.entries(renderCtx.margins[q.code].products).map(([spec, x]) => `${spec}: ${x.pct}%${x.price ? ` (${x.price})` : ''}`).join('\n');
+    return ` <span class="mgn ${pct < 30 ? 'low' : ''}" title="${esc(items)}">📈 Đang bán ${pct}%</span>`;
+  };
+
+  // Nhận diện bình luận xin công nợ (thanh toán sau, gối đầu, CN 30 ngày…) – chỉ xét lời NVKD
+  const CREDIT_RE =
+    /công\s*nợ|cong\s*no(?![\p{L}])|\bcn\s*\d+\s*(ngày|ngay|n)\b|nợ\s*\d+\s*(ngày|ngay)|thanh\s*toán\s*(sau|chậm|trả\s*chậm)|trả\s*sau|gối\s*đầu|goi\s*dau|net\s*\d+/iu;
+  function creditInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      if (t.staff?.name !== meName && CREDIT_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    if (!hit) return null;
+    return { at: hit.createdAt, by: hit.staff?.name, text: hit.text, days: (hit.text.match(/(\d{1,3})\s*(ngày|ngay)/i) || [])[1] || '' };
+  }
+  const creditTag = (c) => {
+    const t = creditInfo(c);
+    return t ? ` <span class="crd" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">🧾 Xin công nợ${t.days ? ` ${t.days} ngày` : ''}</span>` : '';
+  };
+
   // Nhận diện khách chưa / không chịu cọc
   const NO_DEPOSIT_RE = /(chưa|chua|không|khong|ko|k|hông|chẳng)\s*(chịu\s*|muốn\s*|đồng ý\s*|dong y\s*)?(đặt\s*|dat\s*)?(cọc|coc)\b|(cọc|coc)\s*(chưa|không|khong|ko)\b/i;
   function noDepositInfo(c) {
@@ -1089,10 +1187,28 @@ Quy tắc:
       ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
     </div>`;
   };
+  // Mở báo giá mà chưa có / cũ lịch sử mua hàng → tự đọc trang khách hàng trong khung ẩn
+  const ordersFetching = new Set();
+  const ordersTried = {}; // cid → lần thử gần nhất (tránh tải lại liên tục khi không lấy được)
+  async function fetchOrdersNow(cid) {
+    if (ordersFetching.has(cid) || ordersFetching.size || Date.now() - (ordersTried[cid] || 0) < 10 * 60 * 1000) return;
+    ordersTried[cid] = Date.now();
+    ordersFetching.add(cid);
+    try {
+      await loadInFrame(null, `/khach-hang/view/${cid}?t=order`, /\/misaOrder\?.*customerId=/);
+    } finally {
+      ordersFetching.delete(cid);
+      render();
+    }
+  }
+
   // Khối "Lịch sử mua hàng" của khách trong báo giá đang mở
   const ordersBox = (q) => {
     const cid = q?.customer?.id;
     if (!cid) return '';
+    const od = renderCtx.orders[cid];
+    if (IS_TOP && (!od || hoursSince(od.at) > 24)) setTimeout(() => fetchOrdersNow(cid), 0);
+    if (!od && ordersFetching.has(cid)) return `<div class="orders muted">🛒 Đang tải lịch sử mua hàng của khách…</div>`;
     const s = orderSummary(renderCtx.orders[cid]);
     if (!s) return `<div class="orders muted">🛒 Lịch sử mua hàng: chưa có dữ liệu – sẽ tự thu thập (hoặc bấm nút "Mua hàng" của CRM).</div>`;
     if (!s.count) return `<div class="orders">🛒 <b>Khách chưa từng mua đơn nào</b></div>`;
@@ -1102,7 +1218,7 @@ Quy tắc:
       <table><tr><th>Đơn</th><th>Ngày</th><th>Báo giá</th><th>Sản phẩm</th><th class="num">Tiền</th></tr>${rows}</table></details>`;
   };
 
-  let renderCtx = { comments: {}, quotes: {}, collected: {}, orders: {}, quickSent: {}, quickDraft: {} };
+  let renderCtx = { comments: {}, quotes: {}, collected: {}, orders: {}, margins: {}, quickSent: {}, quickDraft: {} };
 
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
@@ -1143,7 +1259,7 @@ Quy tắc:
     const editing = root.activeElement?.classList;
     if (editing?.contains('suggest-edit') || editing?.contains('quick-edit')) return; // đang sửa – không vẽ lại
     avatars = avatarIndex(quotes);
-    renderCtx = { comments, quotes, collected, orders: await kvGet('orders'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    renderCtx = { comments, quotes, collected, orders: await kvGet('orders'), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
 
 
@@ -1162,7 +1278,7 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${targetTag(c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
@@ -1188,7 +1304,14 @@ Quy tắc:
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
     // Bấm nhãn trên tiêu đề để lọc danh sách: 'tgt' = khách cho giá, 'zero' = chưa cho giá
-    const FILTERS = { tgt: ({ c }) => targetPriceInfo(c), zero: ({ q }) => noPrice(q), nodep: ({ c }) => noDepositInfo(c) };
+    const FILTERS = {
+      tgt: ({ c }) => targetPriceInfo(c),
+      zero: ({ q }) => noPrice(q),
+      nodep: ({ c }) => noDepositInfo(c),
+      high: ({ c }) => highPriceInfo(c),
+      credit: ({ c }) => creditInfo(c),
+      lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
+    };
     const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items);
     const filterChip = (f, cls, label) =>
       ` <button class="${cls} chipbtn${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">${label}</button>`;
@@ -1197,14 +1320,20 @@ Quy tắc:
       const zero = items.filter(({ q }) => noPrice(q)).length;
       const tgt = items.filter(({ c }) => targetPriceInfo(c)).length;
       const nodep = items.filter(({ c }) => noDepositInfo(c)).length;
+      const high = items.filter(({ c }) => highPriceInfo(c)).length;
+      const credit = items.filter(({ c }) => creditInfo(c)).length;
+      const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
       return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') +
         (zero ? filterChip('zero', 'noprice', `⚠️ ${zero} chưa cho giá`) : '') +
         (tgt ? filterChip('tgt', 'tgt', `💲 ${tgt} khách cho giá`) : '') +
         (nodep ? filterChip('nodep', 'nodep', `🚫 ${nodep} chưa cọc`) : '') +
+        (high ? filterChip('high', 'hip', `💸 ${high} giá cao`) : '') +
+        (credit ? filterChip('credit', 'crd', `🧾 ${credit} xin công nợ`) : '') +
+        (lowm ? filterChip('lowm', 'mgn low', `📈 ${lowm} bán dưới 30%`) : '') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${targetTag(c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
     const overdueBox = `
@@ -1289,6 +1418,9 @@ Quy tắc:
     }
     else if (act === 'filter') {
       state.filter = state.filter === b.dataset.f ? '' : b.dataset.f;
+      try {
+        localStorage.setItem('dgFilter', state.filter); // giữ bộ lọc sau khi F5
+      } catch {}
       render();
     } else if (act === 'eval-quote') evaluateQuote(id);
     else if (act === 'quick-send') {
