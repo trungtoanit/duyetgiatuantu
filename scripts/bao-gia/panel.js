@@ -453,7 +453,7 @@ Quy tắc:
   // Mở lần lượt từng báo giá trong 1 iframe ẩn (name="dg-collector"); chính app CRM tải dữ liệu,
   // hook.js trong iframe ghi lại bình luận và CHẶN lệnh /read + mọi lệnh ghi (chỉ đọc).
   const IS_TOP = window.top === window;
-  const COLLECT = { perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
+  const COLLECT = { listPages: 5, perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
   const collect = { running: false, done: 0, total: 0, current: '', suggested: 0, lastRun: 0 };
   const TAB_ID = Math.random().toString(36).slice(2);
 
@@ -499,6 +499,58 @@ Quy tắc:
     }
   }
 
+  // Đọc N trang đầu của danh sách Báo giá (cùng bộ lọc người dùng đang dùng) trong iframe ẩn:
+  // bấm lần lượt trang 2..N; hook.js trong iframe ghi lại từng trang. Khôi phục bộ lọc/trang của người dùng sau đó.
+  async function collectListPages() {
+    let saved = null;
+    try {
+      saved = localStorage.getItem('quote.query');
+    } catch {}
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = '/bao-gia';
+    document.documentElement.append(f);
+    const loaded = (page) => {
+      try {
+        return f.contentWindow.performance
+          .getEntriesByType('resource')
+          .some((e) => /\/opportunity\?/.test(e.name) && /[?&]type=2\b/.test(e.name) && new RegExp(`[?&]page=${page}&`).test(e.name));
+      } catch {
+        return false;
+      }
+    };
+    const waitFor = async (cond, ms) => {
+      const t = Date.now();
+      while (Date.now() - t < ms) {
+        if (cond()) return true;
+        await sleep(300);
+      }
+      return false;
+    };
+    try {
+      collect.current = 'danh sách trang 1';
+      render();
+      if (!(await waitFor(() => loaded(1), 25000))) return;
+      await sleep(1500);
+      for (let page = 2; page <= COLLECT.listPages; page++) {
+        collect.current = `danh sách trang ${page}`;
+        render();
+        const li = await waitFor(() => f.contentDocument?.querySelector(`.ant-pagination-item-${page}`), 5000);
+        if (!li) break;
+        f.contentDocument.querySelector(`.ant-pagination-item-${page}`).click();
+        if (!(await waitFor(() => loaded(page), 20000))) break;
+        await sleep(1500); // chờ panel.js trong iframe lưu xong
+      }
+    } finally {
+      f.remove();
+      try {
+        if (saved != null) localStorage.setItem('quote.query', saved);
+      } catch {}
+    }
+  }
+
   async function takeLock() {
     const lock = await kvGet('collectLock');
     if (lock?.tab && lock.tab !== TAB_ID && Date.now() - lock.at < 90000) return false; // tab khác đang chạy
@@ -514,6 +566,7 @@ Quy tắc:
     collect.done = 0;
     collect.suggested = 0;
     try {
+      await collectListPages();
       const [quotes, comments, collected] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('collected')]);
       const queue = pickQueue(quotes, comments, collected);
       collect.total = queue.length;
@@ -795,7 +848,7 @@ Quy tắc:
       <div class="collector">🔄 Thu thập ngầm & tự phân tích:
         <button class="act" data-act="toggle-auto">${settings.auto ? 'Đang bật' : 'Đang tắt'}</button>
         ${collect.running
-          ? `<span class="muted">${collect.current === 'phân tích' ? `đang soạn gợi ý (${collect.suggested})…` : `đang đọc ${esc(collect.current)} (${collect.done}/${collect.total})…`}</span>`
+          ? `<span class="muted">${collect.current === 'phân tích' ? `đang soạn gợi ý (${collect.suggested})…` : (/^danh sách/.test(collect.current) ? `đang đọc ${esc(collect.current)}/${COLLECT.listPages}…` : `đang đọc ${esc(collect.current)} (${collect.done}/${collect.total})…`)}</span>`
           : `<button class="act" data-act="collect-now">Chạy ngay</button>
              <span class="muted">${collect.lastRun ? `lần cuối ${new Date(collect.lastRun).toLocaleTimeString('vi-VN')} · ${collect.done} báo giá, ${collect.suggested} gợi ý` : `tự chạy mỗi ${COLLECT.everyMin} phút`} · đã thu thập ${Object.keys(collected).length}</span>`}
       </div>
