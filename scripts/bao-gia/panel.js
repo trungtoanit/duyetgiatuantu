@@ -1057,6 +1057,9 @@ Quy tắc:
     .amt-pct .muted { font-size: 11px; font-weight: 500; }
     .ncm { margin-left: 6px; display: inline-block; background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .cov { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; color: #334155; }
+    .cov-bar { flex: 0 0 220px; height: 8px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
+    .cov-bar span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #16a34a); border-radius: 99px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1674,6 +1677,14 @@ Quy tắc:
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = staleList(quotes, comments, overdue);
     const silent = noCommentList(quotes, comments, collected);
+    // Tất cả báo giá CHƯA ĐỌC trên CRM (dòng in đậm) – hiện đủ 100%
+    const unreadAll = Object.values(quotes)
+      .filter((q) => q.isRead === false && !isExcluded(staffOf(q, comments[q.id])))
+      .map((q) => {
+        const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
+        return { q, c, last: lastComment(c) };
+      })
+      .sort((a, b) => (b.q.createdAt || 0) - (a.q.createdAt || 0));
     // Mọi báo giá có cắt mẫu (kể cả đã chốt) – để xem tỉ lệ cắt mẫu thành đơn
     const samples = Object.values(comments)
       .filter((c) => sampleInfo(c) && !isExcluded(staffOf(quotes[c.id], c)))
@@ -1798,6 +1809,10 @@ Quy tắc:
       ${feasible.length
         ? `<div class="box unread">${applyFilter(feasible).slice(0, state.filter ? 300 : 60).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi.</div>'}
+      ${unreadAll.length
+        ? `<h3>📬 Chưa đọc (${unreadAll.length})${revenueHtml(unreadAll)}</h3><div class="hint muted">Toàn bộ báo giá đang in đậm (chưa đọc) trên CRM.</div>
+          <div class="box unread">${applyFilter(unreadAll).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        : ''}
       ${samples.length
         ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
           <div class="box unread">${applyFilter(samples).slice(0, state.filter ? 300 : 30).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
@@ -1810,6 +1825,11 @@ Quy tắc:
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
       <div class="muted">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
+      ${(() => {
+        const done = all.filter((x) => collected[x.id] || comments[x.id]?.threads?.length).length;
+        const pctDone = all.length ? Math.round((done / all.length) * 100) : 0;
+        return `<div class="cov"><div class="cov-bar"><span style="width:${pctDone}%"></span></div><span>Extension đã đọc <b>${pctDone}%</b> (${done}/${all.length})${pctDone < 100 ? ' – bấm <b>📦 Thu thập toàn bộ</b> trong popup để đọc 100%' : ' ✅'}</span></div>`;
+      })()}
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
