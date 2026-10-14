@@ -291,7 +291,15 @@ Yêu cầu:
       },
       {
         khi: 'bình luận CUỐI CÙNG của luồng là quản lý đã cho giá / duyệt giá (vd. "A cho em giá đã bao gồm khuôn + bản in", "E cho chị giá nhé", "E duyệt giá nhé chị") và sau đó NVKD chưa phản hồi gì',
-        hoi: 'Giá cả ok không? Khách phản hồi giá thế nào?',
+        // Nhiều phiên bản mềm mại – mỗi lần gợi ý chọn ngẫu nhiên 1 câu
+        hoi: [
+          'Giá anh gửi khách thấy sao rồi em, có ổn không?',
+          'Báo giá này khách phản hồi sao rồi em? Có vướng chỗ nào không để anh hỗ trợ.',
+          'Em ơi khách xem giá chưa, thấy ok không em?',
+          'Giá này khách có ý kiến gì không em? Cần anh điều chỉnh gì thì báo anh nhé.',
+          'Khách nhận giá rồi thấy thế nào em, có hợp không?',
+          'Em hỏi thăm khách giúp anh giá này ổn chưa nhé, khách cần gì thêm không?',
+        ],
       },
       {
         khi: 'luồng có nhắc khách cần mẫu / phải có mẫu / chạy mẫu (vd. "Quy trình của bên này làm hàng phải có mẫu Sếp ạ", "Thùng này có chạy mẫu không") mà chưa thấy xác nhận đã có mẫu',
@@ -304,7 +312,14 @@ Yêu cầu:
     ],
   };
   const tinhHuongText = () =>
-    BO_CAU_HOI.tinhHuong.map((t) => `- Khi ${t.khi}:\n  → hỏi: ${t.hoi}`).join('\n');
+    BO_CAU_HOI.tinhHuong
+      .map((t) =>
+        Array.isArray(t.hoi)
+          ? `- Khi ${t.khi}:\n  → hỏi theo MỘT trong các phiên bản sau (dùng đúng số phiên bản đề bài chỉ định, chỉ đổi xưng hô cho đúng):\n${t.hoi.map((h, i) => `     ${i + 1}. ${h}`).join('\n')}`
+          : `- Khi ${t.khi}:\n  → hỏi: ${t.hoi}`,
+      )
+      .join('\n');
+  const maxVariants = () => Math.max(1, ...BO_CAU_HOI.tinhHuong.map((t) => (Array.isArray(t.hoi) ? t.hoi.length : 1)));
 
   const list = (arr) => arr.map((q) => `- ${q}`).join('\n');
 
@@ -359,6 +374,7 @@ Quy tắc:
         last
           ? `Bình luận cuối: ${humanDuration(hours)} trước, của ${last.staff?.name || '?'}. Khoảng thời gian im lặng: ${humanDuration(hours)}.`
           : 'Chưa có bình luận nào.',
+        `Nếu khớp tình huống có nhiều phiên bản câu hỏi: dùng phiên bản số ${1 + Math.floor(Math.random() * maxVariants())} (nếu tình huống có ít phiên bản hơn thì lấy phiên bản cuối).`,
         q?.isReprint ? 'ĐƠN TÁI BẢN: sản phẩm của báo giá đã có mã SP (tái bản) – chỉ hỏi khách xuống đơn tái bản chưa.' : '',
         mode === 'hoiNhanh'
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
