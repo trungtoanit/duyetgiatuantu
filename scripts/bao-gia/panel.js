@@ -781,6 +781,8 @@ Quy tắc:
     .quick-text { flex: 1; font: inherit; font-size: 16px; font-weight: 700; color: #1f2328; background: #fff; border-radius: 8px;
       padding: 8px 12px; border: 1px dashed #d4a72c; resize: vertical; min-height: 44px; line-height: 1.4; }
     .quick-text:focus { outline: 2px solid #fcd34d; border-style: solid; }
+    .tgt { margin-left: 6px; display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -897,6 +899,31 @@ Quy tắc:
   };
 
   // Nhãn mã khách hàng (vd. "NPT VH"), di chuột để xem tên đầy đủ
+  // Nhận diện bình luận "khách cho giá" / "làm được không" (khách đưa giá mục tiêu, hỏi bên mình làm được không)
+  const TARGET_PRICE_RE =
+    /(làm|lam)\s*(được|duoc|đc|dc)\s*(không|khong|ko|k)\b|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot)\s*(giá|gia)\b|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/i;
+  function targetPriceInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      const txt = t.text || '';
+      if (t.staff?.name !== meName && TARGET_PRICE_RE.test(txt)) {
+        if (!hit || t.createdAt > hit.createdAt) hit = t;
+      }
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    if (!hit) return null;
+    // Mức giá nếu có: "3.500đ", "3500 đ/thùng", "3,5k", "3.500/thùng"
+    const m = hit.text.match(/(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?\s*k\b|\d{3,})\s*(đ|vnđ|vnd|\/\s*(thùng|hộp|cái|tấm))?/i);
+    return { at: hit.createdAt, by: hit.staff?.name, text: hit.text, price: m ? m[0].trim() : '' };
+  }
+  const targetTag = (c) => {
+    const t = targetPriceInfo(c);
+    return t
+      ? ` <span class="tgt" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">💲 Khách cho giá${t.price ? ` ${esc(t.price)}` : ''}</span>`
+      : '';
+  };
+
   // Báo giá 0đ = quản lý chưa cho giá
   const noPrice = (q) => q != null && q.amount != null && Number(q.amount) === 0;
   const noPriceTag = (q) => (noPrice(q) ? ' <span class="noprice">⚠️ Chưa cho giá</span>' : '');
@@ -1021,7 +1048,7 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)} – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${targetTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
@@ -1048,10 +1075,12 @@ Quy tắc:
     const revenueHtml = (items) => {
       const total = items.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const zero = items.filter(({ q }) => noPrice(q)).length;
-      return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') + (zero ? ` <span class="noprice">⚠️ ${zero} chưa cho giá</span>` : '');
+      const tgt = items.filter(({ c }) => targetPriceInfo(c)).length;
+      return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') + (zero ? ` <span class="noprice">⚠️ ${zero} chưa cho giá</span>` : '') +
+        (tgt ? ` <span class="tgt">💲 ${tgt} khách cho giá</span>` : '');
     };
     const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${targetTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
     const overdueBox = `
