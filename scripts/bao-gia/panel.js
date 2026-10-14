@@ -156,12 +156,11 @@
       .sort((a, b) => (mode === 'chaoLai' ? b.last.createdAt - a.last.createdAt : a.last.createdAt - b.last.createdAt));
   }
 
-  // Khoảng thời gian kiểu nói tự nhiên: "13 giờ", "5 ngày", "2 tuần", "3 tháng"
+  // Khoảng thời gian kiểu nói tự nhiên: "13 giờ", "26 ngày", "3 tháng"
   const humanDuration = (hours) => {
     if (hours < 24) return `${Math.max(1, Math.floor(hours))} giờ`;
     const d = hours / 24;
-    if (d < 14) return `${Math.floor(d)} ngày`;
-    if (d < 60) return `${Math.round(d / 7)} tuần`;
+    if (d < 60) return `${Math.floor(d)} ngày`;
     return `${Math.round(d / 30)} tháng`;
   };
 
