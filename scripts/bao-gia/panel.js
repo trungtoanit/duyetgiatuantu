@@ -165,6 +165,14 @@
     return `${Math.round(d / 30)} tháng`;
   };
 
+  // Danh sách "Cần chào lại" bỏ những khách đang có báo giá trong danh sách "Quá 12 giờ"
+  // (khách đó đang được hỏi theo báo giá khác rồi)
+  const custKey = (q) => (q?.customer?.id ? `id:${q.customer.id}` : q?.customer?.code ? `code:${q.customer.code}` : null);
+  function staleList(quotes, comments, overdue = listByMode(quotes, comments, 'hoiNhanh')) {
+    const active = new Set(overdue.map(({ q }) => custKey(q)).filter(Boolean));
+    return listByMode(quotes, comments, 'chaoLai').filter(({ q }) => !active.has(custKey(q)));
+  }
+
   const ago = (sec) => {
     const h = hoursSince(sec);
     return h >= 48 ? `${Math.floor(h / 24)} ngày trước` : `${Math.floor(h)} giờ trước`;
@@ -611,7 +619,7 @@ Quy tắc:
       collect.current = 'phân tích';
       progress();
       const [q2, c2, sg] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('suggests')]);
-      const need = [...listByMode(q2, c2, 'hoiNhanh'), ...listByMode(q2, c2, 'chaoLai')]
+      const need = [...listByMode(q2, c2, 'hoiNhanh'), ...staleList(q2, c2)]
         .filter(({ c, last }) => !sg[c.id] || sg[c.id].at / 1000 < last.createdAt)
         .slice(0, COLLECT.autoSuggest);
       for (const { c } of need) {
@@ -902,7 +910,7 @@ Quy tắc:
       getSettings(),
     ]);
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
-    const stale = listByMode(quotes, comments, 'chaoLai');
+    const stale = staleList(quotes, comments, overdue);
     const fab = root.querySelector('.fab');
     const alertCount = overdue.length;
     fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">⏰ ${alertCount}</span>` : ''}`;
