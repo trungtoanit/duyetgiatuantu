@@ -58,6 +58,15 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+## Đồng bộ giữa các máy (Supabase)
+
+1. Tạo project trên supabase.com, mở **SQL Editor**, chạy [supabase/setup.sql](supabase/setup.sql).
+   Dòng kết quả cuối là **mật khẩu nhóm** (sinh ngẫu nhiên).
+2. **Project Settings → API**: lấy Project URL và anon public key.
+3. Trên mỗi máy: popup → Cài đặt → nhập Supabase URL, anon key, mật khẩu nhóm → Lưu, rồi bấm **Đồng bộ ngay**.
+
+Không ghi các khoá này vào git (repo đang public).
+
 ## Cài đặt trên mỗi máy (một lần)
 
 1. Mở `chrome://extensions`, bật **Developer mode**.
