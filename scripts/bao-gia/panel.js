@@ -260,31 +260,6 @@ Yêu cầu:
     await runEval(`q:${id}`, prompt, { staff, code: q?.code || c?.code });
   }
 
-  async function evaluateStaff(name) {
-    const [quotes, comments] = await Promise.all([kvGet('quotes'), kvGet('comments')]);
-    const mine = Object.values(quotes).filter((q) => staffOf(q, comments[q.id]) === name);
-    const withComments = mine
-      .filter((q) => comments[q.id]?.threads?.length)
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 30);
-    const byStatus = {};
-    for (const q of mine) byStatus[statusLabel(q.quoteStatus)] = (byStatus[statusLabel(q.quoteStatus)] || 0) + 1;
-    const stats = [
-      `Tổng số báo giá đã ghi nhận: ${mine.length}`,
-      `Chưa đọc (in đậm trên CRM): ${mine.filter((q) => q.isRead === false).length}`,
-      `Theo tình trạng: ${Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(', ')}`,
-      `Số báo giá có bình luận được ghi lại: ${withComments.length}`,
-    ].join('\n');
-    const prompt = `Đánh giá tổng hợp NVKD "${name}" dựa trên các báo giá dưới đây. Nêu thêm các xu hướng lặp lại giữa nhiều báo giá.
-
-THỐNG KÊ
-${stats}
-
-CHI TIẾT BÌNH LUẬN
-${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || '(chưa có)'}`;
-    await runEval(`s:${name}`, prompt, { staff: name });
-  }
-
   // ---------- Bộ câu hỏi nhân viên trong báo giá ----------
   // ===== BỘ CÂU HỎI NHÂN VIÊN TRONG BÁO GIÁ =====
   // Muốn nạp thêm câu hỏi: thêm 1 dòng vào đúng nhóm rồi push lên git.
@@ -609,7 +584,7 @@ Quy tắc:
   }
 
   // ---------- Giao diện ----------
-  const state = { busy: new Set(), shown: null, error: null, unreadOf: null };
+  const state = { busy: new Set(), error: null };
   let host, root;
 
   const CSS = `
@@ -806,18 +781,6 @@ Quy tắc:
     avatars = avatarIndex(quotes);
     const all = Object.values(quotes);
 
-    // Gom theo NVKD
-    const byStaff = {};
-    for (const q of all) {
-      const name = staffOf(q, comments[q.id]) || '(không rõ)';
-      const s = (byStaff[name] ||= { name, total: 0, unread: [], commented: 0, evaluated: [] });
-      s.total++;
-      if (q.isRead === false) s.unread.push(q);
-      if (comments[q.id]?.threads?.length) s.commented++;
-      const ev = evals[`q:${q.id}`];
-      if (ev?.score != null) s.evaluated.push(ev.score);
-    }
-    const staffRows = Object.values(byStaff).sort((a, b) => b.unread.length - a.unread.length || b.total - a.total);
 
     const btn = (act, key, label, busyLabel, attrs = '') =>
       `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
@@ -866,15 +829,6 @@ Quy tắc:
         ? `<h3>💤 Cần chào lại khách (${stale.length})</h3><div class="box unread">${stale.slice(0, 20).map(itemHtml).join('')}</div>`
         : ''}`;
 
-    const shown = state.shown?.startsWith('s:') ? evals[state.shown] : null;
-    const unreadBox = state.unreadOf && byStaff[state.unreadOf]
-      ? `<h3>Báo giá chưa đọc – ${esc(state.unreadOf)}</h3><div class="box unread">${
-          byStaff[state.unreadOf].unread
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .map((q) => `<a href="/co-hoi/update/${q.id}" data-nav data-code="${esc(q.code)}"><b>${esc(q.code)}</b>${custTag(q)} · ${esc(q.name)} <span class="muted">(${fmtTime(q.createdAt)})</span></a>`)
-            .join('') || '<span class="muted">Không có</span>'
-        }</div>`
-      : '';
 
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
@@ -890,28 +844,6 @@ Quy tắc:
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
       ${overdueBox}
-      <h3>Theo NVKD</h3>
-      <table>
-        <tr><th>NVKD</th><th class="num">Báo giá</th><th class="num">Chưa đọc</th><th class="num">Có BL</th><th class="num">Điểm TB</th><th></th></tr>
-        ${staffRows
-          .map((s) => {
-            const key = `s:${s.name}`;
-            const avg = s.evaluated.length ? Math.round((s.evaluated.reduce((a, b) => a + b, 0) / s.evaluated.length) * 10) / 10 : null;
-            const sev = evals[key];
-            return `<tr>
-              <td><span class="who">${avatarHtml(s.name, 26)}${sev ? `<button class="link" data-act="show" data-key="${esc(key)}">${esc(s.name)}</button>` : esc(s.name)}</span></td>
-              <td class="num">${s.total}</td>
-              <td class="num">${s.unread.length ? `<button class="link" data-act="unread" data-staff="${esc(s.name)}"><b>${s.unread.length}</b></button>` : 0}</td>
-              <td class="num">${s.commented}</td>
-              <td class="num">${avg != null ? `<span class="score ${scoreCls(avg)}">${avg}</span>` : '–'}</td>
-              <td><button class="act" data-act="eval-staff" data-staff="${esc(s.name)}" ${state.busy.has(key) || !s.commented ? 'disabled' : ''}>
-                ${state.busy.has(key) ? 'Đang…' : '🤖 Tổng hợp'}</button></td>
-            </tr>`;
-          })
-          .join('') || '<tr><td colspan="6" class="muted">Chưa có dữ liệu – hãy mở trang Báo giá.</td></tr>'}
-      </table>
-      ${unreadBox}
-      ${shown ? `<h3>Đánh giá tổng hợp – ${esc(shown.staff)} ${scoreHtml(shown)}</h3><div class="muted">Lúc ${new Date(shown.at).toLocaleString('vi-VN')}</div><div class="result">${esc(shown.text)}</div>` : ''}
     `;
     // Ảnh lỗi → chữ cái đầu
     root.querySelectorAll('img.ava').forEach((img) =>
@@ -965,7 +897,6 @@ Quy tắc:
       if (!cur.auto) runCollector();
       render();
     } else if (act === 'collect-now') runCollector(true);
-    else if (act === 'eval-staff') evaluateStaff(b.dataset.staff);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
       const text = root.querySelector(`textarea.suggest-edit[data-id="${id}"]`)?.value ?? ((await kvGet('suggests'))[id]?.text || '');
@@ -975,12 +906,6 @@ Quy tắc:
         await navigator.clipboard.writeText(text);
         b.textContent = 'Đã copy';
       }
-    } else if (act === 'show') {
-      state.shown = b.dataset.key;
-      render();
-    } else if (act === 'unread') {
-      state.unreadOf = state.unreadOf === b.dataset.staff ? null : b.dataset.staff;
-      render();
     }
   }
 
