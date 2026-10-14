@@ -62,6 +62,44 @@
   const statusLabel = (s) => STATUS[s] || s || '?';
   const CLOSED = new Set(['APPROVE', 'SUCCESS', 'REJECT']); // đã chốt, không cần hỏi lại
   const FOLLOW_UP_HOURS = 12;
+  const MAX_FOLLOW_UP_DAYS = 30; // bình luận cũ hơn coi như báo giá đã nguội, không nhắc
+
+  // Tài khoản quản lý (người dùng extension) – lấy từ CRM, mặc định là Nguyễn Trung Toán
+  const MY_NAME_FALLBACK = 'Nguyễn Trung Toán';
+  const myName = (me) => me?.name || MY_NAME_FALLBACK;
+
+  // Gom các bình luận thật của quản lý để Claude học văn phong.
+  // Ưu tiên những câu nói với cùng NVKD (để xưng hô cho đúng), sau đó là các câu gần nhất.
+  function styleExamples(quotes, comments, me, nvkd, limit = 40) {
+    const name = myName(me);
+    const all = [];
+    for (const c of Object.values(comments)) {
+      const staff = staffOf(quotes[c.id], c);
+      const walk = (t, parent) => {
+        const text = (t.text || '').trim();
+        if (t.staff?.name === name && text.length >= 3) {
+          all.push({ text, at: t.createdAt, staff, parent: parent && { name: parent.staff?.name, text: (parent.text || '').trim() } });
+        }
+        (t.children || []).forEach((ch) => walk(ch, t));
+      };
+      (c.threads || []).forEach((t) => walk(t, null));
+    }
+    all.sort((a, b) => b.at - a.at);
+    const same = all.filter((e) => nvkd && (e.staff === nvkd || e.parent?.name === nvkd)).slice(0, 15);
+    const rest = all.filter((e) => !same.includes(e)).slice(0, limit - same.length);
+    return { total: all.length, list: [...same, ...rest] };
+  }
+
+  function styleBlock(examples, name) {
+    if (!examples.list.length) return '';
+    const cut = (t, n) => (t.length > n ? t.slice(0, n) + '…' : t);
+    const lines = examples.list.map((e) =>
+      e.parent?.text
+        ? `- Trả lời ${e.parent.name || '?'} ("${cut(e.parent.text.replace(/\s+/g, ' '), 120)}"):\n  ${name}: "${e.text}"`
+        : `- (báo giá của ${e.staff || '?'}) ${name}: "${e.text}"`,
+    );
+    return `VĂN PHONG CỦA ${name.toUpperCase()} – các bình luận THẬT đã viết trên CRM (học cách xưng hô với từng người, độ dài câu, từ ngữ, viết tắt, dấu câu, mức độ thân mật):\n${lines.join('\n')}`;
+  }
 
   // Bình luận mới nhất (kể cả trả lời) của một báo giá
   function lastComment(c) {
@@ -79,7 +117,12 @@
   function overdueList(quotes, comments) {
     return Object.values(comments)
       .map((c) => ({ q: quotes[c.id], c, last: lastComment(c) }))
-      .filter(({ q, last }) => last && !CLOSED.has(q?.quoteStatus) && hoursSince(last.createdAt) >= FOLLOW_UP_HOURS)
+      // Chỉ tính báo giá đã biết tình trạng (CRM tải kèm bình luận cũ của báo giá khác cùng khách)
+      .filter(({ q, last }) => {
+        if (!last || !q?.quoteStatus || CLOSED.has(q.quoteStatus)) return false;
+        const h = hoursSince(last.createdAt);
+        return h >= FOLLOW_UP_HOURS && h <= MAX_FOLLOW_UP_DAYS * 24;
+      })
       .sort((a, b) => a.last.createdAt - b.last.createdAt);
   }
 
@@ -216,9 +259,11 @@ Bộ câu hỏi nhân viên theo giai đoạn (chọn những câu hợp với t
 - Nếu đã QUÁ 12 GIỜ kể từ bình luận cuối mà báo giá chưa chốt: trọng tâm là hỏi thẳng giá cả đã ok với khách chưa, khách nói gì, và hẹn mốc giờ cập nhật.
 
 Quy tắc:
-- Người đăng bình luận là quản lý (tên được cung cấp). Xưng hô giống cách quản lý đã dùng với NVKD trong luồng; nếu chưa có thì dùng "em"/"anh/chị" lịch sự.
-- Không hỏi lại những điều đã được trả lời trong luồng.
-- Tối đa 3 câu hỏi, ngắn gọn, đánh số nếu nhiều hơn 1 câu. Thân thiện nhưng rõ ràng, có mốc thời gian phản hồi.
+- Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
+- Tuyệt đối không viết giọng văn mẫu, công sở hay "AI". Không mở đầu bằng lời chào dài, không cảm ơn, không ký tên. Nếu quản lý hay viết ngắn gọn thì viết ngắn gọn.
+- Chỉ đánh số câu hỏi nếu thật cần (từ 3 ý trở lên); 1–2 ý thì viết liền tự nhiên như nhắn tin.
+- Không hỏi lại những điều đã được trả lời trong luồng. Tối đa 3 ý hỏi; nên có mốc thời gian phản hồi nếu hợp văn phong.
+- Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
 - Chỉ trả về đúng nội dung bình luận, không giải thích, không dùng markdown.`;
 
   async function suggestComment(id) {
@@ -231,8 +276,9 @@ Quy tắc:
       const last = lastComment(c);
       const hours = last ? hoursSince(last.createdAt) : null;
       const overdue = hours != null && hours >= FOLLOW_UP_HOURS && !CLOSED.has(q?.quoteStatus);
+      const examples = styleExamples(quotes, comments, me, staffOf(q, c));
       const context = [
-        `Quản lý đăng bình luận: ${me?.name || '(không rõ)'}`,
+        `Quản lý đăng bình luận (chính là người dùng): ${myName(me)}`,
         `NVKD phụ trách: ${staffOf(q, c) || '(không rõ)'}`,
         `Thời điểm hiện tại: ${fmtTime(Date.now() / 1000)}`,
         last
@@ -245,10 +291,10 @@ Quy tắc:
       const text = await call({
         type: 'claude',
         system: SUGGEST_SYSTEM,
-        prompt: `${context}\n\n${threadText(q, c)}`,
+        prompt: [styleBlock(examples, myName(me)), context, threadText(q, c)].filter(Boolean).join('\n\n'),
         maxTokens: 4000,
       });
-      await kvMerge('suggests', { [id]: { text: text.trim(), at: Date.now(), overdue } });
+      await kvMerge('suggests', { [id]: { text: text.trim(), at: Date.now(), overdue, styleFrom: examples.list.length } });
     } catch (e) {
       state.error = e.message;
     } finally {
@@ -405,7 +451,7 @@ Quy tắc:
             ${btn('suggest', `c:${qid}`, '💬 Gợi ý câu hỏi cho NVKD', 'Đang soạn…', `data-id="${qid}"`)}
             ${btn('eval-quote', `q:${qid}`, '🤖 Đánh giá NVKD', 'Đang đánh giá…', `data-id="${qid}"`)}
           </div>
-          ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')})</span></div>
+          ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')}${sg.styleFrom ? ` · học văn phong từ ${sg.styleFrom} bình luận của bạn` : ''})</span></div>
             <div class="result suggest">${esc(sg.text)}</div>
             <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}">Chèn vào ô bình luận</button>
               <button class="act" data-act="copy" data-id="${qid}">Copy</button>
