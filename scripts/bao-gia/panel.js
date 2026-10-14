@@ -211,6 +211,8 @@
     } else if (kind === 'quote') {
       const cur = await kvGet('quotes');
       await kvMerge('quotes', { [data.id]: { ...cur[data.id], ...definedOnly(data) } });
+    } else if (kind === 'orders') {
+      await kvMerge('orders', { [data.customerId]: { ...data, at: Math.floor(Date.now() / 1000) } });
     } else if (kind === 'comments') {
       const cur = await kvGet('comments');
       const patch = {};
@@ -246,7 +248,9 @@ Yêu cầu:
         `Khách hàng: ${q.customer?.name || '?'} | Số tiền: ${money(q.amount) || '?'} | Tình trạng báo giá: ${statusLabel(q.quoteStatus)} | Tạo lúc: ${fmtTime(q.createdAt)}`,
       );
     }
-    lines.push(`NVKD phụ trách: ${staffOf(q, c) || '?'}`, 'Bình luận (theo thời gian):');
+    lines.push(`NVKD phụ trách: ${staffOf(q, c) || '?'}`);
+    if (q?.customer?.id && renderCtx.orders?.[q.customer.id]) lines.push(ordersText(renderCtx.orders[q.customer.id]));
+    lines.push('Bình luận (theo thời gian):');
     const walk = (t, depth) => {
       const file = t.file ? ' [có ảnh/file đính kèm]' : '';
       lines.push(`${'  '.repeat(depth)}${depth ? '↳ ' : '- '}[${fmtTime(t.createdAt)}] ${t.staff?.name || '?'}: ${t.text.trim()}${file}`);
@@ -277,6 +281,7 @@ Yêu cầu:
 
   async function evaluateQuote(id) {
     const [quotes, comments] = await Promise.all([kvGet('quotes'), kvGet('comments')]);
+    renderCtx.orders = await kvGet('orders');
     const q = quotes[id];
     const c = comments[id];
     const staff = staffOf(q, c);
@@ -391,6 +396,7 @@ Quy tắc:
     setBusy(key, true);
     try {
       const [quotes, comments, me] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me')]);
+      renderCtx.orders = await kvGet('orders');
       meName = myName(me);
       const q = quotes[id];
       const c = comments[id];
@@ -521,12 +527,12 @@ Quy tắc:
       .slice(0, full ? COLLECT.fullPerRun : COLLECT.perRun);
   }
 
-  async function loadInFrame(id) {
+  async function loadInFrame(id, url = `/co-hoi/update/${id}`, readyRe = /\/fileAttach\?/) {
     const f = document.createElement('iframe');
     f.name = 'dg-collector';
     f.setAttribute('aria-hidden', 'true');
     f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:900px;visibility:hidden;pointer-events:none';
-    f.src = `/co-hoi/update/${id}`;
+    f.src = url;
     document.documentElement.append(f);
     const start = Date.now();
     try {
@@ -534,7 +540,7 @@ Quy tắc:
         await sleep(500);
         let done = false;
         try {
-          done = f.contentWindow.performance.getEntriesByType('resource').some((e) => /\/fileAttach\?/.test(e.name));
+          done = f.contentWindow.performance.getEntriesByType('resource').some((e) => readyRe.test(e.name));
         } catch {}
         if (done) {
           await sleep(2500); // chờ panel.js trong iframe lưu xong
@@ -639,6 +645,16 @@ Quy tắc:
         progress();
         await loadInFrame(q.id);
         await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
+        // Lịch sử mua hàng của khách: tối đa 1 lần / ngày / khách
+        const cid = q.customer?.id;
+        if (cid) {
+          const od = (await kvGet('orders'))[cid];
+          if (!od || hoursSince(od.at) > 24) {
+            collect.current = `${q.code} · lịch sử mua hàng`;
+            progress();
+            await loadInFrame(null, `/khach-hang/view/${cid}?t=order`, /\/misaOrder\?.*customerId=/);
+          }
+        }
         await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
         collect.done++;
         if (full) collect.remaining = Math.max(0, collect.remaining - 1);
@@ -824,6 +840,9 @@ Quy tắc:
     button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
     .nodep { margin-left: 6px; display: inline-block; background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .orders { margin-top: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+    .orders summary { cursor: pointer; }
+    .orders table { margin-top: 6px; font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -983,6 +1002,22 @@ Quy tắc:
     return t ? ` <span class="nodep" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">🚫 Chưa cọc</span>` : '';
   };
 
+  // Lịch sử mua hàng của khách (từ trang khách hàng → đơn hàng)
+  function orderSummary(od) {
+    if (!od?.orders) return null;
+    const list = [...od.orders].sort((a, b) => b.at - a.at);
+    const total = list.reduce((a, o) => a + (o.total || 0), 0);
+    const year = list.filter((o) => hoursSince(o.at) <= 365 * 24);
+    return { count: od.total ?? list.length, total, year: year.length, yearTotal: year.reduce((a, o) => a + (o.total || 0), 0), last: list[0], list };
+  }
+  function ordersText(od) {
+    const s = orderSummary(od);
+    if (!s) return 'Lịch sử mua hàng: chưa có dữ liệu.';
+    if (!s.count) return 'Lịch sử mua hàng: khách CHƯA từng mua đơn nào.';
+    const lines = s.list.slice(0, 10).map((o) => `- ${o.code} ${fmtTime(o.at)} (báo giá ${o.quote || '?'}, ${o.status || ''})${o.total ? ` ${money(o.total)}` : ''}: ${o.lines.map((l) => `${l.name || l.product} x${l.qty}`).join('; ').slice(0, 200)}`);
+    return `Lịch sử mua hàng: ${s.count} đơn${s.total ? `, tổng ${money(s.total)}` : ''}; 12 tháng gần đây ${s.year} đơn${s.yearTotal ? ` (${money(s.yearTotal)})` : ''}.\n${lines.join('\n')}`;
+  }
+
   // Báo giá 0đ = quản lý chưa cho giá
   const noPrice = (q) => q != null && q.amount != null && Number(q.amount) === 0;
   const noPriceTag = (q) => (noPrice(q) ? ' <span class="noprice">⚠️ Chưa cho giá</span>' : '');
@@ -1054,7 +1089,20 @@ Quy tắc:
       ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
     </div>`;
   };
-  let renderCtx = { comments: {}, quotes: {}, collected: {}, quickSent: {}, quickDraft: {} };
+  // Khối "Lịch sử mua hàng" của khách trong báo giá đang mở
+  const ordersBox = (q) => {
+    const cid = q?.customer?.id;
+    if (!cid) return '';
+    const s = orderSummary(renderCtx.orders[cid]);
+    if (!s) return `<div class="orders muted">🛒 Lịch sử mua hàng: chưa có dữ liệu – sẽ tự thu thập (hoặc bấm nút "Mua hàng" của CRM).</div>`;
+    if (!s.count) return `<div class="orders">🛒 <b>Khách chưa từng mua đơn nào</b></div>`;
+    const rows = s.list.slice(0, 8).map((o) => `<tr><td>${esc(o.code)}</td><td>${fmtTime(o.at)}</td><td>${esc(o.quote || '')}</td>
+      <td>${esc(o.lines.map((l) => `${l.name || l.product} ×${l.qty}`).join('; ').slice(0, 90))}</td><td class="num">${o.total ? money(o.total) : ''}</td></tr>`).join('');
+    return `<details class="orders"><summary>🛒 Đã mua <b>${s.count} đơn</b>${s.total ? ` · tổng <b>${money(s.total)}</b>` : ''} · 12 tháng: ${s.year} đơn${s.last ? ` · gần nhất ${ago(s.last.at)} (${esc(s.last.code)})` : ''}</summary>
+      <table><tr><th>Đơn</th><th>Ngày</th><th>Báo giá</th><th>Sản phẩm</th><th class="num">Tiền</th></tr>${rows}</table></details>`;
+  };
+
+  let renderCtx = { comments: {}, quotes: {}, collected: {}, orders: {}, quickSent: {}, quickDraft: {} };
 
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
@@ -1095,7 +1143,7 @@ Quy tắc:
     const editing = root.activeElement?.classList;
     if (editing?.contains('suggest-edit') || editing?.contains('quick-edit')) return; // đang sửa – không vẽ lại
     avatars = avatarIndex(quotes);
-    renderCtx = { comments, quotes, collected, quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    renderCtx = { comments, quotes, collected, orders: await kvGet('orders'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
 
 
@@ -1119,6 +1167,7 @@ Quy tắc:
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
           ${quickBox(q, c, mode)}
+          ${ordersBox(q)}
           <div class="btns">
             <button class="act hero" data-act="suggest" data-id="${qid}" ${state.busy.has(`c:${qid}`) ? 'disabled' : ''}>
               ${state.busy.has(`c:${qid}`) ? '<span class="spinner light"></span> Đang soạn câu hỏi…' : '💬 Gợi ý câu hỏi cho NVKD'}</button>

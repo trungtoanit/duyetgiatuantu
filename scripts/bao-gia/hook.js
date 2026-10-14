@@ -91,6 +91,36 @@
       emit('quote', q);
       return;
     }
+    // Lịch sử mua hàng của khách (trang khách hàng → tab đơn hàng)
+    if (/\/misaOrder\?/.test(url) && /[?&]customerId=\d+/.test(url) && Array.isArray(d.misaOrders)) {
+      const customerId = Number(url.match(/[?&]customerId=(\d+)/)[1]);
+      const orders = d.misaOrders.map((o) => {
+        const lines = (o.misaOrderDetails || []).map((x) => {
+          const op = x.opportunityProduct || {};
+          const price = x.price || op.price || 0;
+          return {
+            product: x.productionCode || x.productId || '',
+            name: x.description || op.name || '',
+            qty: x.quantity || 0,
+            delivered: x.deliveredQuantity || 0,
+            price,
+            total: x.totalPrice || (price && x.quantity ? price * x.quantity : op.totalPrice || 0),
+          };
+        });
+        return {
+          id: o.id,
+          code: o.code,
+          at: o.orderedAt || o.createdAt,
+          status: o.status,
+          deliveryDate: (o.deliveryDate || '').slice(0, 10),
+          quote: o.opportunity?.code || '',
+          total: lines.reduce((a, l) => a + (l.total || 0), 0),
+          lines,
+        };
+      });
+      emit('orders', { customerId, total: d.total ?? orders.length, orders });
+      return;
+    }
     // Bình luận: ERP lưu dưới dạng fileAttach (bình luận gốc + children là trả lời)
     if (/\/fileAttach\?/.test(url) && Array.isArray(d.fileAttaches)) {
       const byOpp = {};
