@@ -280,8 +280,8 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
   // ===== BỘ CÂU HỎI NHÂN VIÊN TRONG BÁO GIÁ =====
   // Muốn nạp thêm câu hỏi: thêm 1 dòng vào đúng nhóm rồi push lên git.
   const BO_CAU_HOI = {
-    // Luôn cân nhắc hỏi ở gợi ý bình thường (không gộp vào hỏi nhanh / chào lại / tình huống đặc biệt)
-    luonHoi: ['Đã hẹn gặp khách hàng này chưa?', 'Đã tới audit khách hàng này chưa?'],
+    // Luôn cân nhắc hỏi ở gợi ý bình thường và chế độ chào lại (không gộp vào hỏi nhanh / tình huống đặc biệt)
+    luonHoi: ['"Em tới công ty khách hàng xem quy mô chưa em?" (giữ cách nói này, chỉ đổi xưng hô cho đúng)'],
     // Hỏi theo giai đoạn của báo giá
     theoGiaiDoan: [
       'Chưa đủ thông tin để tính giá: còn thiếu gì (số lượng, quy cách, số lớp/định lượng, in hay không, địa chỉ giao, VAT/hóa đơn, ngày cần hàng)?',
@@ -321,26 +321,26 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
 
 BỘ CÂU HỎI NHÂN VIÊN
 
-TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách), bỏ qua chế độ hỏi nhanh/chào lại:
+TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), bỏ qua chế độ hỏi nhanh/chào lại:
 ${tinhHuongText()}
 
-Câu luôn cân nhắc hỏi – CHỈ dùng khi không ở chế độ hỏi nhanh/chào lại và không khớp tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
+Câu luôn cân nhắc hỏi – dùng ở gợi ý bình thường và chế độ chào lại; KHÔNG dùng ở chế độ hỏi nhanh và tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
 ${list(BO_CAU_HOI.luonHoi)}
 
 Câu hỏi theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
 ${list(BO_CAU_HOI.theoGiaiDoan)}
 
-Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách), không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
+Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
 ${list(BO_CAU_HOI.hoiNhanh)}
 
-Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): viết 1–2 câu ngắn nhắc NVKD chào lại khách theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách). Có thể nhắc 1 chi tiết từ luồng nếu giúp NVKD có cớ chào lại (vd. phương án mới đã chốt trong luồng), nhưng không hỏi lại chuyện giá cũ, không đánh số:
-${list(BO_CAU_HOI.chaoLai)}
+Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): viết 1–2 câu ngắn nhắc NVKD chào lại khách theo các ý sau, không gộp thêm câu nào khác. Có thể nhắc 1 chi tiết từ luồng nếu giúp NVKD có cớ chào lại (vd. phương án mới đã chốt trong luồng), nhưng không hỏi lại chuyện giá cũ, không đánh số:
+${list([...BO_CAU_HOI.chaoLai, ...BO_CAU_HOI.luonHoi])}
 
 Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
 - Tuyệt đối không viết giọng văn mẫu, công sở hay "AI". Không mở đầu bằng lời chào dài, không cảm ơn, không ký tên. Nếu quản lý hay viết ngắn gọn thì viết ngắn gọn.
 - Chỉ đánh số câu hỏi nếu thật cần (từ 3 ý trở lên); 1–2 ý thì viết liền tự nhiên như nhắn tin.
-- Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã gặp/hẹn gặp hoặc đã audit khách thì không hỏi lại). Tối đa 3 ý hỏi.
+- Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã tới công ty khách / đã gặp khách thì không hỏi lại). Tối đa 3 ý hỏi.
 - Ở gợi ý bình thường (không phải hỏi nhanh / chào lại / tình huống đặc biệt): kết thúc bằng câu "${BO_CAU_HOI.ketThuc}" (chỉ đổi xưng hô cho đúng). KHÔNG hẹn giờ cụ thể kiểu "phản hồi trước 11h hôm nay".
 - Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
 - Chỉ trả về đúng nội dung bình luận, không giải thích, không dùng markdown.`;

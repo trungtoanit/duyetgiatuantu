@@ -5,6 +5,25 @@
   if (window.__dgHooked) return;
   window.__dgHooked = true;
 
+  // CRM vừa cập nhật bản mới mà trình duyệt còn giữ trang HTML cũ trong cache → file main.*.js cũ
+  // bị 404 → trang trắng. Khi gặp, làm mới cache rồi tải lại trang (tối đa 1 lần / phút).
+  window.addEventListener(
+    'error',
+    (e) => {
+      const t = e.target;
+      if (!t || t.tagName !== 'SCRIPT' || !/\/static\/js\/main\.[^/]+\.js/.test(t.src)) return;
+      try {
+        const last = Number(sessionStorage.getItem('dgStaleReload') || 0);
+        if (Date.now() - last < 60000) return;
+        sessionStorage.setItem('dgStaleReload', String(Date.now()));
+      } catch {
+        return;
+      }
+      fetch(location.href, { cache: 'reload' }).finally(() => location.reload());
+    },
+    true,
+  );
+
   const API = /:8080\/v1\/admin\//;
   const emit = (kind, data) =>
     document.dispatchEvent(new CustomEvent('dg:data', { detail: JSON.stringify({ kind, data }) }));

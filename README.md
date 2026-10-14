@@ -32,8 +32,8 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
      Extension không tự gửi: bạn xem lại rồi tự bấm gửi.
    - **Bộ câu hỏi nhân viên** nằm trong `BO_CAU_HOI` ở đầu [scripts/bao-gia/panel.js](scripts/bao-gia/panel.js).
      Muốn nạp thêm câu hỏi thì thêm một dòng vào nhóm phù hợp rồi push:
-     `luonHoi` (luôn cân nhắc hỏi ở gợi ý bình thường – vd. đã hẹn gặp khách chưa, đã tới audit khách chưa;
-     không gộp vào hỏi nhanh, chào lại hay tình huống đặc biệt),
+     `luonHoi` (luôn cân nhắc hỏi ở gợi ý bình thường và chào lại – "Em tới công ty khách hàng xem quy mô chưa em?";
+     không gộp vào hỏi nhanh hay tình huống đặc biệt),
      `theoGiaiDoan` (theo giai đoạn báo giá), `hoiNhanh` (khi quá 12 giờ),
      `chaoLai` (báo giá Thất bại hoặc im lặng quá 30 ngày – chào lại khách, hỏi khách còn dự án thùng khác không).
      `tinhHuong` (tình huống đặc biệt nhận ra từ nội dung bình luận, ưu tiên hơn các nhóm khác – mỗi mục gồm
