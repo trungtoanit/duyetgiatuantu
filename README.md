@@ -50,7 +50,7 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
    - **Báo giá đang mở → 🤖 Đánh giá NVKD**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
    - **⏰ Quá 12 giờ chưa cập nhật**: liệt kê báo giá chưa chốt (khác Duyệt lên đơn, Thành công, Thất bại)
      mà bình luận cuối đã quá 12 giờ. Số lượng hiện ngay trên nút nổi. Với những báo giá này, câu hỏi gợi ý
-     tập trung vào việc "giá cả đã ok với khách chưa".
+     tập trung vào việc hỏi giá cả đạt chưa, ví dụ "8 ngày chưa có phản hồi, báo cáo lại nhé chị. Giá cả đạt chưa chị?".
    - **Theo NVKD**: số báo giá, số chưa đọc (bấm để xem danh sách), số có bình luận,
      điểm trung bình. **🤖 Tổng hợp** đánh giá NVKD qua tối đa 30 báo giá gần nhất có bình luận.
 

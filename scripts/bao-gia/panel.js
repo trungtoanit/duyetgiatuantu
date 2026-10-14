@@ -300,7 +300,8 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
       'Khách chê/chưa chốt: "Nếu giá vẫn chưa tới, khách tăng số lượng được không để anh tính lại cho sát?" (giữ nguyên ý và cách nói này, chỉ đổi xưng hô cho đúng)',
     ],
     // Chế độ hỏi nhanh: đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt
-    hoiNhanh: ['Giá cả ok chưa, khách đồng ý chốt chưa?'],
+    // Giữ đúng cách nói, vd: "8 ngày chưa có phản hồi, báo cáo lại nhé chị. Giá cả đạt chưa chị?"
+    hoiNhanh: ['"Giá cả đạt chưa?" (giữ nguyên cách nói này, chỉ thêm xưng hô ở cuối; không thêm "khách đồng ý chốt chưa")'],
     // Câu kết ở gợi ý bình thường (thay cho kiểu hẹn giờ "phản hồi trước 11h")
     ketThuc: 'Làm việc với khách xong báo cáo lại cho anh.',
     // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
@@ -742,7 +743,7 @@ Quy tắc:
           <div><b>${esc(q?.code || c?.code || '#' + qid)}</b> – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
-          ${mode === 'hoiNhanh' ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đã ok chưa.</div>` : ''}
+          ${mode === 'hoiNhanh' ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đạt chưa.</div>` : ''}
           ${mode === 'chaoLai' ? `<div class="warn">💤 Báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`} – nên nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.</div>` : ''}
           <div class="btns">
             ${btn('suggest', `c:${qid}`, '💬 Gợi ý câu hỏi cho NVKD', 'Đang soạn…', `data-id="${qid}"`)}
