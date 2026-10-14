@@ -521,6 +521,12 @@ Quy tắc:
 
   // Đọc N trang đầu của danh sách Báo giá (cùng bộ lọc người dùng đang dùng) trong iframe ẩn:
   // bấm lần lượt trang 2..N; hook.js trong iframe ghi lại từng trang. Khôi phục bộ lọc/trang của người dùng sau đó.
+  // Trạng thái thu thập → lưu cho popup của extension hiển thị
+  const progress = () => {
+    call({ type: 'kv.set', key: 'collectStatus', value: { ...collect, at: Date.now() } }).catch(() => {});
+    render();
+  };
+
   async function collectListPages() {
     let saved = null;
     try {
@@ -551,12 +557,12 @@ Quy tắc:
     };
     try {
       collect.current = 'danh sách trang 1';
-      render();
+      progress();
       if (!(await waitFor(() => loaded(1), 25000))) return;
       await sleep(1500);
       for (let page = 2; page <= COLLECT.listPages; page++) {
         collect.current = `danh sách trang ${page}`;
-        render();
+        progress();
         const li = await waitFor(() => f.contentDocument?.querySelector(`.ant-pagination-item-${page}`), 5000);
         if (!li) break;
         f.contentDocument.querySelector(`.ant-pagination-item-${page}`).click();
@@ -590,11 +596,11 @@ Quy tắc:
       const [quotes, comments, collected] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('collected')]);
       const queue = pickQueue(quotes, comments, collected);
       collect.total = queue.length;
-      render();
+      progress();
       for (const q of queue) {
         if (!force && !(await getSettings()).auto) break;
         collect.current = q.code;
-        render();
+        progress();
         await loadInFrame(q.id);
         await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
         await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
@@ -603,7 +609,7 @@ Quy tắc:
       }
       // Tự phân tích: soạn gợi ý cho các báo giá cần hỏi lại mà chưa có gợi ý mới hơn bình luận cuối
       collect.current = 'phân tích';
-      render();
+      progress();
       const [q2, c2, sg] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('suggests')]);
       const need = [...listByMode(q2, c2, 'hoiNhanh'), ...listByMode(q2, c2, 'chaoLai')]
         .filter(({ c, last }) => !sg[c.id] || sg[c.id].at / 1000 < last.createdAt)
@@ -619,13 +625,22 @@ Quy tắc:
       collect.current = '';
       collect.lastRun = Date.now();
       await call({ type: 'kv.set', key: 'collectLock', value: null }).catch(() => {});
-      render();
+      progress();
     }
   }
 
   if (IS_TOP) {
     setTimeout(() => runCollector(), 15000);
     setInterval(() => runCollector(), COLLECT.everyMin * 60 * 1000);
+    // Nút "Chạy ngay" trong popup extension ghi kv collectNow = thời điểm bấm
+    let handledNow = Date.now();
+    setInterval(async () => {
+      const t = await call({ type: 'kv.get', key: 'collectNow' }).catch(() => null);
+      if (typeof t === 'number' && t > handledNow && !collect.running) {
+        handledNow = t;
+        runCollector(true);
+      }
+    }, 3000);
   }
 
   // ---------- Giao diện ----------
@@ -741,7 +756,6 @@ Quy tắc:
     .rev { margin-left: 8px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 999px;
       padding: 2px 10px; font-size: 13px; font-weight: 800; vertical-align: 1px; }
     .amt { margin-left: 6px; color: #047857; font-weight: 700; font-size: 13px; }
-    .spendline { margin-top: 6px; font-size: 13px; color: #334155; }
     .noprice { margin-left: 6px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; animation: dgbadge 1.8s ease-in-out infinite; display: inline-block; }
     .warn.danger { background: #fef2f2; border-color: #f87171; color: #991b1b; font-weight: 600; }
@@ -887,7 +901,6 @@ Quy tắc:
       kvGet('collected'),
       getSettings(),
     ]);
-    const spend = await call({ type: 'spend.get' }).catch(() => null); // background cũ chưa có → bỏ qua
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = listByMode(quotes, comments, 'chaoLai');
     const fab = root.querySelector('.fab');
@@ -966,18 +979,7 @@ Quy tắc:
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
       <div class="muted">Dựa trên ${all.length} báo giá và ${Object.keys(comments).length} báo giá có bình luận mà extension đã ghi lại khi bạn xem CRM.
-      Mở trang Báo giá để cập nhật danh sách; bình luận được thu thập ngầm (không đánh dấu đã đọc).</div>
-      <div class="collector">🔄 Thu thập ngầm & tự phân tích:
-        <button class="act" data-act="toggle-auto">${settings.auto ? 'Đang bật' : 'Đang tắt'}</button>
-        ${collect.running
-          ? `<span class="muted">${collect.current === 'phân tích' ? `đang soạn gợi ý (${collect.suggested})…` : (/^danh sách/.test(collect.current) ? `đang đọc ${esc(collect.current)}/${COLLECT.listPages}…` : `đang đọc ${esc(collect.current)} (${collect.done}/${collect.total})…`)}</span>`
-          : `<button class="act" data-act="collect-now">Chạy ngay</button>
-             <span class="muted">${collect.lastRun ? `lần cuối ${new Date(collect.lastRun).toLocaleTimeString('vi-VN')} · ${collect.done} báo giá, ${collect.suggested} gợi ý` : `tự chạy mỗi ${COLLECT.everyMin} phút`} · đã thu thập ${Object.keys(collected).length}</span>`}
-      </div>
-      <div class="collector">📂 Tự mở bảng khi vào báo giá:
-        <button class="act" data-act="toggle-autoopen">${settings.autoOpen ? 'Đang bật' : 'Đang tắt'}</button>
-      </div>
-      ${spend ? `<div class="spendline">💳 Claude: hôm nay <b>$${spend.today.toFixed(2)}</b> · tháng này <b>$${spend.month.toFixed(2)}</b>${spend.remaining != null ? ` · còn lại khoảng <b class="${spend.remaining < 5 ? 'bad' : 'good'}">$${spend.remaining.toFixed(2)}</b>` : ' · <span class="muted">nhập số dư trong popup extension để xem số còn lại</span>'}</div>` : ''}
+      Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
       ${overdueBox}
@@ -1041,16 +1043,6 @@ Quy tắc:
     }
     else if (act === 'eval-quote') evaluateQuote(id);
     else if (act === 'suggest') suggestComment(id);
-    else if (act === 'toggle-autoopen') {
-      const cur = await getSettings();
-      await call({ type: 'kv.set', key: 'settings', value: { ...cur, autoOpen: !cur.autoOpen } });
-      render();
-    } else if (act === 'toggle-auto') {
-      const cur = await getSettings();
-      await call({ type: 'kv.set', key: 'settings', value: { ...cur, auto: !cur.auto } });
-      if (!cur.auto) runCollector();
-      render();
-    } else if (act === 'collect-now') runCollector(true);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
       const text = root.querySelector(`textarea.suggest-edit[data-id="${id}"]`)?.value ?? ((await kvGet('suggests'))[id]?.text || '');

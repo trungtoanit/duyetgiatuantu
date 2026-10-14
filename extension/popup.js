@@ -98,4 +98,36 @@ form.onsubmit = async (e) => {
   setTimeout(() => send('getStatus'), 1500);
 };
 
+// ---- Tính năng trên CRM (lưu chung kho dữ liệu với script trên trang: chrome.storage.local "kv:*") ----
+const KV = (k) => `kv:${k}`;
+async function loadCrm() {
+  const o = await chrome.storage.local.get([KV('settings'), KV('collectStatus'), KV('collected')]);
+  const st = { auto: true, autoOpen: false, ...(o[KV('settings')] || {}) };
+  $('optAuto').checked = !!st.auto;
+  $('optAutoOpen').checked = !!st.autoOpen;
+  const c = o[KV('collectStatus')];
+  const n = Object.keys(o[KV('collected')] || {}).length;
+  let text = `Đã thu thập ${n} báo giá`;
+  if (c?.running && Date.now() - c.at < 120000) {
+    text = c.current === 'phân tích'
+      ? `Đang soạn gợi ý (${c.suggested})…`
+      : /^danh sách/.test(c.current) ? `Đang đọc ${c.current}…` : `Đang đọc ${c.current} (${c.done}/${c.total})…`;
+  } else if (c?.lastRun) {
+    text += ` · lần cuối ${ago(c.lastRun)}: ${c.done} báo giá, ${c.suggested} gợi ý`;
+  }
+  $('collectStatus').textContent = text;
+}
+async function saveSetting(patch) {
+  const o = await chrome.storage.local.get(KV('settings'));
+  await chrome.storage.local.set({ [KV('settings')]: { auto: true, autoOpen: false, ...(o[KV('settings')] || {}), ...patch } });
+}
+$('optAuto').onchange = (e) => saveSetting({ auto: e.target.checked });
+$('optAutoOpen').onchange = (e) => saveSetting({ autoOpen: e.target.checked });
+$('collectNow').onclick = async () => {
+  await chrome.storage.local.set({ [KV('collectNow')]: Date.now() }); // tab CRM đang mở sẽ bắt đầu trong vài giây
+  $('collectStatus').textContent = 'Đã yêu cầu – tab CRM đang mở sẽ bắt đầu trong vài giây…';
+};
+loadCrm();
+setInterval(loadCrm, 2000);
+
 send('getStatus');
