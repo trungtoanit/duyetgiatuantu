@@ -642,9 +642,15 @@ Quy tắc:
       background: linear-gradient(90deg, #1d4ed8, #7c3aed, #1d4ed8); background-size: 200% 100%;
       -webkit-background-clip: text; background-clip: text; color: transparent; animation: dgshine 2.4s linear infinite; }
     .lname { font-size: 17px; font-weight: 600; line-height: 1.35; color: #0f172a; margin-bottom: 10px; }
-    .lcust { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; color: #334155;
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; }
-    .licon { font-size: 15px; }
+    .lcust { display: flex; align-items: center; gap: 14px; margin-top: 4px; padding: 14px 16px; border-radius: 14px;
+      background: linear-gradient(135deg, #fff7ed, #fffbeb); border: 1px solid #fed7aa; border-left: 5px solid #f97316;
+      box-shadow: 0 4px 14px rgba(249,115,22,.12); }
+    .licon { flex: none; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      font-size: 24px; background: #fff; box-shadow: 0 2px 8px rgba(249,115,22,.18); }
+    .lcust-body { min-width: 0; flex: 1; }
+    .lcust-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #c2410c;
+      display: flex; align-items: center; gap: 4px; }
+    .lcust-name { font-size: 20px; line-height: 1.3; font-weight: 800; color: #7c2d12; margin-top: 2px; word-break: break-word; }
     .lstaff { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: #475569; }
     .lstatus { margin-left: auto; background: #eef2ff; color: #4338ca; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
     .spinner { width: 16px; height: 16px; border: 2.5px solid #dbe4ff; border-top-color: #1d4ed8; border-radius: 50%;
@@ -703,7 +709,7 @@ Quy tắc:
         <div class="lcode">${esc(code || 'Báo giá')}</div>
         ${q?.name ? `<div class="lname">${esc(q.name)}</div>` : ''}
         ${q?.customer?.name || q?.customer?.code
-          ? `<div class="lcust"><span class="licon">🏢</span><span>${esc(q.customer.name || '')}</span>${custTag(q)}</div>`
+          ? `<div class="lcust"><span class="licon">🏢</span><div class="lcust-body"><div class="lcust-label">Khách hàng${custTag(q)}</div><div class="lcust-name">${esc(q.customer.name || q.customer.code)}</div></div></div>`
           : ''}
         ${staff ? `<div class="lstaff">${avatarHtml(staff, 22)}<span>${esc(staff)}</span>${q?.quoteStatus ? `<span class="lstatus">${esc(statusLabel(q.quoteStatus))}</span>` : ''}</div>` : ''}
       </div>`;
