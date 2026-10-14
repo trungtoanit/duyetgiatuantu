@@ -1008,6 +1008,16 @@ Quy tắc:
     .mgnbox .link { color: #1d4ed8; font-size: 12px; text-decoration: underline; margin-left: 6px; }
     .mgnbox .expl { margin-top: 6px; font-size: 13px; color: #334155; }
     .mgnbox table { margin-top: 6px; font-size: 12px; }
+    .side { position: fixed; right: 16px; top: 130px; z-index: 2147483645; width: 280px; max-height: calc(100vh - 160px); overflow: auto;
+      background: #fff; border: 1px solid #e9d5ff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); padding: 12px 14px;
+      font-size: 13px; color: #1f2328; }
+    .side[hidden] { display: none; }
+    .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .side-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .side-row b { font-size: 22px; font-weight: 800; }
+    .side-row b.good { color: #047857; } .side-row b.bad { color: #b91c1c; }
+    .side-d { margin-top: 6px; padding: 6px 8px; font-size: 12px; }
+    .side-d summary { font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1017,7 +1027,7 @@ Quy tắc:
     host.id = 'dg-root';
     document.documentElement.append(host);
     root = host.attachShadow({ mode: 'open' });
-    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Đánh giá NVKD</button><div class="panel" hidden></div>`;
+    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Đánh giá NVKD</button><div class="panel" hidden></div><div class="side" hidden></div>`;
     root.querySelector('.fab').onclick = () => {
       const p = root.querySelector('.panel');
       p.hidden = !p.hidden;
@@ -1497,7 +1507,38 @@ Quy tắc:
       render();
     }
   }
-  const marginBox = (q) => {
+  // Tóm tắt riêng từng loại: Flexo (còn lại sau giấy tấm) và Offset (đang bán %, thấp nhất trong các sản phẩm)
+  function marginParts(q) {
+    const m = renderCtx.margins?.[q?.code] || {};
+    const offs = Object.values(m.products || {});
+    return {
+      flexo: flexoInfo(q),
+      offset: offs.length ? Math.min(...offs.map((x) => x.pct)) : null,
+      offs: Object.entries(m.products || {}),
+    };
+  }
+  const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
+
+  function renderSide(q) {
+    const el = root?.querySelector('.side');
+    if (!el) return;
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+    if (!q || !kinds.length) {
+      el.hidden = true;
+      return;
+    }
+    const { flexo, offset } = marginParts(q);
+    const busy = marginFetching.has(q.id);
+    if (IS_TOP && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && !flexo && q.amount))) setTimeout(() => fetchMarginNow(q), 0);
+    const open = el.querySelector('details')?.open;
+    el.hidden = false;
+    el.innerHTML = `<div class="side-h">📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}</div>
+      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>` : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
+      ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
+      ${marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`)}`;
+  }
+
+  const marginBox = (q, compact = false) => {
     if (!q?.code) return '';
     const kinds = q.kinds || (q.offset ? ['offset'] : []);
     if (!kinds.length) return '';
@@ -1509,16 +1550,18 @@ Quy tắc:
     if (IS_TOP && (needOff || needFx)) setTimeout(() => fetchMarginNow(q), 0);
     const pct = marginOf(q);
     const busy = marginFetching.has(q.id);
-    const head = pct != null
-      ? `📊 Đơn hàng này: <b class="${pct < 30 ? 'bad' : 'good'}">${pct}%</b>`
-      : `📊 Đơn hàng này: <span class="muted">${busy ? 'đang tính…' : 'chưa có số'}</span>`;
+    const parts = marginParts(q);
+    const segs = [];
+    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.rest}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
+    if (kinds.includes('offset')) segs.push(`🟪 Offset ${parts.offset != null ? `<b class="${pctCls(parts.offset)}">${parts.offset}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
+    const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
     const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('');
     const fxRows = fx ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}${s === fx.best ? ' (rẻ nhất)' : ''}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num"><b>${Math.round((s.total / fx.base) * 1000) / 10}%</b></td></tr>`).join('') : '';
     return `<details class="mgnbox"><summary>${head}${busy ? ' <span class="spinner"></span>' : ''} <span class="link">Giải thích</span></summary>
       ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
       ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = Tổng thanh toán PO ÷ tổng giá trị báo giá (${money(fx.base)})</i>. Nhà cung cấp rẻ nhất ${esc(fx.best.code)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b>.</div>` : ''}
       ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th><th class="num">%</th></tr>${offRows}${fxRows}</table>` : '<div class="muted">Chưa có dữ liệu – extension đang tự tính trong khung ẩn.</div>'}
-      ${pct != null ? `<div class="muted">Số hiển thị là mức thấp nhất trong các hạng mục.</div>` : ''}
+      ${pct != null ? `<div class="muted">Flexo: % còn lại sau giấy tấm (nhà cung cấp rẻ nhất). Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
     </details>`;
   };
 
@@ -1582,6 +1625,10 @@ Quy tắc:
     fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
+    // Thẻ cố định bên phải trang báo giá: Flexo % / Offset % (luôn hiện, không trôi khi cuộn)
+    renderCtx.margins = await kvGet('margins');
+    renderCtx.quotes = quotes;
+    renderSide(quotes[currentQuoteId()]);
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
     if (editing?.contains('suggest-edit') || editing?.contains('quick-edit')) return; // đang sửa – không vẽ lại
