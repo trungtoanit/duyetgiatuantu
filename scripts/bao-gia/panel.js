@@ -268,7 +268,7 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
   // ===== BỘ CÂU HỎI NHÂN VIÊN TRONG BÁO GIÁ =====
   // Muốn nạp thêm câu hỏi: thêm 1 dòng vào đúng nhóm rồi push lên git.
   const BO_CAU_HOI = {
-    // Luôn cân nhắc hỏi (nếu luồng bình luận chưa có câu trả lời), kể cả ở chế độ hỏi nhanh
+    // Luôn cân nhắc hỏi ở gợi ý bình thường (không gộp vào hỏi nhanh / chào lại / tình huống đặc biệt)
     luonHoi: ['Đã hẹn gặp khách hàng này chưa?', 'Đã tới audit khách hàng này chưa?'],
     // Hỏi theo giai đoạn của báo giá
     theoGiaiDoan: [
@@ -306,17 +306,17 @@ BỘ CÂU HỎI NHÂN VIÊN
 TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách), bỏ qua chế độ hỏi nhanh/chào lại:
 ${tinhHuongText()}
 
-Câu luôn cân nhắc hỏi (bỏ qua nếu luồng bình luận đã có câu trả lời):
+Câu luôn cân nhắc hỏi – CHỈ dùng khi không ở chế độ hỏi nhanh/chào lại và không khớp tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
 ${list(BO_CAU_HOI.luonHoi)}
 
 Câu hỏi theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
 ${list(BO_CAU_HOI.theoGiaiDoan)}
 
-Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn gộp các ý sau, không hỏi thêm gì khác, không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
-${list([...BO_CAU_HOI.hoiNhanh, ...BO_CAU_HOI.luonHoi])}
+Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách), không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
+${list(BO_CAU_HOI.hoiNhanh)}
 
-Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): viết 1–2 câu ngắn nhắc NVKD chào lại khách theo các ý sau. Có thể nhắc 1 chi tiết từ luồng nếu giúp NVKD có cớ chào lại (vd. phương án mới đã chốt trong luồng), nhưng không hỏi lại chuyện giá cũ, không đánh số:
-${list([...BO_CAU_HOI.chaoLai, ...BO_CAU_HOI.luonHoi])}
+Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): viết 1–2 câu ngắn nhắc NVKD chào lại khách theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả hẹn gặp/audit khách). Có thể nhắc 1 chi tiết từ luồng nếu giúp NVKD có cớ chào lại (vd. phương án mới đã chốt trong luồng), nhưng không hỏi lại chuyện giá cũ, không đánh số:
+${list(BO_CAU_HOI.chaoLai)}
 
 Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
