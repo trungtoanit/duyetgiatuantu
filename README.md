@@ -8,9 +8,27 @@ không cần cài lại hay bấm reload extension.
 extension/   # cài vào Chrome (Load unpacked) – hiếm khi phải sửa
 scripts/     # code chạy trên trang web – sửa và push thoải mái
   manifest.json
-  lib/utils.js
-  example.js
+  bao-gia/hook.js    # nghe dữ liệu báo giá + bình luận mà CRM tự tải về
+  bao-gia/panel.js   # bảng "Đánh giá NVKD" + gọi Claude
 ```
+
+## Đánh giá nhân viên kinh doanh (sale.tuantu.com.vn)
+
+1. Trong popup extension → **Cài đặt**, nhập **Anthropic API key**, rồi bấm **Lưu**.
+   Key được lưu trong `chrome.storage.sync` và đồng bộ theo tài khoản Chrome.
+   Key chỉ nằm trong extension, trang CRM không đọc được.
+2. Mở trang **Báo giá**. Extension ghi lại danh sách báo giá trên trang đó, gồm cả trạng thái
+   đậm/nhạt (`isRead`: chưa đọc/đã đọc). Chuyển trang danh sách thì ghi thêm.
+3. Mở từng báo giá để extension ghi lại phần **Bình luận**.
+   Lưu ý: CRM tự đánh dấu báo giá là **đã đọc** khi mở.
+4. Bấm nút **📊 Đánh giá NVKD** ở góc dưới bên trái:
+   - **Báo giá đang mở → 🤖 Đánh giá**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
+   - **Theo NVKD**: số báo giá, số chưa đọc (bấm để xem danh sách), số có bình luận,
+     điểm trung bình. **🤖 Tổng hợp** đánh giá NVKD qua tối đa 30 báo giá gần nhất có bình luận.
+
+Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản hồi mà trang CRM vốn đã tải về,
+nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
+Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
 ## Cài đặt trên mỗi máy (một lần)
 
