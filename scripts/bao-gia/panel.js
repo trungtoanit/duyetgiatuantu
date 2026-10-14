@@ -693,6 +693,55 @@ Quy tắc:
     }
   }
 
+  // Báo giá Flexo: trong khung ẩn mở "Lên PO → Giấy tấm", bấm lần lượt từng mã nhà cung cấp,
+  // đọc "Tổng thanh toán". Tỉ lệ giấy tấm = tổng PO / tổng giá trị báo giá. Không lưu PO (khung chặn lệnh ghi).
+  async function readFlexoCost(f, q) {
+    const doc = f.contentDocument;
+    if (!doc) return;
+    const vis = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
+    const poBtn = [...doc.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lên PO');
+    if (!poBtn) return;
+    for (const t of ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click']) poBtn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+    let item = null;
+    for (let i = 0; i < 15 && !item; i++) {
+      await sleep(200);
+      item = [...doc.querySelectorAll('.ant-dropdown .ant-dropdown-menu-item')].find((li) => li.innerText.trim() === 'Giấy tấm');
+    }
+    if (!item) return;
+    (item.querySelector('.ant-dropdown-menu-title-content > span') || item).click();
+    let modal = null;
+    for (let i = 0; i < 25 && !modal; i++) {
+      await sleep(250);
+      modal = vis().find((m) => /Tạo PO cho báo giá/.test(m.innerText));
+    }
+    if (!modal) return;
+    await sleep(1200);
+    const readTotal = () => Number((modal.innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
+    const chips = [];
+    for (const b of modal.querySelectorAll('button.ant-btn')) {
+      const t = b.innerText.trim();
+      if (/^[A-Z][A-Z0-9_.&-]{1,12}$/.test(t) && t !== 'OUT' && !chips.some((c) => c.code === t)) chips.push({ code: t, btn: b });
+    }
+    const suppliers = [];
+    for (const ch of chips.slice(0, 8)) {
+      ch.btn.click();
+      let total = 0;
+      for (let i = 0; i < 16; i++) {
+        await sleep(400);
+        total = readTotal();
+        if (total) break;
+      }
+      const name = modal.querySelector('.ant-select-selection-item')?.innerText || '';
+      if (total) suppliers.push({ code: ch.code, name, total });
+    }
+    vis().forEach((m) => m.querySelector('.ant-modal-close')?.click());
+    if (!suppliers.length) return;
+    const all = await kvGet('margins');
+    const cur = all[q.code] || { products: {} };
+    cur.flexo = { suppliers, quoteTotal: q.amount || 0, at: Math.floor(Date.now() / 1000) };
+    await kvMerge('margins', { [q.code]: cur });
+  }
+
   async function takeLock() {
     const lock = await kvGet('collectLock');
     if (lock?.tab && lock.tab !== TAB_ID && Date.now() - lock.at < 90000) return false; // tab khác đang chạy
@@ -726,8 +775,15 @@ Quy tắc:
         if (!force && !(await getSettings()).auto) break;
         collect.current = q.code;
         progress();
-        const needMargin = q.offset && !(await kvGet('margins'))[q.code];
-        await loadInFrame(q.id, undefined, undefined, needMargin ? readOffsetMargins : null);
+        const mg = (await kvGet('margins'))[q.code];
+        const needOffset = q.offset && !Object.keys(mg?.products || {}).length;
+        const needFlexo = (q.kinds || []).includes('flexo') && !mg?.flexo && q.amount;
+        await loadInFrame(q.id, undefined, undefined, needOffset || needFlexo
+          ? async (f) => {
+              if (needOffset) await readOffsetMargins(f);
+              if (needFlexo) await readFlexoCost(f, q);
+            }
+          : null);
         await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
         // Lịch sử mua hàng của khách: tối đa 1 lần / ngày / khách
         const cid = q.customer?.id;
@@ -945,6 +1001,13 @@ Quy tắc:
     .smp { margin-left: 6px; display: inline-block; background: #fdf4ff; color: #a21caf; border: 1px solid #f5d0fe; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .smp.ok { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+    .ctr { margin-left: 6px; display: inline-block; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .mgnbox { margin-top: 8px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+    .mgnbox summary { cursor: pointer; }
+    .mgnbox .link { color: #1d4ed8; font-size: 12px; text-decoration: underline; margin-left: 6px; }
+    .mgnbox .expl { margin-top: 6px; font-size: 13px; color: #334155; }
+    .mgnbox table { margin-top: 6px; font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1116,16 +1179,30 @@ Quy tắc:
   };
 
   // "Đang bán (X%)" từ bảng chiết giá Offset (Ctrl+Shift+G) – thấp nhất trong các sản phẩm của báo giá
+  // Flexo: tỉ lệ giấy tấm (nhà cung cấp rẻ nhất) trên tổng giá trị báo giá; phần còn lại = 100% − tỉ lệ đó
+  const flexoInfo = (q) => {
+    const fx = q?.code && renderCtx.margins?.[q.code]?.flexo;
+    const base = fx?.quoteTotal || q?.amount;
+    if (!fx?.suppliers?.length || !base) return null;
+    const best = [...fx.suppliers].sort((a, b) => a.total - b.total)[0];
+    const cost = Math.round((best.total / base) * 1000) / 10;
+    return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, suppliers: fx.suppliers, at: fx.at };
+  };
   const marginOf = (q) => {
     const m = q?.code && renderCtx.margins?.[q.code];
     const list = m ? Object.values(m.products || {}) : [];
-    return list.length ? Math.min(...list.map((x) => x.pct)) : null;
+    const vals = list.map((x) => x.pct);
+    const fx = flexoInfo(q);
+    if (fx) vals.push(fx.rest);
+    return vals.length ? Math.min(...vals) : null;
   };
   const marginTag = (q) => {
     const pct = marginOf(q);
     if (pct == null) return '';
-    const items = Object.entries(renderCtx.margins[q.code].products).map(([spec, x]) => `${spec}: ${x.pct}%${x.price ? ` (${x.price})` : ''}`).join('\n');
-    return ` <span class="mgn ${pct < 30 ? 'low' : ''}" title="${esc(items)}">📈 Đang bán ${pct}%</span>`;
+    const items = Object.entries(renderCtx.margins[q.code].products || {}).map(([spec, x]) => `${spec}: ${x.pct}%${x.price ? ` (${x.price})` : ''}`);
+    const fx = flexoInfo(q);
+    if (fx) items.push(`Flexo – giấy tấm ${fx.cost}% (${fx.best.code}), còn ${fx.rest}%`);
+    return ` <span class="mgn ${pct < 30 ? 'low' : ''}" title="${esc(items.join('\n'))}">📈 ${pct}%</span>`;
   };
 
   // Nhận diện bình luận xin công nợ (thanh toán sau, gối đầu, CN 30 ngày…) – chỉ xét lời NVKD
@@ -1183,6 +1260,22 @@ Quy tắc:
     if (!t) return '';
     const ordered = hasOrderFull(q, c);
     return ` <span class="smp ${ordered ? 'ok' : ''}" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">✂️ Cắt mẫu${ordered ? ' → có đơn' : ''}</span>`;
+  };
+
+  // Khách đang làm hợp đồng
+  const CONTRACT_RE = /hợp\s*đồng|hop\s*dong(?![\p{L}])|(làm|lam|ký|ky|gửi|gui|soạn|duyệt)\s*(HĐ|hđ)(?![\p{L}])|\bHĐ\s*(nguyên tắc|mua bán|khung)/iu;
+  function contractInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      if (CONTRACT_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
+  }
+  const contractTag = (c) => {
+    const t = contractInfo(c);
+    return t ? ` <span class="ctr" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">📝 Hợp đồng</span>` : '';
   };
 
   // Nhận diện khách chưa / không chịu cọc
@@ -1386,6 +1479,49 @@ Quy tắc:
     }
   }
 
+  // Khối "Đơn hàng này bao nhiêu %": Offset (chiết giá) + Flexo (giấy tấm / tổng BG); bấm "Giải thích" xem chi tiết
+  const marginFetching = new Set();
+  const marginTried = {};
+  async function fetchMarginNow(q) {
+    if (marginFetching.size || Date.now() - (marginTried[q.id] || 0) < 10 * 60 * 1000) return;
+    marginTried[q.id] = Date.now();
+    marginFetching.add(q.id);
+    render();
+    try {
+      await loadInFrame(q.id, undefined, undefined, async (f) => {
+        if (q.offset) await readOffsetMargins(f);
+        if ((q.kinds || []).includes('flexo') && q.amount) await readFlexoCost(f, q);
+      });
+    } finally {
+      marginFetching.delete(q.id);
+      render();
+    }
+  }
+  const marginBox = (q) => {
+    if (!q?.code) return '';
+    const kinds = q.kinds || (q.offset ? ['offset'] : []);
+    if (!kinds.length) return '';
+    const m = renderCtx.margins?.[q.code] || {};
+    const offs = Object.entries(m.products || {});
+    const fx = flexoInfo(q);
+    const needOff = kinds.includes('offset') && !offs.length;
+    const needFx = kinds.includes('flexo') && !fx && q.amount;
+    if (IS_TOP && (needOff || needFx)) setTimeout(() => fetchMarginNow(q), 0);
+    const pct = marginOf(q);
+    const busy = marginFetching.has(q.id);
+    const head = pct != null
+      ? `📊 Đơn hàng này: <b class="${pct < 30 ? 'bad' : 'good'}">${pct}%</b>`
+      : `📊 Đơn hàng này: <span class="muted">${busy ? 'đang tính…' : 'chưa có số'}</span>`;
+    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('');
+    const fxRows = fx ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}${s === fx.best ? ' (rẻ nhất)' : ''}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num"><b>${Math.round((s.total / fx.base) * 1000) / 10}%</b></td></tr>`).join('') : '';
+    return `<details class="mgnbox"><summary>${head}${busy ? ' <span class="spinner"></span>' : ''} <span class="link">Giải thích</span></summary>
+      ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
+      ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = Tổng thanh toán PO ÷ tổng giá trị báo giá (${money(fx.base)})</i>. Nhà cung cấp rẻ nhất ${esc(fx.best.code)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b>.</div>` : ''}
+      ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th><th class="num">%</th></tr>${offRows}${fxRows}</table>` : '<div class="muted">Chưa có dữ liệu – extension đang tự tính trong khung ẩn.</div>'}
+      ${pct != null ? `<div class="muted">Số hiển thị là mức thấp nhất trong các hạng mục.</div>` : ''}
+    </details>`;
+  };
+
   // Khối "Lịch sử mua hàng" của khách trong báo giá đang mở
   const ordersBox = (q) => {
     const cid = q?.customer?.id;
@@ -1469,11 +1605,12 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${sampleTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
           ${quickBox(q, c, mode)}
+          ${marginBox(q)}
           ${ordersBox(q)}
           <div class="btns">
             <button class="act hero" data-act="suggest" data-id="${qid}" ${state.busy.has(`c:${qid}`) ? 'disabled' : ''}>
@@ -1503,6 +1640,7 @@ Quy tắc:
       credit: ({ c }) => creditInfo(c),
       promise: ({ q, c }) => promiseInfo(q, c),
       sample: ({ c }) => sampleInfo(c),
+      contract: ({ c }) => contractInfo(c),
       sampleOrder: ({ q, c }) => sampleInfo(c) && hasOrderFull(q, c),
       sampleNo: ({ q, c }) => sampleInfo(c) && !hasOrderFull(q, c),
       lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
@@ -1522,6 +1660,7 @@ Quy tắc:
       const credit = items.filter(({ c }) => creditInfo(c)).length;
       const promise = items.filter(({ q, c }) => promiseInfo(q, c)).length;
       const sample = items.filter(({ c }) => sampleInfo(c)).length;
+      const contract = items.filter(({ c }) => contractInfo(c)).length;
       const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
       const kinds = { flexo: 0, offset: 0, both: 0 };
       items.forEach(({ q }) => { const k = kindOf(q); if (k) kinds[k]++; });
@@ -1533,12 +1672,13 @@ Quy tắc:
         (credit ? filterChip('credit', 'crd', `🧾 ${credit} xin công nợ`) : '') +
         (promise ? filterChip('promise', 'prm', `🤝 ${promise} hứa lên đơn`) : '') +
         (sample ? filterChip('sample', 'smp', `✂️ ${sample} cắt mẫu`) : '') +
+        (contract ? filterChip('contract', 'ctr', `📝 ${contract} hợp đồng`) : '') +
         (lowm ? filterChip('lowm', 'mgn low', `📈 ${lowm} bán dưới 30%`) : '') +
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     const itemHtml = ({ q, c, last, f }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
     const overdueBox = `
