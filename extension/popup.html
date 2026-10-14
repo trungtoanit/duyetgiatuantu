@@ -30,6 +30,8 @@
   <div class="row"><span class="muted">Commit</span><code id="sha">–</code></div>
   <div class="row"><span class="muted">Phiên bản</span><span id="version">–</span></div>
   <div class="row"><span class="muted">Kiểm tra lần cuối</span><span id="lastCheck">–</span></div>
+  <div class="row"><span class="muted">Chi phí Claude hôm nay / tháng</span><span id="spend">–</span></div>
+  <div class="row"><span class="muted">Số dư Anthropic còn lại (ước tính)</span><b id="remaining">–</b></div>
   <div id="error" class="err"></div>
 
   <b>Script đang chạy</b>
@@ -37,6 +39,13 @@
 
   <button id="sync">Cập nhật ngay</button>
   <button id="reload">Tải lại tab hiện tại</button>
+
+  <details>
+    <summary>Số dư Anthropic</summary>
+    <div class="muted" style="margin-top:6px">API không cho đọc số dư. Xem số dư trên platform.claude.com (Billing) rồi nhập vào đây; extension tự trừ chi phí các lần gọi Claude sau đó.</div>
+    <label>Số dư hiện tại (USD) <input id="balance" type="number" step="0.01" min="0"></label>
+    <button id="saveBalance" type="button">Lưu số dư</button>
+  </details>
 
   <details>
     <summary>Cài đặt</summary>

@@ -149,6 +149,59 @@ async function kvGet(key) {
   return o[kvKey(key)] ?? null;
 }
 
+// ---- Theo dõi chi phí Claude ----
+// API key thường không đọc được số dư tài khoản Anthropic, nên extension tự cộng chi phí từ `usage`
+// của mỗi lần gọi (giá USD / 1 triệu token). Người dùng nhập số dư hiện tại trong popup để tính số còn lại.
+const PRICES = {
+  'claude-opus-5-5': { in: 4, out: 20, cacheRead: 0.2 },
+  'claude-sonnet-5-5': { in: 2, out: 10, cacheRead: 0.2 },
+  'claude-haiku-5-5': { in: 0.1, out: 0.5, cacheRead: 0.01 },
+  'claude-fable-5-1': { in: 10, out: 50, cacheRead: 0.25 },
+  'claude-opus-5': { in: 5, out: 25, cacheRead: 0.5 },
+  'claude-opus-4-8': { in: 5, out: 25, cacheRead: 0.5 },
+};
+const vnDate = (t = Date.now()) => new Date(t + 7 * 3600 * 1000).toISOString().slice(0, 10); // ngày theo giờ VN
+
+function costOf(model, u = {}) {
+  const p = PRICES[model] || PRICES['claude-opus-5-5'];
+  const cacheWrite = (u.cache_creation_input_tokens || 0) * p.in * 1.25;
+  return ((u.input_tokens || 0) * p.in + (u.output_tokens || 0) * p.out + (u.cache_read_input_tokens || 0) * p.cacheRead + cacheWrite) / 1e6;
+}
+
+let spendQueue = Promise.resolve();
+function addSpend(usd) {
+  spendQueue = spendQueue.then(async () => {
+    const { spend = { total: 0, days: {} } } = await chrome.storage.sync.get('spend');
+    const day = vnDate();
+    spend.total = (spend.total || 0) + usd;
+    spend.days = spend.days || {};
+    spend.days[day] = (spend.days[day] || 0) + usd;
+    const keep = Object.keys(spend.days).sort().slice(-62); // giữ ~2 tháng
+    spend.days = Object.fromEntries(keep.map((d) => [d, spend.days[d]]));
+    await chrome.storage.sync.set({ spend });
+  }).catch(() => {});
+  return spendQueue;
+}
+
+async function getSpend() {
+  const { spend = { total: 0, days: {} }, balance } = await chrome.storage.sync.get(['spend', 'balance']);
+  const today = vnDate();
+  const month = today.slice(0, 7);
+  const sum = (pred) => Object.entries(spend.days || {}).filter(([d]) => pred(d)).reduce((a, [, v]) => a + v, 0);
+  const out = { today: sum((d) => d === today), month: sum((d) => d.startsWith(month)), total: spend.total || 0 };
+  if (balance?.amount != null) {
+    out.balance = balance.amount;
+    out.balanceAt = balance.at;
+    out.remaining = balance.amount - (out.total - (balance.totalAtSet || 0));
+  }
+  return out;
+}
+
+async function setBalance(amount) {
+  const { spend = { total: 0 } } = await chrome.storage.sync.get('spend');
+  await chrome.storage.sync.set({ balance: { amount: Number(amount), at: Date.now(), totalAtSet: spend.total || 0 } });
+}
+
 async function callClaude({ system, prompt, maxTokens = 16000 }) {
   const cfg = await getConfig();
   if (!cfg.anthropicKey) throw new Error('Chưa nhập Anthropic API key trong popup của extension.');
@@ -172,6 +225,7 @@ async function callClaude({ system, prompt, maxTokens = 16000 }) {
   });
   const j = await res.json();
   if (!res.ok) throw new Error(j.error?.message || `Claude API lỗi ${res.status}`);
+  await addSpend(costOf(j.model || cfg.model, j.usage)); // tính cả khi bị từ chối (vẫn bị tính tiền)
   if (j.stop_reason === 'refusal') throw new Error('Claude từ chối xử lý yêu cầu này.');
   return j.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 }
@@ -186,6 +240,7 @@ const services = {
       await chrome.storage.local.set({ [kvKey(key)]: Object.assign(cur, patch) });
     }),
   claude: callClaude,
+  'spend.get': getSpend,
 };
 
 chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {
@@ -200,6 +255,7 @@ chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     if (msg.type === 'syncNow') await sync(true);
+    if (msg.type === 'setBalance') await setBalance(msg.amount);
     const [cfg, local] = await Promise.all([
       getConfig(),
       chrome.storage.local.get(['sha', 'bundle', 'status']),
@@ -211,6 +267,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       scripts: (local.bundle?.scripts || []).map(({ code, ...s }) => s),
       status: local.status || {},
       userScriptsAvailable: userScriptsAvailable(),
+      spend: await getSpend(),
     });
   })();
   return true;

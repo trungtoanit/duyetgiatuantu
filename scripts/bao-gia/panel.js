@@ -375,6 +375,9 @@ Quy tắc:
           ? `Bình luận cuối: ${humanDuration(hours)} trước, của ${last.staff?.name || '?'}. Khoảng thời gian im lặng: ${humanDuration(hours)}.`
           : 'Chưa có bình luận nào.',
         `Nếu khớp tình huống có nhiều phiên bản câu hỏi: dùng phiên bản số ${1 + Math.floor(Math.random() * maxVariants())} (nếu tình huống có ít phiên bản hơn thì lấy phiên bản cuối).`,
+        noPrice(q)
+          ? 'BÁO GIÁ ĐANG 0đ: quản lý CHƯA cho giá. KHÔNG hỏi NVKD "giá đạt chưa / khách phản hồi giá"; nếu cần thì chỉ hỏi NVKD còn thiếu thông tin gì để quản lý tính giá.'
+          : '',
         q?.isReprint ? 'ĐƠN TÁI BẢN: sản phẩm của báo giá đã có mã SP (tái bản) – chỉ hỏi khách xuống đơn tái bản chưa.' : '',
         mode === 'hoiNhanh'
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
@@ -709,6 +712,13 @@ Quy tắc:
       50% { box-shadow: 0 6px 18px rgba(79,70,229,.35), 0 0 0 8px rgba(124,58,237,0); } }
     @keyframes dggrad { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
     @keyframes dgsweep { 0% { left: -60%; } 60%,100% { left: 130%; } }
+    .rev { margin-left: 8px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 999px;
+      padding: 2px 10px; font-size: 13px; font-weight: 800; vertical-align: 1px; }
+    .amt { margin-left: 6px; color: #047857; font-weight: 700; font-size: 13px; }
+    .spendline { margin-top: 6px; font-size: 13px; color: #334155; }
+    .noprice { margin-left: 6px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; animation: dgbadge 1.8s ease-in-out infinite; display: inline-block; }
+    .warn.danger { background: #fef2f2; border-color: #f87171; color: #991b1b; font-weight: 600; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -815,6 +825,10 @@ Quy tắc:
   };
 
   // Nhãn mã khách hàng (vd. "NPT VH"), di chuột để xem tên đầy đủ
+  // Báo giá 0đ = quản lý chưa cho giá
+  const noPrice = (q) => q != null && q.amount != null && Number(q.amount) === 0;
+  const noPriceTag = (q) => (noPrice(q) ? ' <span class="noprice">⚠️ Chưa cho giá</span>' : '');
+
   const custTag = (q) =>
     q?.customer?.code ? ` <span class="kh" title="${esc(q.customer.name || '')}">${esc(q.customer.code)}</span>` : '';
 
@@ -845,6 +859,7 @@ Quy tắc:
       kvGet('collected'),
       getSettings(),
     ]);
+    const spend = await call({ type: 'spend.get' }).catch(() => null); // background cũ chưa có → bỏ qua
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = listByMode(quotes, comments, 'chaoLai');
     const fab = root.querySelector('.fab');
@@ -876,6 +891,7 @@ Quy tắc:
           <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
+          ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
           ${q?.isReprint && !CLOSED.has(q?.quoteStatus) && !hasOrder(q, c) ? `<div class="warn">🔁 Đơn tái bản – chỉ cần hỏi NVKD khách xuống đơn tái bản chưa.</div>` : ''}
           ${mode === 'hoiNhanh' && !q?.isReprint ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đạt chưa.</div>` : ''}
           ${mode === 'chaoLai' ? `<div class="warn">💤 Báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`} – nên nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.</div>` : ''}
@@ -894,17 +910,23 @@ Quy tắc:
     }
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
-    const itemHtml = ({ q, c, last }) => `<a href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+    // Tổng doanh thu (số tiền báo giá) của một danh sách
+    const revenueHtml = (items) => {
+      const total = items.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      const zero = items.filter(({ q }) => noPrice(q)).length;
+      return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') + (zero ? ` <span class="noprice">⚠️ ${zero} chưa cho giá</span>` : '');
+    };
+    const itemHtml = ({ q, c, last }) => `<a href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}${q?.amount ? ` <span class="amt">${money(q.amount)}</span>` : ''}${noPriceTag(q)}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
       <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
-      <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
+      <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})${revenueHtml(overdue)}</h3>
       ${overdue.length
         ? `<div class="box unread">${overdue
             .map(itemHtml)
             .join('')}</div>`
         : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}
       ${stale.length
-        ? `<h3>💤 Cần chào lại khách (${stale.length})</h3><div class="box unread">${stale.slice(0, 20).map(itemHtml).join('')}</div>`
+        ? `<h3>💤 Cần chào lại khách (${stale.length})${revenueHtml(stale)}</h3><div class="box unread">${stale.slice(0, 20).map(itemHtml).join('')}</div>`
         : ''}`;
 
 
@@ -919,6 +941,7 @@ Quy tắc:
           : `<button class="act" data-act="collect-now">Chạy ngay</button>
              <span class="muted">${collect.lastRun ? `lần cuối ${new Date(collect.lastRun).toLocaleTimeString('vi-VN')} · ${collect.done} báo giá, ${collect.suggested} gợi ý` : `tự chạy mỗi ${COLLECT.everyMin} phút`} · đã thu thập ${Object.keys(collected).length}</span>`}
       </div>
+      ${spend ? `<div class="spendline">💳 Claude: hôm nay <b>$${spend.today.toFixed(2)}</b> · tháng này <b>$${spend.month.toFixed(2)}</b>${spend.remaining != null ? ` · còn lại khoảng <b class="${spend.remaining < 5 ? 'bad' : 'good'}">$${spend.remaining.toFixed(2)}</b>` : ' · <span class="muted">nhập số dư trong popup extension để xem số còn lại</span>'}</div>` : ''}
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
       ${overdueBox}

@@ -13,6 +13,12 @@ function render(data) {
   $('version').textContent = version || '–';
   $('lastCheck').textContent = fmt(status.lastCheck);
   $('error').textContent = status.error ? `Lỗi: ${status.error}` : '';
+  const usd = (n) => `$${(n || 0).toFixed(2)}`;
+  if (data.spend) {
+    $('spend').textContent = `${usd(data.spend.today)} / ${usd(data.spend.month)}`;
+    $('remaining').textContent = data.spend.remaining != null ? usd(data.spend.remaining) : 'chưa nhập số dư';
+    if (data.spend.balance != null && !$('balance').value) $('balance').value = data.spend.balance;
+  }
 
   const ul = $('scripts');
   ul.replaceChildren();
@@ -43,6 +49,12 @@ $('sync').onclick = async () => {
 $('reload').onclick = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) chrome.tabs.reload(tab.id);
+};
+
+$('saveBalance').onclick = async () => {
+  const amount = Number($('balance').value);
+  if (!Number.isFinite(amount)) return;
+  render(await chrome.runtime.sendMessage({ type: 'setBalance', amount }));
 };
 
 $('openExt').onclick = () => {
