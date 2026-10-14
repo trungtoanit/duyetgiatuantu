@@ -929,8 +929,9 @@ Quy tắc:
 
   // Nhãn mã khách hàng (vd. "NPT VH"), di chuột để xem tên đầy đủ
   // Nhận diện bình luận "khách cho giá" / "làm được không" (khách đưa giá mục tiêu, hỏi bên mình làm được không)
+  // Gồm: "làm (giá này) được không", "là được giá này không", "deal", "khách cho/báo/trả giá…", "giá mục tiêu"
   const TARGET_PRICE_RE =
-    /(làm|lam)\s*(được|duoc|đc|dc)\s*(không|khong|ko|k)\b|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot)\s*(giá|gia)\b|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/i;
+    /(làm|lam|là|la)\s*((giá|gia)\s*(này|nay|đó|do|vậy|vay)\s*)?(được|duoc|đc|dc)\s*((giá|gia)\s*(này|nay|đó|do)\s*)?(không|khong|ko|k)\b|\bdeal\b|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot|trả|tra)\s*(giá|gia)(?![\p{L}])|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/iu;
   function targetPriceInfo(c) {
     let hit = null;
     const walk = (t) => {
