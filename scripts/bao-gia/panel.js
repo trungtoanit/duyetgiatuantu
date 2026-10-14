@@ -194,6 +194,18 @@
     if (noDepositInfo(c)) add(-10, 'chưa cọc');
     return { score, reasons };
   }
+  // Sắp xếp y như danh sách Báo giá trên ERP (vị trí ghi lại khi ERP tải danh sách); chưa có vị trí → cuối.
+  // Có thể chuyển sang xếp theo điểm (lưu trong localStorage).
+  const sortMode = () => {
+    try {
+      return localStorage.getItem('dgSort') || 'erp';
+    } catch {
+      return 'erp';
+    }
+  };
+  const rankOf = (q) => (Number.isFinite(q?.erpRank) ? q.erpRank : 1e9);
+  const sortByErp = (a, b) => (sortMode() === 'erp' ? rankOf(a.q) - rankOf(b.q) : 0);
+
   function feasibleList(quotes, comments, ordersMap) {
     return Object.values(quotes)
       .filter(
@@ -206,7 +218,8 @@
         return { q, c, last: lastComment(c), f: feasibility(q, c, ordersMap) };
       })
       .filter((x) => x.f.score >= 30)
-      .sort((a, b) => b.f.score - a.f.score || (b.q.amount || 0) - (a.q.amount || 0));
+      .sort((a, b) => b.f.score - a.f.score || (b.q.amount || 0) - (a.q.amount || 0))
+      .sort(sortByErp);
   }
 
   // Báo giá chưa có bình luận nào (bộ thu thập đã mở xem mà không thấy luồng nào), chưa chốt, tạo đã hơn 1 ngày
@@ -1082,6 +1095,11 @@ Quy tắc:
     .cov { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; color: #334155; }
     .cov-bar { flex: 0 0 220px; height: 8px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
     .cov-bar span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #16a34a); border-radius: 99px; }
+    a.item.q-unread .item-main b, a.item.q-unread .item-main { font-weight: 700; }
+    a.item.q-unread .item-main b { font-weight: 800; }
+    a.item.q-read .item-main { font-weight: 400; opacity: .78; }
+    a.item.q-read .item-main b { font-weight: 600; }
+    .sortbtn { margin-left: 8px; font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1801,7 +1819,8 @@ Quy tắc:
         const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
         return { q, c, last: lastComment(c) };
       })
-      .sort((a, b) => (b.q.createdAt || 0) - (a.q.createdAt || 0));
+      .sort((a, b) => (b.q.createdAt || 0) - (a.q.createdAt || 0))
+      .sort(sortByErp);
     // Mọi báo giá có cắt mẫu (kể cả đã chốt) – để xem tỉ lệ cắt mẫu thành đơn
     const samples = Object.values(comments)
       .filter((c) => sampleInfo(c) && !isExcluded(staffOf(quotes[c.id], c)))
@@ -1916,12 +1935,13 @@ Quy tắc:
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
-    const itemHtml = ({ q, c, last, f }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
+    const itemHtml = ({ q, c, last, f }) => `<a class="item ${q?.isRead === false ? 'q-unread' : q?.isRead === true ? 'q-read' : ''}" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
       <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${pctLine(q)}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
     const overdueBox = `
-      <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}</h3>
+      <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}
+        <button class="act chipbtn sortbtn" data-act="sort" title="Đổi cách sắp xếp">${sortMode() === 'erp' ? '↕ Xếp: như ERP' : '↕ Xếp: theo điểm'}</button></h3>
       <div class="hint muted">Báo giá chưa chốt, xếp theo điểm khả năng chốt đơn (hứa lên đơn, khách cho giá, tái bản, khách quen, mới trao đổi…).</div>
       ${feasible.length
         ? `<div class="box unread">${applyFilter(feasible).slice(0, state.filter ? 300 : 60).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
@@ -2009,7 +2029,12 @@ Quy tắc:
       root.querySelector('.panel').hidden = true;
       render();
     }
-    else if (act === 'filter') {
+    else if (act === 'sort') {
+      try {
+        localStorage.setItem('dgSort', sortMode() === 'erp' ? 'score' : 'erp');
+      } catch {}
+      render();
+    } else if (act === 'filter') {
       state.filter = state.filter === b.dataset.f ? '' : b.dataset.f;
       try {
         localStorage.setItem('dgFilter', state.filter); // giữ bộ lọc sau khi F5

@@ -134,7 +134,11 @@
     }
     // Danh sách báo giá (trang /bao-gia)
     if (/\/opportunity\?/.test(url) && /[?&]type=2\b/.test(url) && Array.isArray(d.opportunities)) {
-      emit('quotes', d.opportunities.map(slimQuote));
+      // Vị trí trên danh sách ERP (để sắp xếp y như ERP)
+      const page = Number(url.match(/[?&]page=(\d+)/)?.[1] || 1);
+      const limit = Number(url.match(/[?&]limit=(\d+)/)?.[1] || d.opportunities.length || 100);
+      const at = Math.floor(Date.now() / 1000);
+      emit('quotes', d.opportunities.map((o, i) => ({ ...slimQuote(o), erpRank: (page - 1) * limit + i, erpRankAt: at })));
       return;
     }
     // Chi tiết 1 báo giá – mở trang chi tiết thì ERP tự đánh dấu đã đọc
