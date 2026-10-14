@@ -9,4 +9,8 @@ export const DEFAULT_CONFIG = {
   intervalMinutes: 1, // chu kỳ kiểm tra bản mới (phút)
   anthropicKey: '', // API key Claude, dùng cho tính năng đánh giá NVKD
   model: 'claude-opus-5-5',
+  // Đồng bộ dữ liệu giữa các máy (Supabase) – nhập trong popup, KHÔNG ghi vào git
+  supabaseUrl: '',
+  supabaseKey: '',
+  teamSecret: '',
 };

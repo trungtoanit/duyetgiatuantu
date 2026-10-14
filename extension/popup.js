@@ -41,6 +41,13 @@ function render(data) {
     $('remaining').textContent = 'cần tải lại extension';
   }
 
+  const ss = data.syncStatus || {};
+  $('syncInfo').textContent = !data.syncEnabled
+    ? 'Chưa bật – nhập Supabase URL, key và mật khẩu nhóm trong Cài đặt'
+    : `Đang bật · kéo về ${ago(ss.lastPull)} · đẩy lên ${ago(ss.lastPush)}`;
+  $('syncAll').disabled = !data.syncEnabled;
+  $('syncErr').textContent = ss.error ? `Lỗi đồng bộ: ${ss.error}` : '';
+
   const box = $('scripts');
   box.replaceChildren();
   for (const s of scripts) {
@@ -78,6 +85,13 @@ $('sync').onclick = async () => {
 $('reload').onclick = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) chrome.tabs.reload(tab.id);
+};
+
+$('syncAll').onclick = async () => {
+  $('syncAll').disabled = true;
+  $('syncAll').textContent = 'Đang đồng bộ…';
+  render(await chrome.runtime.sendMessage({ type: 'syncAll' }));
+  $('syncAll').textContent = 'Đồng bộ ngay';
 };
 
 $('saveBalance').onclick = async () => {

@@ -113,6 +113,12 @@
         <input type="checkbox" id="optAutoOpen"><i></i></label>
     </section>
 
+    <section class="card">
+      <h2>☁️ Đồng bộ giữa các máy</h2>
+      <div class="collect"><span id="syncInfo" class="hint">–</span><button id="syncAll" type="button">Đồng bộ ngay</button></div>
+      <div id="syncErr" class="err"></div>
+    </section>
+
     <div class="actions">
       <button id="sync" class="primary">⟳ Cập nhật ngay</button>
       <button id="reload">Tải lại tab</button>
@@ -147,6 +153,9 @@
         <label>Chu kỳ kiểm tra (phút) <input name="intervalMinutes" type="number" min="1"></label>
         <label>Anthropic API key (đánh giá NVKD) <input name="anthropicKey" type="password"></label>
         <label>Model Claude <input name="model" placeholder="claude-opus-5-5"></label>
+        <label>Supabase URL (đồng bộ giữa các máy) <input name="supabaseUrl" placeholder="https://xxxx.supabase.co"></label>
+        <label>Supabase anon key <input name="supabaseKey" type="password"></label>
+        <label>Mật khẩu nhóm <input name="teamSecret" type="password"></label>
         <button type="submit" class="primary">Lưu cài đặt</button>
       </form>
     </details>

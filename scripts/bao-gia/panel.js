@@ -1076,7 +1076,7 @@ Quy tắc:
   }
 
   // Cập nhật số báo giá quá 12 giờ trên nút nổi theo thời gian
-  setInterval(render, 5 * 60 * 1000);
+  setInterval(render, 60 * 1000); // cũng để hiện dữ liệu vừa đồng bộ từ máy khác
 
   // ERP là SPA: theo dõi đổi trang để cập nhật mục "Báo giá đang mở"
   // Vào trang báo giá + bật "Tự mở bảng" → mở bảng

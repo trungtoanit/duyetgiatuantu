@@ -134,10 +134,16 @@ chrome.runtime.onInstalled.addListener(async () => {
   await sync(true);
 });
 
-chrome.runtime.onStartup.addListener(() => sync());
+chrome.runtime.onStartup.addListener(() => {
+  sync();
+  pullRemote();
+});
 
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === ALARM) sync();
+  if (a.name === ALARM) {
+    sync();
+    pullRemote();
+  }
 });
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
@@ -244,6 +250,106 @@ async function callClaude({ system, prompt, maxTokens = 16000 }) {
   return j.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 }
 
+// ---- Đồng bộ dữ liệu giữa các máy qua Supabase ----
+// Bảng dg_items(ns, id, data, updated_at): mỗi báo giá / bình luận / gợi ý... là 1 dòng.
+// Bảo vệ bằng RLS + header x-team-secret (mật khẩu nhóm). Thông tin kết nối chỉ nhập trong popup.
+// Không đồng bộ: 'me' (tài khoản CRM của từng người), settings, khoá/ trạng thái thu thập.
+const SYNC_NS = ['quotes', 'comments', 'suggests', 'evals', 'collected'];
+
+async function remoteCfg() {
+  const cfg = await getConfig();
+  if (!cfg.supabaseUrl || !cfg.supabaseKey || !cfg.teamSecret) return null;
+  return {
+    url: `${cfg.supabaseUrl.replace(/\/+$/, '')}/rest/v1/dg_items`,
+    headers: {
+      apikey: cfg.supabaseKey,
+      Authorization: `Bearer ${cfg.supabaseKey}`,
+      'x-team-secret': cfg.teamSecret,
+      'content-type': 'application/json',
+    },
+  };
+}
+
+async function setSyncStatus(patch) {
+  const { syncStatus } = await chrome.storage.local.get('syncStatus');
+  await chrome.storage.local.set({ syncStatus: { ...(syncStatus || {}), ...patch } });
+}
+
+async function pushRemote(ns, patch) {
+  try {
+    const rc = await remoteCfg();
+    if (!rc) return;
+    const rows = Object.entries(patch).map(([id, data]) => ({ ns, id: String(id), data }));
+    for (let i = 0; i < rows.length; i += 500) {
+      const res = await fetch(rc.url, {
+        method: 'POST',
+        headers: { ...rc.headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(rows.slice(i, i + 500)),
+      });
+      if (!res.ok) throw new Error(`Đẩy dữ liệu lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    await setSyncStatus({ lastPush: Date.now(), error: null });
+  } catch (e) {
+    await setSyncStatus({ error: String(e.message || e) });
+  }
+}
+
+// Gộp bình luận theo id luồng (không ghi đè mất luồng mà máy này đã có)
+function mergeEntry(ns, local, remote) {
+  if (ns !== 'comments' || !local?.threads) return remote;
+  const m = new Map(local.threads.map((t) => [t.id, t]));
+  for (const t of remote.threads || []) m.set(t.id, t);
+  return { ...remote, threads: [...m.values()].sort((a, b) => a.createdAt - b.createdAt) };
+}
+
+let pulling = null;
+function pullRemote() {
+  if (!pulling) pulling = doPull().finally(() => (pulling = null));
+  return pulling;
+}
+async function doPull() {
+  try {
+    const rc = await remoteCfg();
+    if (!rc) return;
+    const { syncCursor } = await chrome.storage.local.get('syncCursor');
+    let cursor = syncCursor || '1970-01-01T00:00:00Z';
+    for (let page = 0; page < 50; page++) {
+      const q = `?select=ns,id,data,updated_at&updated_at=gt.${encodeURIComponent(cursor)}&order=updated_at.asc&limit=1000`;
+      const res = await fetch(rc.url + q, { headers: rc.headers, cache: 'no-store' });
+      if (!res.ok) throw new Error(`Kéo dữ liệu lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const rows = await res.json();
+      if (!rows.length) break;
+      const byNs = {};
+      for (const r of rows) (byNs[r.ns] ||= []).push(r);
+      await kvSerial(async () => {
+        for (const [ns, list] of Object.entries(byNs)) {
+          if (!SYNC_NS.includes(ns)) continue;
+          const cur = (await kvGet(ns)) || {};
+          for (const r of list) cur[r.id] = mergeEntry(ns, cur[r.id], r.data);
+          await chrome.storage.local.set({ [kvKey(ns)]: cur });
+        }
+      });
+      cursor = rows[rows.length - 1].updated_at;
+      await chrome.storage.local.set({ syncCursor: cursor });
+      if (rows.length < 1000) break;
+    }
+    await setSyncStatus({ lastPull: Date.now(), error: null });
+  } catch (e) {
+    await setSyncStatus({ error: String(e.message || e) });
+  }
+}
+
+// Lần đầu bật đồng bộ: đẩy toàn bộ dữ liệu máy này lên rồi kéo dữ liệu các máy khác về
+async function syncAllNow() {
+  if (!(await remoteCfg())) throw new Error('Chưa nhập đủ Supabase URL, key và mật khẩu nhóm.');
+  for (const ns of SYNC_NS) {
+    const data = (await kvGet(ns)) || {};
+    if (Object.keys(data).length) await pushRemote(ns, data);
+  }
+  await chrome.storage.local.remove('syncCursor');
+  await pullRemote();
+}
+
 const services = {
   'kv.get': ({ key }) => kvGet(key),
   'kv.set': ({ key, value }) => kvSerial(() => chrome.storage.local.set({ [kvKey(key)]: value })),
@@ -252,6 +358,7 @@ const services = {
     kvSerial(async () => {
       const cur = (await kvGet(key)) || {};
       await chrome.storage.local.set({ [kvKey(key)]: Object.assign(cur, patch) });
+      if (SYNC_NS.includes(key)) pushRemote(key, patch); // đồng bộ lên máy chủ (không chờ)
     }),
   claude: callClaude,
   'spend.get': getSpend,
@@ -270,6 +377,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     if (msg.type === 'syncNow') await sync(true);
     if (msg.type === 'setBalance') await setBalance(msg.amount);
+    if (msg.type === 'syncAll') await syncAllNow().catch((e) => setSyncStatus({ error: String(e.message || e) }));
     const [cfg, local] = await Promise.all([
       getConfig(),
       chrome.storage.local.get(['sha', 'bundle', 'status']),
@@ -282,6 +390,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       status: local.status || {},
       userScriptsAvailable: userScriptsAvailable(),
       spend: await getSpend(),
+      syncStatus: (await chrome.storage.local.get('syncStatus')).syncStatus || {},
+      syncEnabled: !!(await remoteCfg()),
     });
   })();
   return true;
