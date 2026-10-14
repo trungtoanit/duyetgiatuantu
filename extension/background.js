@@ -263,7 +263,8 @@ async function remoteCfg() {
     url: `${cfg.supabaseUrl.replace(/\/+$/, '')}/rest/v1/dg_items`,
     headers: {
       apikey: cfg.supabaseKey,
-      Authorization: `Bearer ${cfg.supabaseKey}`,
+      // Key kiểu cũ (JWT "eyJ…") gửi kèm Authorization; key mới (sb_publishable_…) chỉ dùng header apikey
+      ...(cfg.supabaseKey.startsWith('eyJ') ? { Authorization: `Bearer ${cfg.supabaseKey}` } : {}),
       'x-team-secret': cfg.teamSecret,
       'content-type': 'application/json',
     },

@@ -1,8 +1,6 @@
 -- Chạy 1 lần trong Supabase → SQL Editor → Run.
 -- Script tự sinh MẬT KHẨU NHÓM ngẫu nhiên; dòng cuối in ra mật khẩu này để nhập vào popup extension.
 
-create extension if not exists pgcrypto;
-
 create table if not exists public.dg_items (
   ns text not null,              -- quotes | comments | suggests | evals | collected | quickSent
   id text not null,              -- id báo giá
@@ -22,7 +20,7 @@ create trigger dg_touch before insert or update on public.dg_items
 -- Mật khẩu nhóm: sinh ngẫu nhiên, lưu ở bảng riêng mà anon không đọc được
 create table if not exists public.dg_secret (
   k int primary key default 1 check (k = 1),
-  v text not null default encode(gen_random_bytes(18), 'hex')
+  v text not null default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')
 );
 insert into public.dg_secret default values on conflict do nothing;
 alter table public.dg_secret enable row level security;
