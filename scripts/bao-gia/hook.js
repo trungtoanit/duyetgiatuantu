@@ -100,6 +100,10 @@
     // Đơn tái bản: sản phẩm đã có mã SP (republishType = REPUBLISH)
     isReprint: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => p.republishType === 'REPUBLISH') : undefined,
     offset: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => /OFFSET/i.test(p.productType || '')) : undefined,
+    // Loại hàng: offset (CARTON_OFFSET…) / flexo (thùng carton thường, flexo)
+    kinds: Array.isArray(o.opportunityProducts)
+      ? [...new Set(o.opportunityProducts.map((p) => (/OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : null)).filter(Boolean))]
+      : undefined,
     staff: person(o.staff),
     customer: o.customer ? { id: o.customer.id, code: o.customer.code || undefined, name: o.customer.name } : undefined,
   });
