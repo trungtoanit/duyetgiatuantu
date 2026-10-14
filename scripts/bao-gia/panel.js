@@ -6,15 +6,19 @@
   window.__dgPanel = true;
 
   // ---------- Kết nối với background của extension ----------
+  const NEED_RELOAD =
+    'Extension trên máy này chưa được cập nhật. Vào chrome://extensions, bấm nút tải lại (↻) của "Duyệt giá Tuấn Tú", rồi tải lại trang này.';
   const call = (msg) =>
-    new Promise((resolve, reject) =>
+    new Promise((resolve, reject) => {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return reject(new Error(NEED_RELOAD));
       chrome.runtime.sendMessage(msg, (r) => {
         const err = chrome.runtime.lastError;
         if (err) reject(new Error(err.message));
         else if (r?.error) reject(new Error(r.error));
-        else resolve(r?.result);
-      }),
-    );
+        else if (r === undefined) reject(new Error(NEED_RELOAD)); // background cũ không trả lời
+        else resolve(r.result);
+      });
+    });
   const kvGet = async (key) => (await call({ type: 'kv.get', key })) || {};
   const kvMerge = (key, patch) => call({ type: 'kv.merge', key, patch });
 
@@ -341,6 +345,19 @@ Quy tắc:
 
   async function render() {
     if (!root) return;
+    try {
+      await renderInner();
+    } catch (e) {
+      console.warn('[DG]', e);
+      if (isOpen()) {
+        root.querySelector('.panel').innerHTML = `
+          <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
+          <div class="err">${esc(e.message || e)}</div>`;
+      }
+    }
+  }
+
+  async function renderInner() {
     const [quotes, comments, evals, suggests] = await Promise.all([
       kvGet('quotes'),
       kvGet('comments'),
