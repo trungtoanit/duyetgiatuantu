@@ -480,7 +480,7 @@ Quy tắc:
   // Mở lần lượt từng báo giá trong 1 iframe ẩn (name="dg-collector"); chính app CRM tải dữ liệu,
   // hook.js trong iframe ghi lại bình luận và CHẶN lệnh /read + mọi lệnh ghi (chỉ đọc).
   const IS_TOP = window.top === window;
-  const COLLECT = { listPages: 5, perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
+  const COLLECT = { listPages: 10, perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
   const collect = { running: false, done: 0, total: 0, current: '', suggested: 0, lastRun: 0 };
   const TAB_ID = Math.random().toString(36).slice(2);
 
