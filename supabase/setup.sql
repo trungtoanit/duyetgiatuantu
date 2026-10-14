@@ -2,7 +2,7 @@
 -- Đổi 'DOI_MAT_KHAU_NHOM' thành mật khẩu nhóm của bạn (nhập đúng chuỗi này vào popup extension).
 
 create table if not exists public.dg_items (
-  ns text not null,              -- quotes | comments | suggests | evals | collected
+  ns text not null,              -- quotes | comments | suggests | evals | collected | quickSent
   id text not null,              -- id báo giá
   data jsonb not null,
   updated_at timestamptz not null default now(),

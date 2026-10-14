@@ -768,6 +768,11 @@ Quy tắc:
       padding: 1px 9px; font-size: 12px; font-weight: 800; animation: dgbadge 1.8s ease-in-out infinite; display: inline-block; }
     .warn.danger { background: #fef2f2; border-color: #f87171; color: #991b1b; font-weight: 600; }
     .sent { color: #047857; font-weight: 700; }
+    .warn.quick { display: grid; gap: 6px; }
+    .quick-why { font-weight: 600; }
+    .quick-row { display: flex; align-items: center; gap: 12px; }
+    .quick-text { flex: 1; font-size: 16px; font-weight: 700; color: #1f2328; background: #fff; border-radius: 8px; padding: 8px 12px;
+      border: 1px dashed #d4a72c; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -882,6 +887,61 @@ Quy tắc:
   const custTag = (q) =>
     q?.customer?.code ? ` <span class="kh" title="${esc(q.customer.name || '')}">${esc(q.customer.code)}</span>` : '';
 
+  // Xưng hô với NVKD: đoán từ các bình luận cũ của quản lý gửi chính NVKD đó (chị / anh / em)
+  function addressFor(staff, comments, quotes) {
+    if (!staff) return 'em';
+    let chi = 0, anh = 0;
+    for (const c of Object.values(comments)) {
+      if (staffOf(quotes[c.id], c) !== staff) continue;
+      const walk = (t) => {
+        if (t.staff?.name === meName) {
+          const txt = ` ${(t.text || '').toLowerCase()} `;
+          chi += (txt.match(/\schị[\s,.?!]/g) || []).length;
+          anh += (txt.match(/\sanh[\s,.?!]/g) || []).length;
+        }
+        (t.children || []).forEach(walk);
+      };
+      (c.threads || []).forEach(walk);
+    }
+    return chi > anh && chi > 0 ? 'chị' : anh > 0 ? 'anh' : 'em';
+  }
+
+  // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
+  function quickQuestion(q, c, mode, p) {
+    if (noPrice(q) || !q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
+    const last = lastComment(c);
+    const h = last ? hoursSince(last.createdAt) : 0;
+    const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
+    if (q.isReprint) return { icon: '🔁', why: 'Đơn tái bản', text: `${lead}Khách xuống đơn tái bản chưa ${p}?` };
+    if (mode === 'hoiNhanh') return { icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: `${lead}Giá cả đạt chưa ${p}?` };
+    if (mode === 'chaoLai')
+      return {
+        icon: '💤',
+        why: q.quoteStatus === 'REJECT' ? 'Báo giá thất bại' : `Im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`,
+        text: `${lead}Khách này ${p} chào lại chưa, khách còn dự án thùng khác không ${p}?`,
+      };
+    return null;
+  }
+
+  let quickCtx = {}; // id → câu hỏi nhanh đang hiển thị (dùng khi bấm gửi)
+  const quickBox = (q, c, mode) => {
+    const p = addressFor(staffOf(q, c), renderCtx.comments, renderCtx.quotes);
+    const qq = quickQuestion(q, c, mode, p);
+    if (!qq) return '';
+    const id = q.id;
+    quickCtx[id] = qq.text;
+    const sent = renderCtx.quickSent[id];
+    const key = `quick:${id}`;
+    return `<div class="warn quick">
+      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý:</div>
+      <div class="quick-row"><div class="quick-text">“${esc(qq.text)}”</div>
+        <button class="act primary" data-act="quick-send" data-id="${id}" ${state.busy.has(key) ? 'disabled' : ''}>
+          ${state.busy.has(key) ? '<span class="spinner light"></span> Đang gửi…' : sent ? '📨 Gửi lại' : '📨 Bình luận ngay'}</button></div>
+      ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
+    </div>`;
+  };
+  let renderCtx = { comments: {}, quotes: {}, quickSent: {} };
+
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
 
@@ -919,6 +979,7 @@ Quy tắc:
     if (!isOpen()) return;
     if (root.activeElement?.classList?.contains('suggest-edit')) return; // đang sửa gợi ý – không vẽ lại
     avatars = avatarIndex(quotes);
+    renderCtx = { comments, quotes, quickSent: await kvGet('quickSent') };
     const all = Object.values(quotes);
 
 
@@ -941,9 +1002,7 @@ Quy tắc:
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
-          ${q?.isReprint && !CLOSED.has(q?.quoteStatus) && !hasOrder(q, c) ? `<div class="warn">🔁 Đơn tái bản – chỉ cần hỏi NVKD khách xuống đơn tái bản chưa.</div>` : ''}
-          ${mode === 'hoiNhanh' && !q?.isReprint ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đạt chưa.</div>` : ''}
-          ${mode === 'chaoLai' ? `<div class="warn">💤 Báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`} – nên nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.</div>` : ''}
+          ${quickBox(q, c, mode)}
           <div class="btns">
             <button class="act hero" data-act="suggest" data-id="${qid}" ${state.busy.has(`c:${qid}`) ? 'disabled' : ''}>
               ${state.busy.has(`c:${qid}`) ? '<span class="spinner light"></span> Đang soạn câu hỏi…' : '💬 Gợi ý câu hỏi cho NVKD'}</button>
@@ -1050,6 +1109,20 @@ Quy tắc:
       render();
     }
     else if (act === 'eval-quote') evaluateQuote(id);
+    else if (act === 'quick-send') {
+      const key = `quick:${id}`;
+      if (state.busy.has(key) || !quickCtx[id]) return;
+      const text = quickCtx[id];
+      setBusy(key, true);
+      try {
+        await sendComment(text, (await kvGet('quotes'))[id]?.code || document.title.match(/#(BG\d+)/)?.[1]);
+        await kvMerge('quickSent', { [id]: { text, at: Date.now() } });
+      } catch (err) {
+        state.error = err.message;
+      } finally {
+        setBusy(key, false);
+      }
+    }
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
