@@ -663,6 +663,11 @@ Quy tắc:
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
+    .unread a.item { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+    .item-main { flex: 1; min-width: 0; }
+    .item-amt { flex: none; min-width: 150px; text-align: right; font-size: 16px; font-weight: 800; color: #047857;
+      font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .item-amt .noprice { margin-left: 0; }
     .unread a:last-child { border-bottom: 0; }
     textarea.suggest-edit { width: 100%; min-height: 110px; border: 1px solid #c8d6f5; border-radius: 8px; padding: 10px;
       background: #eef4ff; font: inherit; line-height: 1.5; resize: vertical; margin-top: 8px; color: inherit; }
@@ -937,8 +942,10 @@ Quy tắc:
       const zero = items.filter(({ q }) => noPrice(q)).length;
       return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') + (zero ? ` <span class="noprice">⚠️ ${zero} chưa cho giá</span>` : '');
     };
-    const itemHtml = ({ q, c, last }) => `<a href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}${q?.amount ? ` <span class="amt">${money(q.amount)}</span>` : ''}${noPriceTag(q)}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
-      <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
+    const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+        <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
+      <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})${revenueHtml(overdue)}</h3>
       ${overdue.length

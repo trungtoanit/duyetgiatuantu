@@ -1,33 +1,56 @@
 const $ = (id) => document.getElementById(id);
 const form = $('form');
 
-function fmt(ts) {
-  return ts ? new Date(ts).toLocaleString('vi-VN') : '–';
+// "vừa xong", "3 phút trước", "2 giờ trước"…
+function ago(ts) {
+  if (!ts) return '–';
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return 'vừa xong';
+  if (m < 60) return `${m} phút trước`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} giờ trước` : new Date(ts).toLocaleString('vi-VN');
 }
 
 function render(data) {
   const { config, sha, version, scripts, status, userScriptsAvailable } = data;
   $('warn').hidden = userScriptsAvailable;
-  $('repo').textContent = `${config.owner}/${config.repo}@${config.branch}`;
+  $('repo').textContent = `${config.owner}/${config.repo} · ${config.branch}`;
   $('sha').textContent = sha ? sha.slice(0, 7) : '–';
   $('version').textContent = version || '–';
-  $('lastCheck').textContent = fmt(status.lastCheck);
+  $('lastCheck').textContent = ago(status.lastCheck);
+  $('lastCheck').title = status.lastCheck ? new Date(status.lastCheck).toLocaleString('vi-VN') : '';
   $('error').textContent = status.error ? `Lỗi: ${status.error}` : '';
+
+  const bad = !userScriptsAvailable || !!status.error;
+  $('pill').classList.toggle('err', bad);
+  $('pillText').textContent = !userScriptsAvailable ? 'Chưa bật' : status.error ? 'Có lỗi' : 'Đang chạy';
+
   const usd = (n) => `$${(n || 0).toFixed(2)}`;
   if (data.spend) {
-    $('spend').textContent = `${usd(data.spend.today)} / ${usd(data.spend.month)}`;
-    $('remaining').textContent = data.spend.remaining != null ? usd(data.spend.remaining) : 'chưa nhập số dư';
-    if (data.spend.balance != null && !$('balance').value) $('balance').value = data.spend.balance;
+    const { today, month, remaining, balance } = data.spend;
+    $('spendToday').textContent = usd(today);
+    $('spendMonth').textContent = usd(month);
+    const low = remaining != null && remaining < 5;
+    $('remaining').textContent = remaining != null ? usd(remaining) : 'chưa nhập';
+    $('remaining').classList.toggle('low', low);
+    const pct = remaining != null && balance ? Math.max(0, Math.min(100, (remaining / balance) * 100)) : 0;
+    $('remainBar').style.width = `${pct}%`;
+    $('remainBar').classList.toggle('low', low);
+    if (balance != null && !$('balance').value) $('balance').value = balance;
+  } else {
+    $('remaining').textContent = 'cần tải lại extension';
   }
 
-  const ul = $('scripts');
-  ul.replaceChildren();
+  const box = $('scripts');
+  box.replaceChildren();
   for (const s of scripts) {
-    const li = document.createElement('li');
-    li.textContent = `${s.id}${s.enabled === false ? ' (tắt)' : ''} — ${s.matches.join(', ')}`;
-    ul.append(li);
+    const chip = document.createElement('span');
+    chip.className = `chip${s.enabled === false ? ' off' : ''}`;
+    chip.textContent = s.id;
+    chip.title = s.matches.join(', ');
+    box.append(chip);
   }
-  if (!scripts.length) ul.innerHTML = '<li class="muted">Chưa có</li>';
+  if (!scripts.length) box.innerHTML = '<span class="muted">Chưa có script</span>';
 
   for (const [k, v] of Object.entries(config)) {
     if (form.elements[k]) form.elements[k].value = v;
@@ -49,7 +72,7 @@ $('sync').onclick = async () => {
     await chrome.tabs.reload(tab.id, { bypassCache: true });
   }
   $('sync').disabled = false;
-  $('sync').textContent = 'Cập nhật ngay';
+  $('sync').textContent = '⟳ Cập nhật ngay';
 };
 
 $('reload').onclick = async () => {
