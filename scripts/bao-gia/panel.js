@@ -36,7 +36,8 @@
         })
       : '';
   const money = (n) => (n ? `${Number(n).toLocaleString('vi-VN')}đ` : '');
-  const currentQuoteId = () => Number(location.pathname.match(/\/co-hoi\/update\/(\d+)/)?.[1]) || null;
+  // Trang báo giá (/bao-gia/update/ID) hoặc trang cơ hội (/co-hoi/update/ID) – cùng ID
+  const currentQuoteId = () => Number(location.pathname.match(/\/(?:co-hoi|bao-gia)\/update\/(\d+)/)?.[1]) || null;
   const definedOnly = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
   function mergeThreads(oldT = [], newT = []) {
@@ -276,6 +277,8 @@ Yêu cầu:
     // Chế độ hỏi nhanh: đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt
     // Giữ đúng cách nói, vd: "8 ngày chưa có phản hồi, báo cáo lại nhé chị. Giá cả đạt chưa chị?"
     hoiNhanh: ['"Giá cả đạt chưa?" (giữ nguyên cách nói này, chỉ thêm xưng hô ở cuối; không thêm "khách đồng ý chốt chưa")'],
+    // Đơn tái bản (sản phẩm đã có mã SP): CHỈ hỏi câu này
+    taiBan: '"Khách xuống đơn tái bản chưa em?" (giữ nguyên cách nói, chỉ đổi xưng hô cho đúng)',
     // Câu kết ở gợi ý bình thường (thay cho kiểu hẹn giờ "phản hồi trước 11h")
     ketThuc: 'Làm việc với khách xong báo cáo lại cho anh.',
     // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
@@ -309,7 +312,9 @@ Yêu cầu:
 
 BỘ CÂU HỎI NHÂN VIÊN
 
-TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN. Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), bỏ qua chế độ hỏi nhanh/chào lại:
+ĐƠN TÁI BẢN – ưu tiên cao nhất. Nếu đề bài ghi "ĐƠN TÁI BẢN" thì CHỈ viết đúng 1 câu: ${BO_CAU_HOI.taiBan}. Có thể mở đầu bằng "<thời gian> chưa có phản hồi, báo cáo lại nhé" nếu im lặng từ 3 ngày trở lên. Không hỏi gì khác, bỏ qua mọi chế độ và tình huống bên dưới.
+
+TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN (sau đơn tái bản). Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), bỏ qua chế độ hỏi nhanh/chào lại:
 ${tinhHuongText()}
 
 Câu luôn cân nhắc hỏi – dùng ở gợi ý bình thường và chế độ chào lại; KHÔNG dùng ở chế độ hỏi nhanh và tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
@@ -354,6 +359,7 @@ Quy tắc:
         last
           ? `Bình luận cuối: ${humanDuration(hours)} trước, của ${last.staff?.name || '?'}. Khoảng thời gian im lặng: ${humanDuration(hours)}.`
           : 'Chưa có bình luận nào.',
+        q?.isReprint ? 'ĐƠN TÁI BẢN: sản phẩm của báo giá đã có mã SP (tái bản) – chỉ hỏi khách xuống đơn tái bản chưa.' : '',
         mode === 'hoiNhanh'
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
           : '',
@@ -591,7 +597,17 @@ Quy tắc:
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
     .fab { position: fixed; left: 16px; bottom: 16px; z-index: 2147483646; border: 0; border-radius: 999px;
       padding: 10px 16px; background: #1d4ed8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
-      box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+      box-shadow: 0 4px 14px rgba(0,0,0,.25); display: inline-flex; align-items: center; gap: 8px; }
+    .fab-badge { background: #ef4444; color: #fff; border-radius: 999px; padding: 2px 9px; font-weight: 800; font-size: 13px;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+    .fab.alert { animation: dgbounce 2.6s ease-in-out infinite; background: linear-gradient(135deg, #1d4ed8, #7c3aed); }
+    .fab.alert::before { content: ''; position: absolute; inset: 0; border-radius: 999px; pointer-events: none;
+      box-shadow: 0 0 0 0 rgba(239,68,68,.6); animation: dgring 1.8s ease-out infinite; }
+    .fab.alert .fab-badge { animation: dgbadge 1.8s ease-in-out infinite; }
+    @keyframes dgring { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); } 100% { box-shadow: 0 0 0 16px rgba(239,68,68,0); } }
+    @keyframes dgbounce { 0%, 70%, 100% { transform: translateY(0); } 76% { transform: translateY(-7px); } 82% { transform: translateY(0); }
+      88% { transform: translateY(-3px); } 94% { transform: translateY(0); } }
+    @keyframes dgbadge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
     .panel { position: fixed; left: 16px; bottom: 64px; z-index: 2147483647; width: min(860px, calc(100vw - 32px));
       max-height: calc(100vh - 88px); overflow: auto; background: #fff; color: #1f2328; border-radius: 12px; font-size: 14px;
       box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 18px 22px; }
@@ -662,6 +678,21 @@ Quy tắc:
     @keyframes dgspin { to { transform: rotate(360deg); } }
     .kh { display: inline-block; background: #fff1e6; color: #b45309; border: 1px solid #fcd9b6; border-radius: 4px;
       padding: 0 6px; font-size: 12px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+    button.act.hero { position: relative; overflow: hidden; border: 0; color: #fff; font-size: 15px; font-weight: 700;
+      padding: 10px 18px; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #7c3aed); background-size: 160% 160%;
+      box-shadow: 0 6px 18px rgba(79,70,229,.35); animation: dgglow 2.2s ease-in-out infinite, dggrad 4s ease infinite;
+      transition: transform .15s ease, box-shadow .15s ease; display: inline-flex; align-items: center; gap: 8px; }
+    button.act.hero::after { content: ''; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+      background: linear-gradient(100deg, transparent, rgba(255,255,255,.45), transparent); transform: skewX(-20deg);
+      animation: dgsweep 2.8s ease-in-out infinite; }
+    button.act.hero:hover:not(:disabled) { transform: translateY(-2px) scale(1.03); box-shadow: 0 10px 26px rgba(79,70,229,.45); }
+    button.act.hero:active:not(:disabled) { transform: scale(.98); }
+    button.act.hero:disabled { opacity: .85; cursor: wait; animation: dggrad 1.5s ease infinite; }
+    .spinner.light { border-color: rgba(255,255,255,.35); border-top-color: #fff; }
+    @keyframes dgglow { 0%,100% { box-shadow: 0 6px 18px rgba(79,70,229,.35), 0 0 0 0 rgba(124,58,237,.45); }
+      50% { box-shadow: 0 6px 18px rgba(79,70,229,.35), 0 0 0 8px rgba(124,58,237,0); } }
+    @keyframes dggrad { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    @keyframes dgsweep { 0% { left: -60%; } 60%,100% { left: 130%; } }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -800,7 +831,11 @@ Quy tắc:
     ]);
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = listByMode(quotes, comments, 'chaoLai');
-    root.querySelector('.fab').textContent = `📊 Đánh giá NVKD${overdue.length ? ` · ⏰ ${overdue.length}` : ''}`;
+    const fab = root.querySelector('.fab');
+    const alertCount = overdue.length;
+    fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">⏰ ${alertCount}</span>` : ''}`;
+    // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
+    fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     if (!isOpen()) return;
     if (root.activeElement?.classList?.contains('suggest-edit')) return; // đang sửa gợi ý – không vẽ lại
     avatars = avatarIndex(quotes);
@@ -825,10 +860,12 @@ Quy tắc:
           <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
-          ${mode === 'hoiNhanh' ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đạt chưa.</div>` : ''}
+          ${q?.isReprint && !CLOSED.has(q?.quoteStatus) && !hasOrder(q, c) ? `<div class="warn">🔁 Đơn tái bản – chỉ cần hỏi NVKD khách xuống đơn tái bản chưa.</div>` : ''}
+          ${mode === 'hoiNhanh' && !q?.isReprint ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đạt chưa.</div>` : ''}
           ${mode === 'chaoLai' ? `<div class="warn">💤 Báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`} – nên nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.</div>` : ''}
           <div class="btns">
-            ${btn('suggest', `c:${qid}`, '💬 Gợi ý câu hỏi cho NVKD', 'Đang soạn…', `data-id="${qid}"`)}
+            <button class="act hero" data-act="suggest" data-id="${qid}" ${state.busy.has(`c:${qid}`) ? 'disabled' : ''}>
+              ${state.busy.has(`c:${qid}`) ? '<span class="spinner light"></span> Đang soạn câu hỏi…' : '💬 Gợi ý câu hỏi cho NVKD'}</button>
             ${btn('eval-quote', `q:${qid}`, '🤖 Đánh giá NVKD', 'Đang đánh giá…', `data-id="${qid}"`)}
           </div>
           ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')}${sg.styleFrom ? ` · học văn phong từ ${sg.styleFrom} bình luận của bạn` : ''})</span></div>
@@ -841,7 +878,7 @@ Quy tắc:
     }
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
-    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+    const itemHtml = ({ q, c, last }) => `<a href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
       <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
@@ -900,7 +937,7 @@ Quy tắc:
         location.assign(href);
       };
       // Từ trang chi tiết báo giá sang báo giá khác: app CRM giữ dữ liệu cũ → phải tải hẳn trang mới
-      if (/^\/co-hoi\/update\//.test(location.pathname)) return fullLoad();
+      if (/^\/(co-hoi|bao-gia)\/update\//.test(location.pathname)) return fullLoad();
       document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       const arrived = () => location.pathname === href && (!code || document.title.includes(code));
       const started = Date.now();
@@ -923,7 +960,10 @@ Quy tắc:
     if (!b) return;
     const act = b.dataset.act;
     const id = Number(b.dataset.id);
-    if (act === 'close') root.querySelector('.panel').hidden = true;
+    if (act === 'close') {
+      root.querySelector('.panel').hidden = true;
+      render();
+    }
     else if (act === 'eval-quote') evaluateQuote(id);
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'toggle-auto') {

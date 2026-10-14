@@ -49,6 +49,8 @@
     updatedAt: o.updatedAt,
     // Đã lên đơn hàng Misa (tình trạng báo giá có thể vẫn để Bản thảo)
     hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length),
+    // Đơn tái bản: sản phẩm đã có mã SP (republishType = REPUBLISH)
+    isReprint: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => p.republishType === 'REPUBLISH') : undefined,
     staff: person(o.staff),
     customer: o.customer ? { id: o.customer.id, code: o.customer.code || undefined, name: o.customer.name } : undefined,
   });
