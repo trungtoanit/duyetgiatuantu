@@ -1053,6 +1053,8 @@ Quy tắc:
     .amt-pct { margin-top: 3px; font-size: 15px; font-weight: 700; color: #334155; }
     .amt-pct b.good { color: #047857; } .amt-pct b.bad { color: #b91c1c; }
     .amt-pct .muted { font-size: 11px; font-weight: 500; }
+    .ncm { margin-left: 6px; display: inline-block; background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1739,6 +1741,7 @@ Quy tắc:
       promise: ({ q, c }) => promiseInfo(q, c),
       sample: ({ c }) => sampleInfo(c),
       contract: ({ c }) => contractInfo(c),
+      nocmt: ({ c }) => !c?.threads?.length,
       sampleOrder: ({ q, c }) => sampleInfo(c) && hasOrderFull(q, c),
       sampleNo: ({ q, c }) => sampleInfo(c) && !hasOrderFull(q, c),
       lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
@@ -1759,6 +1762,7 @@ Quy tắc:
       const promise = items.filter(({ q, c }) => promiseInfo(q, c)).length;
       const sample = items.filter(({ c }) => sampleInfo(c)).length;
       const contract = items.filter(({ c }) => contractInfo(c)).length;
+      const nocmt = items.filter(({ c }) => !c?.threads?.length).length;
       const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
       const kinds = { flexo: 0, offset: 0, both: 0 };
       items.forEach(({ q }) => { const k = kindOf(q); if (k) kinds[k]++; });
@@ -1771,6 +1775,7 @@ Quy tắc:
         (promise ? filterChip('promise', 'prm', `🤝 ${promise} hứa lên đơn`) : '') +
         (sample ? filterChip('sample', 'smp', `✂️ ${sample} cắt mẫu`) : '') +
         (contract ? filterChip('contract', 'ctr', `📝 ${contract} hợp đồng`) : '') +
+        (nocmt ? filterChip('nocmt', 'ncm', `📭 ${nocmt} chưa có bình luận`) : '') +
         (lowm ? filterChip('lowm', 'mgn low', `📈 ${lowm} bán dưới 30%`) : '') +
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
@@ -1796,7 +1801,7 @@ Quy tắc:
 
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
-      <div class="muted">Dựa trên ${all.length} báo giá và ${Object.keys(comments).length} báo giá có bình luận mà extension đã ghi lại khi bạn xem CRM.
+      <div class="muted">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
