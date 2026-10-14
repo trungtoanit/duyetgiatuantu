@@ -564,9 +564,9 @@ Quy tắc:
     .fab { position: fixed; left: 16px; bottom: 16px; z-index: 2147483646; border: 0; border-radius: 999px;
       padding: 10px 16px; background: #1d4ed8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
       box-shadow: 0 4px 14px rgba(0,0,0,.25); }
-    .panel { position: fixed; left: 16px; bottom: 64px; z-index: 2147483647; width: min(520px, calc(100vw - 32px));
-      max-height: 78vh; overflow: auto; background: #fff; color: #1f2328; border-radius: 12px; font-size: 13px;
-      box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 14px 16px; }
+    .panel { position: fixed; left: 16px; bottom: 64px; z-index: 2147483647; width: min(860px, calc(100vw - 32px));
+      max-height: calc(100vh - 88px); overflow: auto; background: #fff; color: #1f2328; border-radius: 12px; font-size: 14px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 18px 22px; }
     .panel[hidden] { display: none; }
     h2 { font-size: 15px; margin: 0 0 4px; }
     h3 { font-size: 13px; margin: 14px 0 6px; }
