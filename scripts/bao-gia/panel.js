@@ -944,7 +944,22 @@ Quy tắc:
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+    .unread a.item { display: grid; grid-template-columns: 74px minmax(0, 1fr) 150px 74px 128px 96px 52px; align-items: center;
+      gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
+    .unread a.item:hover { background: #f5f8ff; }
+    .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .it-code { font-weight: 800; font-size: 14px; }
+    .it-main .kh, .it-main .knd, .it-main .tgt, .it-main .hip, .it-main .crd, .it-main .prm, .it-main .smp, .it-main .ctr, .it-main .nodep
+      { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
+    .it-name { color: #1e3a8a; }
+    .it-who { display: flex; align-items: center; gap: 6px; color: #334155; }
+    .it-who span { overflow: hidden; text-overflow: ellipsis; }
+    .it-ago { color: #64748b; font-size: 12px; text-align: right; }
+    .it-amt { text-align: right; font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
+    .it-amt .noprice { margin-left: 0; font-size: 11px; padding: 0 6px; }
+    .it-pct { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .it-pct b.good { color: #047857; } .it-pct b.bad { color: #b91c1c; }
+    .it-fea { text-align: right; font-weight: 800; color: #1d4ed8; }
     .item-main { flex: 1; min-width: 0; }
     .item-amt { flex: none; min-width: 150px; text-align: right; font-size: 16px; font-weight: 800; color: #047857;
       font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1095,13 +1110,20 @@ Quy tắc:
     .cov { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; color: #334155; }
     .cov-bar { flex: 0 0 220px; height: 8px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
     .cov-bar span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #16a34a); border-radius: 99px; }
-    a.item.q-unread .item-main b, a.item.q-unread .item-main { font-weight: 700; }
-    a.item.q-unread .item-main b { font-weight: 800; }
-    a.item.q-read .item-main { font-weight: 400; opacity: .78; }
-    a.item.q-read .item-main b { font-weight: 600; }
+    a.item.q-unread .it-name, a.item.q-unread .it-who { font-weight: 700; }
+    a.item.q-unread .it-code { font-weight: 900; }
+    a.item.q-read .it-code, a.item.q-read .it-main, a.item.q-read .it-who { opacity: .78; }
+    a.item.q-read .it-code { font-weight: 600; }
     .sortbtn { margin-left: 8px; font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
+
+  function setPanelOpen(open) {
+    root.querySelector('.panel').hidden = !open;
+    try {
+      localStorage.setItem('dgPanelOpen', open ? '1' : '0');
+    } catch {}
+  }
 
   function mount() {
     if (host) return;
@@ -1111,10 +1133,15 @@ Quy tắc:
     root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Đánh giá NVKD</button><div class="panel" hidden></div><div class="side" hidden></div>`;
     root.querySelector('.fab').onclick = () => {
-      const p = root.querySelector('.panel');
-      p.hidden = !p.hidden;
-      if (!p.hidden) render();
+      const open = root.querySelector('.panel').hidden;
+      setPanelOpen(open);
+      if (open) render();
     };
+    // Giữ trạng thái bung / thu gọn của bảng qua F5
+    if (lsGet('dgPanelOpen') === '1') {
+      root.querySelector('.panel').hidden = false;
+      render();
+    }
     root.querySelector('.panel').addEventListener('click', onClick);
     wireSide(root.querySelector('.side'));
     resumeLoading();
@@ -1617,6 +1644,17 @@ Quy tắc:
     const none = !flexo && offset == null;
     return `<div class="amt-pct" title="Flexo: % còn lại sau giấy tấm · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
   };
+  // Ô % gọn trong danh sách 1 dòng
+  const pctCell = (q) => {
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+    if (!kinds.length) return '';
+    const { flexo, offset } = marginParts(q);
+    const segs = [];
+    if (kinds.includes('flexo'))
+      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦<span class="muted">…</span>');
+    if (kinds.includes('offset')) segs.push(offset != null ? `🟪<b class="${pctCls(offset)}">${offset}%</b>` : '🟪<span class="muted">…</span>');
+    return segs.join(' ');
+  };
   const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
 
   const lsGet = (k) => {
@@ -1935,10 +1973,21 @@ Quy tắc:
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
-    const itemHtml = ({ q, c, last, f }) => `<a class="item ${q?.isRead === false ? 'q-unread' : q?.isRead === true ? 'q-read' : ''}" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
-        <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
-      <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${pctLine(q)}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
+    // Mỗi báo giá 1 dòng: mã | KH, loại, nhãn, tên | NVKD | bình luận cuối | tiền | % | điểm
+    const itemHtml = ({ q, c, last, f }) => {
+      const staff = staffOf(q, c);
+      const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
+        last ? `Bình luận cuối ${ago(last.createdAt)} (${last.staff?.name || '?'})` : `Chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`,
+        suggests[c.id]?.sentAt ? 'Đã gửi gợi ý' : suggests[c.id] ? 'Đã có gợi ý' : ''].filter(Boolean).join('\n');
+      return `<a class="item ${q?.isRead === false ? 'q-unread' : q?.isRead === true ? 'q-read' : ''}" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}" title="${esc(tip)}">
+      <span class="it-code">${esc(q?.code || c.code)}</span>
+      <span class="it-main">${custTag(q)}${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}<span class="it-name">${esc(q?.name || '')}</span></span>
+      <span class="it-who">${avatarHtml(staff, 20)}<span>${esc(staff || '?')}</span></span>
+      <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
+      <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
+      <span class="it-pct">${pctCell(q)}</span>
+      <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `🎯${f.score}` : ''}</span></a>`;
+    };
     const overdueBox = `
       <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}
         <button class="act chipbtn sortbtn" data-act="sort" title="Đổi cách sắp xếp">${sortMode() === 'erp' ? '↕ Xếp: như ERP' : '↕ Xếp: theo điểm'}</button></h3>
@@ -1991,7 +2040,7 @@ Quy tắc:
       e.preventDefault();
       const href = a.getAttribute('href');
       const code = a.dataset.code;
-      root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
+      setPanelOpen(false); // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
       const navQuote = (await kvGet('quotes'))[Number(href.match(/(\d+)$/)?.[1])];
       showLoading(code, navQuote);
       // Tải hẳn trang: ghi tạm để trang mới hiện tiếp thẻ "Đang mở báo giá" cho tới khi app hiện xong
@@ -2026,7 +2075,7 @@ Quy tắc:
     const act = b.dataset.act;
     const id = Number(b.dataset.id);
     if (act === 'close') {
-      root.querySelector('.panel').hidden = true;
+      setPanelOpen(false);
       render();
     }
     else if (act === 'sort') {
