@@ -321,6 +321,14 @@ Yêu cầu:
         khi: 'NVKD báo khách đã đặt chỗ khác / đặt bên khác rồi (vd. "khách báo đơn này gấp cần 3 ngày giao nên họ đặt qua chỗ khác rồi Sếp")',
         hoi: 'Xin giá khách làm bên kia là bao nhiêu để lần sau chào lại.',
       },
+      {
+        khi: 'NVKD báo đã xin giá mong muốn mà khách KHÔNG cho giá / không phản hồi giá mong muốn (vd. "em có xin giá nhưng khách không có phản hồi ạ")',
+        hoi: 'Để anh cho giá mới nhé em.',
+      },
+      {
+        khi: 'NVKD báo khách chê giá cao / giá bên mình cao mà CHƯA nói khách mong muốn giá bao nhiêu',
+        hoi: 'Xin giá khách mong muốn đi em.',
+      },
     ],
   };
   const tinhHuongText = () =>

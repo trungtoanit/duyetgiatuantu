@@ -37,6 +37,8 @@ revoke all on function public.dg_team_ok() from public;
 grant execute on function public.dg_team_ok() to anon, authenticated;
 
 -- Chỉ ai gửi đúng mật khẩu nhóm mới đọc/ghi được dữ liệu
+grant usage on schema public to anon;
+grant select, insert, update on public.dg_items to anon;
 alter table public.dg_items enable row level security;
 drop policy if exists dg_team on public.dg_items;
 create policy dg_team on public.dg_items for all to anon
