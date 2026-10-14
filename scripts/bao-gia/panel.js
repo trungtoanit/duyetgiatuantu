@@ -172,6 +172,43 @@
     return listByMode(quotes, comments, 'chaoLai').filter(({ q }) => !active.has(custKey(q)));
   }
 
+  // ---- Báo giá khả thi: chấm điểm khả năng chốt đơn từ các tín hiệu trong bình luận + dữ liệu CRM ----
+  function feasibility(q, c, ordersMap) {
+    const reasons = [];
+    let score = 0;
+    const add = (n, why) => {
+      score += n;
+      if (why) reasons.push(why);
+    };
+    if (promiseInfo(q, c)) add(35, 'hứa lên đơn');
+    if (targetPriceInfo(c)) add(30, 'khách cho giá');
+    if (q.isReprint) add(25, 'tái bản');
+    const os = orderSummary(ordersMap?.[q.customer?.id]);
+    if (os?.year) add(os.year >= 5 ? 25 : 20, `khách quen (${os.year} đơn/12 tháng)`);
+    const last = lastComment(c);
+    const h = last ? hoursSince(last.createdAt) : null;
+    if (h != null) h <= 7 * 24 ? add(15, 'mới trao đổi') : h <= 30 * 24 ? add(5) : add(-20, 'im lặng lâu');
+    if (noPrice(q)) add(-10, 'chưa cho giá');
+    else if (q.amount) add(10 + Math.min(10, Math.round(Math.log10(Math.max(1, q.amount / 1e6)) * 5)));
+    if (highPriceInfo(c)) add(-15, 'chê giá cao');
+    if (noDepositInfo(c)) add(-10, 'chưa cọc');
+    return { score, reasons };
+  }
+  function feasibleList(quotes, comments, ordersMap) {
+    return Object.values(quotes)
+      .filter(
+        (q) =>
+          q.id && q.quoteStatus && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !hasOrder(q, comments[q.id]) &&
+          !isExcluded(staffOf(q, comments[q.id])) && q.createdAt && hoursSince(q.createdAt) <= 90 * 24,
+      )
+      .map((q) => {
+        const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
+        return { q, c, last: lastComment(c), f: feasibility(q, c, ordersMap) };
+      })
+      .filter((x) => x.f.score >= 30)
+      .sort((a, b) => b.f.score - a.f.score || (b.q.amount || 0) - (a.q.amount || 0));
+  }
+
   // Báo giá chưa có bình luận nào (bộ thu thập đã mở xem mà không thấy luồng nào), chưa chốt, tạo đã hơn 1 ngày
   function noCommentList(quotes, comments, collected) {
     return Object.values(quotes)
@@ -903,6 +940,8 @@ Quy tắc:
     .knd.both { background: linear-gradient(90deg, #eff6ff, #faf5ff); color: #5b21b6; border-color: #c4b5fd; }
     .prm { margin-left: 6px; display: inline-block; background: #fefce8; color: #a16207; border: 1px solid #fde68a; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .fea { margin-top: 4px; font-size: 13px; font-weight: 800; color: #1d4ed8; }
+    .fea span { display: block; font-size: 11px; font-weight: 600; color: #64748b; white-space: normal; max-width: 220px; margin-left: auto; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1296,8 +1335,9 @@ Quy tắc:
     const stale = staleList(quotes, comments, overdue);
     const silent = noCommentList(quotes, comments, collected);
     const fab = root.querySelector('.fab');
-    const alertCount = overdue.length;
-    fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">⏰ ${alertCount}</span>` : ''}`;
+    const feasible = feasibleList(quotes, comments, await kvGet('orders'));
+    const alertCount = feasible.length;
+    fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     if (!isOpen()) return;
@@ -1386,17 +1426,16 @@ Quy tắc:
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
-    const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
+    const itemHtml = ({ q, c, last, f }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
       <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
-      <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
+      <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
     const overdueBox = `
-      <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})${revenueHtml(overdue)}</h3>
-      ${overdue.length
-        ? `<div class="box unread">${(applyFilter(overdue).length ? applyFilter(overdue) : [])
-            .map(itemHtml)
-            .join('')}</div>`
-        : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}
+      <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}</h3>
+      <div class="hint muted">Báo giá chưa chốt, xếp theo điểm khả năng chốt đơn (hứa lên đơn, khách cho giá, tái bản, khách quen, mới trao đổi…).</div>
+      ${feasible.length
+        ? `<div class="box unread">${applyFilter(feasible).slice(0, state.filter ? 300 : 60).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi.</div>'}
       ${stale.length
         ? `<h3>💤 Cần chào lại khách (${stale.length})${revenueHtml(stale)}</h3><div class="box unread">${applyFilter(stale).slice(0, state.filter ? 200 : 20).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : ''}
