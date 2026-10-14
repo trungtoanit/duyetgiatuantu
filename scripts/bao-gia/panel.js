@@ -317,8 +317,33 @@ Quy tắc:
   }
 
   // Chỉ điền nội dung, KHÔNG tự bấm gửi – người dùng xem lại rồi tự bấm "Bình luận".
-  function insertComment(text) {
-    const ta = findCommentBox();
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Trang báo giá hiện cả luồng bình luận của các báo giá khác cùng khách.
+  // Luồng của báo giá đang mở có nhãn mã (ant-tag) màu xanh = đúng mã báo giá.
+  // Tìm luồng mới nhất của báo giá này, bấm "Trả lời" rồi trả về ô trả lời.
+  async function openReplyBox(code) {
+    if (!code) return null;
+    const roots = [...document.querySelectorAll('.ant-comment')].filter((c) => !c.parentElement.closest('.ant-comment-nested'));
+    for (const c of roots) {
+      const content = c.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+      if (!content || ![...content.querySelectorAll('.ant-tag')].some((t) => t.textContent.trim() === code)) continue;
+      const actions = content.querySelector(':scope > ul.ant-comment-actions');
+      const reply = actions && [...actions.querySelectorAll('*')].reverse().find((x) => x.textContent.trim() === 'Trả lời');
+      if (!reply) continue; // vd. dòng hệ thống "đã tạo báo giá" không có nút Trả lời
+      let ta = c.querySelector('.ant-comment-nested textarea');
+      if (!ta) {
+        reply.click();
+        for (let i = 0; i < 30 && !(ta = c.querySelector('.ant-comment-nested textarea')); i++) await sleep(100);
+      }
+      if (ta) return ta;
+    }
+    return null;
+  }
+
+  // Báo giá đã có bình luận: trả lời vào luồng của báo giá; chưa có thì dùng ô bình luận mới.
+  async function insertComment(text, code) {
+    const ta = (await openReplyBox(code)) || findCommentBox();
     if (!ta) {
       state.error = 'Không tìm thấy ô bình luận trên trang này.';
       return render();
@@ -460,9 +485,9 @@ Quy tắc:
           </div>
           ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')}${sg.styleFrom ? ` · học văn phong từ ${sg.styleFrom} bình luận của bạn` : ''})</span></div>
             <div class="result suggest">${esc(sg.text)}</div>
-            <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}">Chèn vào ô bình luận</button>
+            <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}">Chèn vào bình luận</button>
               <button class="act" data-act="copy" data-id="${qid}">Copy</button>
-              <span class="muted">Xem lại rồi tự bấm "Bình luận" để gửi.</span></div>` : ''}
+              <span class="muted">Tự mở "Trả lời" ở luồng của báo giá này (nếu có). Xem lại rồi tự bấm gửi.</span></div>` : ''}
           ${ev ? `<div class="row label"><span>Đánh giá NVKD <span class="muted">(${new Date(ev.at).toLocaleString('vi-VN')})</span></span>${scoreHtml(ev)}</div><div class="result">${esc(ev.text)}</div>` : ''}
         </div>`;
     }
@@ -529,7 +554,8 @@ Quy tắc:
     else if (act === 'eval-staff') evaluateStaff(b.dataset.staff);
     else if (act === 'insert' || act === 'copy') {
       const text = (await kvGet('suggests'))[id]?.text || '';
-      if (act === 'insert') insertComment(text);
+      const code = (await kvGet('quotes'))[id]?.code || document.title.match(/#(BG\d+)/)?.[1];
+      if (act === 'insert') await insertComment(text, code);
       else {
         await navigator.clipboard.writeText(text);
         b.textContent = 'Đã copy';
