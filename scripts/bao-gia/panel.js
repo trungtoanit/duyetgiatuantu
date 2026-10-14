@@ -944,11 +944,12 @@ Quy tắc:
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item { display: grid; grid-template-columns: 74px minmax(0, 1fr) 150px 74px 128px 96px 52px; align-items: center;
+    .unread a.item { display: grid; grid-template-columns: 34px 74px minmax(0, 1fr) 150px 74px 128px 96px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread a.item:hover { background: #f5f8ff; }
     .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .it-code { font-weight: 800; font-size: 14px; }
+    .it-no { text-align: right; color: #94a3b8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .it-main .kh, .it-main .knd, .it-main .tgt, .it-main .hip, .it-main .crd, .it-main .prm, .it-main .smp, .it-main .ctr, .it-main .nodep
       { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .it-name { color: #1e3a8a; }
@@ -1974,12 +1975,13 @@ Quy tắc:
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     // Mỗi báo giá 1 dòng: mã | KH, loại, nhãn, tên | NVKD | bình luận cuối | tiền | % | điểm
-    const itemHtml = ({ q, c, last, f }) => {
+    const itemHtml = ({ q, c, last, f }, i) => {
       const staff = staffOf(q, c);
       const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
         last ? `Bình luận cuối ${ago(last.createdAt)} (${last.staff?.name || '?'})` : `Chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`,
         suggests[c.id]?.sentAt ? 'Đã gửi gợi ý' : suggests[c.id] ? 'Đã có gợi ý' : ''].filter(Boolean).join('\n');
       return `<a class="item ${q?.isRead === false ? 'q-unread' : q?.isRead === true ? 'q-read' : ''}" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}" title="${esc(tip)}">
+      <span class="it-no">${i + 1}</span>
       <span class="it-code">${esc(q?.code || c.code)}</span>
       <span class="it-main">${custTag(q)}${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}<span class="it-name">${esc(q?.name || '')}</span></span>
       <span class="it-who">${avatarHtml(staff, 20)}<span>${esc(staff || '?')}</span></span>
