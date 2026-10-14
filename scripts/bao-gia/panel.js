@@ -678,6 +678,7 @@ Quy tắc:
       if (!p.hidden) render();
     };
     root.querySelector('.panel').addEventListener('click', onClick);
+    resumeLoading();
     let saveTimer;
     root.querySelector('.panel').addEventListener('input', (e) => {
       const ta = e.target.closest('textarea.suggest-edit');
@@ -722,6 +723,25 @@ Quy tắc:
     const el = root?.querySelector('.loading');
     if (el) el.hidden = true;
   };
+
+  // Trang vừa được tải hẳn từ link trong bảng → hiện tiếp thẻ "Đang mở báo giá" tới khi app hiện báo giá
+  function resumeLoading() {
+    let nav = null;
+    try {
+      nav = JSON.parse(sessionStorage.getItem('dgNav') || 'null');
+      sessionStorage.removeItem('dgNav');
+    } catch {}
+    if (!nav || Date.now() - nav.at > 30000 || location.pathname !== nav.href) return;
+    if (nav.q?.staff?.avatar) avatars[nav.q.staff.name] = nav.q.staff.avatar;
+    showLoading(nav.code, nav.q);
+    const t0 = Date.now();
+    const timer = setInterval(() => {
+      if ((nav.code && document.title.includes(nav.code)) || Date.now() - t0 > 20000) {
+        clearInterval(timer);
+        hideLoading();
+      }
+    }, 150);
+  }
 
   const isOpen = () => root && !root.querySelector('.panel').hidden;
 
@@ -870,9 +890,17 @@ Quy tắc:
       const href = a.getAttribute('href');
       const code = a.dataset.code;
       root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
-      showLoading(code, (await kvGet('quotes'))[Number(href.match(/(\d+)$/)?.[1])]);
+      const navQuote = (await kvGet('quotes'))[Number(href.match(/(\d+)$/)?.[1])];
+      showLoading(code, navQuote);
+      // Tải hẳn trang: ghi tạm để trang mới hiện tiếp thẻ "Đang mở báo giá" cho tới khi app hiện xong
+      const fullLoad = () => {
+        try {
+          sessionStorage.setItem('dgNav', JSON.stringify({ href, code, q: navQuote || null, at: Date.now() }));
+        } catch {}
+        location.assign(href);
+      };
       // Từ trang chi tiết báo giá sang báo giá khác: app CRM giữ dữ liệu cũ → phải tải hẳn trang mới
-      if (/^\/co-hoi\/update\//.test(location.pathname)) return location.assign(href);
+      if (/^\/co-hoi\/update\//.test(location.pathname)) return fullLoad();
       document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       const arrived = () => location.pathname === href && (!code || document.title.includes(code));
       const started = Date.now();
@@ -883,7 +911,7 @@ Quy tắc:
         } else if (Date.now() - started > 3500) {
           // App không chuyển được, hoặc chuyển URL nhưng vẫn hiện báo giá cũ → tải hẳn trang báo giá đó
           clearInterval(timer);
-          location.assign(href);
+          fullLoad();
         } else if (Date.now() - started > 15000) {
           clearInterval(timer);
           hideLoading();
@@ -930,7 +958,7 @@ Quy tắc:
 
   // Trong iframe thu thập ngầm chỉ ghi dữ liệu, không hiện giao diện
   if (IS_TOP) {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
-    else mount();
+    if (document.documentElement) mount();
+    else document.addEventListener('DOMContentLoaded', mount);
   }
 })();
