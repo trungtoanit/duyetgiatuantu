@@ -20,6 +20,8 @@
     amount: o.totalPrice ?? o.amount,
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
+    // Đã lên đơn hàng Misa (tình trạng báo giá có thể vẫn để Bản thảo)
+    hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length),
     staff: person(o.staff),
     customer: o.customer ? { id: o.customer.id, name: o.customer.name } : undefined,
   });

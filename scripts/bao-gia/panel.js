@@ -120,9 +120,21 @@
   //  - 'hoiNhanh': chưa chốt, bình luận cuối đã quá 12 giờ (trong vòng 30 ngày) → hỏi giá ok chưa
   //  - 'chaoLai' : Thất bại, hoặc chưa chốt mà im lặng quá 30 ngày → chào lại khách, hỏi dự án khác
   // Chỉ tính báo giá đã biết tình trạng (CRM tải kèm bình luận cũ của báo giá khác cùng khách).
+  // Đã lên đơn: CRM ghi dòng hệ thống "... lên đơn hàng ..." / "Mã đơn hàng Misa: ..."
+  function hasOrder(q, c) {
+    if (q?.hasOrder) return true;
+    let found = false;
+    const walk = (t) => {
+      if (/lên đơn hàng|mã đơn hàng misa/i.test(t.text || '')) found = true;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return found;
+  }
+
   function followMode(q, c) {
     const last = lastComment(c);
-    if (!last || !q?.quoteStatus) return null;
+    if (!last || !q?.quoteStatus || hasOrder(q, c)) return null;
     if (q.quoteStatus === 'REJECT') return 'chaoLai';
     if (CLOSED.has(q.quoteStatus)) return null;
     const h = hoursSince(last.createdAt);
@@ -291,6 +303,10 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
       {
         khi: 'bình luận CUỐI CÙNG của luồng là quản lý đã cho giá / duyệt giá (vd. "A cho em giá đã bao gồm khuôn + bản in", "E cho chị giá nhé", "E duyệt giá nhé chị") và sau đó NVKD chưa phản hồi gì',
         hoi: 'Giá cả ok không? Khách phản hồi giá thế nào?',
+      },
+      {
+        khi: 'luồng có nhắc khách cần mẫu / phải có mẫu / chạy mẫu (vd. "Quy trình của bên này làm hàng phải có mẫu Sếp ạ", "Thùng này có chạy mẫu không") mà chưa thấy xác nhận đã có mẫu',
+        hoi: 'Nếu chưa có mẫu thì đàm phán làm mẫu cho khách.',
       },
     ],
   };
