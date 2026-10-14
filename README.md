@@ -91,9 +91,9 @@ Khai báo script trong `scripts/manifest.json`:
   `USER_SCRIPT` thì chạy tách biệt. Mặc định là `USER_SCRIPT`.
 - `runAt`: `document_start` | `document_end` | `document_idle`.
 
-Sau khi push, các máy nhận bản mới trong vòng tối đa `intervalMinutes` (mặc định 5 phút),
-hoặc ngay lập tức nếu bấm **Cập nhật ngay** trong popup. Tab đang mở cần tải lại thì script
-mới chạy.
+Sau khi push, các máy nhận bản mới trong vòng tối đa `intervalMinutes` (mặc định 1 phút; kiểm tra
+bằng ETag nên không tốn giới hạn API của GitHub khi không có commit mới), hoặc ngay lập tức nếu bấm
+**Cập nhật ngay** trong popup – nút này cập nhật xong sẽ tự tải lại tab CRM đang mở.
 
 ## Cách hoạt động
 
@@ -110,7 +110,7 @@ mới chạy.
 
 Tạo GitHub fine-grained token chỉ có quyền **Contents: Read-only** cho repo này, rồi dán
 vào ô Token trong popup. GitHub API không cần token cho phép 60 request/giờ mỗi IP.
-Với chu kỳ 5 phút thì vẫn đủ.
+Lần kiểm tra không có commit mới (304) không bị tính vào giới hạn này.
 
 ## Lưu ý
 

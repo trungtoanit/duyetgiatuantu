@@ -5,7 +5,9 @@ let running = null;
 
 async function getConfig() {
   const { config } = await chrome.storage.sync.get('config');
-  return { ...DEFAULT_CONFIG, ...(config || {}) };
+  const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
+  if (Number(cfg.intervalMinutes) === 5) cfg.intervalMinutes = 1; // mặc định cũ 5 phút → 1 phút
+  return cfg;
 }
 
 // chrome.userScripts chỉ dùng được khi người dùng bật "Allow User Scripts"
@@ -25,14 +27,20 @@ function authHeaders(cfg) {
 
 // Lấy SHA commit mới nhất của nhánh. Đọc file theo SHA giúp tránh cache
 // 5 phút của raw.githubusercontent.com.
+// Kiểm tra kiểu có điều kiện (If-None-Match): khi không có commit mới GitHub trả 304 và
+// KHÔNG tính vào giới hạn 60 lần/giờ, nên kiểm tra mỗi phút vẫn an toàn.
 async function resolveSha(cfg) {
   const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/commits/${encodeURIComponent(cfg.branch)}`;
-  const res = await fetch(url, {
-    cache: 'no-store',
-    headers: { Accept: 'application/vnd.github.sha', ...authHeaders(cfg) },
-  });
+  const { shaEtag } = await chrome.storage.local.get('shaEtag');
+  const headers = { Accept: 'application/vnd.github.sha', ...authHeaders(cfg) };
+  if (shaEtag?.url === url && shaEtag.etag) headers['If-None-Match'] = shaEtag.etag;
+  const res = await fetch(url, { cache: 'no-store', headers });
+  if (res.status === 304 && shaEtag?.sha) return shaEtag.sha;
   if (!res.ok) throw new Error(`GitHub API trả về ${res.status} (${url})`);
-  return (await res.text()).trim();
+  const sha = (await res.text()).trim();
+  const etag = res.headers.get('etag');
+  if (etag) await chrome.storage.local.set({ shaEtag: { url, etag, sha } });
+  return sha;
 }
 
 async function fetchFile(cfg, ref, path) {
@@ -112,7 +120,7 @@ function sync(force = false) {
 
 async function scheduleAlarm() {
   const cfg = await getConfig();
-  await chrome.alarms.create(ALARM, { periodInMinutes: Math.max(1, Number(cfg.intervalMinutes) || 5) });
+  await chrome.alarms.create(ALARM, { periodInMinutes: Math.max(1, Number(cfg.intervalMinutes) || 1) });
 }
 
 chrome.runtime.onInstalled.addListener(async () => {

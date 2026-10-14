@@ -42,6 +42,12 @@ $('sync').onclick = async () => {
   $('sync').disabled = true;
   $('sync').textContent = 'Đang cập nhật…';
   await send('syncNow');
+  // Cập nhật xong → tự tải lại tab CRM đang mở để chạy bản mới
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab && /^https:\/\/sale\.tuantu\.com\.vn\//.test(tab.url || '')) {
+    $('sync').textContent = 'Đang tải lại trang…';
+    await chrome.tabs.reload(tab.id, { bypassCache: true });
+  }
   $('sync').disabled = false;
   $('sync').textContent = 'Cập nhật ngay';
 };
@@ -64,7 +70,7 @@ $('openExt').onclick = () => {
 form.onsubmit = async (e) => {
   e.preventDefault();
   const config = Object.fromEntries(new FormData(form));
-  config.intervalMinutes = Number(config.intervalMinutes) || 5;
+  config.intervalMinutes = Number(config.intervalMinutes) || 1;
   await chrome.storage.sync.set({ config }); // background tự đồng bộ lại khi config đổi
   setTimeout(() => send('getStatus'), 1500);
 };
