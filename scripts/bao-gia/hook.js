@@ -42,6 +42,12 @@
     }
     if (!d) return;
 
+    // Người đang đăng nhập (để gợi ý bình luận xưng hô cho đúng)
+    if (/\/auth\/profile\b/.test(url)) {
+      const name = d.name || d.staff?.name;
+      if (name) emit('me', { id: d.id, name });
+      return;
+    }
     // Danh sách báo giá (trang /bao-gia)
     if (/\/opportunity\?/.test(url) && /[?&]type=2\b/.test(url) && Array.isArray(d.opportunities)) {
       emit('quotes', d.opportunities.map(slimQuote));

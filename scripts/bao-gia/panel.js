@@ -44,6 +44,41 @@
   // NVKD phụ trách: lấy từ báo giá, nếu thiếu thì lấy người tạo bình luận đầu tiên
   const staffOf = (q, c) => q?.staff?.name || c?.threads?.[0]?.staff?.name || '';
 
+  // Tình trạng báo giá theo CRM
+  const STATUS = {
+    DRAFF: 'Bản thảo',
+    PENDING_PRICE: 'Chờ xin giá',
+    CONFIRMED: 'Đã xác nhận',
+    SEND_2_CUSOMTER: 'Đã gửi',
+    NEGOTIATE: 'Chờ lên đơn',
+    APPROVE: 'Duyệt lên đơn',
+    SUCCESS: 'Thành công',
+    REJECT: 'Thất bại',
+  };
+  const statusLabel = (s) => STATUS[s] || s || '?';
+  const CLOSED = new Set(['APPROVE', 'SUCCESS', 'REJECT']); // đã chốt, không cần hỏi lại
+  const FOLLOW_UP_HOURS = 12;
+
+  // Bình luận mới nhất (kể cả trả lời) của một báo giá
+  function lastComment(c) {
+    let last = null;
+    const walk = (t) => {
+      if (!last || t.createdAt > last.createdAt) last = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return last;
+  }
+  const hoursSince = (sec) => (Date.now() / 1000 - sec) / 3600;
+
+  // Báo giá chưa chốt mà bình luận cuối đã quá 12 giờ
+  function overdueList(quotes, comments) {
+    return Object.values(comments)
+      .map((c) => ({ q: quotes[c.id], c, last: lastComment(c) }))
+      .filter(({ q, last }) => last && !CLOSED.has(q?.quoteStatus) && hoursSince(last.createdAt) >= FOLLOW_UP_HOURS)
+      .sort((a, b) => a.last.createdAt - b.last.createdAt);
+  }
+
   // ---------- Ghi nhận dữ liệu từ hook.js ----------
   let chain = Promise.resolve();
   document.addEventListener('dg:data', (e) => {
@@ -57,7 +92,9 @@
   });
 
   async function save({ kind, data }) {
-    if (kind === 'quotes') {
+    if (kind === 'me') {
+      await call({ type: 'kv.set', key: 'me', value: data });
+    } else if (kind === 'quotes') {
       const patch = {};
       for (const q of data) patch[q.id] = definedOnly(q);
       await kvMerge('quotes', patch);
@@ -72,7 +109,7 @@
       }
       await kvMerge('comments', patch);
     }
-    if (isOpen()) render();
+    render();
   }
 
   // ---------- Claude ----------
@@ -96,7 +133,7 @@ Yêu cầu:
     const lines = [`Báo giá ${q?.code || c?.code || ''} – "${q?.name || ''}"`];
     if (q) {
       lines.push(
-        `Khách hàng: ${q.customer?.name || '?'} | Số tiền: ${money(q.amount) || '?'} | Tình trạng báo giá: ${q.quoteStatus || '?'} | Tạo lúc: ${fmtTime(q.createdAt)}`,
+        `Khách hàng: ${q.customer?.name || '?'} | Số tiền: ${money(q.amount) || '?'} | Tình trạng báo giá: ${statusLabel(q.quoteStatus)} | Tạo lúc: ${fmtTime(q.createdAt)}`,
       );
     }
     lines.push(`NVKD phụ trách: ${staffOf(q, c) || '?'}`, 'Bình luận (theo thời gian):');
@@ -146,7 +183,7 @@ Yêu cầu:
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 30);
     const byStatus = {};
-    for (const q of mine) byStatus[q.quoteStatus || '?'] = (byStatus[q.quoteStatus || '?'] || 0) + 1;
+    for (const q of mine) byStatus[statusLabel(q.quoteStatus)] = (byStatus[statusLabel(q.quoteStatus)] || 0) + 1;
     const stats = [
       `Tổng số báo giá đã ghi nhận: ${mine.length}`,
       `Chưa đọc (in đậm trên CRM): ${mine.filter((q) => q.isRead === false).length}`,
@@ -161,6 +198,79 @@ ${stats}
 CHI TIẾT BÌNH LUẬN
 ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || '(chưa có)'}`;
     await runEval(`s:${name}`, prompt, { staff: name });
+  }
+
+  // ---------- Bộ câu hỏi nhân viên trong báo giá ----------
+  const SUGGEST_SYSTEM = `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
+
+Bộ câu hỏi nhân viên theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
+- Chưa đủ thông tin để tính giá: còn thiếu gì (số lượng, quy cách, số lớp/định lượng, in hay không, địa chỉ giao, VAT/hóa đơn, ngày cần hàng)?
+- Đã có giá nhưng chưa gửi khách: đã gửi báo giá cho khách chưa, khi nào gửi?
+- Đã gửi giá: khách phản hồi thế nào – giá ok chưa, chê cao thì giá mục tiêu bao nhiêu, đang so với bên nào?
+- Khách đồng ý: khi nào lên đơn, cọc/thanh toán thế nào, ngày giao, đã duyệt mẫu/maket chưa?
+- Khách chê/chưa chốt: cần điều chỉnh gì (quy cách, số lượng, giao hàng) để chốt được?
+- Nếu đã QUÁ 12 GIỜ kể từ bình luận cuối mà báo giá chưa chốt: trọng tâm là hỏi thẳng giá cả đã ok với khách chưa, khách nói gì, và hẹn mốc giờ cập nhật.
+
+Quy tắc:
+- Người đăng bình luận là quản lý (tên được cung cấp). Xưng hô giống cách quản lý đã dùng với NVKD trong luồng; nếu chưa có thì dùng "em"/"anh/chị" lịch sự.
+- Không hỏi lại những điều đã được trả lời trong luồng.
+- Tối đa 3 câu hỏi, ngắn gọn, đánh số nếu nhiều hơn 1 câu. Thân thiện nhưng rõ ràng, có mốc thời gian phản hồi.
+- Chỉ trả về đúng nội dung bình luận, không giải thích, không dùng markdown.`;
+
+  async function suggestComment(id) {
+    const key = `c:${id}`;
+    setBusy(key, true);
+    try {
+      const [quotes, comments, me] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me')]);
+      const q = quotes[id];
+      const c = comments[id];
+      const last = lastComment(c);
+      const hours = last ? hoursSince(last.createdAt) : null;
+      const overdue = hours != null && hours >= FOLLOW_UP_HOURS && !CLOSED.has(q?.quoteStatus);
+      const context = [
+        `Quản lý đăng bình luận: ${me?.name || '(không rõ)'}`,
+        `NVKD phụ trách: ${staffOf(q, c) || '(không rõ)'}`,
+        `Thời điểm hiện tại: ${fmtTime(Date.now() / 1000)}`,
+        last
+          ? `Bình luận cuối: ${Math.floor(hours)} giờ trước, của ${last.staff?.name || '?'}.`
+          : 'Chưa có bình luận nào.',
+        overdue ? `ĐÃ QUÁ ${FOLLOW_UP_HOURS} GIỜ từ bình luận cuối mà báo giá chưa chốt.` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+      const text = await call({
+        type: 'claude',
+        system: SUGGEST_SYSTEM,
+        prompt: `${context}\n\n${threadText(q, c)}`,
+        maxTokens: 4000,
+      });
+      await kvMerge('suggests', { [id]: { text: text.trim(), at: Date.now(), overdue } });
+    } catch (e) {
+      state.error = e.message;
+    } finally {
+      setBusy(key, false);
+    }
+  }
+
+  // Ô nhập bình luận của CRM: textarea nằm cùng khối với nút "Bình luận"
+  function findCommentBox() {
+    const btn = [...document.querySelectorAll('button.ant-btn-primary')].find((b) => b.innerText.trim() === 'Bình luận');
+    let p = btn;
+    while (p && !p.querySelector('textarea:not(#privateNote)')) p = p.parentElement;
+    return p?.querySelector('textarea:not(#privateNote)') || null;
+  }
+
+  // Chỉ điền nội dung, KHÔNG tự bấm gửi – người dùng xem lại rồi tự bấm "Bình luận".
+  function insertComment(text) {
+    const ta = findCommentBox();
+    if (!ta) {
+      state.error = 'Không tìm thấy ô bình luận trên trang này.';
+      return render();
+    }
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, text);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    ta.focus();
   }
 
   // ---------- Giao diện ----------
@@ -194,6 +304,11 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 2px 0; }
     .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .warn { background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
+    .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+    .label { margin-top: 10px; font-weight: 600; }
+    .suggest { background: #eef4ff; }
+    button.act.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -210,6 +325,7 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
       if (!p.hidden) render();
     };
     root.querySelector('.panel').addEventListener('click', onClick);
+    render();
   }
 
   const isOpen = () => root && !root.querySelector('.panel').hidden;
@@ -224,8 +340,16 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
 
   async function render() {
+    if (!root) return;
+    const [quotes, comments, evals, suggests] = await Promise.all([
+      kvGet('quotes'),
+      kvGet('comments'),
+      kvGet('evals'),
+      kvGet('suggests'),
+    ]);
+    const overdue = overdueList(quotes, comments);
+    root.querySelector('.fab').textContent = `📊 Đánh giá NVKD${overdue.length ? ` · ⏰ ${overdue.length}` : ''}`;
     if (!isOpen()) return;
-    const [quotes, comments, evals] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('evals')]);
     const all = Object.values(quotes);
 
     // Gom theo NVKD
@@ -241,25 +365,46 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
     }
     const staffRows = Object.values(byStaff).sort((a, b) => b.unread.length - a.unread.length || b.total - a.total);
 
+    const btn = (act, key, label, busyLabel, attrs = '') =>
+      `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
+
     const qid = currentQuoteId();
     let current = '';
     if (qid) {
       const q = quotes[qid];
       const c = comments[qid];
-      const key = `q:${qid}`;
-      const ev = evals[key];
+      const ev = evals[`q:${qid}`];
+      const sg = suggests[qid];
+      const last = lastComment(c);
+      const late = last && !CLOSED.has(q?.quoteStatus) && hoursSince(last.createdAt) >= FOLLOW_UP_HOURS;
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div class="row">
-            <div><b>${esc(q?.code || c?.code || '#' + qid)}</b> – ${esc(q?.name || '')}<br>
-              <span class="muted">NVKD: ${esc(staffOf(q, c) || '?')} · ${c?.threads?.length || 0} luồng bình luận đã ghi</span></div>
-            <button class="act" data-act="eval-quote" data-id="${qid}" ${state.busy.has(key) ? 'disabled' : ''}>
-              ${state.busy.has(key) ? 'Đang đánh giá…' : '🤖 Đánh giá'}</button>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b> – ${esc(q?.name || '')}<br>
+            <span class="muted">NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
+            ${last ? ` · bình luận cuối ${Math.floor(hoursSince(last.createdAt))} giờ trước` : ''}</span></div>
+          ${late ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đã ok chưa.</div>` : ''}
+          <div class="btns">
+            ${btn('suggest', `c:${qid}`, '💬 Gợi ý câu hỏi cho NVKD', 'Đang soạn…', `data-id="${qid}"`)}
+            ${btn('eval-quote', `q:${qid}`, '🤖 Đánh giá NVKD', 'Đang đánh giá…', `data-id="${qid}"`)}
           </div>
-          ${ev ? `<div class="row" style="margin-top:6px"><span class="muted">Đánh giá lúc ${new Date(ev.at).toLocaleString('vi-VN')}</span>${scoreHtml(ev)}</div><div class="result">${esc(ev.text)}</div>` : ''}
+          ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')})</span></div>
+            <div class="result suggest">${esc(sg.text)}</div>
+            <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}">Chèn vào ô bình luận</button>
+              <button class="act" data-act="copy" data-id="${qid}">Copy</button>
+              <span class="muted">Xem lại rồi tự bấm "Bình luận" để gửi.</span></div>` : ''}
+          ${ev ? `<div class="row label"><span>Đánh giá NVKD <span class="muted">(${new Date(ev.at).toLocaleString('vi-VN')})</span></span>${scoreHtml(ev)}</div><div class="result">${esc(ev.text)}</div>` : ''}
         </div>`;
     }
+
+    const overdueBox = `
+      <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
+      ${overdue.length
+        ? `<div class="box unread">${overdue
+            .map(({ q, c, last }) => `<a href="/co-hoi/update/${c.id}"><b>${esc(q?.code || c.code)}</b> · ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))}
+              <span class="muted">– bình luận cuối ${Math.floor(hoursSince(last.createdAt))} giờ trước (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`)
+            .join('')}</div>`
+        : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}`;
 
     const shown = state.shown?.startsWith('s:') ? evals[state.shown] : null;
     const unreadBox = state.unreadOf && byStaff[state.unreadOf]
@@ -277,6 +422,7 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
       Mở trang Báo giá để cập nhật danh sách; mở từng báo giá để ghi lại bình luận.</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
+      ${overdueBox}
       <h3>Theo NVKD</h3>
       <table>
         <tr><th>NVKD</th><th class="num">Báo giá</th><th class="num">Chưa đọc</th><th class="num">Có BL</th><th class="num">Điểm TB</th><th></th></tr>
@@ -302,14 +448,23 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
     `;
   }
 
-  function onClick(e) {
+  async function onClick(e) {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
+    const id = Number(b.dataset.id);
     if (act === 'close') root.querySelector('.panel').hidden = true;
-    else if (act === 'eval-quote') evaluateQuote(Number(b.dataset.id));
+    else if (act === 'eval-quote') evaluateQuote(id);
+    else if (act === 'suggest') suggestComment(id);
     else if (act === 'eval-staff') evaluateStaff(b.dataset.staff);
-    else if (act === 'show') {
+    else if (act === 'insert' || act === 'copy') {
+      const text = (await kvGet('suggests'))[id]?.text || '';
+      if (act === 'insert') insertComment(text);
+      else {
+        await navigator.clipboard.writeText(text);
+        b.textContent = 'Đã copy';
+      }
+    } else if (act === 'show') {
       state.shown = b.dataset.key;
       render();
     } else if (act === 'unread') {
@@ -317,6 +472,9 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
       render();
     }
   }
+
+  // Cập nhật số báo giá quá 12 giờ trên nút nổi theo thời gian
+  setInterval(render, 5 * 60 * 1000);
 
   // ERP là SPA: theo dõi đổi trang để cập nhật mục "Báo giá đang mở"
   let lastPath = location.pathname;
