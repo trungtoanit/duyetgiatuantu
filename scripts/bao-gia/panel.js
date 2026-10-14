@@ -242,7 +242,6 @@ Yêu cầu:
     try {
       const text = await call({ type: 'claude', system: SYSTEM, prompt });
       await kvMerge('evals', { [evalKey]: { ...meta, text, score: parseScore(text), at: Date.now() } });
-      state.shown = evalKey;
     } catch (e) {
       state.error = e.message;
     } finally {
