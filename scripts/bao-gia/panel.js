@@ -652,12 +652,33 @@ Quy tắc:
     .ava { border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center; }
     .ava.ini { background: #dbe4ff; color: #1d4ed8; font-size: 11px; font-weight: 700; width: 22px; height: 22px; }
     .loading { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
-      background: rgba(255,255,255,.55); backdrop-filter: blur(1px); }
+      background: rgba(15, 23, 42, .28); backdrop-filter: blur(3px); opacity: 0; }
+    .loading.show { animation: dgfade .25s ease-out forwards; }
     .loading[hidden] { display: none; }
-    .loading-box { display: flex; align-items: center; gap: 12px; background: #fff; padding: 14px 20px; border-radius: 12px;
-      box-shadow: 0 8px 30px rgba(0,0,0,.2); font-size: 15px; font-weight: 600; color: #1f2328; }
-    .spinner { width: 22px; height: 22px; border: 3px solid #dbe4ff; border-top-color: #1d4ed8; border-radius: 50%;
+    .lcard { position: relative; overflow: hidden; width: min(460px, calc(100vw - 48px)); background: #fff; border-radius: 18px;
+      padding: 26px 28px 22px; box-shadow: 0 24px 60px rgba(15,23,42,.28), 0 0 0 1px rgba(29,78,216,.08); color: #1f2328;
+      transform: translateY(14px) scale(.94); opacity: 0; }
+    .loading.show .lcard { animation: dgpop .38s cubic-bezier(.2,.9,.3,1.25) .05s forwards; }
+    .lbar { position: absolute; left: 0; right: 0; top: 0; height: 4px; background: #e0e7ff; overflow: hidden; }
+    .lbar span { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 4px;
+      background: linear-gradient(90deg, #60a5fa, #1d4ed8, #7c3aed); animation: dgbar 1.1s ease-in-out infinite; }
+    .ltop { display: flex; align-items: center; gap: 8px; }
+    .llabel { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #64748b; }
+    .lcode { margin: 6px 0 4px; font-size: 44px; line-height: 1.05; font-weight: 800; letter-spacing: -.01em;
+      background: linear-gradient(90deg, #1d4ed8, #7c3aed, #1d4ed8); background-size: 200% 100%;
+      -webkit-background-clip: text; background-clip: text; color: transparent; animation: dgshine 2.4s linear infinite; }
+    .lname { font-size: 17px; font-weight: 600; line-height: 1.35; color: #0f172a; margin-bottom: 10px; }
+    .lcust { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; color: #334155;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; }
+    .licon { font-size: 15px; }
+    .lstaff { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: #475569; }
+    .lstatus { margin-left: auto; background: #eef2ff; color: #4338ca; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+    .spinner { width: 16px; height: 16px; border: 2.5px solid #dbe4ff; border-top-color: #1d4ed8; border-radius: 50%;
       animation: dgspin .8s linear infinite; }
+    @keyframes dgfade { to { opacity: 1; } }
+    @keyframes dgpop { to { transform: none; opacity: 1; } }
+    @keyframes dgbar { 0% { left: -40%; } 100% { left: 100%; } }
+    @keyframes dgshine { to { background-position: 200% 0; } }
     @keyframes dgspin { to { transform: rotate(360deg); } }
     .kh { display: inline-block; background: #fff1e6; color: #b45309; border: 1px solid #fcd9b6; border-radius: 4px;
       padding: 0 6px; font-size: 12px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
@@ -692,16 +713,30 @@ Quy tắc:
   }
 
   // Hiệu ứng chờ khi mở báo giá từ bảng
-  function showLoading(code) {
+  // Thẻ "Đang mở báo giá": số báo giá to nhất, tên cơ hội, khách hàng, NVKD + hiệu ứng
+  function showLoading(code, q) {
     let el = root.querySelector('.loading');
     if (!el) {
       el = document.createElement('div');
       el.className = 'loading';
-      el.innerHTML = '<div class="loading-box"><span class="spinner"></span><span class="loading-text"></span></div>';
       root.append(el);
     }
-    el.querySelector('.loading-text').textContent = `Đang mở ${code || 'báo giá'}…`;
+    const staff = q?.staff?.name;
+    el.innerHTML = `
+      <div class="lcard">
+        <div class="lbar"><span></span></div>
+        <div class="ltop"><span class="spinner"></span><span class="llabel">Đang mở báo giá</span></div>
+        <div class="lcode">${esc(code || 'Báo giá')}</div>
+        ${q?.name ? `<div class="lname">${esc(q.name)}</div>` : ''}
+        ${q?.customer?.name || q?.customer?.code
+          ? `<div class="lcust"><span class="licon">🏢</span><span>${esc(q.customer.name || '')}</span>${custTag(q)}</div>`
+          : ''}
+        ${staff ? `<div class="lstaff">${avatarHtml(staff, 22)}<span>${esc(staff)}</span>${q?.quoteStatus ? `<span class="lstatus">${esc(statusLabel(q.quoteStatus))}</span>` : ''}</div>` : ''}
+      </div>`;
     el.hidden = false;
+    el.classList.remove('show');
+    void el.offsetWidth; // chạy lại hiệu ứng
+    el.classList.add('show');
   }
   const hideLoading = () => {
     const el = root?.querySelector('.loading');
@@ -899,7 +934,7 @@ Quy tắc:
       const code = a.dataset.code;
       document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
-      showLoading(code);
+      showLoading(code, (await kvGet('quotes'))[Number(href.match(/(\d+)$/)?.[1])]);
       const arrived = () => location.pathname === href && (!code || document.title.includes(code));
       const started = Date.now();
       const timer = setInterval(() => {
