@@ -805,6 +805,29 @@ Quy tắc:
         if (full) collect.remaining = Math.max(0, collect.remaining - 1);
         await sleep(COLLECT.gapMs);
       }
+      // Tính % (Flexo/Offset) cho các báo giá khả thi điểm cao còn thiếu số – tối đa 10 / lượt
+      {
+        const [q3, c3, o3, m3] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('orders'), kvGet('margins')]);
+        renderCtx.margins = m3;
+        const missing = feasibleList(q3, c3, o3)
+          .filter(({ q }) => {
+            const k = q.kinds || (q.offset ? ['offset'] : []);
+            const mg = m3[q.code] || {};
+            return (k.includes('offset') && !Object.keys(mg.products || {}).length) || (k.includes('flexo') && !mg.flexo && q.amount);
+          })
+          .slice(0, 10);
+        for (const { q } of missing) {
+          if (!force && !(await getSettings()).auto) break;
+          collect.current = `${q.code} · tính %`;
+          progress();
+          const k = q.kinds || (q.offset ? ['offset'] : []);
+          await loadInFrame(q.id, undefined, undefined, async (f) => {
+            if (k.includes('offset')) await readOffsetMargins(f);
+            if (k.includes('flexo') && q.amount) await readFlexoCost(f, q);
+          });
+          await sleep(COLLECT.gapMs);
+        }
+      }
       // Hết báo giá chưa thu thập → kết thúc chế độ toàn bộ
       if (full && !queue.length) {
         await call({ type: 'kv.set', key: 'fullCollect', value: { ...(await kvGet('fullCollect')), on: false, doneAt: Date.now() } });
@@ -1027,6 +1050,9 @@ Quy tắc:
     .side-row b.good { color: #047857; } .side-row b.bad { color: #b91c1c; }
     .side-d { margin-top: 6px; padding: 6px 8px; font-size: 12px; }
     .side-d summary { font-size: 12px; }
+    .amt-pct { margin-top: 3px; font-size: 15px; font-weight: 700; color: #334155; }
+    .amt-pct b.good { color: #047857; } .amt-pct b.bad { color: #b91c1c; }
+    .amt-pct .muted { font-size: 11px; font-weight: 500; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1528,6 +1554,18 @@ Quy tắc:
       offs: Object.entries(m.products || {}),
     };
   }
+  // Dòng % ở cột phải danh sách: 🟦 Flexo X% · 🟪 Offset Y%
+  const pctLine = (q) => {
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+    if (!kinds.length) return '';
+    const { flexo, offset } = marginParts(q);
+    const segs = [];
+    if (kinds.includes('flexo'))
+      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦 <b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦 <span class="muted">–</span>');
+    if (kinds.includes('offset')) segs.push(offset != null ? `🟪 <b class="${pctCls(offset)}">${offset}%</b>` : '🟪 <span class="muted">–</span>');
+    const none = !flexo && offset == null;
+    return `<div class="amt-pct" title="Flexo: % còn lại sau giấy tấm · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
+  };
   const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
 
   function renderSide(q) {
@@ -1738,9 +1776,9 @@ Quy tắc:
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     const itemHtml = ({ q, c, last, f }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
-      <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
+      <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${pctLine(q)}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
     const overdueBox = `
       <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}</h3>
       <div class="hint muted">Báo giá chưa chốt, xếp theo điểm khả năng chốt đơn (hứa lên đơn, khách cho giá, tái bản, khách quen, mới trao đổi…).</div>
