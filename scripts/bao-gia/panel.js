@@ -597,6 +597,14 @@ Quy tắc:
     .who { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
     .ava { border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center; }
     .ava.ini { background: #dbe4ff; color: #1d4ed8; font-size: 11px; font-weight: 700; width: 22px; height: 22px; }
+    .loading { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,.55); backdrop-filter: blur(1px); }
+    .loading[hidden] { display: none; }
+    .loading-box { display: flex; align-items: center; gap: 12px; background: #fff; padding: 14px 20px; border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.2); font-size: 15px; font-weight: 600; color: #1f2328; }
+    .spinner { width: 22px; height: 22px; border: 3px solid #dbe4ff; border-top-color: #1d4ed8; border-radius: 50%;
+      animation: dgspin .8s linear infinite; }
+    @keyframes dgspin { to { transform: rotate(360deg); } }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -626,6 +634,23 @@ Quy tắc:
     });
     render();
   }
+
+  // Hiệu ứng chờ khi mở báo giá từ bảng
+  function showLoading(code) {
+    let el = root.querySelector('.loading');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'loading';
+      el.innerHTML = '<div class="loading-box"><span class="spinner"></span><span class="loading-text"></span></div>';
+      root.append(el);
+    }
+    el.querySelector('.loading-text').textContent = `Đang mở ${code || 'báo giá'}…`;
+    el.hidden = false;
+  }
+  const hideLoading = () => {
+    const el = root?.querySelector('.loading');
+    if (el) el.hidden = true;
+  };
 
   const isOpen = () => root && !root.querySelector('.panel').hidden;
 
@@ -814,10 +839,22 @@ Quy tắc:
       const code = a.dataset.code;
       document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
-      // App không chuyển được (vd. router không nhận) → tải hẳn trang báo giá đó
-      setTimeout(() => {
-        if (location.pathname !== href || (code && !document.title.includes(code))) location.assign(href);
-      }, 3500);
+      showLoading(code);
+      const arrived = () => location.pathname === href && (!code || document.title.includes(code));
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (arrived()) {
+          clearInterval(timer);
+          hideLoading();
+        } else if (Date.now() - started > 3500 && location.pathname !== href) {
+          // App không chuyển được (vd. router không nhận) → tải hẳn trang báo giá đó
+          clearInterval(timer);
+          location.assign(href);
+        } else if (Date.now() - started > 15000) {
+          clearInterval(timer);
+          hideLoading();
+        }
+      }, 150);
       return render();
     }
     const b = e.target.closest('[data-act]');
