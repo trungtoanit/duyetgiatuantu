@@ -24,7 +24,12 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
 4. Bấm nút **📊 Đánh giá NVKD** ở góc dưới bên trái:
    - **Báo giá đang mở → 💬 Gợi ý câu hỏi cho NVKD** (bộ câu hỏi nhân viên): Claude đọc luồng bình luận
      rồi soạn một bình luận hỏi NVKD về bước tiếp theo, ví dụ khách phản hồi giá chưa, khi nào lên đơn.
-     Bấm **Chèn vào ô bình luận** hoặc **Copy**. Extension không tự gửi: bạn xem lại rồi tự bấm "Bình luận".
+     Claude học văn phong từ chính các bình luận của bạn (tài khoản Nguyễn Trung Toán), ưu tiên những câu
+     bạn đã nói với đúng NVKD đó để xưng hô cho đúng. Với báo giá đã quá 12 giờ, gợi ý chỉ là một câu ngắn
+     hỏi giá cả đã ok chưa, khách đồng ý chốt chưa.
+     **Chèn vào bình luận**: nếu báo giá đã có bình luận, extension bấm **Trả lời** ở luồng mới nhất của báo
+     giá đang mở (luồng có nhãn mã màu xanh) rồi điền vào ô trả lời; nếu chưa có thì điền vào ô bình luận mới.
+     Extension không tự gửi: bạn xem lại rồi tự bấm gửi.
    - **Báo giá đang mở → 🤖 Đánh giá NVKD**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
    - **⏰ Quá 12 giờ chưa cập nhật**: liệt kê báo giá chưa chốt (khác Duyệt lên đơn, Thành công, Thất bại)
      mà bình luận cuối đã quá 12 giờ. Số lượng hiện ngay trên nút nổi. Với những báo giá này, câu hỏi gợi ý
