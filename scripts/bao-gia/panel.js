@@ -812,6 +812,7 @@ Quy tắc:
       e.preventDefault();
       history.pushState({}, '', a.getAttribute('href'));
       window.dispatchEvent(new PopStateEvent('popstate'));
+      root.querySelector('.panel').hidden = true; // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
       return render();
     }
     const b = e.target.closest('[data-act]');
