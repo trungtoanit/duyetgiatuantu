@@ -1,19 +1,29 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "scripts": [
     {
       "id": "bao-gia-hook",
-      "files": ["bao-gia/hook.js"],
-      "matches": ["https://sale.tuantu.com.vn/*"],
+      "files": [
+        "bao-gia/hook.js"
+      ],
+      "matches": [
+        "https://sale.tuantu.com.vn/*"
+      ],
       "runAt": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "allFrames": true
     },
     {
       "id": "bao-gia-panel",
-      "files": ["bao-gia/panel.js"],
-      "matches": ["https://sale.tuantu.com.vn/*"],
+      "files": [
+        "bao-gia/panel.js"
+      ],
+      "matches": [
+        "https://sale.tuantu.com.vn/*"
+      ],
       "runAt": "document_start",
-      "world": "USER_SCRIPT"
+      "world": "USER_SCRIPT",
+      "allFrames": true
     }
   ]
 }

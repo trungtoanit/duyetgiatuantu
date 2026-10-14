@@ -96,11 +96,19 @@
 
   const open = XMLHttpRequest.prototype.open;
   const send = XMLHttpRequest.prototype.send;
+  // Khung thu thập ngầm (iframe name="dg-collector", do panel.js tạo): CHỈ ĐỌC.
+  // Chặn mọi lệnh ghi và lệnh đánh dấu đã đọc, để báo giá chưa đọc vẫn in đậm và không có gì bị sửa.
+  const COLLECTOR = window.name === 'dg-collector';
+  const blocked = (method, url) =>
+    COLLECTOR && (String(method || 'GET').toUpperCase() !== 'GET' || /\/opportunity\/\d+\/read\b/.test(String(url)));
+
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__dgUrl = String(url);
+    this.__dgBlocked = blocked(method, url);
     return open.apply(this, arguments);
   };
   XMLHttpRequest.prototype.send = function () {
+    if (this.__dgBlocked) return; // không gửi
     this.addEventListener('load', () => {
       try {
         if (this.status === 200 && (this.responseType === '' || this.responseType === 'text')) {
@@ -114,7 +122,9 @@
   };
 
   const origFetch = window.fetch;
-  window.fetch = async function (input) {
+  window.fetch = async function (input, init) {
+    const url0 = typeof input === 'string' ? input : input?.url;
+    if (blocked(init?.method || input?.method, url0)) return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
     const res = await origFetch.apply(this, arguments);
     try {
       const url = typeof input === 'string' ? input : input.url;

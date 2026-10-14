@@ -150,6 +150,15 @@
       .sort((a, b) => (mode === 'chaoLai' ? b.last.createdAt - a.last.createdAt : a.last.createdAt - b.last.createdAt));
   }
 
+  // Khoảng thời gian kiểu nói tự nhiên: "13 giờ", "5 ngày", "2 tuần", "3 tháng"
+  const humanDuration = (hours) => {
+    if (hours < 24) return `${Math.max(1, Math.floor(hours))} giờ`;
+    const d = hours / 24;
+    if (d < 14) return `${Math.floor(d)} ngày`;
+    if (d < 60) return `${Math.round(d / 7)} tuần`;
+    return `${Math.round(d / 30)} tháng`;
+  };
+
   const ago = (sec) => {
     const h = hoursSince(sec);
     return h >= 48 ? `${Math.floor(h / 24)} ngày trước` : `${Math.floor(h)} giờ trước`;
@@ -310,6 +319,10 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
         khi: 'luồng có nhắc khách cần mẫu / phải có mẫu / chạy mẫu (vd. "Quy trình của bên này làm hàng phải có mẫu Sếp ạ", "Thùng này có chạy mẫu không") mà chưa thấy xác nhận đã có mẫu',
         hoi: 'Nếu chưa có mẫu thì đàm phán làm mẫu cho khách.',
       },
+      {
+        khi: 'NVKD báo khách đã đặt chỗ khác / đặt bên khác rồi (vd. "khách báo đơn này gấp cần 3 ngày giao nên họ đặt qua chỗ khác rồi Sếp")',
+        hoi: 'Xin giá khách làm bên kia là bao nhiêu để lần sau chào lại.',
+      },
     ],
   };
   const tinhHuongText = () =>
@@ -340,6 +353,7 @@ Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
 - Tuyệt đối không viết giọng văn mẫu, công sở hay "AI". Không mở đầu bằng lời chào dài, không cảm ơn, không ký tên. Nếu quản lý hay viết ngắn gọn thì viết ngắn gọn.
 - Chỉ đánh số câu hỏi nếu thật cần (từ 3 ý trở lên); 1–2 ý thì viết liền tự nhiên như nhắn tin.
+- Khi nhắc khoảng thời gian NVKD im lặng, nói đúng kiểu: "<khoảng thời gian> chưa có phản hồi, báo cáo lại nhé" (vd. "2 tuần chưa có phản hồi, báo cáo lại nhé"), dùng đúng khoảng thời gian đề bài đưa. KHÔNG viết "chưa có cập nhật". Ở chế độ hỏi nhanh / chào lại, nếu im lặng từ 3 ngày trở lên thì mở đầu bằng câu này rồi mới hỏi (vẫn ngắn gọn).
 - Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã tới công ty khách / đã gặp khách thì không hỏi lại). Tối đa 3 ý hỏi.
 - Ở gợi ý bình thường (không phải hỏi nhanh / chào lại / tình huống đặc biệt): kết thúc bằng câu "${BO_CAU_HOI.ketThuc}" (chỉ đổi xưng hô cho đúng). KHÔNG hẹn giờ cụ thể kiểu "phản hồi trước 11h hôm nay".
 - Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
@@ -363,7 +377,7 @@ Quy tắc:
         `NVKD phụ trách: ${staffOf(q, c) || '(không rõ)'}`,
         `Thời điểm hiện tại: ${fmtTime(Date.now() / 1000)}`,
         last
-          ? `Bình luận cuối: ${Math.floor(hours)} giờ trước, của ${last.staff?.name || '?'}.`
+          ? `Bình luận cuối: ${humanDuration(hours)} trước, của ${last.staff?.name || '?'}. Khoảng thời gian im lặng: ${humanDuration(hours)}.`
           : 'Chưa có bình luận nào.',
         mode === 'hoiNhanh'
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
@@ -434,6 +448,112 @@ Quy tắc:
     ta.focus();
   }
 
+  // ---------- Thu thập ngầm + tự phân tích ----------
+  // Mở lần lượt từng báo giá trong 1 iframe ẩn (name="dg-collector"); chính app CRM tải dữ liệu,
+  // hook.js trong iframe ghi lại bình luận và CHẶN lệnh /read + mọi lệnh ghi (chỉ đọc).
+  const IS_TOP = window.top === window;
+  const COLLECT = { perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
+  const collect = { running: false, done: 0, total: 0, current: '', suggested: 0, lastRun: 0 };
+  const TAB_ID = Math.random().toString(36).slice(2);
+
+  const getSettings = async () => ({ auto: true, ...(await kvGet('settings')) });
+
+  function pickQueue(quotes, comments, collected) {
+    const now = Date.now() / 1000;
+    const isOpenQuote = (q) => !CLOSED.has(q.quoteStatus) && !hasOrder(q, comments[q.id]);
+    return Object.values(quotes)
+      .filter((q) => q.id && q.createdAt && now - q.createdAt < COLLECT.maxAgeDays * 86400)
+      .filter((q) => !collected[q.id] || (isOpenQuote(q) && now - collected[q.id] > COLLECT.refreshHours * 3600))
+      .sort(
+        (a, b) =>
+          !!collected[a.id] - !!collected[b.id] || // chưa thu thập lần nào trước
+          (a.isRead === false ? 0 : 1) - (b.isRead === false ? 0 : 1) || // chưa đọc trước
+          b.createdAt - a.createdAt,
+      )
+      .slice(0, COLLECT.perRun);
+  }
+
+  async function loadInFrame(id) {
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = `/co-hoi/update/${id}`;
+    document.documentElement.append(f);
+    const start = Date.now();
+    try {
+      while (Date.now() - start < COLLECT.waitMs) {
+        await sleep(500);
+        let done = false;
+        try {
+          done = f.contentWindow.performance.getEntriesByType('resource').some((e) => /\/fileAttach\?/.test(e.name));
+        } catch {}
+        if (done) {
+          await sleep(2500); // chờ panel.js trong iframe lưu xong
+          break;
+        }
+      }
+    } finally {
+      f.remove();
+    }
+  }
+
+  async function takeLock() {
+    const lock = await kvGet('collectLock');
+    if (lock?.tab && lock.tab !== TAB_ID && Date.now() - lock.at < 90000) return false; // tab khác đang chạy
+    await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
+    return true;
+  }
+
+  async function runCollector(force = false) {
+    if (!IS_TOP || collect.running) return;
+    if (!force && !(await getSettings()).auto) return;
+    if (!(await takeLock())) return;
+    collect.running = true;
+    collect.done = 0;
+    collect.suggested = 0;
+    try {
+      const [quotes, comments, collected] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('collected')]);
+      const queue = pickQueue(quotes, comments, collected);
+      collect.total = queue.length;
+      render();
+      for (const q of queue) {
+        if (!force && !(await getSettings()).auto) break;
+        collect.current = q.code;
+        render();
+        await loadInFrame(q.id);
+        await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
+        await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
+        collect.done++;
+        await sleep(COLLECT.gapMs);
+      }
+      // Tự phân tích: soạn gợi ý cho các báo giá cần hỏi lại mà chưa có gợi ý mới hơn bình luận cuối
+      collect.current = 'phân tích';
+      render();
+      const [q2, c2, sg] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('suggests')]);
+      const need = [...listByMode(q2, c2, 'hoiNhanh'), ...listByMode(q2, c2, 'chaoLai')]
+        .filter(({ c, last }) => !sg[c.id] || sg[c.id].at / 1000 < last.createdAt)
+        .slice(0, COLLECT.autoSuggest);
+      for (const { c } of need) {
+        await suggestComment(c.id);
+        collect.suggested++;
+      }
+    } catch (e) {
+      state.error = e.message;
+    } finally {
+      collect.running = false;
+      collect.current = '';
+      collect.lastRun = Date.now();
+      await call({ type: 'kv.set', key: 'collectLock', value: null }).catch(() => {});
+      render();
+    }
+  }
+
+  if (IS_TOP) {
+    setTimeout(() => runCollector(), 15000);
+    setInterval(() => runCollector(), COLLECT.everyMin * 60 * 1000);
+  }
+
   // ---------- Giao diện ----------
   const state = { busy: new Set(), shown: null, error: null, unreadOf: null };
   let host, root;
@@ -473,6 +593,7 @@ Quy tắc:
     .label { margin-top: 10px; font-weight: 600; }
     .suggest { background: #eef4ff; }
     button.act.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    .collector { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -530,11 +651,13 @@ Quy tắc:
 
   async function renderInner() {
     meName = myName(await kvGet('me'));
-    const [quotes, comments, evals, suggests] = await Promise.all([
+    const [quotes, comments, evals, suggests, collected, settings] = await Promise.all([
       kvGet('quotes'),
       kvGet('comments'),
       kvGet('evals'),
       kvGet('suggests'),
+      kvGet('collected'),
+      getSettings(),
     ]);
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = listByMode(quotes, comments, 'chaoLai');
@@ -616,7 +739,14 @@ Quy tắc:
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
       <div class="muted">Dựa trên ${all.length} báo giá và ${Object.keys(comments).length} báo giá có bình luận mà extension đã ghi lại khi bạn xem CRM.
-      Mở trang Báo giá để cập nhật danh sách; mở từng báo giá để ghi lại bình luận.</div>
+      Mở trang Báo giá để cập nhật danh sách; bình luận được thu thập ngầm (không đánh dấu đã đọc).</div>
+      <div class="collector">🔄 Thu thập ngầm & tự phân tích:
+        <button class="act" data-act="toggle-auto">${settings.auto ? 'Đang bật' : 'Đang tắt'}</button>
+        ${collect.running
+          ? `<span class="muted">${collect.current === 'phân tích' ? `đang soạn gợi ý (${collect.suggested})…` : `đang đọc ${esc(collect.current)} (${collect.done}/${collect.total})…`}</span>`
+          : `<button class="act" data-act="collect-now">Chạy ngay</button>
+             <span class="muted">${collect.lastRun ? `lần cuối ${new Date(collect.lastRun).toLocaleTimeString('vi-VN')} · ${collect.done} báo giá, ${collect.suggested} gợi ý` : `tự chạy mỗi ${COLLECT.everyMin} phút`} · đã thu thập ${Object.keys(collected).length}</span>`}
+      </div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${current}
       ${overdueBox}
@@ -661,6 +791,12 @@ Quy tắc:
     if (act === 'close') root.querySelector('.panel').hidden = true;
     else if (act === 'eval-quote') evaluateQuote(id);
     else if (act === 'suggest') suggestComment(id);
+    else if (act === 'toggle-auto') {
+      const cur = await getSettings();
+      await call({ type: 'kv.set', key: 'settings', value: { ...cur, auto: !cur.auto } });
+      if (!cur.auto) runCollector();
+      render();
+    } else if (act === 'collect-now') runCollector(true);
     else if (act === 'eval-staff') evaluateStaff(b.dataset.staff);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
@@ -692,6 +828,9 @@ Quy tắc:
     }
   }, 1000);
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
-  else mount();
+  // Trong iframe thu thập ngầm chỉ ghi dữ liệu, không hiện giao diện
+  if (IS_TOP) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
+    else mount();
+  }
 })();
