@@ -28,7 +28,7 @@
   const emit = (kind, data) =>
     document.dispatchEvent(new CustomEvent('dg:data', { detail: JSON.stringify({ kind, data }) }));
 
-  const person = (s) => (s ? { id: s.id, name: s.name } : undefined);
+  const person = (s) => (s ? { id: s.id, name: s.name, avatar: s.avatar || undefined } : undefined);
   const slimQuote = (o) => ({
     id: o.id,
     code: o.code,

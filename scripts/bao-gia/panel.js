@@ -594,6 +594,9 @@ Quy tắc:
     .suggest { background: #eef4ff; }
     button.act.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
     .collector { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+    .who { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+    .ava { border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+    .ava.ini { background: #dbe4ff; color: #1d4ed8; font-size: 11px; font-weight: 700; width: 22px; height: 22px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -632,6 +635,22 @@ Quy tắc:
     render();
   }
 
+  // Avatar NVKD: ảnh trên server CRM (cổng 8080), không có thì hiện chữ cái đầu
+  const avatarUrl = (a) => (!a ? '' : /^https?:/.test(a) ? a : `https://sale.tuantu.com.vn:8080/${a.replace(/^\/+/, '')}`);
+  const avatarIndex = (quotes) => {
+    const m = {};
+    for (const q of Object.values(quotes)) if (q.staff?.name && q.staff.avatar) m[q.staff.name] = q.staff.avatar;
+    return m;
+  };
+  let avatars = {};
+  const avatarHtml = (name, size = 22) => {
+    const url = avatarUrl(avatars[name]);
+    const initials = (name || '?').split(/\s+/).slice(-1)[0].slice(0, 1).toUpperCase();
+    return url
+      ? `<img class="ava" src="${esc(url)}" alt="" style="width:${size}px;height:${size}px" data-ini="${esc(initials)}">`
+      : `<span class="ava ini" style="width:${size}px;height:${size}px">${esc(initials)}</span>`;
+  };
+
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
 
@@ -664,6 +683,7 @@ Quy tắc:
     root.querySelector('.fab').textContent = `📊 Đánh giá NVKD${overdue.length ? ` · ⏰ ${overdue.length}` : ''}`;
     if (!isOpen()) return;
     if (root.activeElement?.classList?.contains('suggest-edit')) return; // đang sửa gợi ý – không vẽ lại
+    avatars = avatarIndex(quotes);
     const all = Object.values(quotes);
 
     // Gom theo NVKD
@@ -695,7 +715,7 @@ Quy tắc:
         <h3>Báo giá đang mở</h3>
         <div class="box">
           <div><b>${esc(q?.code || c?.code || '#' + qid)}</b> – ${esc(q?.name || '')}<br>
-            <span class="muted">NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
+            <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${mode === 'hoiNhanh' ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đã ok chưa.</div>` : ''}
           ${mode === 'chaoLai' ? `<div class="warn">💤 Báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`} – nên nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.</div>` : ''}
@@ -713,7 +733,7 @@ Quy tắc:
     }
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
-    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav><b>${esc(q?.code || c.code)}</b>${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br>${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))}
+    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}" data-nav><b>${esc(q?.code || c.code)}</b>${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
       <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
@@ -759,7 +779,7 @@ Quy tắc:
             const avg = s.evaluated.length ? Math.round((s.evaluated.reduce((a, b) => a + b, 0) / s.evaluated.length) * 10) / 10 : null;
             const sev = evals[key];
             return `<tr>
-              <td>${sev ? `<button class="link" data-act="show" data-key="${esc(key)}">${esc(s.name)}</button>` : esc(s.name)}</td>
+              <td><span class="who">${avatarHtml(s.name, 26)}${sev ? `<button class="link" data-act="show" data-key="${esc(key)}">${esc(s.name)}</button>` : esc(s.name)}</span></td>
               <td class="num">${s.total}</td>
               <td class="num">${s.unread.length ? `<button class="link" data-act="unread" data-staff="${esc(s.name)}"><b>${s.unread.length}</b></button>` : 0}</td>
               <td class="num">${s.commented}</td>
@@ -773,6 +793,16 @@ Quy tắc:
       ${unreadBox}
       ${shown ? `<h3>Đánh giá tổng hợp – ${esc(shown.staff)} ${scoreHtml(shown)}</h3><div class="muted">Lúc ${new Date(shown.at).toLocaleString('vi-VN')}</div><div class="result">${esc(shown.text)}</div>` : ''}
     `;
+    // Ảnh lỗi → chữ cái đầu
+    root.querySelectorAll('img.ava').forEach((img) =>
+      img.addEventListener('error', () => {
+        const span = document.createElement('span');
+        span.className = 'ava ini';
+        span.style.cssText = img.style.cssText;
+        span.textContent = img.dataset.ini || '?';
+        img.replaceWith(span);
+      }),
+    );
   }
 
   async function onClick(e) {
