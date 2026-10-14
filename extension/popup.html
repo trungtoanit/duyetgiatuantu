@@ -109,6 +109,8 @@
       <label class="sw"><span><b>Thu thập ngầm & tự phân tích</b><br><span class="hint">Tự đọc bình luận các báo giá (không đánh dấu đã đọc) và soạn gợi ý, 30 phút/lượt</span></span>
         <input type="checkbox" id="optAuto"><i></i></label>
       <div class="collect"><span id="collectStatus" class="hint">–</span><button id="collectNow" type="button">Chạy ngay</button></div>
+      <div class="collect"><span id="fullStatus" class="hint">Đọc tất cả báo giá + bình luận và đẩy lên máy chủ (chạy liên tục tới khi xong)</span>
+        <button id="fullCollect" type="button">📦 Thu thập toàn bộ</button></div>
       <label class="sw"><span><b>Tự mở bảng khi vào báo giá</b><br><span class="hint">Vào trang báo giá là bảng đánh giá tự bung ra</span></span>
         <input type="checkbox" id="optAutoOpen"><i></i></label>
     </section>
@@ -156,6 +158,9 @@
         <label>Supabase URL (đồng bộ giữa các máy) <input name="supabaseUrl" placeholder="https://xxxx.supabase.co"></label>
         <label>Supabase anon key <input name="supabaseKey" type="password"></label>
         <label>Mật khẩu nhóm <input name="teamSecret" type="password"></label>
+        <label class="sw"><span><b>Dùng chung Anthropic key & model cho cả nhóm</b><br><span class="hint">Lưu lên máy chủ đồng bộ; các máy khác không cần nhập</span></span>
+          <input type="checkbox" id="shareTeam"><i></i></label>
+        <div class="hint" id="teamInfo"></div>
         <button type="submit" class="primary">Lưu cài đặt</button>
       </form>
     </details>

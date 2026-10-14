@@ -487,18 +487,18 @@ Quy tắc:
   // Mở lần lượt từng báo giá trong 1 iframe ẩn (name="dg-collector"); chính app CRM tải dữ liệu,
   // hook.js trong iframe ghi lại bình luận và CHẶN lệnh /read + mọi lệnh ghi (chỉ đọc).
   const IS_TOP = window.top === window;
-  const COLLECT = { listPages: 10, perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
+  const COLLECT = { listPages: 10, fullPerRun: 50, perRun: 30, gapMs: 4000, waitMs: 20000, refreshHours: 6, maxAgeDays: 60, everyMin: 30, autoSuggest: 10 };
   const collect = { running: false, done: 0, total: 0, current: '', suggested: 0, lastRun: 0 };
   const TAB_ID = Math.random().toString(36).slice(2);
 
   // auto: thu thập ngầm; autoOpen: tự mở bảng khi vào trang báo giá
   const getSettings = async () => ({ auto: true, autoOpen: false, ...(await kvGet('settings')) });
 
-  function pickQueue(quotes, comments, collected) {
+  function pickQueue(quotes, comments, collected, full = false) {
     const now = Date.now() / 1000;
     const isOpenQuote = (q) => !CLOSED.has(q.quoteStatus) && !hasOrder(q, comments[q.id]);
     return Object.values(quotes)
-      .filter((q) => q.id && q.createdAt && now - q.createdAt < COLLECT.maxAgeDays * 86400 && !isExcluded(q.staff?.name))
+      .filter((q) => q.id && (full || (q.createdAt && now - q.createdAt < COLLECT.maxAgeDays * 86400)) && !isExcluded(q.staff?.name))
       .filter((q) => !collected[q.id] || (isOpenQuote(q) && now - collected[q.id] > COLLECT.refreshHours * 3600))
       .sort(
         (a, b) =>
@@ -506,7 +506,7 @@ Quy tắc:
           (a.isRead === false ? 0 : 1) - (b.isRead === false ? 0 : 1) || // chưa đọc trước
           b.createdAt - a.createdAt,
       )
-      .slice(0, COLLECT.perRun);
+      .slice(0, full ? COLLECT.fullPerRun : COLLECT.perRun);
   }
 
   async function loadInFrame(id) {
@@ -542,7 +542,7 @@ Quy tắc:
     render();
   };
 
-  async function collectListPages() {
+  async function collectListPages(maxPages = COLLECT.listPages) {
     let saved = null;
     try {
       saved = localStorage.getItem('quote.query');
@@ -575,7 +575,7 @@ Quy tắc:
       progress();
       if (!(await waitFor(() => loaded(1), 25000))) return;
       await sleep(1500);
-      for (let page = 2; page <= COLLECT.listPages; page++) {
+      for (let page = 2; page <= maxPages; page++) {
         collect.current = `danh sách trang ${page}`;
         progress();
         const li = await waitFor(() => f.contentDocument?.querySelector(`.ant-pagination-item-${page}`), 5000);
@@ -606,10 +606,19 @@ Quy tắc:
     collect.running = true;
     collect.done = 0;
     collect.suggested = 0;
+    const full = (await kvGet('fullCollect'))?.on === true;
+    collect.full = full;
     try {
-      await collectListPages();
+      // Thu thập toàn bộ: đọc hết các trang danh sách ở lượt đầu, các lượt sau chỉ đọc bình luận
+      const fc = full ? await kvGet('fullCollect') : null;
+      if (!full) await collectListPages();
+      else if (!fc.listDone) {
+        await collectListPages(999);
+        await call({ type: 'kv.set', key: 'fullCollect', value: { ...fc, listDone: Date.now() } });
+      }
       const [quotes, comments, collected] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('collected')]);
-      const queue = pickQueue(quotes, comments, collected);
+      const queue = pickQueue(quotes, comments, collected, full);
+      collect.remaining = full ? Object.values(quotes).filter((q) => q.id && !collected[q.id] && !isExcluded(q.staff?.name)).length : 0;
       collect.total = queue.length;
       progress();
       for (const q of queue) {
@@ -620,9 +629,17 @@ Quy tắc:
         await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
         await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
         collect.done++;
+        if (full) collect.remaining = Math.max(0, collect.remaining - 1);
         await sleep(COLLECT.gapMs);
       }
+      // Hết báo giá chưa thu thập → kết thúc chế độ toàn bộ
+      if (full && !queue.length) {
+        await call({ type: 'kv.set', key: 'fullCollect', value: { ...(await kvGet('fullCollect')), on: false, doneAt: Date.now() } });
+        collect.full = false;
+      }
       // Tự phân tích: soạn gợi ý cho các báo giá cần hỏi lại mà chưa có gợi ý mới hơn bình luận cuối
+      // (bỏ qua khi đang thu thập toàn bộ để không tốn phí Claude mỗi lượt)
+      if (full) return;
       collect.current = 'phân tích';
       progress();
       const [q2, c2, sg] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('suggests')]);
@@ -649,10 +666,18 @@ Quy tắc:
     setInterval(() => runCollector(), COLLECT.everyMin * 60 * 1000);
     // Nút "Chạy ngay" trong popup extension ghi kv collectNow = thời điểm bấm
     let handledNow = Date.now();
+    let lastFullRun = 0;
     setInterval(async () => {
+      if (collect.running) return;
       const t = await call({ type: 'kv.get', key: 'collectNow' }).catch(() => null);
-      if (typeof t === 'number' && t > handledNow && !collect.running) {
+      if (typeof t === 'number' && t > handledNow) {
         handledNow = t;
+        return runCollector(true);
+      }
+      // Chế độ thu thập toàn bộ (bật trong popup): chạy liên tục, nghỉ 1 phút giữa các lượt
+      const fc = await call({ type: 'kv.get', key: 'fullCollect' }).catch(() => null);
+      if (fc?.on && Date.now() - lastFullRun > 60000 && Date.now() - collect.lastRun > 60000) {
+        lastFullRun = Date.now();
         runCollector(true);
       }
     }, 3000);
@@ -782,6 +807,10 @@ Quy tắc:
       padding: 8px 12px; border: 1px dashed #d4a72c; resize: vertical; min-height: 44px; line-height: 1.4; }
     .quick-text:focus { outline: 2px solid #fcd34d; border-style: solid; }
     .tgt { margin-left: 6px; display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    button.chipbtn { cursor: pointer; font: inherit; font-size: 13px; }
+    button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
+    .nodep { margin-left: 6px; display: inline-block; background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
@@ -924,6 +953,23 @@ Quy tắc:
       : '';
   };
 
+  // Nhận diện khách chưa / không chịu cọc
+  const NO_DEPOSIT_RE = /(chưa|chua|không|khong|ko|k|hông|chẳng)\s*(chịu\s*|muốn\s*|đồng ý\s*|dong y\s*)?(đặt\s*|dat\s*)?(cọc|coc)\b|(cọc|coc)\s*(chưa|không|khong|ko)\b/i;
+  function noDepositInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      // chỉ xét lời NVKD báo lại (câu hỏi "cọc chưa em?" của quản lý không tính)
+      if (t.staff?.name !== meName && NO_DEPOSIT_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
+  }
+  const noDepositTag = (c) => {
+    const t = noDepositInfo(c);
+    return t ? ` <span class="nodep" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">🚫 Chưa cọc</span>` : '';
+  };
+
   // Báo giá 0đ = quản lý chưa cho giá
   const noPrice = (q) => q != null && q.amount != null && Number(q.amount) === 0;
   const noPriceTag = (q) => (noPrice(q) ? ' <span class="noprice">⚠️ Chưa cho giá</span>' : '');
@@ -1048,7 +1094,7 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${targetTag(c)} – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${targetTag(c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
@@ -1072,26 +1118,35 @@ Quy tắc:
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
+    // Bấm nhãn trên tiêu đề để lọc danh sách: 'tgt' = khách cho giá, 'zero' = chưa cho giá
+    const FILTERS = { tgt: ({ c }) => targetPriceInfo(c), zero: ({ q }) => noPrice(q), nodep: ({ c }) => noDepositInfo(c) };
+    const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items);
+    const filterChip = (f, cls, label) =>
+      ` <button class="${cls} chipbtn${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">${label}</button>`;
     const revenueHtml = (items) => {
       const total = items.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const zero = items.filter(({ q }) => noPrice(q)).length;
       const tgt = items.filter(({ c }) => targetPriceInfo(c)).length;
-      return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') + (zero ? ` <span class="noprice">⚠️ ${zero} chưa cho giá</span>` : '') +
-        (tgt ? ` <span class="tgt">💲 ${tgt} khách cho giá</span>` : '');
+      const nodep = items.filter(({ c }) => noDepositInfo(c)).length;
+      return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') +
+        (zero ? filterChip('zero', 'noprice', `⚠️ ${zero} chưa cho giá`) : '') +
+        (tgt ? filterChip('tgt', 'tgt', `💲 ${tgt} khách cho giá`) : '') +
+        (nodep ? filterChip('nodep', 'nodep', `🚫 ${nodep} chưa cọc`) : '') +
+        (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     const itemHtml = ({ q, c, last }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${targetTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${targetTag(c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</div></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})${revenueHtml(overdue)}</h3>
       ${overdue.length
-        ? `<div class="box unread">${overdue
+        ? `<div class="box unread">${(applyFilter(overdue).length ? applyFilter(overdue) : [])
             .map(itemHtml)
             .join('')}</div>`
         : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}
       ${stale.length
-        ? `<h3>💤 Cần chào lại khách (${stale.length})${revenueHtml(stale)}</h3><div class="box unread">${stale.slice(0, 20).map(itemHtml).join('')}</div>`
+        ? `<h3>💤 Cần chào lại khách (${stale.length})${revenueHtml(stale)}</h3><div class="box unread">${applyFilter(stale).slice(0, state.filter ? 200 : 20).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : ''}`;
 
 
@@ -1160,7 +1215,10 @@ Quy tắc:
       root.querySelector('.panel').hidden = true;
       render();
     }
-    else if (act === 'eval-quote') evaluateQuote(id);
+    else if (act === 'filter') {
+      state.filter = state.filter === b.dataset.f ? '' : b.dataset.f;
+      render();
+    } else if (act === 'eval-quote') evaluateQuote(id);
     else if (act === 'quick-send') {
       const key = `quick:${id}`;
       if (state.busy.has(key) || !quickCtx[id]) return;

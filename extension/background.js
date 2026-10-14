@@ -3,9 +3,31 @@ import { DEFAULT_CONFIG } from './config.js';
 const ALARM = 'sync-scripts';
 let running = null;
 
+// Cài đặt chung của nhóm, để mỗi máy chỉ cần cài extension:
+//  - extension/team.json (KHÔNG đưa lên git): Supabase URL/key/mật khẩu nhóm, có trong gói zip gửi cho máy khác
+//  - teamConfig trên Supabase: Anthropic key/model do 1 máy chia sẻ cho cả nhóm
+let teamFile;
+async function loadTeamFile() {
+  if (teamFile === undefined) {
+    try {
+      const res = await fetch(chrome.runtime.getURL('team.json'), { cache: 'no-store' });
+      teamFile = res.ok ? await res.json() : {};
+    } catch {
+      teamFile = {};
+    }
+  }
+  return teamFile;
+}
+const nonEmpty = (o) => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v !== '' && v != null));
+
 async function getConfig() {
-  const { config } = await chrome.storage.sync.get('config');
-  const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
+  const [{ config }, { teamConfig }, file] = await Promise.all([
+    chrome.storage.sync.get('config'),
+    chrome.storage.local.get('teamConfig'),
+    loadTeamFile(),
+  ]);
+  // Thứ tự ưu tiên: mặc định < team.json < cài đặt chung của nhóm < cài đặt riêng máy này (ô nào để trống thì bỏ qua)
+  const cfg = { ...DEFAULT_CONFIG, ...nonEmpty(file), ...nonEmpty(teamConfig), ...nonEmpty(config) };
   if (Number(cfg.intervalMinutes) === 5) cfg.intervalMinutes = 1; // mặc định cũ 5 phút → 1 phút
   return cfg;
 }
@@ -276,22 +298,49 @@ async function setSyncStatus(patch) {
   await chrome.storage.local.set({ syncStatus: { ...(syncStatus || {}), ...patch } });
 }
 
+// Ký tự NUL (\u0000) làm Postgres từ chối cả lô jsonb → bỏ đi
+const cleanJson = (rows) => JSON.stringify(rows).replace(/\\u0000/g, '');
+
+async function postRows(rc, rows) {
+  const res = await fetch(rc.url, {
+    method: 'POST',
+    headers: { ...rc.headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: cleanJson(rows),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
+
+// Đẩy theo lô 200 dòng; lô lỗi thì chia nhỏ dần để 1 dòng hỏng không chặn cả lô
+async function postRobust(rc, rows, errors) {
+  try {
+    await postRows(rc, rows);
+  } catch (e) {
+    if (rows.length === 1) {
+      errors.push(`${rows[0].ns}/${rows[0].id}: ${e.message}`);
+      return;
+    }
+    const mid = Math.ceil(rows.length / 2);
+    await postRobust(rc, rows.slice(0, mid), errors);
+    await postRobust(rc, rows.slice(mid), errors);
+  }
+}
+
 async function pushRemote(ns, patch) {
   try {
     const rc = await remoteCfg();
     if (!rc) return;
-    const rows = Object.entries(patch).map(([id, data]) => ({ ns, id: String(id), data }));
-    for (let i = 0; i < rows.length; i += 500) {
-      const res = await fetch(rc.url, {
-        method: 'POST',
-        headers: { ...rc.headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify(rows.slice(i, i + 500)),
-      });
-      if (!res.ok) throw new Error(`Đẩy dữ liệu lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    }
-    await setSyncStatus({ lastPush: Date.now(), error: null });
+    const rows = Object.entries(patch)
+      .filter(([, data]) => data !== undefined && data !== null)
+      .map(([id, data]) => ({ ns, id: String(id), data }));
+    const errors = [];
+    for (let i = 0; i < rows.length; i += 200) await postRobust(rc, rows.slice(i, i + 200), errors);
+    await setSyncStatus({
+      lastPush: Date.now(),
+      pushed: { ...((await chrome.storage.local.get('syncStatus')).syncStatus?.pushed || {}), [ns]: rows.length - errors.length },
+      error: errors.length ? `Đẩy lỗi ${errors.length} dòng – ${errors[0]}` : null,
+    });
   } catch (e) {
-    await setSyncStatus({ error: String(e.message || e) });
+    await setSyncStatus({ error: `Đẩy ${ns} lỗi: ${String(e.message || e)}` });
   }
 }
 
@@ -324,6 +373,11 @@ async function doPull() {
       for (const r of rows) (byNs[r.ns] ||= []).push(r);
       await kvSerial(async () => {
         for (const [ns, list] of Object.entries(byNs)) {
+          if (ns === 'teamConfig') {
+            const main = list.find((r) => r.id === 'main');
+            if (main) await chrome.storage.local.set({ teamConfig: main.data });
+            continue;
+          }
           if (!SYNC_NS.includes(ns)) continue;
           const cur = (await kvGet(ns)) || {};
           for (const r of list) cur[r.id] = mergeEntry(ns, cur[r.id], r.data);
@@ -378,6 +432,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     if (msg.type === 'syncNow') await sync(true);
     if (msg.type === 'setBalance') await setBalance(msg.amount);
+    if (msg.type === 'shareTeam') {
+      await pushRemote('teamConfig', { main: { anthropicKey: msg.anthropicKey || '', model: msg.model || '' } });
+      await chrome.storage.local.set({ teamConfig: { anthropicKey: msg.anthropicKey || '', model: msg.model || '' } });
+    }
     if (msg.type === 'syncAll') await syncAllNow().catch((e) => setSyncStatus({ error: String(e.message || e) }));
     const [cfg, local] = await Promise.all([
       getConfig(),
@@ -393,6 +451,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       spend: await getSpend(),
       syncStatus: (await chrome.storage.local.get('syncStatus')).syncStatus || {},
       syncEnabled: !!(await remoteCfg()),
+      hasTeamFile: Object.keys(await loadTeamFile()).length > 0,
+      teamShared: !!(await chrome.storage.local.get('teamConfig')).teamConfig?.anthropicKey,
     });
   })();
   return true;

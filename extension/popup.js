@@ -44,7 +44,7 @@ function render(data) {
   const ss = data.syncStatus || {};
   $('syncInfo').textContent = !data.syncEnabled
     ? 'Chưa bật – nhập Supabase URL, key và mật khẩu nhóm trong Cài đặt'
-    : `Đang bật · kéo về ${ago(ss.lastPull)} · đẩy lên ${ago(ss.lastPush)}`;
+    : `Đang bật · kéo về ${ago(ss.lastPull)} · đẩy lên ${ago(ss.lastPush)}${ss.pushed ? ` · đã đẩy: ${Object.entries(ss.pushed).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`;
   $('syncAll').disabled = !data.syncEnabled;
   $('syncErr').textContent = ss.error ? `Lỗi đồng bộ: ${ss.error}` : '';
 
@@ -60,8 +60,12 @@ function render(data) {
   if (!scripts.length) box.innerHTML = '<span class="muted">Chưa có script</span>';
 
   for (const [k, v] of Object.entries(config)) {
-    if (form.elements[k]) form.elements[k].value = v;
+    if (form.elements[k] && document.activeElement !== form.elements[k]) form.elements[k].value = v;
   }
+  $('teamInfo').textContent = [
+    data.hasTeamFile ? '✅ Kết nối đồng bộ lấy sẵn từ gói cài (team.json).' : '',
+    data.teamShared ? '✅ Đang dùng Anthropic key chung của nhóm.' : '',
+  ].filter(Boolean).join(' ');
 }
 
 async function send(type) {
@@ -109,13 +113,16 @@ form.onsubmit = async (e) => {
   const config = Object.fromEntries(new FormData(form));
   config.intervalMinutes = Number(config.intervalMinutes) || 1;
   await chrome.storage.sync.set({ config }); // background tự đồng bộ lại khi config đổi
+  if ($('shareTeam').checked && config.anthropicKey) {
+    await chrome.runtime.sendMessage({ type: 'shareTeam', anthropicKey: config.anthropicKey, model: config.model });
+  }
   setTimeout(() => send('getStatus'), 1500);
 };
 
 // ---- Tính năng trên CRM (lưu chung kho dữ liệu với script trên trang: chrome.storage.local "kv:*") ----
 const KV = (k) => `kv:${k}`;
 async function loadCrm() {
-  const o = await chrome.storage.local.get([KV('settings'), KV('collectStatus'), KV('collected')]);
+  const o = await chrome.storage.local.get([KV('settings'), KV('collectStatus'), KV('collected'), KV('fullCollect'), KV('quotes')]);
   const st = { auto: true, autoOpen: false, ...(o[KV('settings')] || {}) };
   $('optAuto').checked = !!st.auto;
   $('optAutoOpen').checked = !!st.autoOpen;
@@ -130,6 +137,17 @@ async function loadCrm() {
     text += ` · lần cuối ${ago(c.lastRun)}: ${c.done} báo giá, ${c.suggested} gợi ý`;
   }
   $('collectStatus').textContent = text;
+  const fc = o[KV('fullCollect')];
+  const total = Object.keys(o[KV('quotes')] || {}).length;
+  if (fc?.on) {
+    $('fullStatus').textContent = `Đang thu thập toàn bộ: ${fc.listDone ? `đã đọc danh sách (${total} báo giá)` : 'đang đọc các trang danh sách…'}${c?.full && c.remaining != null ? ` · còn ${c.remaining} báo giá chưa đọc bình luận` : ''}`;
+    $('fullCollect').textContent = '⏹ Dừng';
+  } else {
+    $('fullStatus').textContent = fc?.doneAt
+      ? `Đã thu thập toàn bộ xong lúc ${new Date(fc.doneAt).toLocaleString('vi-VN')} (${total} báo giá)`
+      : 'Đọc tất cả báo giá + bình luận và đẩy lên máy chủ (chạy liên tục tới khi xong)';
+    $('fullCollect').textContent = '📦 Thu thập toàn bộ';
+  }
 }
 async function saveSetting(patch) {
   const o = await chrome.storage.local.get(KV('settings'));
@@ -140,6 +158,12 @@ $('optAutoOpen').onchange = (e) => saveSetting({ autoOpen: e.target.checked });
 $('collectNow').onclick = async () => {
   await chrome.storage.local.set({ [KV('collectNow')]: Date.now() }); // tab CRM đang mở sẽ bắt đầu trong vài giây
   $('collectStatus').textContent = 'Đã yêu cầu – tab CRM đang mở sẽ bắt đầu trong vài giây…';
+};
+$('fullCollect').onclick = async () => {
+  const o = await chrome.storage.local.get(KV('fullCollect'));
+  const cur = o[KV('fullCollect')] || {};
+  await chrome.storage.local.set({ [KV('fullCollect')]: cur.on ? { ...cur, on: false } : { on: true, startedAt: Date.now() } });
+  loadCrm();
 };
 loadCrm();
 setInterval(loadCrm, 2000);

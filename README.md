@@ -67,6 +67,16 @@ Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh
 
 Không ghi các khoá này vào git (repo đang public).
 
+**Máy khác chỉ cần cài extension:** thông tin đồng bộ nằm trong `extension/team.json` (đã bị `.gitignore`).
+Chạy `tools/dong-goi.command` để tạo `DuyetGia-extension.zip` trên Desktop, gửi riêng cho máy khác →
+giải nén → `chrome://extensions` → **Load unpacked**. Anthropic key/model: trên 1 máy, nhập trong Cài đặt,
+tick **Dùng chung cho cả nhóm** → các máy khác tự dùng. Không chia sẻ file zip công khai (có mật khẩu nhóm).
+
+**📦 Thu thập toàn bộ** (popup): đọc tất cả trang danh sách + bình luận mọi báo giá, chạy liên tục
+50 báo giá/lượt tới khi xong; các máy chia nhau nhờ dữ liệu "đã thu thập" được đồng bộ.
+
+Nhãn trên danh sách (bấm nhãn trên tiêu đề để lọc): 💲 Khách cho giá, 🚫 Chưa cọc, ⚠️ Chưa cho giá.
+
 ## Cài đặt trên mỗi máy (một lần)
 
 1. Mở `chrome://extensions`, bật **Developer mode**.
