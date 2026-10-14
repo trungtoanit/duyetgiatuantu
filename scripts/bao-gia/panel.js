@@ -53,6 +53,11 @@
     q?.staff?.name || c?.threads?.map((t) => t.staff?.name).find((n) => n && n !== meName) || '';
 
   // Tình trạng báo giá theo CRM
+  // NVKD không theo dõi: báo giá của họ không vào danh sách hỏi lại, không thu thập ngầm, không tự gợi ý
+  const EXCLUDED_STAFF = ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi'];
+  const norm = (n) => (n || '').normalize('NFC').trim().toLowerCase();
+  const isExcluded = (name) => EXCLUDED_STAFF.some((x) => norm(x) === norm(name));
+
   const STATUS = {
     DRAFF: 'Bản thảo',
     PENDING_PRICE: 'Chờ xin giá',
@@ -147,7 +152,7 @@
   function listByMode(quotes, comments, mode) {
     return Object.values(comments)
       .map((c) => ({ q: quotes[c.id], c, last: lastComment(c) }))
-      .filter(({ q, c }) => followMode(q, c) === mode)
+      .filter(({ q, c }) => followMode(q, c) === mode && !isExcluded(staffOf(q, c)))
       .sort((a, b) => (mode === 'chaoLai' ? b.last.createdAt - a.last.createdAt : a.last.createdAt - b.last.createdAt));
   }
 
@@ -478,7 +483,7 @@ Quy tắc:
     const now = Date.now() / 1000;
     const isOpenQuote = (q) => !CLOSED.has(q.quoteStatus) && !hasOrder(q, comments[q.id]);
     return Object.values(quotes)
-      .filter((q) => q.id && q.createdAt && now - q.createdAt < COLLECT.maxAgeDays * 86400)
+      .filter((q) => q.id && q.createdAt && now - q.createdAt < COLLECT.maxAgeDays * 86400 && !isExcluded(q.staff?.name))
       .filter((q) => !collected[q.id] || (isOpenQuote(q) && now - collected[q.id] > COLLECT.refreshHours * 3600))
       .sort(
         (a, b) =>

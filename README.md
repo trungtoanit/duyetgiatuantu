@@ -45,6 +45,8 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
      các báo giá trong 60 ngày gần đây trong một khung ẩn để ghi lại bình luận (tối đa 30 báo giá mỗi lượt,
      30 phút một lượt, chỉ 1 tab chạy). Khung ẩn chỉ đọc: chặn lệnh đánh dấu đã đọc và mọi lệnh ghi, nên báo
      giá chưa đọc vẫn in đậm. Sau mỗi lượt, tự soạn gợi ý cho tối đa 10 báo giá cần hỏi lại.
+   - NVKD không theo dõi nằm trong `EXCLUDED_STAFF` ở đầu panel.js (hiện: Trần Đình Hùng, Nguyễn Trí Thức,
+     Nguyễn Thăng Khôi) – báo giá của họ không vào danh sách hỏi lại, không thu thập ngầm, không tự gợi ý.
    - Báo giá đã lên đơn hàng Misa được coi là đã chốt (kể cả khi tình trạng báo giá vẫn là Bản thảo).
    - **💤 Cần chào lại khách**: liệt kê các báo giá thuộc chế độ chào lại ở trên.
    - **Báo giá đang mở → 🤖 Đánh giá NVKD**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
