@@ -46,7 +46,10 @@
   }
 
   // NVKD phụ trách: lấy từ báo giá, nếu thiếu thì lấy người tạo bình luận đầu tiên
-  const staffOf = (q, c) => q?.staff?.name || c?.threads?.[0]?.staff?.name || '';
+  // (bỏ qua chính quản lý – người dùng extension – vì quản lý không phải NVKD)
+  let meName = 'Nguyễn Trung Toán';
+  const staffOf = (q, c) =>
+    q?.staff?.name || c?.threads?.map((t) => t.staff?.name).find((n) => n && n !== meName) || '';
 
   // Tình trạng báo giá theo CRM
   const STATUS = {
@@ -256,7 +259,7 @@ Bộ câu hỏi nhân viên theo giai đoạn (chọn những câu hợp với t
 - Đã gửi giá: khách phản hồi thế nào – giá ok chưa, chê cao thì giá mục tiêu bao nhiêu, đang so với bên nào?
 - Khách đồng ý: khi nào lên đơn, cọc/thanh toán thế nào, ngày giao, đã duyệt mẫu/maket chưa?
 - Khách chê/chưa chốt: cần điều chỉnh gì (quy cách, số lượng, giao hàng) để chốt được?
-- Nếu đã QUÁ 12 GIỜ kể từ bình luận cuối mà báo giá chưa chốt: trọng tâm là hỏi thẳng giá cả đã ok với khách chưa, khách nói gì, và hẹn mốc giờ cập nhật.
+- Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết đúng 1 câu ngắn hỏi giá cả ok chưa, khách đồng ý chốt chưa. Không hỏi thêm gì khác, không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ.
 
 Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
@@ -271,6 +274,7 @@ Quy tắc:
     setBusy(key, true);
     try {
       const [quotes, comments, me] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me')]);
+      meName = myName(me);
       const q = quotes[id];
       const c = comments[id];
       const last = lastComment(c);
@@ -284,7 +288,9 @@ Quy tắc:
         last
           ? `Bình luận cuối: ${Math.floor(hours)} giờ trước, của ${last.staff?.name || '?'}.`
           : 'Chưa có bình luận nào.',
-        overdue ? `ĐÃ QUÁ ${FOLLOW_UP_HOURS} GIỜ từ bình luận cuối mà báo giá chưa chốt.` : '',
+        overdue
+          ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu hỏi giá cả ok chưa, khách đồng ý chốt chưa.`
+          : '',
       ]
         .filter(Boolean)
         .join('\n');
@@ -404,6 +410,7 @@ Quy tắc:
   }
 
   async function renderInner() {
+    meName = myName(await kvGet('me'));
     const [quotes, comments, evals, suggests] = await Promise.all([
       kvGet('quotes'),
       kvGet('comments'),
