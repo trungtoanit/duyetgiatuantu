@@ -942,6 +942,9 @@ Quy tắc:
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .fea { margin-top: 4px; font-size: 13px; font-weight: 800; color: #1d4ed8; }
     .fea span { display: block; font-size: 11px; font-weight: 600; color: #64748b; white-space: normal; max-width: 220px; margin-left: auto; }
+    .smp { margin-left: 6px; display: inline-block; background: #fdf4ff; color: #a21caf; border: 1px solid #f5d0fe; border-radius: 999px;
+      padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .smp.ok { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -1161,6 +1164,27 @@ Quy tắc:
     return t ? ` <span class="prm" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">🤝 Hứa lên đơn</span>` : '';
   };
 
+  // Cắt mẫu / làm mẫu / chạy mẫu / gửi mẫu… (mọi người trong luồng) + đã thành đơn hàng chưa
+  const SAMPLE_RE = /(cắt|cat|làm|chạy|chay|gửi|gui|lấy|lay|in|đi|bế)\s*(thử\s*|thu\s*|lại\s*)?(mẫu|mau)(?![\p{L}])|(mẫu|mau)\s*(cắt|cat|thử|thu)(?![\p{L}])|sample/iu;
+  function sampleInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      if (SAMPLE_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
+  }
+  // Báo giá đã thành đơn: có đơn Misa / dòng "lên đơn hàng" / đơn trong lịch sử mua hàng trỏ về báo giá này
+  const hasOrderFull = (q, c) =>
+    !!(q?.hasOrder || hasOrder(q, c) || (q?.customer?.id && renderCtx.orders?.[q.customer.id]?.orders?.some((o) => o.quote === q.code)));
+  const sampleTag = (q, c) => {
+    const t = sampleInfo(c);
+    if (!t) return '';
+    const ordered = hasOrderFull(q, c);
+    return ` <span class="smp ${ordered ? 'ok' : ''}" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">✂️ Cắt mẫu${ordered ? ' → có đơn' : ''}</span>`;
+  };
+
   // Nhận diện khách chưa / không chịu cọc
   const NO_DEPOSIT_RE = /(chưa|chua|không|khong|ko|k|hông|chẳng)\s*(chịu\s*|muốn\s*|đồng ý\s*|dong y\s*)?(đặt\s*|dat\s*)?(cọc|coc)\b|(cọc|coc)\s*(chưa|không|khong|ko)\b/i;
   function noDepositInfo(c) {
@@ -1223,6 +1247,77 @@ Quy tắc:
     return best[1] > 0 ? best[0] : 'em';
   }
 
+  // 50 cách hỏi "giá cả đạt chưa" cho tự nhiên ({p} = xưng hô NVKD, {P} = viết hoa) + 10 câu mở đầu khi im lặng lâu
+  const PRICE_ASK = [
+      "Giá cả đạt chưa {p}?",
+      "Giá này khách thấy đạt chưa {p}?",
+      "Giá ok với khách chưa {p}?",
+      "Khách chịu giá này chưa {p}?",
+      "Giá mình báo khách thấy sao rồi {p}?",
+      "Khách phản hồi giá thế nào rồi {p}?",
+      "Báo giá này khách ưng giá chưa {p}?",
+      "Giá có vừa ý khách không {p}?",
+      "Khách duyệt giá chưa {p}?",
+      "Giá đã chốt được với khách chưa {p}?",
+      "Mức giá này khách đồng ý chưa {p}?",
+      "Khách xem giá xong nói sao {p}?",
+      "Giá này có cạnh tranh được không {p}, khách nói gì?",
+      "Khách có ý kiến gì về giá không {p}?",
+      "Giá ổn chưa {p}, khách có chê gì không?",
+      "{P} ơi giá này khách ok chưa?",
+      "{P} ơi khách phản hồi giá chưa?",
+      "{P} check lại giúp anh, giá này khách đạt chưa?",
+      "Giá anh duyệt khách thấy được không {p}?",
+      "Khách có chịu mức giá này không {p}?",
+      "Giá bên mình khách so với bên khác thấy sao {p}?",
+      "Khách có cần mình điều chỉnh giá không {p}?",
+      "Giá đã hợp với khách chưa {p}?",
+      "Khách có chốt theo giá này không {p}?",
+      "Đơn này giá đạt chưa {p}?",
+      "Đơn này khách phản hồi giá sao rồi {p}?",
+      "Giá này đi được chưa {p}?",
+      "Khách gật giá chưa {p}?",
+      "Giá có vướng gì không {p}?",
+      "Khách thấy giá cao hay ổn {p}?",
+      "Giá báo khách rồi, khách nói gì {p}?",
+      "{P} cập nhật giúp anh tình hình giá với khách nhé.",
+      "Giá đạt chưa {p}, có cần anh tính lại không?",
+      "Khách ok giá thì mình lên đơn luôn nhé {p}, khách nói sao rồi?",
+      "Báo giá này tình hình sao rồi {p}, giá đạt không?",
+      "Khách đã trả lời về giá chưa {p}?",
+      "Giá mình đưa có làm khách hài lòng không {p}?",
+      "Khách có nhận giá này không {p}?",
+      "Giá này khách thấy hợp lý chưa {p}?",
+      "Có tin gì từ khách về giá chưa {p}?",
+      "Khách đã xem báo giá chưa {p}, thấy giá sao?",
+      "Giá này khách có kêu gì không {p}?",
+      "Giá ổn rồi thì chốt đơn luôn nhé {p}, khách nói sao?",
+      "{P} hỏi lại khách giúp anh giá đạt chưa nhé.",
+      "Giá này với khách được không {p}?",
+      "Khách bên này chịu giá chưa {p}?",
+      "Giá cả khách thấy sao rồi {p}, có cần hỗ trợ gì không?",
+      "Khách duyệt báo giá chưa {p}?",
+      "Giá có đúng kỳ vọng của khách không {p}?",
+      "Khách phản hồi gì về giá chưa {p}, báo anh biết nhé."
+  ];
+  const SILENT_LEAD = [
+      "{d} chưa có phản hồi, báo cáo lại nhé {p}. ",
+      "{d} rồi chưa thấy cập nhật, báo cáo lại nhé {p}. ",
+      "Đã {d} chưa có tin, cập nhật giúp anh nhé {p}. ",
+      "{d} im lặng rồi {p}, báo cáo lại nhé. ",
+      "{d} chưa có phản hồi gì, {p} báo lại giúp anh. ",
+      "Đơn này {d} chưa có phản hồi, báo cáo lại nhé {p}. ",
+      "{d} rồi {p} ơi, báo cáo lại nhé. ",
+      "Đã {d} chưa thấy báo cáo, {p} cập nhật nhé. ",
+      "{d} chưa có thông tin mới, báo cáo lại nhé {p}. ",
+      "{d} chưa nghe phản hồi, {p} báo cáo lại giúp anh. "
+  ];
+  // Chọn cố định theo báo giá (không đổi mỗi lần vẽ lại); bấm "Gửi lại" thì đổi câu khác
+  const pickFor = (arr, id, salt = 0) => arr[(Math.abs(Number(id) * 2654435761 + salt * 40503) >>> 0) % arr.length];
+  const fillP = (t, p, d = '') => t.replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
+  // "anh" trong mẫu là quản lý tự xưng; nếu NVKD được gọi là "anh" thì quản lý xưng "em"
+  const selfFix = (t, p) => (p === 'anh' ? t.replace(/\b(giúp|với|cho|báo|tính lại|duyệt|hỗ trợ) anh\b/g, '$1 em').replace(/Giá anh duyệt/g, 'Giá em duyệt') : t);
+
   // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
   function quickQuestion(q, c, mode, p) {
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
@@ -1242,7 +1337,12 @@ Quy tắc:
     const h = last ? hoursSince(last.createdAt) : 0;
     const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
     if (q.isReprint) return { icon: '🔁', why: 'Đơn tái bản', text: `${lead}Khách xuống đơn tái bản chưa ${p}?` };
-    if (mode === 'hoiNhanh') return { icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: `${lead}Giá cả đạt chưa ${p}?` };
+    if (mode === 'hoiNhanh') {
+      const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
+      const lead2 = h >= 72 ? fillP(pickFor(SILENT_LEAD, q.id, salt + 7), p, humanDuration(h)) : '';
+      const text = lead2 + fillP(pickFor(PRICE_ASK, q.id, salt), p);
+      return { icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: selfFix(text.charAt(0).toUpperCase() + text.slice(1), p) };
+    }
     if (mode === 'chaoLai')
       return {
         icon: '💤',
@@ -1334,6 +1434,12 @@ Quy tắc:
     const overdue = listByMode(quotes, comments, 'hoiNhanh');
     const stale = staleList(quotes, comments, overdue);
     const silent = noCommentList(quotes, comments, collected);
+    // Mọi báo giá có cắt mẫu (kể cả đã chốt) – để xem tỉ lệ cắt mẫu thành đơn
+    const samples = Object.values(comments)
+      .filter((c) => sampleInfo(c) && !isExcluded(staffOf(quotes[c.id], c)))
+      .map((c) => ({ q: quotes[c.id] || { id: c.id, code: c.code }, c, last: lastComment(c) }))
+      .sort((a, b) => (b.last?.createdAt || 0) - (a.last?.createdAt || 0));
+    const samplesOrdered = samples.filter(({ q, c }) => hasOrderFull(q, c)).length;
     const fab = root.querySelector('.fab');
     const feasible = feasibleList(quotes, comments, await kvGet('orders'));
     const alertCount = feasible.length;
@@ -1363,7 +1469,7 @@ Quy tắc:
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
+          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${sampleTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
@@ -1396,6 +1502,9 @@ Quy tắc:
       high: ({ c }) => highPriceInfo(c),
       credit: ({ c }) => creditInfo(c),
       promise: ({ q, c }) => promiseInfo(q, c),
+      sample: ({ c }) => sampleInfo(c),
+      sampleOrder: ({ q, c }) => sampleInfo(c) && hasOrderFull(q, c),
+      sampleNo: ({ q, c }) => sampleInfo(c) && !hasOrderFull(q, c),
       lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
       flexo: ({ q }) => kindOf(q) === 'flexo',
       offset: ({ q }) => kindOf(q) === 'offset',
@@ -1412,6 +1521,7 @@ Quy tắc:
       const high = items.filter(({ c }) => highPriceInfo(c)).length;
       const credit = items.filter(({ c }) => creditInfo(c)).length;
       const promise = items.filter(({ q, c }) => promiseInfo(q, c)).length;
+      const sample = items.filter(({ c }) => sampleInfo(c)).length;
       const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
       const kinds = { flexo: 0, offset: 0, both: 0 };
       items.forEach(({ q }) => { const k = kindOf(q); if (k) kinds[k]++; });
@@ -1422,12 +1532,13 @@ Quy tắc:
         (high ? filterChip('high', 'hip', `💸 ${high} giá cao`) : '') +
         (credit ? filterChip('credit', 'crd', `🧾 ${credit} xin công nợ`) : '') +
         (promise ? filterChip('promise', 'prm', `🤝 ${promise} hứa lên đơn`) : '') +
+        (sample ? filterChip('sample', 'smp', `✂️ ${sample} cắt mẫu`) : '') +
         (lowm ? filterChip('lowm', 'mgn low', `📈 ${lowm} bán dưới 30%`) : '') +
         Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     const itemHtml = ({ q, c, last, f }) => `<a class="item" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}">
-      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
+      <div class="item-main"><b>${esc(q?.code || c.code)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${sampleTag(q, c)}${noDepositTag(c)}${q?.name ? ` – ${esc(cut(q.name, 70))}` : ''}<br><span class="who">${avatarHtml(staffOf(q, c))}${esc(staffOf(q, c) || '?')}</span> · ${esc(statusLabel(q?.quoteStatus))}
         <span class="muted">– ${last ? `bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})` : `chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`}${suggests[c.id]?.sentAt ? ' · ✅ đã gửi' : suggests[c.id] ? ' · đã có gợi ý' : ''}</span></div>
       <div class="item-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}${f ? `<div class="fea" title="${esc(f.reasons.join(', '))}">🎯 ${f.score}<span>${esc(f.reasons.slice(0, 3).join(' · '))}</span></div>` : ''}</div></a>`;
     const overdueBox = `
@@ -1436,8 +1547,9 @@ Quy tắc:
       ${feasible.length
         ? `<div class="box unread">${applyFilter(feasible).slice(0, state.filter ? 300 : 60).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi.</div>'}
-      ${stale.length
-        ? `<h3>💤 Cần chào lại khách (${stale.length})${revenueHtml(stale)}</h3><div class="box unread">${applyFilter(stale).slice(0, state.filter ? 200 : 20).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+      ${samples.length
+        ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
+          <div class="box unread">${applyFilter(samples).slice(0, state.filter ? 300 : 30).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : ''}
       ${silent.length
         ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${applyFilter(silent).slice(0, state.filter ? 300 : 30).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
