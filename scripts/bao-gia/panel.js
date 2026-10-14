@@ -736,9 +736,14 @@ Quy tắc:
     }
     vis().forEach((m) => m.querySelector('.ant-modal-close')?.click());
     if (!suppliers.length) return;
+    // Giá trị báo giá: ưu tiên ô "Số tiền thanh toán" trên trang
+    let pageTotal = 0;
+    const lbl = [...doc.querySelectorAll('label, div, span')].find((e) => e.children.length === 0 && /^Số tiền thanh toán:?$/.test(e.innerText.trim()));
+    const inp = lbl?.closest('.ant-form-item, .ant-row, div')?.parentElement?.querySelector('input');
+    if (inp) pageTotal = Number(String(inp.value).replace(/[^\d]/g, '')) || 0;
     const all = await kvGet('margins');
     const cur = all[q.code] || { products: {} };
-    cur.flexo = { suppliers, quoteTotal: q.amount || 0, at: Math.floor(Date.now() / 1000) };
+    cur.flexo = { suppliers, quoteTotal: pageTotal || q.amount || 0, at: Math.floor(Date.now() / 1000) };
     await kvMerge('margins', { [q.code]: cur });
   }
 
@@ -1012,6 +1017,10 @@ Quy tắc:
       background: #fff; border: 1px solid #e9d5ff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); padding: 12px 14px;
       font-size: 13px; color: #1f2328; }
     .side[hidden] { display: none; }
+    .side { transition: width .2s ease; }
+    .side:has(details[open]) { width: min(560px, calc(100vw - 32px)); }
+    .side table td, .side table th { white-space: normal; }
+    .warnx { color: #b45309; font-weight: 700; font-size: 12px; }
     .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
     .side-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
     .side-row b { font-size: 22px; font-weight: 800; }
@@ -1196,6 +1205,8 @@ Quy tắc:
     if (!fx?.suppliers?.length || !base) return null;
     const best = [...fx.suppliers].sort((a, b) => a.total - b.total)[0];
     const cost = Math.round((best.total / base) * 1000) / 10;
+    // PO giấy tấm lớn hơn cả giá trị báo giá (thường do số lượng tấm tối thiểu / MOQ) → không tính %
+    if (cost > 100) return { best, cost, rest: null, invalid: true, base, suppliers: fx.suppliers, at: fx.at };
     return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, suppliers: fx.suppliers, at: fx.at };
   };
   const marginOf = (q) => {
@@ -1203,7 +1214,7 @@ Quy tắc:
     const list = m ? Object.values(m.products || {}) : [];
     const vals = list.map((x) => x.pct);
     const fx = flexoInfo(q);
-    if (fx) vals.push(fx.rest);
+    if (fx && fx.rest != null) vals.push(fx.rest);
     return vals.length ? Math.min(...vals) : null;
   };
   const marginTag = (q) => {
@@ -1211,7 +1222,7 @@ Quy tắc:
     if (pct == null) return '';
     const items = Object.entries(renderCtx.margins[q.code].products || {}).map(([spec, x]) => `${spec}: ${x.pct}%${x.price ? ` (${x.price})` : ''}`);
     const fx = flexoInfo(q);
-    if (fx) items.push(`Flexo – giấy tấm ${fx.cost}% (${fx.best.code}), còn ${fx.rest}%`);
+    if (fx && !fx.invalid) items.push(`Flexo – giấy tấm ${fx.cost}% (${fx.best.code}), còn ${fx.rest}%`);
     return ` <span class="mgn ${pct < 30 ? 'low' : ''}" title="${esc(items.join('\n'))}">📈 ${pct}%</span>`;
   };
 
@@ -1533,7 +1544,7 @@ Quy tắc:
     const open = el.querySelector('details')?.open;
     el.hidden = false;
     el.innerHTML = `<div class="side-h">📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}</div>
-      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>` : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
+      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>`) : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
       ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : `<span class="muted">${busy ? 'đang tính…' : 'chưa có'}</span>`}</div>` : ''}
       ${marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`)}`;
   }
@@ -1552,14 +1563,16 @@ Quy tắc:
     const busy = marginFetching.has(q.id);
     const parts = marginParts(q);
     const segs = [];
-    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.rest}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
+    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? (parts.flexo.invalid ? '<span class="warnx">⚠️ PO > giá trị BG</span>' : `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.rest}%</b>`) : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     if (kinds.includes('offset')) segs.push(`🟪 Offset ${parts.offset != null ? `<b class="${pctCls(parts.offset)}">${parts.offset}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
     const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('');
     const fxRows = fx ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}${s === fx.best ? ' (rẻ nhất)' : ''}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num"><b>${Math.round((s.total / fx.base) * 1000) / 10}%</b></td></tr>`).join('') : '';
     return `<details class="mgnbox"><summary>${head}${busy ? ' <span class="spinner"></span>' : ''} <span class="link">Giải thích</span></summary>
       ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
-      ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = Tổng thanh toán PO ÷ tổng giá trị báo giá (${money(fx.base)})</i>. Nhà cung cấp rẻ nhất ${esc(fx.best.code)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b>.</div>` : ''}
+      ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = Tổng thanh toán PO ÷ tổng giá trị báo giá (${money(fx.base)})</i>. ${fx.invalid
+        ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
+        : `Nhà cung cấp rẻ nhất ${esc(fx.best.code)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b>.`}</div>` : ''}
       ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th><th class="num">%</th></tr>${offRows}${fxRows}</table>` : '<div class="muted">Chưa có dữ liệu – extension đang tự tính trong khung ẩn.</div>'}
       ${pct != null ? `<div class="muted">Flexo: % còn lại sau giấy tấm (nhà cung cấp rẻ nhất). Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
     </details>`;
