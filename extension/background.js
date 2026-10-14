@@ -27,20 +27,26 @@ function authHeaders(cfg) {
 
 // Lấy SHA commit mới nhất của nhánh. Đọc file theo SHA giúp tránh cache
 // 5 phút của raw.githubusercontent.com.
-// Kiểm tra kiểu có điều kiện (If-None-Match): khi không có commit mới GitHub trả 304 và
-// KHÔNG tính vào giới hạn 60 lần/giờ, nên kiểm tra mỗi phút vẫn an toàn.
+// Lấy SHA commit mới nhất của nhánh. Repo public: đọc trang commits.atom của GitHub (luôn mới,
+// không tính vào giới hạn 60 lần/giờ của API) nên kiểm tra mỗi phút được. Repo private (có token)
+// hoặc atom lỗi: dùng GitHub API. Đọc file theo SHA giúp tránh cache của raw.githubusercontent.com.
 async function resolveSha(cfg) {
+  if (!cfg.token) {
+    try {
+      const res = await fetch(`https://github.com/${cfg.owner}/${cfg.repo}/commits/${encodeURIComponent(cfg.branch)}.atom`, {
+        cache: 'no-store',
+      });
+      const sha = res.ok && (await res.text()).match(/Commit\/([0-9a-f]{40})/)?.[1];
+      if (sha) return sha;
+    } catch {}
+  }
   const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/commits/${encodeURIComponent(cfg.branch)}`;
-  const { shaEtag } = await chrome.storage.local.get('shaEtag');
-  const headers = { Accept: 'application/vnd.github.sha', ...authHeaders(cfg) };
-  if (shaEtag?.url === url && shaEtag.etag) headers['If-None-Match'] = shaEtag.etag;
-  const res = await fetch(url, { cache: 'no-store', headers });
-  if (res.status === 304 && shaEtag?.sha) return shaEtag.sha;
+  const res = await fetch(url, {
+    cache: 'no-store',
+    headers: { Accept: 'application/vnd.github.sha', ...authHeaders(cfg) },
+  });
   if (!res.ok) throw new Error(`GitHub API trả về ${res.status} (${url})`);
-  const sha = (await res.text()).trim();
-  const etag = res.headers.get('etag');
-  if (etag) await chrome.storage.local.set({ shaEtag: { url, etag, sha } });
-  return sha;
+  return (await res.text()).trim();
 }
 
 async function fetchFile(cfg, ref, path) {

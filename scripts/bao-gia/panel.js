@@ -436,16 +436,31 @@ Quy tắc:
   }
 
   // Báo giá đã có bình luận: trả lời vào luồng của báo giá; chưa có thì dùng ô bình luận mới.
-  async function insertComment(text, code) {
+  // Điền nội dung vào ô trả lời của luồng báo giá (hoặc ô bình luận mới) rồi BẤM GỬI luôn.
+  // Trả về true khi CRM đã nhận (ô nhập được xoá trống sau khi gửi).
+  async function sendComment(text, code) {
+    if (!text.trim()) throw new Error('Nội dung bình luận đang trống.');
     const ta = (await openReplyBox(code)) || findCommentBox();
-    if (!ta) {
-      state.error = 'Không tìm thấy ô bình luận trên trang này.';
-      return render();
-    }
+    if (!ta) throw new Error('Không tìm thấy ô bình luận trên trang này.');
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, text);
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    ta.focus();
+    // Nút gửi nằm cùng khối với ô nhập: "Trả lời" (ô trả lời) hoặc "Bình luận" (ô bình luận mới)
+    let box = ta.parentElement;
+    let btn = null;
+    while (box && !btn) {
+      btn = [...box.querySelectorAll('button')].find((b) => ['Trả lời', 'Bình luận'].includes(b.innerText.trim()));
+      box = box.parentElement;
+    }
+    if (!btn) throw new Error('Không tìm thấy nút gửi bình luận.');
+    for (let i = 0; i < 20 && btn.disabled; i++) await sleep(100);
+    if (btn.disabled) throw new Error('Nút gửi của CRM chưa bấm được.');
+    btn.click();
+    for (let i = 0; i < 80; i++) {
+      await sleep(150);
+      if (!ta.isConnected || ta.value === '') return true;
+    }
+    throw new Error('CRM chưa xác nhận đã gửi – kiểm tra lại phần bình luận.');
   }
 
   // ---------- Thu thập ngầm + tự phân tích ----------
@@ -720,6 +735,7 @@ Quy tắc:
     .noprice { margin-left: 6px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; animation: dgbadge 1.8s ease-in-out infinite; display: inline-block; }
     .warn.danger { background: #fef2f2; border-color: #f87171; color: #991b1b; font-weight: 600; }
+    .sent { color: #047857; font-weight: 700; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
@@ -904,9 +920,12 @@ Quy tắc:
           </div>
           ${sg ? `<div class="label">Bình luận gợi ý <span class="muted">(${new Date(sg.at).toLocaleString('vi-VN')}${sg.styleFrom ? ` · học văn phong từ ${sg.styleFrom} bình luận của bạn` : ''})</span></div>
             <textarea class="suggest-edit" data-id="${qid}">${esc(sg.text)}</textarea>
-            <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}">Chèn vào bình luận</button>
+            <div class="btns"><button class="act primary" data-act="insert" data-id="${qid}" ${state.busy.has(`send:${qid}`) ? 'disabled' : ''}>
+                ${state.busy.has(`send:${qid}`) ? '<span class="spinner light"></span> Đang gửi…' : sg.sentAt ? '📨 Gửi lại' : '📨 Gửi bình luận'}</button>
               <button class="act" data-act="copy" data-id="${qid}">Copy</button>
-              <span class="muted">Tự mở "Trả lời" ở luồng của báo giá này (nếu có). Xem lại rồi tự bấm gửi.</span></div>` : ''}
+              ${sg.sentAt
+                ? `<span class="sent">✅ Đã gửi lúc ${new Date(sg.sentAt).toLocaleTimeString('vi-VN')}</span>`
+                : '<span class="muted">Bấm là gửi luôn (trả lời vào luồng của báo giá này nếu có).</span>'}</div>` : ''}
           ${ev ? `<div class="row label"><span>Đánh giá NVKD <span class="muted">(${new Date(ev.at).toLocaleString('vi-VN')})</span></span>${scoreHtml(ev)}</div><div class="result">${esc(ev.text)}</div>` : ''}
         </div>`;
     }
@@ -1024,7 +1043,19 @@ Quy tắc:
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
       const text = root.querySelector(`textarea.suggest-edit[data-id="${id}"]`)?.value ?? ((await kvGet('suggests'))[id]?.text || '');
       const code = (await kvGet('quotes'))[id]?.code || document.title.match(/#(BG\d+)/)?.[1];
-      if (act === 'insert') await insertComment(text, code);
+      if (act === 'insert') {
+        if (state.busy.has(`send:${id}`)) return;
+        setBusy(`send:${id}`, true);
+        try {
+          await sendComment(text, code);
+          const cur = (await kvGet('suggests'))[id] || {};
+          await kvMerge('suggests', { [id]: { ...cur, text, sentAt: Date.now() } });
+        } catch (err) {
+          state.error = err.message;
+        } finally {
+          setBusy(`send:${id}`, false);
+        }
+      }
       else {
         await navigator.clipboard.writeText(text);
         b.textContent = 'Đã copy';

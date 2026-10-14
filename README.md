@@ -27,9 +27,9 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
      Claude học văn phong từ chính các bình luận của bạn (tài khoản Nguyễn Trung Toán), ưu tiên những câu
      bạn đã nói với đúng NVKD đó để xưng hô cho đúng. Với báo giá đã quá 12 giờ, gợi ý chỉ là một câu ngắn
      hỏi giá cả đã ok chưa, khách đồng ý chốt chưa.
-     **Chèn vào bình luận**: nếu báo giá đã có bình luận, extension bấm **Trả lời** ở luồng mới nhất của báo
-     giá đang mở (luồng có nhãn mã màu xanh) rồi điền vào ô trả lời; nếu chưa có thì điền vào ô bình luận mới.
-     Extension không tự gửi: bạn xem lại rồi tự bấm gửi.
+     **📨 Gửi bình luận**: bấm là gửi luôn, không hỏi lại. Nếu báo giá đã có bình luận, extension bấm **Trả lời**
+     ở luồng mới nhất của báo giá đang mở (luồng có nhãn mã màu xanh), điền nội dung và bấm gửi; nếu chưa có
+     thì gửi vào ô bình luận mới. Có thể sửa nội dung gợi ý trước khi gửi.
    - **Bộ câu hỏi nhân viên** nằm trong `BO_CAU_HOI` ở đầu [scripts/bao-gia/panel.js](scripts/bao-gia/panel.js).
      Muốn nạp thêm câu hỏi thì thêm một dòng vào nhóm phù hợp rồi push:
      `luonHoi` (luôn cân nhắc hỏi ở gợi ý bình thường và chào lại – "Em tới công ty khách hàng xem quy mô chưa em?";
@@ -92,7 +92,7 @@ Khai báo script trong `scripts/manifest.json`:
 - `runAt`: `document_start` | `document_end` | `document_idle`.
 
 Sau khi push, các máy nhận bản mới trong vòng tối đa `intervalMinutes` (mặc định 1 phút; kiểm tra
-bằng ETag nên không tốn giới hạn API của GitHub khi không có commit mới), hoặc ngay lập tức nếu bấm
+qua trang commits.atom của GitHub nên không tốn giới hạn API), hoặc ngay lập tức nếu bấm
 **Cập nhật ngay** trong popup – nút này cập nhật xong sẽ tự tải lại tab CRM đang mở.
 
 ## Cách hoạt động
@@ -110,7 +110,7 @@ bằng ETag nên không tốn giới hạn API của GitHub khi không có commi
 
 Tạo GitHub fine-grained token chỉ có quyền **Contents: Read-only** cho repo này, rồi dán
 vào ô Token trong popup. GitHub API không cần token cho phép 60 request/giờ mỗi IP.
-Lần kiểm tra không có commit mới (304) không bị tính vào giới hạn này.
+Repo public kiểm tra qua trang commits.atom nên không bị giới hạn này; repo private (có token) mới dùng API.
 
 ## Lưu ý
 
