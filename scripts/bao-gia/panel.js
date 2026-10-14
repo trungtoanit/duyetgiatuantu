@@ -116,18 +116,32 @@
   }
   const hoursSince = (sec) => (Date.now() / 1000 - sec) / 3600;
 
-  // Báo giá chưa chốt mà bình luận cuối đã quá 12 giờ
-  function overdueList(quotes, comments) {
+  // Chế độ hỏi theo dõi của một báo giá:
+  //  - 'hoiNhanh': chưa chốt, bình luận cuối đã quá 12 giờ (trong vòng 30 ngày) → hỏi giá ok chưa
+  //  - 'chaoLai' : Thất bại, hoặc chưa chốt mà im lặng quá 30 ngày → chào lại khách, hỏi dự án khác
+  // Chỉ tính báo giá đã biết tình trạng (CRM tải kèm bình luận cũ của báo giá khác cùng khách).
+  function followMode(q, c) {
+    const last = lastComment(c);
+    if (!last || !q?.quoteStatus) return null;
+    if (q.quoteStatus === 'REJECT') return 'chaoLai';
+    if (CLOSED.has(q.quoteStatus)) return null;
+    const h = hoursSince(last.createdAt);
+    if (h > MAX_FOLLOW_UP_DAYS * 24) return 'chaoLai';
+    if (h >= FOLLOW_UP_HOURS) return 'hoiNhanh';
+    return null;
+  }
+
+  function listByMode(quotes, comments, mode) {
     return Object.values(comments)
       .map((c) => ({ q: quotes[c.id], c, last: lastComment(c) }))
-      // Chỉ tính báo giá đã biết tình trạng (CRM tải kèm bình luận cũ của báo giá khác cùng khách)
-      .filter(({ q, last }) => {
-        if (!last || !q?.quoteStatus || CLOSED.has(q.quoteStatus)) return false;
-        const h = hoursSince(last.createdAt);
-        return h >= FOLLOW_UP_HOURS && h <= MAX_FOLLOW_UP_DAYS * 24;
-      })
-      .sort((a, b) => a.last.createdAt - b.last.createdAt);
+      .filter(({ q, c }) => followMode(q, c) === mode)
+      .sort((a, b) => (mode === 'chaoLai' ? b.last.createdAt - a.last.createdAt : a.last.createdAt - b.last.createdAt));
   }
+
+  const ago = (sec) => {
+    const h = hoursSince(sec);
+    return h >= 48 ? `${Math.floor(h / 24)} ngày trước` : `${Math.floor(h)} giờ trước`;
+  };
 
   // ---------- Ghi nhận dữ liệu từ hook.js ----------
   let chain = Promise.resolve();
@@ -266,6 +280,8 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
     ],
     // Chế độ hỏi nhanh: đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt
     hoiNhanh: ['Giá cả ok chưa, khách đồng ý chốt chưa?'],
+    // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
+    chaoLai: ['Chào lại khách hàng này chưa? Khách còn các dự án thùng khác không?'],
   };
   const list = (arr) => arr.map((q) => `- ${q}`).join('\n');
 
@@ -281,6 +297,9 @@ ${list(BO_CAU_HOI.theoGiaiDoan)}
 
 Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn gộp các ý sau, không hỏi thêm gì khác, không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
 ${list([...BO_CAU_HOI.hoiNhanh, ...BO_CAU_HOI.luonHoi])}
+
+Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): viết 1–2 câu ngắn nhắc NVKD chào lại khách theo các ý sau. Có thể nhắc 1 chi tiết từ luồng nếu giúp NVKD có cớ chào lại (vd. phương án mới đã chốt trong luồng), nhưng không hỏi lại chuyện giá cũ, không đánh số:
+${list([...BO_CAU_HOI.chaoLai, ...BO_CAU_HOI.luonHoi])}
 
 Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
@@ -300,7 +319,8 @@ Quy tắc:
       const c = comments[id];
       const last = lastComment(c);
       const hours = last ? hoursSince(last.createdAt) : null;
-      const overdue = hours != null && hours >= FOLLOW_UP_HOURS && !CLOSED.has(q?.quoteStatus);
+      const mode = followMode(q, c);
+      const overdue = mode === 'hoiNhanh';
       const examples = styleExamples(quotes, comments, me, staffOf(q, c));
       const context = [
         `Quản lý đăng bình luận (chính là người dùng): ${myName(me)}`,
@@ -309,8 +329,11 @@ Quy tắc:
         last
           ? `Bình luận cuối: ${Math.floor(hours)} giờ trước, của ${last.staff?.name || '?'}.`
           : 'Chưa có bình luận nào.',
-        overdue
+        mode === 'hoiNhanh'
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh.`
+          : '',
+        mode === 'chaoLai'
+          ? `CHẾ ĐỘ CHÀO LẠI: báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng đã ${Math.floor(hours / 24)} ngày`} – nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.`
           : '',
       ]
         .filter(Boolean)
@@ -321,7 +344,7 @@ Quy tắc:
         prompt: [styleBlock(examples, myName(me)), context, threadText(q, c)].filter(Boolean).join('\n\n'),
         maxTokens: 4000,
       });
-      await kvMerge('suggests', { [id]: { text: text.trim(), at: Date.now(), overdue, styleFrom: examples.list.length } });
+      await kvMerge('suggests', { [id]: { text: text.trim(), at: Date.now(), overdue, mode, styleFrom: examples.list.length } });
     } catch (e) {
       state.error = e.message;
     } finally {
@@ -463,7 +486,8 @@ Quy tắc:
       kvGet('evals'),
       kvGet('suggests'),
     ]);
-    const overdue = overdueList(quotes, comments);
+    const overdue = listByMode(quotes, comments, 'hoiNhanh');
+    const stale = listByMode(quotes, comments, 'chaoLai');
     root.querySelector('.fab').textContent = `📊 Đánh giá NVKD${overdue.length ? ` · ⏰ ${overdue.length}` : ''}`;
     if (!isOpen()) return;
     const all = Object.values(quotes);
@@ -492,14 +516,15 @@ Quy tắc:
       const ev = evals[`q:${qid}`];
       const sg = suggests[qid];
       const last = lastComment(c);
-      const late = last && !CLOSED.has(q?.quoteStatus) && hoursSince(last.createdAt) >= FOLLOW_UP_HOURS;
+      const mode = followMode(q, c);
       current = `
         <h3>Báo giá đang mở</h3>
         <div class="box">
           <div><b>${esc(q?.code || c?.code || '#' + qid)}</b> – ${esc(q?.name || '')}<br>
             <span class="muted">NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
-            ${last ? ` · bình luận cuối ${Math.floor(hoursSince(last.createdAt))} giờ trước` : ''}</span></div>
-          ${late ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đã ok chưa.</div>` : ''}
+            ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
+          ${mode === 'hoiNhanh' ? `<div class="warn">⏰ Đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – nên hỏi NVKD giá cả đã ok chưa.</div>` : ''}
+          ${mode === 'chaoLai' ? `<div class="warn">💤 Báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`} – nên nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không.</div>` : ''}
           <div class="btns">
             ${btn('suggest', `c:${qid}`, '💬 Gợi ý câu hỏi cho NVKD', 'Đang soạn…', `data-id="${qid}"`)}
             ${btn('eval-quote', `q:${qid}`, '🤖 Đánh giá NVKD', 'Đang đánh giá…', `data-id="${qid}"`)}
@@ -513,14 +538,18 @@ Quy tắc:
         </div>`;
     }
 
+    const itemHtml = ({ q, c, last }) => `<a href="/co-hoi/update/${c.id}"><b>${esc(q?.code || c.code)}</b> · ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))}
+      <span class="muted">– bình luận cuối ${ago(last.createdAt)} (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`;
     const overdueBox = `
       <h3>⏰ Quá ${FOLLOW_UP_HOURS} giờ chưa cập nhật (${overdue.length})</h3>
       ${overdue.length
         ? `<div class="box unread">${overdue
-            .map(({ q, c, last }) => `<a href="/co-hoi/update/${c.id}"><b>${esc(q?.code || c.code)}</b> · ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))}
-              <span class="muted">– bình luận cuối ${Math.floor(hoursSince(last.createdAt))} giờ trước (${esc(last.staff?.name || '?')})${suggests[c.id] ? ' · đã có gợi ý' : ''}</span></a>`)
+            .map(itemHtml)
             .join('')}</div>`
-        : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}`;
+        : '<div class="muted">Không có báo giá nào (trong số báo giá đã ghi lại bình luận).</div>'}
+      ${stale.length
+        ? `<h3>💤 Cần chào lại khách (${stale.length})</h3><div class="box unread">${stale.slice(0, 20).map(itemHtml).join('')}</div>`
+        : ''}`;
 
     const shown = state.shown?.startsWith('s:') ? evals[state.shown] : null;
     const unreadBox = state.unreadOf && byStaff[state.unreadOf]

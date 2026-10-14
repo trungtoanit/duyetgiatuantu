@@ -33,7 +33,9 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
    - **Bộ câu hỏi nhân viên** nằm trong `BO_CAU_HOI` ở đầu [scripts/bao-gia/panel.js](scripts/bao-gia/panel.js).
      Muốn nạp thêm câu hỏi thì thêm một dòng vào nhóm phù hợp rồi push:
      `luonHoi` (luôn cân nhắc hỏi, kể cả khi hỏi nhanh – vd. đã hẹn gặp khách chưa, đã tới audit khách chưa),
-     `theoGiaiDoan` (theo giai đoạn báo giá), `hoiNhanh` (khi quá 12 giờ).
+     `theoGiaiDoan` (theo giai đoạn báo giá), `hoiNhanh` (khi quá 12 giờ),
+     `chaoLai` (báo giá Thất bại hoặc im lặng quá 30 ngày – chào lại khách, hỏi khách còn dự án thùng khác không).
+   - **💤 Cần chào lại khách**: liệt kê các báo giá thuộc chế độ chào lại ở trên.
    - **Báo giá đang mở → 🤖 Đánh giá NVKD**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
    - **⏰ Quá 12 giờ chưa cập nhật**: liệt kê báo giá chưa chốt (khác Duyệt lên đơn, Thành công, Thất bại)
      mà bình luận cuối đã quá 12 giờ. Số lượng hiện ngay trên nút nổi. Với những báo giá này, câu hỏi gợi ý
