@@ -36,7 +36,8 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
      `theoGiaiDoan` (theo giai đoạn báo giá), `hoiNhanh` (khi quá 12 giờ),
      `chaoLai` (báo giá Thất bại hoặc im lặng quá 30 ngày – chào lại khách, hỏi khách còn dự án thùng khác không).
      `tinhHuong` (tình huống đặc biệt nhận ra từ nội dung bình luận, ưu tiên hơn các nhóm khác – mỗi mục gồm
-     `khi` và `hoi`; vd. NVKD báo khách hẹn đặt sau → hỏi "Kết quả của báo giá này sao rồi?").
+     `khi` và `hoi`; vd. NVKD báo khách hẹn đặt sau → hỏi "Kết quả của báo giá này sao rồi?"; bình luận cuối là quản lý đã cho
+     giá mà NVKD chưa phản hồi → hỏi lại "Giá cả ok không?").
    - **💤 Cần chào lại khách**: liệt kê các báo giá thuộc chế độ chào lại ở trên.
    - **Báo giá đang mở → 🤖 Đánh giá NVKD**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
    - **⏰ Quá 12 giờ chưa cập nhật**: liệt kê báo giá chưa chốt (khác Duyệt lên đơn, Thành công, Thất bại)

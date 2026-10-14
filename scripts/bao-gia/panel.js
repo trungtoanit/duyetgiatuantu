@@ -288,6 +288,10 @@ ${withComments.map((q) => threadText(q, comments[q.id])).join('\n\n---\n\n') || 
         khi: 'NVKD đã báo khách hẹn đặt sau / để sau / đợi (vd. "khách xem báo giá trước, đợi hàng bớt kho đặt hàng sau", "khách hẹn tuần sau báo lại")',
         hoi: 'Kết quả của báo giá này sao rồi?',
       },
+      {
+        khi: 'bình luận CUỐI CÙNG của luồng là quản lý đã cho giá / duyệt giá (vd. "A cho em giá đã bao gồm khuôn + bản in", "E cho chị giá nhé", "E duyệt giá nhé chị") và sau đó NVKD chưa phản hồi gì',
+        hoi: 'Giá cả ok không? Khách phản hồi giá thế nào?',
+      },
     ],
   };
   const tinhHuongText = () =>
