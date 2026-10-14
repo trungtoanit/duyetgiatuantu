@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "scripts": [
+    {
+      "id": "example",
+      "files": ["lib/utils.js", "example.js"],
+      "matches": ["https://example.com/*"],
+      "runAt": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}
