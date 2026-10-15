@@ -1099,7 +1099,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       progress();
       const [q2, c2, sg] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('suggests')]);
       const need = [...listByMode(q2, c2, 'hoiNhanh'), ...staleList(q2, c2)]
-        .filter(({ c, last }) => !sg[c.id] || sg[c.id].at / 1000 < last.createdAt)
+        // Báo giá Thất bại: không tự soạn (không hiện trong bảng, đỡ tốn phí Claude)
+        .filter(({ q, c, last }) => q?.quoteStatus !== 'REJECT' && (!sg[c.id] || sg[c.id].at / 1000 < last.createdAt))
         .slice(0, COLLECT.autoSuggest);
       for (const { c } of need) {
         await suggestComment(c.id);
