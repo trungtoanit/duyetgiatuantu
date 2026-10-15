@@ -1181,11 +1181,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item { display: grid; grid-template-columns: 34px 74px minmax(0, 1fr) 150px 74px 128px 96px 52px; align-items: center;
+    .unread a.item { display: grid; grid-template-columns: 34px 74px 130px minmax(0, 1fr) 150px 74px 128px 96px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread a.item:hover { background: #f5f8ff; }
     .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .it-code { font-weight: 800; font-size: 14px; }
+    /* Cột mã khách hàng riêng: thẳng hàng giữa các dòng */
+    .it-cust .kh { margin-left: 0; font-size: 11px; padding: 0 7px; max-width: 100%; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
     .it-no { text-align: right; color: #94a3b8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .it-main .kh, .it-main .knd, .it-main .tgt, .it-main .hip, .it-main .crd, .it-main .prm, .it-main .smp, .it-main .ctr, .it-main .nodep
       { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
@@ -2126,11 +2128,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kvGet('collected'),
       getSettings(),
     ]);
-    const overdue = listByMode(quotes, comments, 'hoiNhanh');
-    const stale = staleList(quotes, comments, overdue);
-    const silent = noCommentList(quotes, comments, collected);
+    // Các danh sách trong bảng không hiện báo giá Thất bại
+    const live = Object.fromEntries(Object.entries(quotes).filter(([, q]) => q?.quoteStatus !== 'REJECT'));
+    const liveComments = Object.fromEntries(Object.entries(comments).filter(([id]) => quotes[id]?.quoteStatus !== 'REJECT'));
+    const overdue = listByMode(live, liveComments, 'hoiNhanh');
+    const stale = staleList(live, liveComments, overdue);
+    const silent = noCommentList(live, liveComments, collected);
     // Tất cả báo giá CHƯA ĐỌC trên CRM (dòng in đậm) – hiện đủ 100%
-    const unreadAll = Object.values(quotes)
+    const unreadAll = Object.values(live)
       .filter((q) => q.isRead === false && !isExcluded(staffOf(q, comments[q.id])))
       .map((q) => {
         const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
@@ -2139,13 +2144,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .sort((a, b) => (b.q.createdAt || 0) - (a.q.createdAt || 0))
       .sort(sortByErp);
     // Mọi báo giá có cắt mẫu (kể cả đã chốt) – để xem tỉ lệ cắt mẫu thành đơn
-    const samples = Object.values(comments)
+    const samples = Object.values(liveComments)
       .filter((c) => sampleInfo(c) && !isExcluded(staffOf(quotes[c.id], c)))
       .map((c) => ({ q: quotes[c.id] || { id: c.id, code: c.code }, c, last: lastComment(c) }))
       .sort((a, b) => (b.last?.createdAt || 0) - (a.last?.createdAt || 0));
     const samplesOrdered = samples.filter(({ q, c }) => hasOrderFull(q, c)).length;
     const fab = root.querySelector('.fab');
-    const feasible = feasibleList(quotes, comments, await kvGet('orders'));
+    const feasible = feasibleList(live, liveComments, await kvGet('orders'));
     const alertCount = feasible.length;
     const handovers = Object.values(await kvGet('handovers'))
       .filter((h) => !h.sentAt && !h.skippedAt)
@@ -2264,7 +2269,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return `<a class="item ${q?.isRead === false ? 'q-unread' : q?.isRead === true ? 'q-read' : ''}" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}" title="${esc(tip)}">
       <span class="it-no">${i + 1}</span>
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${custTag(q)}${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}<span class="it-name">${esc(q?.name || '')}</span></span>
+      <span class="it-cust">${custTag(q).trim()}</span>
+      <span class="it-main">${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}<span class="it-name">${esc(q?.name || '')}</span></span>
       <span class="it-who">${avatarHtml(staff, 20)}<span>${esc(staff || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
       <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
