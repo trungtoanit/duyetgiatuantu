@@ -58,6 +58,14 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### 🔁 Bàn giao khách hàng
+
+Khi chuông thông báo của CRM có "A đã bàn giao khách hàng X cho nhân viên B" (trong 14 ngày gần nhất),
+bảng 📊 hiện mục **🔁 Bàn giao khách hàng** và nút nổi có thêm số 🔁. Extension soạn sẵn một bình luận **mới**
+(không trả lời luồng cũ): "Bàn giao khách hàng X từ nhân viên <NVKD cũ> qua nhân viên B". NVKD cũ là người phụ trách
+báo giá gần nhất của khách X khác B. Bình luận được đăng vào báo giá gần nhất của khách X: bấm **Mở BGxxx để gửi**,
+xem/sửa nội dung rồi bấm **📨 Gửi bình luận mới**. Không tự gửi. **Bỏ qua** để ẩn thông báo đó.
+
 ## Đồng bộ giữa các máy (Supabase)
 
 1. Tạo project trên supabase.com, mở **SQL Editor**, chạy [supabase/setup.sql](supabase/setup.sql).

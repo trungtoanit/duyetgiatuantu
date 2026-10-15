@@ -132,6 +132,22 @@
       if (name) emit('me', { id: d.id, name });
       return;
     }
+    // Thông báo (chuông): tìm các câu "X đã bàn giao khách hàng Y cho nhân viên Z" ở bất kỳ đâu trong dữ liệu
+    if (/notif/i.test(url)) {
+      const found = [];
+      const walk = (o) => {
+        if (!o || typeof o !== 'object') return;
+        if (Array.isArray(o)) return o.forEach(walk);
+        for (const v of Object.values(o)) {
+          if (typeof v === 'string' && v.includes('đã bàn giao khách hàng')) {
+            found.push({ text: v.replace(/<[^>]*>/g, ' '), at: o.createdAt ?? o.created_at ?? o.time });
+          } else walk(v);
+        }
+      };
+      walk(d);
+      if (found.length) emit('handovers', found);
+      return;
+    }
     // Danh sách báo giá (trang /bao-gia)
     if (/\/opportunity\?/.test(url) && /[?&]type=2\b/.test(url) && Array.isArray(d.opportunities)) {
       // Vị trí trên danh sách ERP (để sắp xếp y như ERP)

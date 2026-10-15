@@ -269,6 +269,8 @@
       await kvMerge('margins', { [data.code]: cur });
     } else if (kind === 'orders') {
       await kvMerge('orders', { [data.customerId]: { ...data, at: Math.floor(Date.now() / 1000) } });
+    } else if (kind === 'handovers') {
+      await saveHandovers(data);
     } else if (kind === 'comments') {
       const cur = await kvGet('comments');
       const patch = {};
@@ -279,6 +281,79 @@
     }
     render();
   }
+
+  // ---------- Bàn giao khách hàng ----------
+  // Thông báo "A đã bàn giao khách hàng X cho nhân viên B" → soạn sẵn 1 bình luận MỚI (không trả lời luồng cũ)
+  // trên báo giá gần nhất của khách X; quản lý xem lại rồi tự bấm gửi.
+  const HANDOVER_RE = /(\S.*?)\s+đã bàn giao khách hàng\s+(.+?)\s+cho nhân viên\s+(.+?)\s*$/;
+  const HANDOVER_DAYS = 14; // bỏ qua thông báo cũ hơn
+  const normName = (t) => String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+  const toSec = (v) => {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return v > 1e12 ? Math.floor(v / 1000) : v;
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : Math.floor(t / 1000);
+  };
+
+  function parseHandover(text, at) {
+    const m = String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim().match(HANDOVER_RE);
+    if (!m) return null;
+    const by = m[1].replace(/^Bàn giao khách hàng\s*/i, '').trim();
+    const customer = m[2].trim();
+    const to = m[3].trim();
+    const sec = toSec(at);
+    // Cùng 1 thông báo có thể đến từ API và từ giao diện → khoá theo khách + người nhận + phút
+    const key = `${normName(customer)}|${normName(to)}|${sec ? Math.floor(sec / 60) : 'x'}`;
+    return { key, by, customer, to, at: sec };
+  }
+
+  async function saveHandovers(list) {
+    const cur = await kvGet('handovers');
+    const patch = {};
+    const now = Date.now() / 1000;
+    for (const x of list) {
+      const h = parseHandover(x.text, x.at);
+      if (!h || (h.at && now - h.at > HANDOVER_DAYS * 86400)) continue;
+      // Đã có bản cùng khách + người nhận (vd. bản đọc từ giao diện chưa có giờ) → không thêm trùng
+      const dup = Object.values(cur).find((o) => normName(o.customer) === normName(h.customer) && normName(o.to) === normName(h.to) && (!o.at || !h.at || Math.abs(o.at - h.at) < 120));
+      if (dup || cur[h.key]) continue;
+      patch[h.key] = { ...h, seenAt: Math.floor(now) };
+    }
+    if (Object.keys(patch).length) await kvMerge('handovers', patch);
+  }
+
+  // Thông báo hiện trong menu chuông (phòng khi CRM đẩy qua socket chứ không qua API)
+  function watchHandoverDom() {
+    const scan = (el) => {
+      const out = [];
+      for (const n of [el, ...el.querySelectorAll('*')]) {
+        const t = n.textContent || '';
+        if (t.length > 400 || !t.includes('đã bàn giao khách hàng')) continue;
+        if ([...n.children].some((c) => (c.textContent || '').includes('đã bàn giao khách hàng'))) continue; // lấy phần tử nhỏ nhất
+        const box = n.parentElement?.parentElement || n.parentElement;
+        const tm = (box?.textContent || '').match(/(\d{1,2}):(\d{2}),\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        const at = tm ? new Date(+tm[5], +tm[4] - 1, +tm[3], +tm[1], +tm[2]).getTime() : null;
+        out.push({ text: t, at });
+      }
+      return out;
+    };
+    new MutationObserver((muts) => {
+      const found = [];
+      for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1 && (n.textContent || '').includes('đã bàn giao khách hàng')) found.push(...scan(n));
+      if (found.length) chain = chain.then(() => saveHandovers(found)).then(render).catch((err) => console.warn('[DG]', err));
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Báo giá gần nhất của khách + NVKD cũ (người phụ trách gần nhất khác người nhận)
+  function handoverTarget(h, quotes) {
+    const mine = Object.values(quotes)
+      .filter((q) => q.id && normName(q.customer?.name) === normName(h.customer))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const from = mine.find((q) => q.staff?.name && normName(q.staff.name) !== normName(h.to))?.staff.name || '';
+    return { q: mine[0] || null, from };
+  }
+  const handoverText = (h, from) =>
+    from ? `Bàn giao khách hàng ${h.customer} từ nhân viên ${from} qua nhân viên ${h.to}` : `Bàn giao khách hàng ${h.customer} cho nhân viên ${h.to}`;
 
   // ---------- Claude ----------
   const SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú, công ty sản xuất bao bì giấy carton (thùng 3 lớp, 5 lớp, offset, flexo...).
@@ -536,9 +611,10 @@ Quy tắc:
   // Báo giá đã có bình luận: trả lời vào luồng của báo giá; chưa có thì dùng ô bình luận mới.
   // Điền nội dung vào ô trả lời của luồng báo giá (hoặc ô bình luận mới) rồi BẤM GỬI luôn.
   // Trả về true khi CRM đã nhận (ô nhập được xoá trống sau khi gửi).
-  async function sendComment(text, code) {
+  // fresh = true: luôn đăng bình luận mới, không trả lời vào luồng cũ
+  async function sendComment(text, code, fresh = false) {
     if (!text.trim()) throw new Error('Nội dung bình luận đang trống.');
-    const ta = (await openReplyBox(code)) || findCommentBox();
+    const ta = (!fresh && (await openReplyBox(code))) || findCommentBox();
     if (!ta) throw new Error('Không tìm thấy ô bình luận trên trang này.');
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, text);
     ta.dispatchEvent(new Event('input', { bubbles: true }));
@@ -716,6 +792,12 @@ Quy tắc:
     if (IS_TOP) render();
   };
 
+  // Đổi giá trị này để tính lại % Flexo của mọi báo giá đã lưu (khi sửa cách đọc PO)
+  const FLEXO_MODE = 'sum-v2';
+  // Còn nhà cung cấp chưa đọc được thì 1 giờ sau tự tính lại
+  const flexoStale = (fx) =>
+    !fx || fx.mode !== FLEXO_MODE || (fx.missing?.length > 0 && Date.now() / 1000 - fx.at > 3600);
+
   async function readFlexoCost(f, q) {
     const doc = f.contentDocument;
     if (!doc) return;
@@ -744,23 +826,46 @@ Quy tắc:
       const t = b.innerText.trim();
       if (/^[A-Z][A-Z0-9_.&-]{1,12}$/.test(t) && t !== 'OUT' && !chips.some((c) => c.code === t)) chips.push({ code: t, btn: b });
     }
-    const suppliers = [];
-    for (const [ci, ch] of chips.slice(0, 8).entries()) {
-      setStep(`Đang đọc nhà cung cấp ${ch.code} (${ci + 1}/${Math.min(chips.length, 8)})…`);
+    const selName = () => modal.querySelector('.ant-select-selection-item')?.innerText || '';
+    // Bấm mã nhà cung cấp rồi chờ PO của nhà đó tải xong: tên trong ô chọn đã đổi và "Tổng thanh toán"
+    // đứng yên qua 3 lần đọc. PO có thể tải chậm (vd. YFY ~10 giây) nên chờ tối đa 20 giây.
+    const readOne = async (ch) => {
+      const prevName = selName();
       const prev = readTotal();
       ch.btn.click();
-      let total = 0;
-      // chờ "Tổng thanh toán" đổi sang số của nhà cung cấp vừa chọn (tránh đọc lại số cũ)
-      for (let i = 0; i < 16; i++) {
+      let last = 0;
+      let same = 0;
+      for (let i = 0; i < 50; i++) {
         await sleep(400);
-        total = readTotal();
-        if (total && (total !== prev || i >= 8)) break;
+        const t = readTotal();
+        const ready = t && (selName() !== prevName || i >= 12) && (t !== prev || i >= 12);
+        if (!ready) continue;
+        same = t === last ? same + 1 : 0;
+        last = t;
+        if (same >= 2) return t;
       }
-      const name = modal.querySelector('.ant-select-selection-item')?.innerText || '';
-      if (total) suppliers.push({ code: ch.code, name, total });
+      return 0;
+    };
+    const list = chips.slice(0, 8);
+    const suppliers = [];
+    let missing = [];
+    for (const [ci, ch] of list.entries()) {
+      setStep(`Đang đọc nhà cung cấp ${ch.code} (${ci + 1}/${list.length})…`);
+      const total = await readOne(ch);
+      if (total) suppliers.push({ code: ch.code, name: selName(), total });
+      else missing.push(ch);
+    }
+    // Đọc lại nhà cung cấp bị lỡ (PO tải quá chậm) – thiếu 1 nhà là % sai hẳn
+    for (const ch of [...missing]) {
+      setStep(`Đọc lại nhà cung cấp ${ch.code}…`);
+      const total = await readOne(ch);
+      if (!total) continue;
+      suppliers.push({ code: ch.code, name: selName(), total });
+      missing = missing.filter((x) => x !== ch);
     }
     vis().forEach((m) => m.querySelector('.ant-modal-close')?.click());
     if (!suppliers.length) return;
+    suppliers.sort((a, b) => list.findIndex((c) => c.code === a.code) - list.findIndex((c) => c.code === b.code));
     // Giá trị báo giá: ưu tiên ô "Số tiền thanh toán" trên trang
     let pageTotal = 0;
     const lbl = [...doc.querySelectorAll('label, div, span')].find((e) => e.children.length === 0 && /^Số tiền thanh toán:?$/.test(e.innerText.trim()));
@@ -768,7 +873,13 @@ Quy tắc:
     if (inp) pageTotal = Number(String(inp.value).replace(/[^\d]/g, '')) || 0;
     const all = await kvGet('margins');
     const cur = all[q.code] || { products: {} };
-    cur.flexo = { suppliers, quoteTotal: pageTotal || q.amount || 0, mode: 'sum', at: Math.floor(Date.now() / 1000) };
+    cur.flexo = {
+      suppliers,
+      missing: missing.map((c) => c.code),
+      quoteTotal: pageTotal || q.amount || 0,
+      mode: FLEXO_MODE,
+      at: Math.floor(Date.now() / 1000),
+    };
     await kvMerge('margins', { [q.code]: cur });
   }
 
@@ -807,7 +918,7 @@ Quy tắc:
         progress();
         const mg = (await kvGet('margins'))[q.code];
         const needOffset = q.offset && !Object.keys(mg?.products || {}).length;
-        const needFlexo = (q.kinds || []).includes('flexo') && q.amount && (!mg?.flexo || mg.flexo.mode !== 'sum');
+        const needFlexo = (q.kinds || []).includes('flexo') && q.amount && flexoStale(mg?.flexo);
         await loadInFrame(q.id, undefined, undefined, needOffset || needFlexo
           ? async (f) => {
               if (needOffset) await readOffsetMargins(f);
@@ -838,7 +949,7 @@ Quy tắc:
           .filter(({ q }) => {
             const k = q.kinds || (q.offset ? ['offset'] : []);
             const mg = m3[q.code] || {};
-            return (k.includes('offset') && !Object.keys(mg.products || {}).length) || (k.includes('flexo') && q.amount && (!mg.flexo || mg.flexo.mode !== 'sum'));
+            return (k.includes('offset') && !Object.keys(mg.products || {}).length) || (k.includes('flexo') && q.amount && flexoStale(mg.flexo));
           })
           .slice(0, 10);
         for (const { q } of missing) {
@@ -905,7 +1016,7 @@ Quy tắc:
   }
 
   // ---------- Giao diện ----------
-  const state = { busy: new Set(), error: null, filter: (() => { try { return localStorage.getItem('dgFilter') || ''; } catch { return ''; } })() };
+  const state = { busy: new Set(), error: null, handoverDraft: {}, filter: (() => { try { return localStorage.getItem('dgFilter') || ''; } catch { return ''; } })() };
   let host, root;
 
   const CSS = `
@@ -1119,6 +1230,33 @@ Quy tắc:
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
   `;
 
+  // Giữ vị trí cuộn của bảng qua F5 / mở lại. Danh sách được vẽ dần (dữ liệu tải sau),
+  // nên cứ sau mỗi lần vẽ lại thử cuộn tới vị trí cũ cho tới khi đủ dài, hoặc người dùng tự cuộn.
+  let scrollWanted = null;
+  function restoreScroll() {
+    if (scrollWanted == null || !isOpen()) return;
+    const p = root.querySelector('.panel');
+    p.scrollTop = scrollWanted;
+    if (p.scrollHeight - p.clientHeight >= scrollWanted) scrollWanted = null;
+  }
+  let scrollTimer;
+  function wantScroll() {
+    scrollWanted = Number(lsGet('dgPanelScroll')) || null;
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => (scrollWanted = null), 15000);
+  }
+  function wireScroll(p) {
+    wantScroll();
+    const stop = () => (scrollWanted = null);
+    for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) p.addEventListener(ev, stop, { passive: true });
+    let t;
+    p.addEventListener('scroll', () => {
+      if (scrollWanted != null) return; // đang khôi phục – không ghi đè bằng vị trí tạm
+      clearTimeout(t);
+      t = setTimeout(() => lsSet('dgPanelScroll', String(Math.round(p.scrollTop))), 200);
+    });
+  }
+
   function setPanelOpen(open) {
     root.querySelector('.panel').hidden = !open;
     try {
@@ -1136,8 +1274,13 @@ Quy tắc:
     root.querySelector('.fab').onclick = () => {
       const open = root.querySelector('.panel').hidden;
       setPanelOpen(open);
-      if (open) render();
+      if (open) {
+        wantScroll();
+        render();
+      }
     };
+    wireScroll(root.querySelector('.panel'));
+    if (IS_TOP) watchHandoverDom();
     // Giữ trạng thái bung / thu gọn của bảng qua F5
     if (lsGet('dgPanelOpen') === '1') {
       root.querySelector('.panel').hidden = false;
@@ -1156,6 +1299,11 @@ Quy tắc:
           const id = Number(qe.dataset.id);
           kvMerge('quickDraft', { [id]: { base: quickCtx[id]?.base, text: qe.value } });
         }, 400);
+        return;
+      }
+      const he = e.target.closest('textarea.handover-edit');
+      if (he) {
+        state.handoverDraft[he.dataset.key] = he.value;
         return;
       }
       const ta = e.target.closest('textarea.suggest-edit');
@@ -1310,8 +1458,9 @@ Quy tắc:
     const best = { code: fx.suppliers.map((s) => s.code).join(' + '), total: sum };
     const cost = Math.round((sum / base) * 1000) / 10;
     // PO giấy tấm lớn hơn cả giá trị báo giá (thường do số lượng tấm tối thiểu / MOQ) → không tính %
-    if (cost > 100) return { best, cost, rest: null, invalid: true, base, suppliers: fx.suppliers, at: fx.at };
-    return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, suppliers: fx.suppliers, at: fx.at };
+    const missing = fx.missing || [];
+    if (cost > 100) return { best, cost, rest: null, invalid: true, base, suppliers: fx.suppliers, missing, at: fx.at };
+    return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, suppliers: fx.suppliers, missing, at: fx.at };
   };
   const marginOf = (q) => {
     const m = q?.code && renderCtx.margins?.[q.code];
@@ -1623,7 +1772,7 @@ Quy tắc:
       render();
     }
   }
-  // Tóm tắt riêng từng loại: Flexo (còn lại sau giấy tấm) và Offset (đang bán %, thấp nhất trong các sản phẩm)
+  // Tóm tắt riêng từng loại: Flexo (giấy tấm / giá trị BG) và Offset (đang bán %, thấp nhất trong các sản phẩm)
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
     const offs = Object.values(m.products || {});
@@ -1640,10 +1789,10 @@ Quy tắc:
     const { flexo, offset } = marginParts(q);
     const segs = [];
     if (kinds.includes('flexo'))
-      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦 <b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦 <span class="muted">–</span>');
+      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦 <b class="${pctCls(flexo.rest)}">${flexo.cost}%</b>`) : '🟦 <span class="muted">–</span>');
     if (kinds.includes('offset')) segs.push(offset != null ? `🟪 <b class="${pctCls(offset)}">${offset}%</b>` : '🟪 <span class="muted">–</span>');
     const none = !flexo && offset == null;
-    return `<div class="amt-pct" title="Flexo: % còn lại sau giấy tấm · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
+    return `<div class="amt-pct" title="Flexo: giấy tấm / giá trị BG · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
   };
   // Ô % gọn trong danh sách 1 dòng
   const pctCell = (q) => {
@@ -1652,7 +1801,7 @@ Quy tắc:
     const { flexo, offset } = marginParts(q);
     const segs = [];
     if (kinds.includes('flexo'))
-      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦<span class="muted">…</span>');
+      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦<b class="${pctCls(flexo.rest)}">${flexo.cost}%</b>`) : '🟦<span class="muted">…</span>');
     if (kinds.includes('offset')) segs.push(offset != null ? `🟪<b class="${pctCls(offset)}">${offset}%</b>` : '🟪<span class="muted">…</span>');
     return segs.join(' ');
   };
@@ -1746,14 +1895,14 @@ Quy tắc:
     }
     const { flexo, offset } = marginParts(q);
     const busy = marginFetching.has(q.id);
-    const oldFx = renderCtx.margins?.[q.code]?.flexo && renderCtx.margins[q.code].flexo.mode !== 'sum';
+    const oldFx = renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo);
     if (IS_TOP && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
     const open = el.querySelector('details')?.open;
     const collapsed = lsGet('dgSideCollapsed') === '1';
     el.hidden = false;
     el.classList.toggle('collapsed', collapsed);
     const mini = [
-      kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '–'}` : '',
+      kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.cost}%</b>`) : '–'}` : '',
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
     const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="grip">⠿</span>📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}
@@ -1764,8 +1913,9 @@ Quy tắc:
       return;
     }
     el.innerHTML = `${header}
-      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>`) : waitHtml(busy)}</div>` : ''}
+      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.cost}%</b><span class="muted">giấy tấm / BG</span>`) : waitHtml(busy)}</div>` : ''}
       ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : waitHtml(busy)}</div>` : ''}
+      ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
       ${marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`)}`;
     placeSide(el);
@@ -1779,13 +1929,13 @@ Quy tắc:
     const offs = Object.entries(m.products || {});
     const fx = flexoInfo(q);
     const needOff = kinds.includes('offset') && !offs.length;
-    const needFx = kinds.includes('flexo') && q.amount && (!fx || m.flexo?.mode !== 'sum');
+    const needFx = kinds.includes('flexo') && q.amount && (!fx || flexoStale(m.flexo));
     if (IS_TOP && (needOff || needFx)) setTimeout(() => fetchMarginNow(q), 0);
     const pct = marginOf(q);
     const busy = marginFetching.has(q.id);
     const parts = marginParts(q);
     const segs = [];
-    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? (parts.flexo.invalid ? '<span class="warnx">⚠️ PO > giá trị BG</span>' : `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.rest}%</b>`) : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
+    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? (parts.flexo.invalid ? '<span class="warnx">⚠️ PO > giá trị BG</span>' : `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.cost}%</b>`) : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     if (kinds.includes('offset')) segs.push(`🟪 Offset ${parts.offset != null ? `<b class="${pctCls(parts.offset)}">${parts.offset}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
     const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('');
@@ -1797,9 +1947,10 @@ Quy tắc:
       ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
       ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = (tổng PO của tất cả nhà cung cấp) ÷ tổng giá trị báo giá (${money(fx.base)})</i>. ${fx.invalid
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
-        : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b>.`}</div>` : ''}
+        : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> giá trị báo giá.`}
+        ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
       ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th><th class="num">%</th></tr>${offRows}${fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
-      ${pct != null ? `<div class="muted">Flexo: % còn lại sau tổng giấy tấm (mọi nhà cung cấp). Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
+      ${pct != null ? `<div class="muted">Flexo: tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi trên 70%. Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
     </details>`;
   };
 
@@ -1828,6 +1979,7 @@ Quy tắc:
     if (!root) return;
     try {
       await renderInner();
+      restoreScroll();
     } catch (e) {
       console.warn('[DG]', e);
       if (isOpen()) {
@@ -1869,7 +2021,10 @@ Quy tắc:
     const fab = root.querySelector('.fab');
     const feasible = feasibleList(quotes, comments, await kvGet('orders'));
     const alertCount = feasible.length;
-    fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}`;
+    const handovers = Object.values(await kvGet('handovers'))
+      .filter((h) => !h.sentAt && !h.skippedAt)
+      .sort((a, b) => (b.at || b.seenAt) - (a.at || a.seenAt));
+    fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}${handovers.length ? ` <span class="fab-badge">🔁 ${handovers.length}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     // Thẻ cố định bên phải trang báo giá: Flexo % / Offset % (luôn hiện, không trôi khi cuộn)
@@ -2020,6 +2175,7 @@ Quy tắc:
       })()}
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
+      ${handoverBox(handovers, quotes)}
       ${current}
       ${overdueBox}
     `;
@@ -2035,6 +2191,27 @@ Quy tắc:
     );
   }
 
+  function handoverBox(list, quotes) {
+    if (!list.length) return '';
+    const items = list.map((h) => {
+      const { q, from } = handoverTarget(h, quotes);
+      const key = esc(h.key);
+      const text = state.handoverDraft[h.key] ?? handoverText(h, from);
+      const head = `<div><b>${esc(h.customer)}</b><br><span class="muted">${esc(from || '?')} → <b>${esc(h.to)}</b> · ${esc(h.by)} bàn giao${h.at ? ` lúc ${fmtTime(h.at)}` : ''}</span></div>`;
+      const skip = `<button class="act" data-act="handover-skip" data-key="${key}">Bỏ qua</button>`;
+      if (!q) return `<div class="box">${head}<div class="muted">Chưa thấy báo giá nào của khách này trong dữ liệu – mở trang Báo giá để extension ghi nhận.</div><div class="btns">${skip}</div></div>`;
+      const here = currentQuoteId() === q.id;
+      const busy = state.busy.has(`handover:${h.key}`);
+      return `<div class="box">${head}
+        <textarea class="suggest-edit handover-edit" data-key="${key}" rows="2">${esc(text)}</textarea>
+        <div class="btns">${here
+          ? `<button class="act primary" data-act="handover-send" data-key="${key}" data-code="${esc(q.code)}" ${busy ? 'disabled' : ''}>${busy ? 'Đang gửi…' : `📨 Gửi bình luận mới vào ${esc(q.code)}`}</button>`
+          : `<a class="act primary" data-nav data-keep href="/co-hoi/update/${q.id}" data-code="${esc(q.code)}">Mở ${esc(q.code)} để gửi</a>`}
+          ${skip}</div></div>`;
+    });
+    return `<h3>🔁 Bàn giao khách hàng (${list.length})</h3><div class="hint muted">Bình luận mới trên báo giá gần nhất của khách. Xem lại rồi bấm gửi.</div>${items.join('')}`;
+  }
+
   async function onClick(e) {
     // Link trong bảng: chuyển trang ngay trong ứng dụng CRM (không tải lại cả trang)
     const a = e.target.closest('a[data-nav]');
@@ -2042,7 +2219,7 @@ Quy tắc:
       e.preventDefault();
       const href = a.getAttribute('href');
       const code = a.dataset.code;
-      setPanelOpen(false); // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
+      if (!('keep' in a.dataset)) setPanelOpen(false); // tạm ẩn bảng để xem báo giá; bấm nút nổi để mở lại
       const navQuote = (await kvGet('quotes'))[Number(href.match(/(\d+)$/)?.[1])];
       showLoading(code, navQuote);
       // Tải hẳn trang: ghi tạm để trang mới hiện tiếp thẻ "Đang mở báo giá" cho tới khi app hiện xong
@@ -2104,6 +2281,28 @@ Quy tắc:
         state.error = err.message;
       } finally {
         setBusy(key, false);
+      }
+    }
+    else if (act === 'handover-send' || act === 'handover-skip') {
+      const k = b.dataset.key;
+      const h = (await kvGet('handovers'))[k];
+      if (!h) return;
+      if (act === 'handover-skip') {
+        await kvMerge('handovers', { [k]: { ...h, skippedAt: Date.now() } });
+        return render();
+      }
+      const busyKey = `handover:${k}`;
+      if (state.busy.has(busyKey)) return;
+      const text = ([...root.querySelectorAll('textarea.handover-edit')].find((t) => t.dataset.key === k)?.value || '').trim();
+      setBusy(busyKey, true);
+      try {
+        await sendComment(text, b.dataset.code, true);
+        await kvMerge('handovers', { [k]: { ...h, sentAt: Date.now(), sentText: text, quote: b.dataset.code } });
+        delete state.handoverDraft[k];
+      } catch (err) {
+        state.error = err.message;
+      } finally {
+        setBusy(busyKey, false);
       }
     }
     else if (act === 'suggest') suggestComment(id);
