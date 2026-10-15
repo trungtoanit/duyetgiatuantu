@@ -483,32 +483,41 @@ Yêu cầu:
       },
     ],
   };
-  const tinhHuongText = () =>
-    BO_CAU_HOI.tinhHuong
+  const tinhHuongText = (items = BO_CAU_HOI.tinhHuong) =>
+    items
       .map((t) =>
         Array.isArray(t.hoi)
           ? `- Khi ${t.khi}:\n  → hỏi theo MỘT trong các phiên bản sau (dùng đúng số phiên bản đề bài chỉ định, chỉ đổi xưng hô cho đúng):\n${t.hoi.map((h, i) => `     ${i + 1}. ${h}`).join('\n')}`
           : `- Khi ${t.khi}:\n  → hỏi: ${t.hoi}`,
       )
       .join('\n');
-  const maxVariants = () => Math.max(1, ...BO_CAU_HOI.tinhHuong.map((t) => (Array.isArray(t.hoi) ? t.hoi.length : 1)));
+  const maxVariants = (items = BO_CAU_HOI.tinhHuong) => Math.max(1, ...items.map((t) => (Array.isArray(t.hoi) ? t.hoi.length : 1)));
+
+  // Bộ câu hỏi = BO_CAU_HOI (viết tay trong code) + các câu TỰ HỌC từ bình luận thật của quản lý (kv 'learned')
+  const learnedOn = (learned, nhom) => Object.values(learned || {}).filter((x) => !x.off && x.nhom === nhom);
+  const bank = (learned) => ({
+    tinhHuong: [...BO_CAU_HOI.tinhHuong, ...learnedOn(learned, 'tinhHuong').map((x) => ({ khi: x.khi, hoi: x.hoi }))],
+    theoGiaiDoan: [...BO_CAU_HOI.theoGiaiDoan, ...learnedOn(learned, 'theoGiaiDoan').map((x) => x.hoi)],
+  });
 
   const list = (arr) => arr.map((q) => `- ${q}`).join('\n');
 
-  const SUGGEST_SYSTEM = `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
+  const suggestSystem = (learned) => {
+    const b = bank(learned);
+    return `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
 
 BỘ CÂU HỎI NHÂN VIÊN
 
 ĐƠN TÁI BẢN – ưu tiên cao nhất. Nếu đề bài ghi "ĐƠN TÁI BẢN" thì CHỈ viết đúng 1 câu: ${BO_CAU_HOI.taiBan}. Có thể mở đầu bằng "<thời gian> chưa có phản hồi, báo cáo lại nhé" nếu im lặng từ 3 ngày trở lên. Không hỏi gì khác, bỏ qua mọi chế độ và tình huống bên dưới.
 
 TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN (sau đơn tái bản). Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), bỏ qua chế độ hỏi nhanh/chào lại:
-${tinhHuongText()}
+${tinhHuongText(b.tinhHuong)}
 
 Câu luôn cân nhắc hỏi – dùng ở gợi ý bình thường và chế độ chào lại; KHÔNG dùng ở chế độ hỏi nhanh và tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
 ${list(BO_CAU_HOI.luonHoi)}
 
 Câu hỏi theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
-${list(BO_CAU_HOI.theoGiaiDoan)}
+${list(b.theoGiaiDoan)}
 
 Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
 ${list(BO_CAU_HOI.hoiNhanh)}
@@ -525,12 +534,13 @@ Quy tắc:
 - Ở gợi ý bình thường (không phải hỏi nhanh / chào lại / tình huống đặc biệt): kết thúc bằng câu "${BO_CAU_HOI.ketThuc}" (chỉ đổi xưng hô cho đúng). KHÔNG hẹn giờ cụ thể kiểu "phản hồi trước 11h hôm nay".
 - Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
 - Chỉ trả về đúng nội dung bình luận, không giải thích, không dùng markdown.`;
+  };
 
   async function suggestComment(id) {
     const key = `c:${id}`;
     setBusy(key, true);
     try {
-      const [quotes, comments, me] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me')]);
+      const [quotes, comments, me, learned] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me'), kvGet('learned')]);
       renderCtx.orders = await kvGet('orders');
       meName = myName(me);
       const q = quotes[id];
@@ -547,7 +557,7 @@ Quy tắc:
         last
           ? `Bình luận cuối: ${humanDuration(hours)} trước, của ${last.staff?.name || '?'}. Khoảng thời gian im lặng: ${humanDuration(hours)}.`
           : 'Chưa có bình luận nào.',
-        `Nếu khớp tình huống có nhiều phiên bản câu hỏi: dùng phiên bản số ${1 + Math.floor(Math.random() * maxVariants())} (nếu tình huống có ít phiên bản hơn thì lấy phiên bản cuối).`,
+        `Nếu khớp tình huống có nhiều phiên bản câu hỏi: dùng phiên bản số ${1 + Math.floor(Math.random() * maxVariants(bank(learned).tinhHuong))} (nếu tình huống có ít phiên bản hơn thì lấy phiên bản cuối).`,
         noPrice(q)
           ? 'BÁO GIÁ ĐANG 0đ: quản lý CHƯA cho giá. KHÔNG hỏi NVKD "giá đạt chưa / khách phản hồi giá"; nếu cần thì chỉ hỏi NVKD còn thiếu thông tin gì để quản lý tính giá.'
           : '',
@@ -563,7 +573,7 @@ Quy tắc:
         .join('\n');
       const text = await call({
         type: 'claude',
-        system: SUGGEST_SYSTEM,
+        system: suggestSystem(learned),
         prompt: [styleBlock(examples, myName(me)), context, threadText(q, c)].filter(Boolean).join('\n\n'),
         maxTokens: 4000,
       });
@@ -573,6 +583,119 @@ Quy tắc:
     } finally {
       setBusy(key, false);
     }
+  }
+
+  // ---------- Tự học bộ câu hỏi từ bình luận thật của quản lý ----------
+  // Gom các bình luận quản lý gửi NVKD (kèm câu NVKD mà quản lý đang trả lời) chưa học, nhờ Claude rút ra
+  // câu hỏi / tình huống LẶP LẠI ĐƯỢC mà bộ câu hỏi chưa có, rồi nạp vào kv 'learned' (đồng bộ mọi máy).
+  const LEARN = { minNew: 5, maxPerRun: 60, everyHours: 12 };
+
+  function managerComments(quotes, comments, seen) {
+    const name = meName;
+    const out = [];
+    for (const c of Object.values(comments)) {
+      const q = quotes[c.id];
+      const walk = (t, parent) => {
+        const text = (t.text || '').trim();
+        if (t.staff?.name === name && text.length >= 8 && !seen[t.id]) {
+          out.push({ id: t.id, at: t.createdAt, text, code: q?.code || c.code, staff: staffOf(q, c), status: statusLabel(q?.quoteStatus),
+            parent: parent && parent.staff?.name !== name ? { name: parent.staff?.name, text: (parent.text || '').trim() } : null });
+        }
+        (t.children || []).forEach((ch) => walk(ch, t));
+      };
+      (c.threads || []).forEach((t) => walk(t, null));
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }
+
+  const LEARN_SYSTEM = `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) xây dựng BỘ CÂU HỎI dùng để hỏi nhân viên kinh doanh (NVKD) trong phần bình luận báo giá trên CRM.
+Bạn được cho: bộ câu hỏi hiện có, và các bình luận THẬT mà quản lý đã viết cho NVKD (kèm câu của NVKD mà quản lý đang trả lời, nếu có).
+Nhiệm vụ: rút ra những câu hỏi / chỉ đạo của quản lý mà LẶP LẠI ĐƯỢC cho các báo giá khác và bộ câu hỏi CHƯA có ý tương tự.
+
+Bỏ qua:
+- câu chỉ đúng cho 1 báo giá (giá cụ thể, mã sản phẩm, số lượng, quy cách, tên khách);
+- câu cho giá / duyệt giá / trả lời kỹ thuật / giao việc nội bộ không phải câu hỏi NVKD;
+- câu đã có ý tương tự trong bộ câu hỏi hoặc trong danh sách "đã loại".
+
+Với mỗi câu rút ra:
+- "nhom": "tinhHuong" nếu câu hỏi là phản ứng với một điều NVKD vừa nói (mô tả điều đó trong "khi", kèm ví dụ ngắn trích từ câu NVKD); "theoGiaiDoan" nếu là câu hỏi chung theo giai đoạn báo giá.
+- "hoi": giữ ĐÚNG cách nói của quản lý (từ ngữ, độ dài, xưng hô "anh"/"em"), chỉ bỏ tên riêng, số liệu, mã.
+- "vd": trích nguyên văn bình luận gốc của quản lý.
+Tối đa 5 câu. Không có gì mới thì trả về [].
+Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nhom":"tinhHuong","khi":"...","hoi":"...","vd":"..."}]`;
+
+  function bankText(learned) {
+    const b = bank(learned);
+    const off = Object.values(learned || {}).filter((x) => x.off).map((x) => `- ${x.hoi}`);
+    return [
+      'TÌNH HUỐNG ĐẶC BIỆT:',
+      ...b.tinhHuong.map((t) => `- Khi ${t.khi} → ${Array.isArray(t.hoi) ? t.hoi.join(' / ') : t.hoi}`),
+      'THEO GIAI ĐOẠN:',
+      ...b.theoGiaiDoan.map((t) => `- ${t}`),
+      'LUÔN HỎI / HỎI NHANH / CHÀO LẠI / TÁI BẢN:',
+      ...[...BO_CAU_HOI.luonHoi, ...BO_CAU_HOI.hoiNhanh, ...BO_CAU_HOI.chaoLai, BO_CAU_HOI.taiBan].map((t) => `- ${t}`),
+      off.length ? `ĐÃ LOẠI (quản lý đã xoá, không đề xuất lại):\n${off.join('\n')}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  let learning = false;
+  async function learnQuestions(force = false) {
+    if (learning) return 0;
+    const lastAt = Number(await call({ type: 'kv.get', key: 'learnAt' })) || 0;
+    if (!force && Date.now() - lastAt < LEARN.everyHours * 3600 * 1000) return 0;
+    learning = true;
+    state.busy.add('learn');
+    try {
+      const [quotes, comments, me, learned, seen] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me'), kvGet('learned'), kvGet('learnSeen')]);
+      meName = myName(me);
+      const fresh = managerComments(quotes, comments, seen).slice(0, LEARN.maxPerRun);
+      if (fresh.length < (force ? 1 : LEARN.minNew)) return 0;
+      const cut = (t, n) => (t.length > n ? t.slice(0, n) + '…' : t);
+      const lines = fresh.map((x) =>
+        `- [${x.code} · NVKD ${x.staff || '?'} · ${x.status}]${x.parent?.text ? ` ${x.parent.name || 'NVKD'}: "${cut(x.parent.text.replace(/\s+/g, ' '), 200)}" →` : ''} Quản lý: "${cut(x.text.replace(/\s+/g, ' '), 300)}"`,
+      );
+      const out = await call({
+        type: 'claude',
+        system: LEARN_SYSTEM,
+        prompt: `BỘ CÂU HỎI HIỆN CÓ\n${bankText(learned)}\n\nBÌNH LUẬN THẬT CỦA QUẢN LÝ (${meName})\n${lines.join('\n')}`,
+        maxTokens: 4000,
+      });
+      let items = [];
+      try {
+        items = JSON.parse(out.slice(out.indexOf('['), out.lastIndexOf(']') + 1) || '[]');
+      } catch {
+        items = [];
+      }
+      const now = Date.now();
+      const patch = {};
+      items
+        .filter((x) => x && x.hoi && ['tinhHuong', 'theoGiaiDoan'].includes(x.nhom) && (x.nhom !== 'tinhHuong' || x.khi))
+        .slice(0, 5)
+        .forEach((x, i) => {
+          patch[`L${now}-${i}`] = { nhom: x.nhom, khi: x.khi || '', hoi: String(x.hoi).trim(), vd: x.vd || '', at: now };
+        });
+      if (Object.keys(patch).length) await kvMerge('learned', patch);
+      await kvMerge('learnSeen', Object.fromEntries(fresh.map((x) => [x.id, Math.floor(now / 1000)])));
+      await call({ type: 'kv.set', key: 'learnAt', value: now });
+      return Object.keys(patch).length;
+    } finally {
+      learning = false;
+      state.busy.delete('learn');
+    }
+  }
+
+  function learnedBox(learned) {
+    const all = Object.entries(learned || {}).filter(([, x]) => !x.off).sort((a, b) => b[1].at - a[1].at);
+    const items = all
+      .map(([k, x]) => `<div class="box"><div>${x.nhom === 'tinhHuong' ? `<span class="muted">Khi ${esc(x.khi)}</span><br>→ ` : '<span class="muted">Theo giai đoạn</span><br>→ '}<b>${esc(x.hoi)}</b></div>
+        ${x.vd ? `<div class="muted">Học từ: "${esc(x.vd)}" · ${new Date(x.at).toLocaleDateString('vi-VN')}</div>` : ''}
+        <div class="btns"><button class="act" data-act="learn-off" data-key="${esc(k)}">Xoá khỏi bộ câu hỏi</button></div></div>`)
+      .join('');
+    const busy = state.busy.has('learn');
+    return `<details class="learnbox"${state.learnOpen ? ' open' : ''}><summary><b>📚 Bộ câu hỏi tự học (${all.length})</b> <span class="muted">– học từ bình luận thật của bạn, dùng khi soạn gợi ý</span></summary>
+      <div class="btns"><button class="act" data-act="learn-now" ${busy ? 'disabled' : ''}>${busy ? 'Đang học…' : '📚 Học ngay từ bình luận mới'}</button>
+      ${state.learnMsg ? `<span class="muted">${esc(state.learnMsg)}</span>` : ''}</div>
+      ${items || '<div class="muted">Chưa có câu nào. Extension tự học mỗi 12 giờ khi có từ 5 bình luận mới của bạn.</div>'}</details>`;
   }
 
   // Ô nhập bình luận của CRM: textarea nằm cùng khối với nút "Bình luận"
@@ -982,6 +1105,9 @@ Quy tắc:
         await suggestComment(c.id);
         collect.suggested++;
       }
+      collect.current = 'tự học bộ câu hỏi';
+      progress();
+      await learnQuestions().catch((err) => console.warn('[DG] learn', err));
     } catch (e) {
       state.error = e.message;
     } finally {
@@ -2178,6 +2304,7 @@ Quy tắc:
       ${handoverBox(handovers, quotes)}
       ${current}
       ${overdueBox}
+      ${learnedBox(await kvGet('learned'))}
     `;
     // Ảnh lỗi → chữ cái đầu
     root.querySelectorAll('img.ava').forEach((img) =>
@@ -2213,6 +2340,9 @@ Quy tắc:
   }
 
   async function onClick(e) {
+    // Giữ trạng thái mở/đóng của mục "Bộ câu hỏi tự học" qua các lần vẽ lại
+    const sum = e.target.closest('details.learnbox > summary');
+    if (sum) state.learnOpen = !sum.parentElement.open;
     // Link trong bảng: chuyển trang ngay trong ứng dụng CRM (không tải lại cả trang)
     const a = e.target.closest('a[data-nav]');
     if (a && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
@@ -2304,6 +2434,22 @@ Quy tắc:
       } finally {
         setBusy(busyKey, false);
       }
+    }
+    else if (act === 'learn-now') {
+      state.learnMsg = '';
+      render();
+      try {
+        const n = await learnQuestions(true);
+        state.learnMsg = n ? `Đã nạp thêm ${n} câu.` : 'Không có câu hỏi mới.';
+      } catch (err) {
+        state.error = err.message;
+      }
+      render();
+    } else if (act === 'learn-off') {
+      const k = b.dataset.key;
+      const x = (await kvGet('learned'))[k];
+      if (x) await kvMerge('learned', { [k]: { ...x, off: true, offAt: Date.now() } });
+      render();
     }
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'insert' || act === 'copy') {

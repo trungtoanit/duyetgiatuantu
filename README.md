@@ -48,6 +48,10 @@ scripts/     # code chạy trên trang web – sửa và push thoải mái
    - NVKD không theo dõi nằm trong `EXCLUDED_STAFF` ở đầu panel.js (hiện: Trần Đình Hùng, Nguyễn Trí Thức,
      Nguyễn Thăng Khôi) – báo giá của họ không vào danh sách hỏi lại, không thu thập ngầm, không tự gợi ý.
    - Báo giá đã lên đơn hàng Misa được coi là đã chốt (kể cả khi tình trạng báo giá vẫn là Bản thảo).
+   - **📚 Bộ câu hỏi tự học** (cuối bảng): mỗi 12 giờ, khi có từ 5 bình luận mới của bạn, extension nhờ Claude đọc
+     các bình luận thật bạn gửi NVKD (kèm câu NVKD bạn đang trả lời), rút ra câu hỏi / tình huống lặp lại được mà
+     `BO_CAU_HOI` chưa có, giữ đúng cách nói của bạn, rồi nạp vào bộ câu hỏi dùng khi soạn gợi ý. Dữ liệu này đồng bộ
+     giữa các máy (không sửa code). Bấm **Học ngay** để chạy tức thì; câu không hợp thì **Xoá** – câu đã xoá không bị đề xuất lại.
    - **💤 Cần chào lại khách**: liệt kê các báo giá thuộc chế độ chào lại ở trên.
    - **Báo giá đang mở → 🤖 Đánh giá NVKD**: Claude chấm điểm NVKD qua luồng bình luận của báo giá đó.
    - **⏰ Quá 12 giờ chưa cập nhật**: liệt kê báo giá chưa chốt (khác Duyệt lên đơn, Thành công, Thất bại)
