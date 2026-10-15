@@ -1901,7 +1901,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       render();
     }
   }
-  // Tóm tắt riêng từng loại: Flexo (giấy tấm / giá trị BG) và Offset (đang bán %, thấp nhất trong các sản phẩm)
+  // Tóm tắt riêng từng loại: Flexo (còn lại sau giấy tấm) và Offset (đang bán %, thấp nhất trong các sản phẩm)
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
     const offs = Object.values(m.products || {});
@@ -1918,10 +1918,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const { flexo, offset } = marginParts(q);
     const segs = [];
     if (kinds.includes('flexo'))
-      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦 <b class="${pctCls(flexo.rest)}">${flexo.cost}%</b>`) : '🟦 <span class="muted">–</span>');
+      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦 <b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦 <span class="muted">–</span>');
     if (kinds.includes('offset')) segs.push(offset != null ? `🟪 <b class="${pctCls(offset)}">${offset}%</b>` : '🟪 <span class="muted">–</span>');
     const none = !flexo && offset == null;
-    return `<div class="amt-pct" title="Flexo: giấy tấm / giá trị BG · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
+    return `<div class="amt-pct" title="Flexo: % còn lại sau giấy tấm · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
   };
   // Ô % gọn trong danh sách 1 dòng
   const pctCell = (q) => {
@@ -1930,7 +1930,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const { flexo, offset } = marginParts(q);
     const segs = [];
     if (kinds.includes('flexo'))
-      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦<b class="${pctCls(flexo.rest)}">${flexo.cost}%</b>`) : '🟦<span class="muted">…</span>');
+      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦<span class="muted">…</span>');
     if (kinds.includes('offset')) segs.push(offset != null ? `🟪<b class="${pctCls(offset)}">${offset}%</b>` : '🟪<span class="muted">…</span>');
     return segs.join(' ');
   };
@@ -2031,7 +2031,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     el.hidden = false;
     el.classList.toggle('collapsed', collapsed);
     const mini = [
-      kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.cost}%</b>`) : '–'}` : '',
+      kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '–'}` : '',
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
     const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="grip">⠿</span>📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}
@@ -2042,7 +2042,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return;
     }
     el.innerHTML = `${header}
-      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.cost}%</b><span class="muted">giấy tấm / BG</span>`) : waitHtml(busy)}</div>` : ''}
+      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>`) : waitHtml(busy)}</div>` : ''}
       ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : waitHtml(busy)}</div>` : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
@@ -2064,7 +2064,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const busy = marginFetching.has(q.id);
     const parts = marginParts(q);
     const segs = [];
-    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? (parts.flexo.invalid ? '<span class="warnx">⚠️ PO > giá trị BG</span>' : `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.cost}%</b>`) : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
+    if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? (parts.flexo.invalid ? '<span class="warnx">⚠️ PO > giá trị BG</span>' : `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.rest}%</b>`) : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     if (kinds.includes('offset')) segs.push(`🟪 Offset ${parts.offset != null ? `<b class="${pctCls(parts.offset)}">${parts.offset}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
     const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('');
@@ -2076,10 +2076,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
       ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = (tổng PO của tất cả nhà cung cấp) ÷ tổng giá trị báo giá (${money(fx.base)})</i>. ${fx.invalid
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
-        : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> giá trị báo giá.`}
+        : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b>.`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
       ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th><th class="num">%</th></tr>${offRows}${fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
-      ${pct != null ? `<div class="muted">Flexo: tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi trên 70%. Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
+      ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
     </details>`;
   };
 
