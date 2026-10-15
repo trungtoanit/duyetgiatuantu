@@ -1758,7 +1758,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       "Mức giá này khách đồng ý chưa {p}?",
       "Khách xem giá xong nói sao {p}?",
       "Giá này có cạnh tranh được không {p}, khách nói gì?",
-      "Khách có ý kiến gì về giá không {p}?",
+      "Khách có ý vướng về giá không {p}?",
       "Giá ổn chưa {p}, khách có chê gì không?",
       "{P} ơi giá này khách ok chưa?",
       "{P} ơi khách phản hồi giá chưa?",
