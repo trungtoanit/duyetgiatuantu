@@ -90,7 +90,7 @@ async function downloadBundle(cfg, sha) {
       return { ...s, files, code };
     }),
   );
-  return { version: manifest.version || '', scripts };
+  return { version: manifest.version || '', sync: manifest.sync || [], scripts };
 }
 
 async function register(bundle) {
@@ -133,6 +133,7 @@ async function doSync(force) {
     const next = await downloadBundle(cfg, sha);
     await register(next);
     await chrome.storage.local.set({ sha, bundle: next });
+    extraSync = next.sync || [];
     await setStatus({ lastCheck: Date.now(), lastUpdate: Date.now(), error: null });
   } catch (e) {
     // Mất mạng / lỗi GitHub: vẫn chạy bản đã lưu gần nhất.
@@ -276,7 +277,12 @@ async function callClaude({ system, prompt, maxTokens = 16000 }) {
 // Bảng dg_items(ns, id, data, updated_at): mỗi báo giá / bình luận / gợi ý... là 1 dòng.
 // Bảo vệ bằng RLS + header x-team-secret (mật khẩu nhóm). Thông tin kết nối chỉ nhập trong popup.
 // Không đồng bộ: 'me' (tài khoản CRM của từng người), settings, khoá/ trạng thái thu thập.
-const SYNC_NS = ['quotes', 'comments', 'suggests', 'evals', 'collected', 'quickSent', 'quickDraft', 'orders', 'margins', 'handovers', 'learned', 'learnSeen', 'notifs', 'aiHot'];
+const SYNC_NS = ['quotes', 'comments', 'suggests', 'evals', 'collected', 'quickSent', 'quickDraft', 'orders', 'margins', 'handovers', 'learned', 'learnSeen', 'notifs', 'aiHot', 'notifRead'];
+// Loại dữ liệu đồng bộ thêm khai báo trong scripts/manifest.json ("sync": [...]) → thêm loại mới không cần cài lại extension
+let extraSync = [];
+chrome.storage.local.get('bundle').then(({ bundle }) => (extraSync = bundle?.sync || [])).catch(() => {});
+const isSyncNs = (ns) => SYNC_NS.includes(ns) || extraSync.includes(ns);
+const allSyncNs = () => [...new Set([...SYNC_NS, ...extraSync])];
 
 async function remoteCfg() {
   const cfg = await getConfig();
@@ -346,6 +352,11 @@ async function pushRemote(ns, patch) {
 
 // Gộp bình luận theo id luồng (không ghi đè mất luồng mà máy này đã có)
 function mergeEntry(ns, local, remote) {
+  // Đã đọc ở máy nào thì giữ là đã đọc (máy khác có thể đẩy bản cũ "chưa đọc" lên sau)
+  if (ns === 'notifs' && local?.readLocal && !remote?.readLocal) return { ...remote, read: true, readLocal: true, readAt: local.readAt };
+  // Bàn giao đã gửi / bỏ qua thì giữ nguyên dù máy khác đẩy bản chưa xử lý lên sau
+  if (ns === 'handovers' && (local?.sentAt || local?.skippedAt) && !remote?.sentAt && !remote?.skippedAt)
+    return { ...remote, sentAt: local.sentAt, sentText: local.sentText, quote: local.quote, skippedAt: local.skippedAt };
   if (ns !== 'comments' || !local?.threads) return remote;
   const m = new Map(local.threads.map((t) => [t.id, t]));
   for (const t of remote.threads || []) m.set(t.id, t);
@@ -378,7 +389,7 @@ async function doPull() {
             if (main) await chrome.storage.local.set({ teamConfig: main.data });
             continue;
           }
-          if (!SYNC_NS.includes(ns)) continue;
+          if (!isSyncNs(ns)) continue;
           const cur = (await kvGet(ns)) || {};
           for (const r of list) cur[r.id] = mergeEntry(ns, cur[r.id], r.data);
           await chrome.storage.local.set({ [kvKey(ns)]: cur });
@@ -397,7 +408,7 @@ async function doPull() {
 // Lần đầu bật đồng bộ: đẩy toàn bộ dữ liệu máy này lên rồi kéo dữ liệu các máy khác về
 async function syncAllNow() {
   if (!(await remoteCfg())) throw new Error('Chưa nhập đủ Supabase URL, key và mật khẩu nhóm.');
-  for (const ns of SYNC_NS) {
+  for (const ns of allSyncNs()) {
     const data = (await kvGet(ns)) || {};
     if (Object.keys(data).length) await pushRemote(ns, data);
   }
@@ -413,7 +424,7 @@ const services = {
     kvSerial(async () => {
       const cur = (await kvGet(key)) || {};
       await chrome.storage.local.set({ [kvKey(key)]: Object.assign(cur, patch) });
-      if (SYNC_NS.includes(key)) pushRemote(key, patch); // đồng bộ lên máy chủ (không chờ)
+      if (isSyncNs(key)) pushRemote(key, patch); // đồng bộ lên máy chủ (không chờ)
     }),
   claude: callClaude,
   'spend.get': getSpend,

@@ -280,14 +280,18 @@
       const me = await kvGet('me');
       const who = me?.id ?? meName;
       const cur = await kvGet('notifs');
+      const marks = await kvGet('notifRead'); // dấu đã đọc từ mọi máy (chỉ thêm, không bao giờ xoá)
       const patch = {};
       for (const n of data) {
         const key = `${who}:${n.id}`;
         const old = cur[key] || {};
-        // Đã bấm đọc trong bảng (readLocal) thì giữ là đã đọc dù CRM vẫn báo chưa đọc
-        patch[key] = { ...old, ...n, read: old.readLocal ? true : n.read, at: toSec(n.at), owner: who, ownerName: me?.name || meName, seenAt: Math.floor(Date.now() / 1000) };
+        const readHere = old.readLocal || !!marks[key];
+        // Không đổi gì thì không ghi (tránh đẩy bản "chưa đọc" đè lên máy khác)
+        if (old.id && old.read === (readHere ? true : n.read) && old.text === n.text) continue;
+        // Đã bấm đọc trong bảng (ở máy này hay máy khác) thì giữ là đã đọc dù CRM vẫn báo chưa đọc
+        patch[key] = { ...old, ...n, read: readHere ? true : n.read, readLocal: readHere || undefined, at: toSec(n.at), owner: who, ownerName: me?.name || meName, seenAt: Math.floor(Date.now() / 1000) };
       }
-      await kvMerge('notifs', patch);
+      if (Object.keys(patch).length) await kvMerge('notifs', patch);
     } else if (kind === 'notifReadDone') {
       const me = await kvGet('me');
       const key = `${me?.id ?? meName}:${data.id}`;
@@ -2573,8 +2577,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const fab = root.querySelector('.fab');
     const feasible = feasibleList(live, liveComments, await kvGet('orders'));
     const alertCount = feasible.length;
-    const handovers = Object.values(await kvGet('handovers'))
-      .filter((h) => !h.sentAt && !h.skippedAt)
+    // Bàn giao: cùng khách + người nhận đã gửi / bỏ qua ở bất kỳ máy nào (bản ghi có thể khác khoá) → coi là xong
+    const hoAll = Object.values(await kvGet('handovers'));
+    const hoDone = new Set(hoAll.filter((h) => h.sentAt || h.skippedAt).map((h) => `${normName(h.customer)}|${normName(h.to)}`));
+    const handovers = hoAll
+      .filter((h) => !h.sentAt && !h.skippedAt && !hoDone.has(`${normName(h.customer)}|${normName(h.to)}`))
       .sort((a, b) => (b.at || b.seenAt) - (a.at || a.seenAt));
     fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}${handovers.length ? ` <span class="fab-badge">🔁 ${handovers.length}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
@@ -2788,7 +2795,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })()}
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
       ${await (async () => {
-        const [ns, me] = [await kvGet('notifs'), await kvGet('me')];
+        const [ns, me, marks] = [await kvGet('notifs'), await kvGet('me'), await kvGet('notifRead')];
+        // Dấu đã đọc đồng bộ từ máy khác
+        for (const k of Object.keys(marks)) if (ns[k] && ns[k].read === false) ns[k] = { ...ns[k], read: true, readLocal: true };
         syncPendingReads(ns, me?.id ?? meName);
         return notifBox(ns, quotes, me);
       })()}</div>
@@ -2969,7 +2978,9 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     if (!n) return;
     if (!n.crmRead) pushReadToCrm(n.id);
     if (n.readLocal) return;
-    await kvMerge('notifs', { [key]: { ...n, read: true, readLocal: true, readAt: Math.floor(Date.now() / 1000) } });
+    const at = Math.floor(Date.now() / 1000);
+    await kvMerge('notifRead', { [key]: { at } });
+    await kvMerge('notifs', { [key]: { ...n, read: true, readLocal: true, readAt: at } });
   }
   // Đã đọc trong bảng nhưng chưa lên CRM (vd. trước khi extension học được lệnh) → gửi bù, mỗi dòng tối đa 1 lần / 10 phút
   const crmTried = {};
