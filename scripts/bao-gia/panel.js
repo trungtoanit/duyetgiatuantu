@@ -2405,7 +2405,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <button class="act chipbtn sortbtn" data-act="sort" title="Đổi cách sắp xếp">${sortMode() === 'erp' ? '↕ Xếp: như ERP' : '↕ Xếp: theo điểm'}</button></h3>
       <div class="hint muted">Báo giá chưa chốt, xếp theo điểm khả năng chốt đơn (hứa lên đơn, khách cho giá, tái bản, khách quen, mới trao đổi…).</div>
       ${feasible.length
-        ? `<div class="box unread">${applyFilter(feasible).slice(0, state.filter ? 300 : 60).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        ? `<div class="box unread">${applyFilter(feasible).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi.</div>'}
       ${unreadAll.length
         ? `<h3>📬 Chưa đọc (${unreadAll.length})${revenueHtml(unreadAll)}</h3><div class="hint muted">Toàn bộ báo giá đang in đậm (chưa đọc) trên CRM.</div>
@@ -2413,10 +2413,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         : ''}
       ${samples.length
         ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
-          <div class="box unread">${applyFilter(samples).slice(0, state.filter ? 300 : 30).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+          <div class="box unread">${applyFilter(samples).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : ''}
       ${silent.length
-        ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${applyFilter(silent).slice(0, state.filter ? 300 : 30).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${applyFilter(silent).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
         : ''}`;
 
 
