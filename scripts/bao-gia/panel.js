@@ -1378,7 +1378,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .quick-why { font-weight: 600; }
     .quick-row { display: flex; align-items: center; gap: 12px; }
     .quick-text { flex: 1; font: inherit; font-size: 16px; font-weight: 700; color: #1f2328; background: #fff; border-radius: 8px;
-      padding: 8px 12px; border: 1px dashed #d4a72c; resize: vertical; min-height: 44px; line-height: 1.4; }
+      padding: 8px 12px; border: 1px dashed #d4a72c; resize: vertical; min-height: 110px; max-height: 50vh; line-height: 1.4; }
+    /* Thẻ bên phải hẹp: ô câu hỏi chiếm hết chiều ngang, nút gửi xuống dưới */
+    .side .quick-row { flex-direction: column; align-items: stretch; gap: 8px; }
+    .side .quick-row .act { align-self: flex-end; }
     .quick-text:focus { outline: 2px solid #fcd34d; border-style: solid; }
     .tgt { margin-left: 6px; display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
@@ -1620,6 +1623,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     restoreUiPrefs();
     root.querySelector('.panel').addEventListener('click', onClick);
     wireSide(root.querySelector('.side'));
+    root.addEventListener('input', (e) => e.target.matches?.('textarea.quick-text') && fitText(e.target));
     resumeLoading();
     maybeAutoOpen();
     let saveTimer;
@@ -2083,7 +2087,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const key = `quick:${id}`;
     return `<div class="warn quick">
       <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:</div>
-      <div class="quick-row"><textarea class="quick-text quick-edit" data-id="${id}" rows="2">${esc(text)}</textarea>
+      <div class="quick-row"><textarea class="quick-text quick-edit" data-id="${id}" rows="4">${esc(text)}</textarea>
         <button class="act primary" data-act="quick-send" data-id="${id}" ${state.busy.has(key) ? 'disabled' : ''}>
           ${state.busy.has(key) ? '<span class="spinner light"></span> Đang gửi…' : sent ? '📨 Gửi lại' : '📨 Bình luận ngay'}</button></div>
       ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
@@ -2171,7 +2175,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     } catch {}
   };
   // Áp vị trí đã lưu cho thẻ (giữ trong màn hình)
+  // Ô câu hỏi gợi ý tự cao theo nội dung (không phải cuộn bên trong)
+  const fitText = (ta) => {
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.max(110, ta.scrollHeight + 4)}px`;
+  };
+  const fitAll = (el) => el?.querySelectorAll('textarea.quick-text').forEach(fitText);
+
   function placeSide(el) {
+    requestAnimationFrame(() => fitAll(el));
     let pos = null;
     try {
       pos = JSON.parse(lsGet('dgSidePos') || 'null');
@@ -2335,6 +2347,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!root) return;
     try {
       await renderInner();
+      fitAll(root.querySelector('.panel'));
       restoreScroll();
     } catch (e) {
       console.warn('[DG]', e);
