@@ -1625,6 +1625,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     root.querySelector('.panel').addEventListener('click', onClick);
     wireSide(root.querySelector('.side'));
     root.addEventListener('input', (e) => e.target.matches?.('textarea.quick-text') && fitText(e.target));
+    // Ô câu hỏi trong thẻ bên phải: lưu nháp (bảng lớn đã có bộ lưu riêng)
+    let sideDraftTimer;
+    root.querySelector('.side').addEventListener('input', (e) => {
+      const qe = e.target.closest('textarea.quick-edit');
+      if (!qe) return;
+      clearTimeout(sideDraftTimer);
+      sideDraftTimer = setTimeout(() => {
+        const id = Number(qe.dataset.id);
+        kvMerge('quickDraft', { [id]: { base: quickCtx[id]?.base, text: qe.value } });
+      }, 400);
+    });
+    // Phòng khi khung ẩn vẫn lấy mất focus: đang gõ trong ô của bảng/thẻ mà focus nhảy vào khung ẩn → trả lại
+    let typingIn = null;
+    root.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'TEXTAREA') typingIn = { ta: e.target, at: Date.now() };
+    }, true);
+    root.addEventListener('focusout', (e) => {
+      const ta = e.target;
+      if (ta.tagName !== 'TEXTAREA' || !typingIn || typingIn.ta !== ta || Date.now() - typingIn.at > 5000) return;
+      const { selectionStart, selectionEnd } = ta;
+      setTimeout(() => {
+        if (document.activeElement?.tagName === 'IFRAME' && document.activeElement.name === 'dg-collector' && ta.isConnected) {
+          ta.focus();
+          ta.setSelectionRange(selectionStart, selectionEnd);
+        }
+      }, 0);
+    });
     resumeLoading();
     maybeAutoOpen();
     let saveTimer;

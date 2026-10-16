@@ -29,6 +29,12 @@
   // Đọc "Đang bán (X%)" + giá + số lượng + quy cách và gửi cho panel.js lưu lại.
   // Trong khung thu thập ngầm: chặn lệnh in để không bật hộp thoại.
   if (COLLECTOR_FRAME) window.print = () => {};
+  // Khung ẩn không được giật focus của trang chính (đang gõ bình luận thì phím chạy vào khung ẩn → mất chữ)
+  if (COLLECTOR_FRAME) {
+    HTMLElement.prototype.focus = function () {};
+    window.focus = () => {};
+    document.addEventListener('focusin', (e) => e.target?.blur?.(), true);
+  }
   let lastChiet = '';
   function readChiet(f) {
     try {
