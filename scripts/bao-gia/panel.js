@@ -454,7 +454,7 @@ Yêu cầu:
   // ===== BỘ CÂU HỎI NHÂN VIÊN TRONG BÁO GIÁ =====
   // Muốn nạp thêm câu hỏi: thêm 1 dòng vào đúng nhóm rồi push lên git.
   const BO_CAU_HOI = {
-    // Luôn cân nhắc hỏi ở gợi ý bình thường và chế độ chào lại (không gộp vào hỏi nhanh / tình huống đặc biệt)
+    // Luôn cân nhắc hỏi ở gợi ý bình thường (không gộp vào hỏi nhanh / chào lại / tình huống đặc biệt)
     luonHoi: ['"Em tới công ty khách hàng xem quy mô chưa em?" (giữ cách nói này, chỉ đổi xưng hô cho đúng)'],
     // Hỏi theo giai đoạn của báo giá
     theoGiaiDoan: [
@@ -472,7 +472,7 @@ Yêu cầu:
     // Câu kết ở gợi ý bình thường (thay cho kiểu hẹn giờ "phản hồi trước 11h")
     ketThuc: 'Làm việc với khách xong báo cáo lại cho anh.',
     // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
-    chaoLai: ['Chào lại khách hàng này chưa? Khách còn các dự án thùng khác không?'],
+    chaoLai: ['"Báo cáo lại khách hàng này nhé" (đúng 1 câu này, chỉ thêm xưng hô ở cuối)'],
     // Tình huống đặc biệt nhận ra từ nội dung bình luận – ưu tiên hơn các chế độ trên
     tinhHuong: [
       {
@@ -543,7 +543,7 @@ BỘ CÂU HỎI NHÂN VIÊN
 TÌNH HUỐNG ĐẶC BIỆT – kiểm tra TRƯỚC TIÊN (sau đơn tái bản). Nếu bình luận gần nhất của NVKD khớp một tình huống dưới đây thì chỉ viết 1 câu ngắn hỏi đúng câu của tình huống đó – KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), bỏ qua chế độ hỏi nhanh/chào lại:
 ${tinhHuongText(b.tinhHuong)}
 
-Câu luôn cân nhắc hỏi – dùng ở gợi ý bình thường và chế độ chào lại; KHÔNG dùng ở chế độ hỏi nhanh và tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
+Câu luôn cân nhắc hỏi – chỉ dùng ở gợi ý bình thường; KHÔNG dùng ở chế độ hỏi nhanh, chào lại và tình huống đặc biệt (bỏ qua nếu luồng bình luận đã có câu trả lời):
 ${list(BO_CAU_HOI.luonHoi)}
 
 Câu hỏi theo giai đoạn (chọn những câu hợp với tình hình thực tế của luồng bình luận):
@@ -552,14 +552,14 @@ ${list(b.theoGiaiDoan)}
 Nếu đề bài ghi "CHẾ ĐỘ HỎI NHANH" (đã quá 12 giờ từ bình luận cuối mà báo giá chưa chốt): CHỈ viết 1 câu ngắn theo ý sau, KHÔNG gộp thêm câu nào khác (kể cả câu tới công ty khách xem quy mô), không nhắc lại nội dung báo giá, không đánh số, không hẹn giờ:
 ${list(BO_CAU_HOI.hoiNhanh)}
 
-Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): viết 1–2 câu ngắn nhắc NVKD chào lại khách theo các ý sau, không gộp thêm câu nào khác. Có thể nhắc 1 chi tiết từ luồng nếu giúp NVKD có cớ chào lại (vd. phương án mới đã chốt trong luồng), nhưng không hỏi lại chuyện giá cũ, không đánh số:
-${list([...BO_CAU_HOI.chaoLai, ...BO_CAU_HOI.luonHoi])}
+Nếu đề bài ghi "CHẾ ĐỘ CHÀO LẠI" (báo giá đã thất bại hoặc im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày): CHỈ viết đúng 1 câu ngắn sau, không mở đầu bằng thời gian im lặng, không gộp thêm câu nào khác:
+${list(BO_CAU_HOI.chaoLai)}
 
 Quy tắc:
 - Bạn viết THAY quản lý, như chính quản lý tự gõ. Đọc kỹ phần "VĂN PHONG" (các bình luận thật của quản lý) và bắt chước sát: cách xưng hô với từng NVKD (ví dụ quản lý xưng "em" và gọi NVKD nữ lớn tuổi hơn là "chị" thì làm y như vậy), độ dài câu, từ hay dùng, viết tắt, dấu câu, mức độ thân mật. Ưu tiên ví dụ nói với đúng NVKD này.
 - Tuyệt đối không viết giọng văn mẫu, công sở hay "AI". Không mở đầu bằng lời chào dài, không cảm ơn, không ký tên. Nếu quản lý hay viết ngắn gọn thì viết ngắn gọn.
 - Chỉ đánh số câu hỏi nếu thật cần (từ 3 ý trở lên); 1–2 ý thì viết liền tự nhiên như nhắn tin.
-- Khi nhắc khoảng thời gian NVKD im lặng, nói đúng kiểu: "<khoảng thời gian> chưa có phản hồi, báo cáo lại nhé" (vd. "2 tuần chưa có phản hồi, báo cáo lại nhé"), dùng đúng khoảng thời gian đề bài đưa. KHÔNG viết "chưa có cập nhật". Ở chế độ hỏi nhanh / chào lại, nếu im lặng từ 3 ngày trở lên thì mở đầu bằng câu này rồi mới hỏi (vẫn ngắn gọn).
+- Khi nhắc khoảng thời gian NVKD im lặng, nói đúng kiểu: "<khoảng thời gian> chưa có phản hồi, báo cáo lại nhé" (vd. "2 tuần chưa có phản hồi, báo cáo lại nhé"), dùng đúng khoảng thời gian đề bài đưa. KHÔNG viết "chưa có cập nhật". Ở chế độ hỏi nhanh, nếu im lặng từ 3 ngày trở lên thì mở đầu bằng câu này rồi mới hỏi (vẫn ngắn gọn). Chế độ chào lại thì KHÔNG mở đầu bằng câu này.
 - Không hỏi lại những điều đã được trả lời trong luồng (vd. luồng đã nói đã tới công ty khách / đã gặp khách thì không hỏi lại). Tối đa 3 ý hỏi.
 - Ở gợi ý bình thường (không phải hỏi nhanh / chào lại / tình huống đặc biệt): kết thúc bằng câu "${BO_CAU_HOI.ketThuc}" (chỉ đổi xưng hô cho đúng). KHÔNG hẹn giờ cụ thể kiểu "phản hồi trước 11h hôm nay".
 - Nếu chưa có ví dụ văn phong: viết ngắn, thân mật, kiểu nhắn tin nội bộ.
@@ -596,7 +596,7 @@ Quy tắc:
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
           : '',
         mode === 'chaoLai'
-          ? `CHẾ ĐỘ CHÀO LẠI: báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng đã ${Math.floor(hours / 24)} ngày`} – nhắc NVKD chào lại khách, hỏi khách còn dự án thùng khác không (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
+          ? `CHẾ ĐỘ CHÀO LẠI: báo giá ${q?.quoteStatus === 'REJECT' ? 'đã thất bại' : `im lặng đã ${Math.floor(hours / 24)} ngày`} – chỉ 1 câu "Báo cáo lại khách hàng này nhé" (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
           : '',
       ]
         .filter(Boolean)
@@ -2069,7 +2069,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return {
         icon: '💤',
         why: q.quoteStatus === 'REJECT' ? 'Báo giá thất bại' : `Im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`,
-        text: `${lead}Khách này ${p} chào lại chưa, khách còn dự án thùng khác không ${p}?`,
+        text: `Báo cáo lại khách hàng này nhé ${p}.`,
       };
     return null;
   }
