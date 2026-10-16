@@ -1444,6 +1444,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     window.addEventListener('resize', layoutPanel);
   }
 
+  // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
+  // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
+  const UI_KEYS = ['dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
+  let uiSaved = null;
+  async function restoreUiPrefs() {
+    const saved = await kvGet('uiPrefs').catch(() => ({}));
+    const before = uiSnapshot();
+    for (const k of UI_KEYS) if (saved[k] != null && lsGet(k) == null) lsSet(k, saved[k]);
+    uiSaved = uiSnapshot();
+    if (uiSaved !== before) {
+      state.filter = lsGet('dgFilter') || '';
+      if (lsGet('dgPanelOpen') === '1') root.querySelector('.panel').hidden = false;
+      layoutPanel();
+      render();
+    }
+    setInterval(() => {
+      const now = uiSnapshot();
+      if (now === uiSaved) return;
+      uiSaved = now;
+      kvMerge('uiPrefs', JSON.parse(now)).catch(() => {});
+    }, 1500);
+  }
+
   function mount() {
     if (host) return;
     host = document.createElement('div');
@@ -1468,6 +1492,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       render();
     }
     layoutPanel();
+    restoreUiPrefs();
     root.querySelector('.panel').addEventListener('click', onClick);
     wireSide(root.querySelector('.side'));
     resumeLoading();
