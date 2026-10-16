@@ -2405,12 +2405,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `🎯${f.score}` : ''}</span></a>`;
     };
     // Dòng tiêu đề cột (dính trên đầu khi cuộn) + tổng tiền ngay trên cột Số tiền
+    // 20.315.464.107đ → "20,32 tỷ"; dưới 1 tỷ → "845,20 triệu"
+    const moneyShort = (n) => {
+      const f = (v) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return n >= 1e9 ? `${f(n / 1e9)} tỷ` : n >= 1e6 ? `${f(n / 1e6)} triệu` : money(n);
+    };
     const listRows = (items) => {
       const rows = applyFilter(items);
       if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Khách</span><span>Nhãn</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá">Σ ${money(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
     const overdueBox = `
