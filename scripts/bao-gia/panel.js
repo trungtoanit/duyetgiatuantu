@@ -2601,11 +2601,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const fchip = (f, tone, icon, label, n) =>
       `<button class="fchip ${tone}${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">` +
       `<span class="fi">${icon}</span>${label}<b>${n}</b></button>`;
-    const totalBadge = (items) => {
+    const totalBadge = (items, both = false) => {
       const shown = applyFilter(items);
-      const total = shown.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      const pick = both ? shown.filter(isBoth) : shown;
+      const total = pick.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      const tip = both
+        ? `${money(total)} · ${pick.length} báo giá vừa khả thi (có 🎯) vừa chưa đọc${state.filter ? ' (trong bộ lọc đang chọn)' : ''}`
+        : `${money(total)} · ${state.filter ? `${shown.length} báo giá đang lọc` : `${items.length} báo giá`}`;
       return total
-        ? `<span class="rev" title="${money(total)} · ${state.filter ? `${shown.length} báo giá đang lọc` : `${items.length} báo giá`}">💰 ${moneyShort(total)}${state.filter ? ` <small>· ${shown.length} đang lọc</small>` : ''}</span>`
+        ? `<span class="rev" title="${esc(tip)}">💰 ${moneyShort(total)}${both ? ` <small>· ${pick.length} khả thi & chưa đọc</small>` : state.filter ? ` <small>· ${shown.length} đang lọc</small>` : ''}</span>`
         : '';
     };
     const filterBar = (items) => {
@@ -2679,14 +2683,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const f = (v) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return n >= 1e9 ? `${f(n / 1e9)} tỷ` : n >= 1e6 ? `${f(n / 1e6)} triệu` : money(n);
     };
+    // Báo giá vừa khả thi (có điểm 🎯) vừa chưa đọc – Σ của bảng chính chỉ cộng nhóm này
+    const isBoth = ({ q, f }) => !!f && q?.isRead === false;
     const listRows = (items, forExport = false) => {
       const rows = applyFilter(items);
       // Nút Xuất Excel xuất đúng bảng chính đang hiện (đã lọc / tìm / xếp) – không lấy các bảng phụ bên dưới
       if (forExport) state.exportRows = rows;
       if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
-      const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      const sumRows = forExport ? rows.filter(isBoth) : rows;
+      const total = sumRows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      const sumTip = forExport ? `Khả thi & chưa đọc: ${sumRows.length} báo giá – ${money(total)}` : `Tổng ${rows.length} báo giá: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
@@ -2696,7 +2704,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     state.exportRows = []; // bảng chính trống thì không xuất danh sách cũ
     const overdueBox = `
       <div class="sec-head"><h3>🎯 Báo giá khả thi & chưa đọc <span class="cnt">${merged.length}</span></h3>
-        <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged)}
+        <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged, true)}
         <button class="sortbtn2" data-act="sort" title="Đổi cách sắp xếp">↕ ${sortMode() === 'erp' ? 'Như ERP' : 'Theo điểm'}</button>
         <button class="sortbtn2" data-act="export-xlsx" title="Tải danh sách đang hiện (theo bộ lọc / tìm kiếm) ra file Excel">⬇️ Xuất Excel</button></div></div>
       ${filterBar(merged)}
@@ -2857,8 +2865,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const ai = head.indexOf('Số tiền');
     const colL = String.fromCharCode(65 + ai);
     const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
-    const sumRow = head.map((_, i) => (i === ai - 1 ? { t: `Tổng ${rows.length} báo giá`, bold: true } : i === ai ? { f: `SUBTOTAL(9,${colL}2:${colL}${rows.length + 1})`, v: total, bold: true } : ''));
-    downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
+    const sumRow = head.map((_, i) => (i === ai - 1 ? { t: `Tổng tất cả ${rows.length} báo giá`, bold: true } : i === ai ? { f: `SUBTOTAL(9,${colL}2:${colL}${rows.length + 1})`, v: total, bold: true } : ''));
+    // Khả thi & chưa đọc (khớp Σ trên bảng): cột "Đã đọc" = "Chưa đọc" và cột "Điểm" có giá trị
+    const L = (name) => String.fromCharCode(65 + head.indexOf(name));
+    const n1 = rows.length + 1;
+    const both = rows.filter(({ q, f }) => f && q?.isRead === false);
+    const bothTotal = both.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+    const bothRow = head.map((_, i) => (i === ai - 1 ? { t: `Khả thi & chưa đọc (${both.length} báo giá)`, bold: true }
+      : i === ai ? { f: `SUMIFS(${colL}2:${colL}${n1},${L('Đã đọc')}2:${L('Đã đọc')}${n1},"Chưa đọc",${L('Điểm')}2:${L('Điểm')}${n1},"<>")`, v: bothTotal, bold: true } : ''));
+    downloadBlob(buildXlsx([head, ...data, bothRow, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
   }
 
   async function onClick(e) {
