@@ -91,6 +91,23 @@
     document.dispatchEvent(new CustomEvent('dg:data', { detail: JSON.stringify({ kind, data }) }));
 
   const person = (s) => (s ? { id: s.id, name: s.name, avatar: s.avatar || undefined } : undefined);
+  // Cột "Sale" trên ERP là NVKD được gán cho khách hàng (không phải người tạo báo giá).
+  // Tìm trường người phụ trách: ưu tiên trường tên có sale/seller/assign/charge… ở báo giá, rồi ở khách hàng; cuối cùng mới tới staff (người tạo).
+  const isPerson = (v) => v && typeof v === 'object' && !Array.isArray(v) && typeof v.name === 'string' && (v.id != null || v.avatar || v.email || v.phone);
+  const SALE_KEY = /sale|seller|assign|charge|incharge|manager|owner|care|follow/i;
+  const peopleOf = (o) => {
+    const out = {};
+    for (const [k, v] of Object.entries(o || {})) if (isPerson(v)) out[k] = v.name;
+    for (const [k, v] of Object.entries(o?.customer || {})) if (isPerson(v)) out[`customer.${k}`] = v.name;
+    return out;
+  };
+  const saleOf = (o) => {
+    for (const [k, v] of Object.entries(o || {})) if (k !== 'staff' && SALE_KEY.test(k) && isPerson(v)) return { v, k };
+    const c = o?.customer || {};
+    for (const [k, v] of Object.entries(c)) if (SALE_KEY.test(k) && isPerson(v)) return { v, k: `customer.${k}` };
+    for (const k of ['staff', 'user']) if (isPerson(c[k])) return { v: c[k], k: `customer.${k}` };
+    return null;
+  };
   const slimQuote = (o) => ({
     id: o.id,
     code: o.code,
@@ -110,7 +127,11 @@
     kinds: Array.isArray(o.opportunityProducts)
       ? [...new Set(o.opportunityProducts.map((p) => (/OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : null)).filter(Boolean))]
       : undefined,
-    staff: person(o.staff),
+    // NVKD = người phụ trách khách (cột Sale của ERP); creator = người tạo báo giá
+    staff: person(saleOf(o)?.v || o.staff),
+    creator: person(o.staff),
+    staffKey: saleOf(o)?.k || 'staff',
+    people: peopleOf(o),
     customer: o.customer ? { id: o.customer.id, code: o.customer.code || undefined, name: o.customer.name } : undefined,
   });
   const slimComment = (f) => ({
