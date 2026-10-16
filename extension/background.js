@@ -277,7 +277,7 @@ async function callClaude({ system, prompt, maxTokens = 16000 }) {
 // Bảng dg_items(ns, id, data, updated_at): mỗi báo giá / bình luận / gợi ý... là 1 dòng.
 // Bảo vệ bằng RLS + header x-team-secret (mật khẩu nhóm). Thông tin kết nối chỉ nhập trong popup.
 // Không đồng bộ: 'me' (tài khoản CRM của từng người), settings, khoá/ trạng thái thu thập.
-const SYNC_NS = ['quotes', 'comments', 'suggests', 'evals', 'collected', 'quickSent', 'quickDraft', 'orders', 'margins', 'handovers', 'learned', 'learnSeen', 'notifs', 'aiHot', 'notifRead'];
+const SYNC_NS = ['quotes', 'comments', 'suggests', 'evals', 'collected', 'quickSent', 'quickDraft', 'orders', 'margins', 'handovers', 'learned', 'learnSeen', 'notifs', 'aiHot', 'notifRead', 'aiHotDone'];
 // Loại dữ liệu đồng bộ thêm khai báo trong scripts/manifest.json ("sync": [...]) → thêm loại mới không cần cài lại extension
 let extraSync = [];
 chrome.storage.local.get('bundle').then(({ bundle }) => (extraSync = bundle?.sync || [])).catch(() => {});

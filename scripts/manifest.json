@@ -1,5 +1,5 @@
 {
-  "version": "1.2.26",
+  "version": "1.2.27",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -27,8 +27,9 @@
     }
   ],
   "sync": [
-    "notifs",
     "aiHot",
-    "notifRead"
+    "aiHotDone",
+    "notifRead",
+    "notifs"
   ]
 }

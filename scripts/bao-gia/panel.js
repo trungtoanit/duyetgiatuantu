@@ -1500,7 +1500,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-head h3 { margin: 0; }
     .hot-btn { white-space: nowrap; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
-    a.hot-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) 170px; gap: 10px; align-items: center; text-decoration: none; color: inherit;
+    .hot-done { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; color: #94a3b8; font-size: 15px;
+      font-weight: 900; cursor: pointer; transition: all .15s; }
+    .hot-done:hover { border-color: #16a34a; background: #16a34a; color: #fff; transform: scale(1.08); }
+    a.hot-item.hot-gone { opacity: 0; transform: translateX(30px); transition: all .25s ease; }
+    a.hot-item { display: grid; grid-template-columns: 34px 26px minmax(0, 1fr) 170px; gap: 10px; align-items: center; text-decoration: none; color: inherit;
       background: #fff; border: 1px solid #ffedd5; border-radius: 10px; padding: 8px 10px; }
     a.hot-item:hover { border-color: #fb923c; box-shadow: 0 2px 10px rgba(251,146,60,.18); }
     .hot-no { font-weight: 800; color: #ea580c; text-align: center; font-size: 15px; }
@@ -2869,7 +2873,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })()}</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${handoverBox(handovers, quotes)}
-      ${hotBox((await kvGet('aiHot')).latest, quotes)}
+      ${hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone'))}
       ${overdueBox}
       ${learnedBox(await kvGet('learned'))}
     `;
@@ -2950,7 +2954,9 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     try {
       const [quotes, comments, orders] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('orders')]);
       const live = Object.fromEntries(Object.entries(quotes).filter(([, q]) => q?.quoteStatus !== 'REJECT'));
+      const done = await kvGet('aiHotDone');
       const cands = feasibleList(live, comments, orders)
+        .filter(({ q }) => !(done[q.id] && Date.now() - done[q.id].at < 7 * 86400e3)) // đã xử lý trong 7 ngày → không đưa vào lại
         .sort((a, b) => b.f.score - a.f.score)
         .slice(0, HOT.candidates);
       if (!cands.length) throw new Error('Chưa có báo giá khả thi nào để phân tích.');
@@ -2993,15 +2999,18 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
   }
 
-  function hotBox(hot, quotes) {
+  function hotBox(hot, quotes, done = {}) {
     const busy = state.busy.has('hot');
-    const items = (hot?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus));
+    // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
+    const items = (hot?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !done[x.id]);
+    const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
     const rows = items
       .map((x, i) => {
         const q = quotes[x.id];
         const cls = x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad';
         return `<a class="hot-item" href="/bao-gia/update/${x.id}" data-nav data-code="${esc(x.code)}">
+          <button class="hot-done" data-act="hot-done" data-id="${x.id}" title="Đánh dấu đã xử lý xong – ẩn khỏi danh sách trên mọi máy">✓</button>
           <span class="hot-no">${i + 1}</span>
           <span class="hot-main"><span class="hot-top"><b>${esc(x.code)}</b>${custTag(q)}<span class="hot-name">${esc(q.name || '')}</span></span>
             <span class="hot-why">💡 ${esc(x.why)}</span>
@@ -3011,7 +3020,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       .join('');
     return `<div class="hotbox">
       <div class="hot-head"><h3>🔥 Có thể chốt liền <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
-      ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${hot.at < Date.now() - 6 * 3600e3 ? ' · đã cũ, nên phân tích lại' : ''}</div>` : '<div class="muted">Bấm nút để AI đọc luồng bình luận và chọn những báo giá chốt được ngay (tốn 1 lượt gọi Claude).</div>'}
+      ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''}${hot.at < Date.now() - 6 * 3600e3 ? ' · đã cũ, nên phân tích lại' : ''}</div>` : '<div class="muted">Bấm nút để AI đọc luồng bình luận và chọn những báo giá chốt được ngay (tốn 1 lượt gọi Claude).</div>'}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
   }
@@ -3103,6 +3112,15 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   }
 
   async function onClick(e) {
+    // ✓ Hoàn thành 1 dòng "Có thể chốt liền" (nút nằm trong link → chặn chuyển trang)
+    const hd = e.target.closest('[data-act="hot-done"]');
+    if (hd) {
+      e.preventDefault();
+      e.stopPropagation();
+      hd.closest('.hot-item')?.classList.add('hot-gone');
+      await kvMerge('aiHotDone', { [hd.dataset.id]: { at: Date.now(), by: meName } });
+      return setTimeout(render, 250);
+    }
     // Bình luận mới nhất: trình duyệt tự mở báo giá ở tab mới (target=_blank), trang này đánh dấu đã đọc
     const nk = e.target.closest('[data-nkey]')?.dataset.nkey;
     if (nk) return void markNotifRead(nk).then(render).catch((err) => console.warn('[DG]', err));
