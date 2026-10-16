@@ -1455,6 +1455,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .side { transition: width .2s ease; }
     .side:has(details[open]) { width: min(600px, calc(100vw - 32px)); }
     .side-sec { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 2px; }
+    /* 🔥 Có thể chốt liền (AI) */
+    .hotbox { margin: 12px 0 6px; border: 1px solid #fed7aa; background: linear-gradient(180deg, #fff7ed, #fff); border-radius: 12px; padding: 10px 12px; }
+    .hot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .hot-head h3 { margin: 0; }
+    .hot-btn { white-space: nowrap; }
+    .hot-list { display: grid; gap: 6px; margin-top: 8px; }
+    a.hot-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) 170px; gap: 10px; align-items: center; text-decoration: none; color: inherit;
+      background: #fff; border: 1px solid #ffedd5; border-radius: 10px; padding: 8px 10px; }
+    a.hot-item:hover { border-color: #fb923c; box-shadow: 0 2px 10px rgba(251,146,60,.18); }
+    .hot-no { font-weight: 800; color: #ea580c; text-align: center; font-size: 15px; }
+    .hot-main { display: grid; gap: 3px; min-width: 0; }
+    .hot-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .hot-top b { color: #1d4ed8; font-size: 14px; }
+    .hot-top .kh { margin: 0; font-size: 11px; }
+    .hot-name { color: #0f172a; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hot-why { font-size: 12px; color: #334155; }
+    .hot-next { font-size: 12px; color: #9a3412; font-weight: 600; }
+    .hot-side { display: grid; justify-items: end; gap: 2px; }
+    .hot-pct { font-size: 18px; font-weight: 800; border-radius: 999px; padding: 0 10px; }
+    .hot-pct.good { color: #15803d; background: #dcfce7; } .hot-pct.mid { color: #a16207; background: #fef9c3; } .hot-pct.bad { color: #b91c1c; background: #fee2e2; }
+    .hot-amt { font-weight: 800; color: #047857; font-size: 13px; }
+    .hot-who { font-size: 11px; color: #64748b; }
     .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eef2f7; font-size: 13px; display: grid; gap: 10px; }
     .side-q > * { margin: 0 !important; }
     /* Thông tin báo giá ở đầu thẻ */
@@ -1906,7 +1928,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Khách hứa lên đơn ("nếu ok thì lên đơn luôn", "tuần sau đặt hàng", "khách sẽ chốt đơn"…) mà báo giá chưa có đơn
   const PROMISE_RE =
-    /(lên|len|đặt|dat|chốt|chot|xuống|xuong|ra)\s*(đơn|don)(?![\p{L}])|hứa\s*(lên|đặt|chốt|lấy)|(sẽ|se)\s*(lên|đặt|chốt|lấy)\s*(đơn|hàng)|(thứ\s*\d|tuần\s*sau|ngày\s*mai|mai)[^.!?]{0,50}(lên|đặt|chốt|lấy)\s*(đơn|hàng)/iu;
+    /(lên|len|đặt|dat|chốt|chot|xuống|xuong|ra)\s*(đơn|don)(?![\p{L}])|hứa\s*(lên|đặt|chốt|lấy)|(sẽ|se)\s*(lên|đặt|chốt|lấy)\s*(đơn|hàng)|(thứ\s*\d|tuần\s*sau|ngày\s*mai|mai)[^.!?]{0,50}(lên|đặt|chốt|lấy)\s*(đơn|hàng)|(khách|kh)\s*(hàng\s*)?(đã\s*)?(báo\s*|bảo\s*|nói\s*)?(ok|oke|okie|okela|okay|đồng\s*ý|chịu|chốt)\s*(hết|rồi|r|giá|luôn|đơn)(?![\p{L}])/iu;
   function promiseInfo(q, c) {
     if (q?.hasOrder || hasOrder(q, c) || CLOSED.has(q?.quoteStatus)) return null;
     let hit = null;
@@ -2511,6 +2533,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
+  // Tên gọn: 3 chữ → chữ cuối (Phan Văn Thịnh → Thịnh); 4 chữ trở lên → 2 chữ cuối (Lê Thị Đông Anh → Đông Anh)
+  const shortName = (n) => {
+    const w = (n || '').trim().split(/\s+/).filter(Boolean);
+    return w.length >= 4 ? w.slice(-2).join(' ') : w.length === 3 ? w[2] : w.join(' ');
+  };
+
   async function renderInner() {
     meName = myName(await kvGet('me'));
     const [quotes, comments, evals, suggests, collected, settings] = await Promise.all([
@@ -2684,11 +2712,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // (giữ tên cũ cho các chỗ khác)
     const revenueHtml = (items) => totalBadge(items) + filterBar(items);
     // Mỗi báo giá 1 dòng: mã | KH, loại, nhãn, tên | NVKD | bình luận cuối | tiền | % | điểm
-    // Tên gọn: 3 chữ → chữ cuối (Phan Văn Thịnh → Thịnh); 4 chữ trở lên → 2 chữ cuối (Lê Thị Đông Anh → Đông Anh)
-    const shortName = (n) => {
-      const w = (n || '').trim().split(/\s+/).filter(Boolean);
-      return w.length >= 4 ? w.slice(-2).join(' ') : w.length === 3 ? w[2] : w.join(' ');
-    };
     // Màu điểm khả thi: dưới 30 xám, 30 → cam, càng cao càng xanh lá (đậm nhất từ 110 điểm)
     const feaStyle = (score) => {
       if (score < 30) return 'color:#94a3b8;background:#f1f5f9';
@@ -2771,6 +2794,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })()}</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${handoverBox(handovers, quotes)}
+      ${hotBox((await kvGet('aiHot')).latest, quotes)}
       ${overdueBox}
       ${learnedBox(await kvGet('learned'))}
     `;
@@ -2816,6 +2840,105 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         : `<div class="${cls}" data-nkey="${esc(nkey)}" title="${esc(n.text)}">${body}</div>`;
     });
     return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}</div>`;
+  }
+
+  // ---------- 🔥 AI chọn báo giá chốt được liền ----------
+  // Lấy tối đa 40 báo giá khả thi điểm cao nhất, gửi luồng bình luận (rút gọn) cho Claude,
+  // Claude trả về tối đa 10 báo giá có thể chốt NGAY + lý do + việc cần làm. Lưu kv 'aiHot' (đồng bộ).
+  const HOT = { candidates: 40, show: 10 };
+  const HOT_SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú (bao bì giấy carton). Quản lý có quá nhiều báo giá, cần biết báo giá nào CHỐT ĐƯỢC NGAY để tập trung.
+Đọc từng báo giá (thông tin + luồng bình luận nội bộ giữa NVKD và quản lý) và chọn tối đa ${HOT.show} báo giá có khả năng chốt đơn cao nhất TRONG VÀI NGÀY TỚI.
+Tín hiệu chốt mạnh: khách đã ok giá / đồng ý / hứa lên đơn / hẹn ngày đặt; khách cho giá mục tiêu và mình đã đáp ứng; chỉ còn vướng thủ tục (cọc, hợp đồng, duyệt mẫu, maket); khách quen, tái bản; mới trao đổi gần đây.
+Tín hiệu yếu: khách chê giá cao chưa xử lý, im lặng lâu, khách đặt chỗ khác, chưa có giá, chỉ hỏi tham khảo.
+Chỉ dựa trên dữ liệu được cung cấp, không bịa.
+Trả về DUY NHẤT một JSON array, xếp từ khả năng cao xuống thấp, mỗi phần tử:
+{"code":"BGxxxxx","kha_nang":0-100,"ly_do":"1 câu ngắn, nêu tín hiệu cụ thể trong bình luận","viec_can_lam":"1 việc cụ thể quản lý/NVKD cần làm ngay để chốt"}
+Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoài JSON.`;
+
+  function compactThread(q, c) {
+    const all = [];
+    const walk = (t) => {
+      all.push(t);
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    const lines = all
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(-8)
+      .map((t) => `  [${fmtTime(t.createdAt)}] ${t.staff?.name || '?'}: ${(t.text || '').replace(/\s+/g, ' ').trim().slice(0, 300)}${t.file ? ' [ảnh/file]' : ''}`);
+    return lines.length ? lines.join('\n') : '  (chưa có bình luận)';
+  }
+
+  async function analyzeHot() {
+    if (state.busy.has('hot')) return;
+    setBusy('hot', true);
+    try {
+      const [quotes, comments, orders] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('orders')]);
+      const live = Object.fromEntries(Object.entries(quotes).filter(([, q]) => q?.quoteStatus !== 'REJECT'));
+      const cands = feasibleList(live, comments, orders)
+        .sort((a, b) => b.f.score - a.f.score)
+        .slice(0, HOT.candidates);
+      if (!cands.length) throw new Error('Chưa có báo giá khả thi nào để phân tích.');
+      const blocks = cands.map(({ q, c, f }) => {
+        const os = orderSummary(orders?.[q.customer?.id]);
+        return [
+          `### ${q.code} – "${q.name || ''}"`,
+          `Khách: ${q.customer?.name || '?'} | NVKD: ${staffOf(q, c) || '?'} | Số tiền: ${money(q.amount) || '?'} | Tình trạng: ${statusLabel(q.quoteStatus)} | Tạo: ${fmtTime(q.createdAt)}`,
+          `Điểm khả thi (tự chấm): ${f.score} – ${f.reasons.join(', ') || '-'}${os ? ` | Khách đã mua ${os.count} đơn (12 tháng: ${os.year})` : ''}`,
+          'Bình luận gần nhất:',
+          compactThread(q, c),
+        ].join('\n');
+      });
+      const out = await call({
+        type: 'claude',
+        system: HOT_SYSTEM,
+        prompt: `Thời điểm hiện tại: ${fmtTime(Date.now() / 1000)}\n\n${blocks.join('\n\n')}`,
+        maxTokens: 6000,
+      });
+      let items = [];
+      try {
+        items = JSON.parse(out.slice(out.indexOf('['), out.lastIndexOf(']') + 1));
+      } catch {
+        throw new Error('Claude trả về không đúng định dạng – bấm phân tích lại.');
+      }
+      const byCode = Object.fromEntries(cands.map(({ q }) => [q.code, q]));
+      items = items.filter((x) => x && byCode[x.code]).slice(0, HOT.show).map((x) => ({
+        id: byCode[x.code].id,
+        code: x.code,
+        pct: Math.max(0, Math.min(100, Number(x.kha_nang) || 0)),
+        why: String(x.ly_do || ''),
+        next: String(x.viec_can_lam || ''),
+      }));
+      await kvMerge('aiHot', { latest: { at: Date.now(), items, from: cands.length } });
+      state.hotOpen = true;
+    } catch (e) {
+      state.error = e.message;
+    } finally {
+      setBusy('hot', false);
+    }
+  }
+
+  function hotBox(hot, quotes) {
+    const busy = state.busy.has('hot');
+    const items = (hot?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus));
+    const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
+    const rows = items
+      .map((x, i) => {
+        const q = quotes[x.id];
+        const cls = x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad';
+        return `<a class="hot-item" href="/bao-gia/update/${x.id}" data-nav data-code="${esc(x.code)}">
+          <span class="hot-no">${i + 1}</span>
+          <span class="hot-main"><span class="hot-top"><b>${esc(x.code)}</b>${custTag(q)}<span class="hot-name">${esc(q.name || '')}</span></span>
+            <span class="hot-why">💡 ${esc(x.why)}</span>
+            <span class="hot-next">👉 ${esc(x.next)}</span></span>
+          <span class="hot-side"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span><span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></a>`;
+      })
+      .join('');
+    return `<div class="hotbox">
+      <div class="hot-head"><h3>🔥 Có thể chốt liền <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
+      ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${hot.at < Date.now() - 6 * 3600e3 ? ' · đã cũ, nên phân tích lại' : ''}</div>` : '<div class="muted">Bấm nút để AI đọc luồng bình luận và chọn những báo giá chốt được ngay (tốn 1 lượt gọi Claude).</div>'}
+      ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
+    </div>`;
   }
 
   function handoverBox(list, quotes) {
@@ -3025,6 +3148,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       render();
     }
     else if (act === 'export-xlsx') exportList();
+    else if (act === 'hot-run') analyzeHot();
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)

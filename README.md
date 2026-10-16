@@ -62,6 +62,13 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### 🔥 Có thể chốt liền (AI)
+
+Ô cam ở đầu bảng 📊: bấm **🔥 AI chọn đơn chốt được liền** → Claude đọc 40 báo giá khả thi điểm cao nhất
+(thông tin + 8 bình luận gần nhất + lịch sử mua hàng), chọn tối đa 10 báo giá chốt được trong vài ngày tới, mỗi đơn có
+% khả năng, lý do (tín hiệu trong bình luận) và việc cần làm ngay. Bấm một dòng để mở báo giá. Kết quả lưu trong
+kho dữ liệu (`aiHot`, đồng bộ) – không tự chạy lại, bấm **🔄 Phân tích lại** khi cần (mỗi lần 1 lượt gọi Claude).
+
 ### ⬇️ Xuất Excel
 
 Nút **⬇️ Xuất Excel** cạnh nút xếp của bảng "Báo giá khả thi & chưa đọc": tải đúng danh sách đang hiện
