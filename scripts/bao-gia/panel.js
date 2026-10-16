@@ -1305,7 +1305,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .nitem .ndot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
     .nitem.unread-n { color: #0f172a; font-weight: 700; background: #f0f6ff; }
     .nitem.unread-n .ndot { background: #2563eb; }
-    .nhint { font-size: 11px; margin-top: 4px; }
     @media (max-width: 900px) { .headrow { flex-direction: column; } .nbox { width: 100%; } }
     .warn { background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
     .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
@@ -2627,9 +2626,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ? `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener" data-nkey="${esc(nkey)}" title="${esc(n.text)}">${body}</a>`
         : `<div class="${cls}" data-nkey="${esc(nkey)}" title="${esc(n.text)}">${body}</div>`;
     });
-    const tpl = lsGet('dgNotifReadTpl');
-    return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}
-      ${tpl ? '' : '<div class="muted nhint">Để đồng bộ "đã đọc" lên CRM: bấm 1 thông báo trong chuông CRM một lần để extension học cách CRM đánh dấu đã đọc.</div>'}</div>`;
+    return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}</div>`;
   }
 
   function handoverBox(list, quotes) {
