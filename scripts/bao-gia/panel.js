@@ -1505,6 +1505,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-toggle:hover { background: #ffedd5; }
     .hot-count { background: #ea580c; color: #fff; border-radius: 999px; padding: 0 9px; font-size: 13px; margin-left: 4px; }
     .hotbox.collapsed { padding-top: 8px; padding-bottom: 8px; }
+    /* Thu gọn mà còn đơn chốt được → lửa bập bùng, số đếm phát sáng, viền chạy nhẹ để gây chú ý */
+    .hotbox.collapsed.has-data { animation: dghotglow 2.4s ease-in-out infinite; }
+    .hotbox.collapsed.has-data .hot-fire { display: inline-block; animation: dgflame 1.1s ease-in-out infinite; transform-origin: 50% 90%; }
+    .hotbox.collapsed.has-data .hot-count { animation: dgpulse 1.6s ease-in-out infinite; }
+    .hotbox.collapsed.has-data .hot-toggle { animation: dgnudge 1.6s ease-in-out infinite; }
+    .hot-hint { margin-left: 8px; font-size: 12px; font-weight: 600; color: #c2410c; opacity: .8; }
+    @keyframes dgflame { 0%, 100% { transform: scale(1) rotate(-4deg); } 50% { transform: scale(1.25) rotate(5deg); } }
+    @keyframes dgpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(234,88,12,.55); } 60% { box-shadow: 0 0 0 8px rgba(234,88,12,0); } }
+    @keyframes dgnudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    @keyframes dghotglow { 0%, 100% { border-color: #fed7aa; box-shadow: 0 0 0 0 rgba(251,146,60,0); }
+      50% { border-color: #fb923c; box-shadow: 0 0 18px 0 rgba(251,146,60,.35); } }
+    @media (prefers-reduced-motion: reduce) { .hotbox.collapsed.has-data, .hotbox.collapsed.has-data * { animation: none !important; } }
     .hot-done { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; color: #94a3b8; font-size: 15px;
       font-weight: 900; cursor: pointer; transition: all .15s; }
     .hot-done:hover { border-color: #16a34a; background: #16a34a; color: #fff; transform: scale(1.08); }
@@ -3026,7 +3038,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const collapsed = lsGet('dgHotCollapsed') === '1';
     const toggle = `<button class="hot-toggle" data-act="hot-toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button>`;
     if (collapsed)
-      return `<div class="hotbox collapsed"><div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span></h3>${btn}</div></div>`;
+      return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
     return `<div class="hotbox">
       <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span> <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
       ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''}${hot.at < Date.now() - 6 * 3600e3 ? ' · đã cũ, nên phân tích lại' : ''}</div>` : '<div class="muted">Bấm nút để AI đọc luồng bình luận và chọn những báo giá chốt được ngay (tốn 1 lượt gọi Claude).</div>'}
