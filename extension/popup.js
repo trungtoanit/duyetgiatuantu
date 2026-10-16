@@ -77,10 +77,11 @@ $('sync').onclick = async () => {
   $('sync').textContent = 'Đang cập nhật…';
   await send('syncNow');
   // Cập nhật xong → tự tải lại tab CRM đang mở để chạy bản mới
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && /^https:\/\/sale\.tuantu\.com\.vn\//.test(tab.url || '')) {
-    $('sync').textContent = 'Đang tải lại trang…';
-    await chrome.tabs.reload(tab.id, { bypassCache: true });
+  // Tải lại MỌI tab CRM đang mở (tab cũ còn chạy bản script cũ sẽ ghi đè dữ liệu bằng định dạng cũ)
+  const tabs = await chrome.tabs.query({ url: 'https://sale.tuantu.com.vn/*' });
+  if (tabs.length) {
+    $('sync').textContent = `Đang tải lại ${tabs.length} tab CRM…`;
+    await Promise.all(tabs.map((t) => chrome.tabs.reload(t.id, { bypassCache: true }).catch(() => {})));
   }
   $('sync').disabled = false;
   $('sync').textContent = '⟳ Cập nhật ngay';

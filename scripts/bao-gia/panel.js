@@ -262,7 +262,17 @@
       await call({ type: 'kv.set', key: 'me', value: data });
     } else if (kind === 'quotes') {
       const patch = {};
-      for (const q of data) patch[q.id] = definedOnly(q);
+      const cur = await kvGet('quotes');
+      for (const q of data) {
+        const next = definedOnly(q);
+        const old = cur[q.id];
+        // Giữ NVKD phụ trách khách (cột Sale) nếu dữ liệu mới không có (vd. tab chạy bản cũ)
+        if (old?.staffKey && old.staffKey !== 'staff' && (!next.staffKey || next.staffKey === 'staff')) {
+          next.staff = old.staff;
+          next.staffKey = old.staffKey;
+        }
+        patch[q.id] = next;
+      }
       await kvMerge('quotes', patch);
     } else if (kind === 'quote') {
       const cur = await kvGet('quotes');

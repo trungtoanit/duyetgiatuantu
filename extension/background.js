@@ -357,6 +357,9 @@ function mergeEntry(ns, local, remote) {
   // Bàn giao đã gửi / bỏ qua thì giữ nguyên dù máy khác đẩy bản chưa xử lý lên sau
   if (ns === 'handovers' && (local?.sentAt || local?.skippedAt) && !remote?.sentAt && !remote?.skippedAt)
     return { ...remote, sentAt: local.sentAt, sentText: local.sentText, quote: local.quote, skippedAt: local.skippedAt };
+  // NVKD phụ trách khách (cột Sale) – bản cũ của script chỉ có người tạo báo giá → không cho ghi đè
+  if (ns === 'quotes' && local?.staffKey && local.staffKey !== 'staff' && !remote?.staffKey)
+    return { ...remote, staff: local.staff, staffKey: local.staffKey, creator: local.creator, people: local.people };
   if (ns !== 'comments' || !local?.threads) return remote;
   const m = new Map(local.threads.map((t) => [t.id, t]));
   for (const t of remote.threads || []) m.set(t.id, t);
