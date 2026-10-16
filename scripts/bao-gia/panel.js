@@ -1189,7 +1189,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item { display: grid; grid-template-columns: 34px 74px 130px minmax(0, 1fr) 150px 74px 128px 96px 52px; align-items: center;
+    .unread a.item { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .9fr) minmax(0, 1.1fr) 150px 74px 128px 120px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread a.item:hover { background: #f5f8ff; }
     .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1360,7 +1360,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .cov-bar span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #16a34a); border-radius: 99px; }
     a.item.q-unread .it-name, a.item.q-unread .it-who { font-weight: 700; }
     a.item.q-unread .it-code { font-weight: 900; }
-    a.item.q-read .it-code, a.item.q-read .it-main, a.item.q-read .it-who { opacity: .78; }
+    a.item.q-read .it-code, a.item.q-read .it-main, a.item.q-read .it-name, a.item.q-read .it-who { opacity: .78; }
     a.item.q-read .it-code { font-weight: 600; }
     .sortbtn { margin-left: 8px; font-size: 12px; }
     .x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #656d76; }
@@ -2324,7 +2324,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-no">${i + 1}</span>
       <span class="it-code">${esc(q?.code || c.code)}</span>
       <span class="it-cust">${custTag(q).trim()}</span>
-      <span class="it-main">${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}<span class="it-name">${esc(q?.name || '')}</span></span>
+      <span class="it-main">${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who">${avatarHtml(staff, 20)}<span>${esc(staff || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
       <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
