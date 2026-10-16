@@ -3019,7 +3019,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   function hotBox(hot, quotes, done = {}) {
     const busy = state.busy.has('hot');
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
-    const items = (hot?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !done[x.id]);
+    // Ẩn: đã chốt / thất bại, đã lên đơn (CRM ghi "lên đơn hàng", mã đơn Misa, hoặc có trong lịch sử mua hàng của khách), đã bấm ✓
+    const items = (hot?.items || []).filter(
+      (x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !done[x.id],
+    );
     const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
     const rows = items
