@@ -1454,6 +1454,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .fchip.blue { --c: #1d4ed8; --bg: #dbeafe; } .fchip.slate { --c: #475569; --bg: #e2e8f0; } .fchip.red { --c: #dc2626; --bg: #fee2e2; }
     .fchip.amber { --c: #b45309; --bg: #fef3c7; } .fchip.sky { --c: #0369a1; --bg: #e0f2fe; } .fchip.pink { --c: #be185d; --bg: #fce7f3; }
     .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
+    .fchip.staff { --c: #0f766e; --bg: #ccfbf1; padding-left: 4px; }
+    .fchip.staff .ava { width: 18px; height: 18px; font-size: 9px; }
     .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
       color: #fff; border-radius: 999px; padding: 4px 12px; }
     button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
@@ -1701,7 +1703,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -2782,7 +2784,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const needle = fold(state.search).trim();
     const searchHit = ({ q, c }) =>
       !needle || fold(`${q?.name || ''} ${q?.customer?.code || ''} ${q?.customer?.name || ''} ${q?.code || c?.code || ''}`).includes(needle);
-    const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items).filter(searchHit);
+    // Lọc theo NVKD (độc lập với các nhãn lọc khác, giữ qua F5: dgStaff)
+    const staffSel = lsGet('dgStaff') || '';
+    const staffHit = ({ q, c }) => !staffSel || staffOf(q, c) === staffSel;
+    const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items).filter(searchHit).filter(staffHit);
     const filterChip = (f, cls, label) =>
       ` <button class="${cls} chipbtn${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">${label}</button>`;
     // Thanh lọc: chia nhóm (Trạng thái · Tín hiệu khách · Lợi nhuận & loại hàng); chip đang chọn tô đậm màu nhóm
@@ -2827,12 +2832,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           ['both', 'violet', '🟦🟪', 'Flexo + Offset', kinds.both],
         ]],
       ];
+      // Nhóm NHÂN VIÊN: mỗi NVKD 1 chip (ảnh + tên gọn + số báo giá), nhiều báo giá đứng trước
+      const byStaff = {};
+      items.forEach(({ q, c }) => { const n = staffOf(q, c); if (n) byStaff[n] = (byStaff[n] || 0) + 1; });
+      const staffChips = Object.entries(byStaff)
+        .sort((a, b) => b[1] - a[1])
+        .map(([n, k]) => `<button class="fchip staff${staffSel === n ? ' on' : ''}" data-act="staff" data-staff="${esc(n)}" title="${esc(n)} – bấm để lọc / bỏ lọc">${avatarHtml(n, 18)}${esc(shortName(n))}<b>${k}</b></button>`)
+        .join('');
       return `<div class="fbar">${groups
         .map(([name, chips]) => {
           const html = chips.filter((c) => c[4] || state.filter === c[0]).map((c) => fchip(...c)).join('');
           return html ? `<div class="fgroup"><span class="fname">${name}</span><div class="fchips">${html}</div></div>` : '';
         })
-        .join('')}${state.filter ? '<button class="fclear" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</div>`;
+        .join('')}${staffChips ? `<div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>` : ''}${state.filter || staffSel ? '<button class="fclear" data-act="filter-clear">✕ Bỏ lọc</button>' : ''}</div>`;
     };
     // (giữ tên cũ cho các chỗ khác)
     const revenueHtml = (items) => totalBadge(items) + filterBar(items);
@@ -3245,6 +3257,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       try {
         localStorage.setItem('dgSort', sortMode() === 'erp' ? 'score' : 'erp');
       } catch {}
+      render();
+    } else if (act === 'staff') {
+      lsSet('dgStaff', lsGet('dgStaff') === b.dataset.staff ? null : b.dataset.staff);
+      render();
+    } else if (act === 'filter-clear') {
+      state.filter = '';
+      lsSet('dgFilter', '');
+      lsSet('dgStaff', null);
       render();
     } else if (act === 'filter') {
       state.filter = state.filter === b.dataset.f ? '' : b.dataset.f;
