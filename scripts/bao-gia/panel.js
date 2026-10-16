@@ -1493,6 +1493,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .side[hidden] { display: none; }
     .side { transition: width .2s ease; }
     .side:has(details[open]) { width: min(600px, calc(100vw - 32px)); }
+    .ho { margin: 4px 0 10px; }
+    .ho-n { background: #0ea5e9; color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 800; }
+    .ho-card { border: 1px solid #bae6fd; background: linear-gradient(180deg, #f0f9ff, #fff); border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+    .ho-card.here { border-color: #0284c7; box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+    .ho-cust { font-weight: 800; font-size: 13px; color: #0f172a; line-height: 1.3; }
+    .ho-flow { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .ho-from { background: #f1f5f9; color: #64748b; border-radius: 999px; padding: 1px 10px; font-size: 12px; text-decoration: line-through; text-decoration-color: #cbd5e1; }
+    .ho-arrow { color: #0284c7; font-weight: 900; }
+    .ho-to { background: #e0f2fe; color: #0369a1; border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 800; }
+    .ho-meta { margin-top: 4px; font-size: 11px; color: #64748b; }
+    .ho-text { width: 100%; margin-top: 8px; border: 1px solid #bae6fd; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px;
+      line-height: 1.45; background: #fff; resize: vertical; color: inherit; }
+    .ho-text:focus { outline: 2px solid #7dd3fc; border-color: #0ea5e9; }
+    .ho-btns { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+    .ho-send, .ho-open { flex: 1; text-align: center; border: 0; border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 700;
+      cursor: pointer; color: #fff; background: linear-gradient(135deg, #0284c7, #2563eb); text-decoration: none; }
+    .ho-open { background: #fff; color: #0369a1; border: 1px solid #7dd3fc; }
+    .ho-send:disabled { opacity: .7; cursor: wait; }
+    .ho-skip { border: 1px solid #e2e8f0; background: #fff; color: #64748b; border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+    .ho-skip:hover { color: #b91c1c; border-color: #fecaca; }
     .side-sec { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 2px; }
     /* 🔥 Có thể chốt liền (AI) */
     .hotbox { margin: 12px 0 6px; border: 1px solid #fed7aa; background: linear-gradient(180deg, #fff7ed, #fff); border-radius: 12px; padding: 10px 12px; }
@@ -2509,20 +2529,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ? `<span class="calc"><span class="spinner"></span><span class="calc-bar"><i></i></span><span class="muted">đang tính…</span></span>`
       : `<span class="muted">chưa có</span><button class="side-btn calc-btn" data-side="calc" title="Tính lại ngay">↻ Tính ngay</button>`;
 
-  function renderSide(q, qid = q?.id, body = '') {
+  function renderSide(q, qid = q?.id, body = '', ho = '', hoN = 0) {
     const el = root?.querySelector('.side');
     if (!el) return;
-    if (!qid) {
-      el.hidden = true;
-      return;
-    }
-    // Đang gõ trong ô câu hỏi / gợi ý của thẻ → không vẽ lại để khỏi mất chữ
+    // Đang gõ trong ô câu hỏi / gợi ý / bàn giao của thẻ → không vẽ lại để khỏi mất chữ
     const ae = root.activeElement;
     if (ae && el.contains(ae) && ae.tagName === 'TEXTAREA') return;
+    if (!qid) {
+      // Không ở trang báo giá: thẻ chỉ hiện khi có bàn giao khách hàng cần xử lý
+      if (!ho) {
+        el.hidden = true;
+        return;
+      }
+      const col = lsGet('dgSideCollapsed') === '1';
+      el.hidden = false;
+      el.classList.toggle('collapsed', col);
+      el.innerHTML = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>🔁 Bàn giao khách hàng <span class="ho-n">${hoN}</span>
+        <button class="side-btn" data-side="toggle" title="${col ? 'Mở rộng' : 'Thu gọn'}">${col ? '▸' : '▾'}</button></div>${col ? '' : ho}`;
+      placeSide(el);
+      return;
+    }
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     const { flexo, offset } = marginParts(q);
-    const busy = marginFetching.has(q.id);
-    const oldFx = renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo);
+    const busy = !!q && marginFetching.has(q.id);
+    const oldFx = !!q && renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo);
     if (IS_TOP && q && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
     const open = el.querySelector('details')?.open;
     const collapsed = lsGet('dgSideCollapsed') === '1';
@@ -2533,7 +2563,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
     const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${collapsed ? '' : `${custTag(q)}${q?.quoteStatus ? `<span class="st-pill">${esc(statusLabel(q.quoteStatus))}</span>` : ''}`}${busy ? ' <span class="spinner"></span>' : ''}
-      ${collapsed ? `<span class="side-mini">${mini}</span>` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
+      ${collapsed ? `<span class="side-mini">${mini}</span>${hoN ? ` <span class="ho-n" title="Bàn giao khách hàng cần xử lý">🔁 ${hoN}</span>` : ''}` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
     if (collapsed) {
       el.innerHTML = header;
       placeSide(el);
@@ -2542,6 +2572,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const [info, rest] = body.includes('<!--dg-split-->') ? body.split('<!--dg-split-->') : ['', body];
     const tile = (cls, label, main, sub) => `<div class="mtile ${cls}"><div class="mt-l">${label}</div><div class="mt-v">${main}</div>${sub ? `<div class="mt-s">${sub}</div>` : ''}</div>`;
     el.innerHTML = `${header}
+      ${ho}
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
       ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? '<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo && !flexo.invalid ? `giấy tấm ${flexo.cost}%` : '') : ''}
@@ -2719,7 +2750,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         </div>`;
     }
 
-    renderSide(quotes[qid], qid, current);
+    renderSide(quotes[qid], qid, current, handoverBox(handovers, quotes), handovers.length);
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
     if (editing?.contains('handover-edit')) return; // đang sửa – không vẽ lại
@@ -2889,7 +2920,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         return notifBox(ns, quotes, me);
       })()}</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
-      ${handoverBox(handovers, quotes)}
       ${hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone'))}
       ${overdueBox}
       ${learnedBox(await kvGet('learned'))}
@@ -3049,25 +3079,30 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     </div>`;
   }
 
+  // Thẻ bàn giao (hiện trong thẻ bên phải). Báo giá đang mở là nơi gửi → đưa lên đầu, nút gửi ngay.
   function handoverBox(list, quotes) {
     if (!list.length) return '';
-    const items = list.map((h) => {
-      const { q, from } = handoverTarget(h, quotes);
+    const rows = list
+      .map((h) => ({ h, ...handoverTarget(h, quotes) }))
+      .sort((a, b) => (b.q && currentQuoteId() === b.q.id) - (a.q && currentQuoteId() === a.q.id));
+    const items = rows.map(({ h, q, from }) => {
       const key = esc(h.key);
       const text = state.handoverDraft[h.key] ?? handoverText(h, from);
-      const head = `<div><b>${esc(h.customer)}</b><br><span class="muted">${esc(from || '?')} → <b>${esc(h.to)}</b> · ${esc(h.by)} bàn giao${h.at ? ` lúc ${fmtTime(h.at)}` : ''}</span></div>`;
-      const skip = `<button class="act" data-act="handover-skip" data-key="${key}">Bỏ qua</button>`;
-      if (!q) return `<div class="box">${head}<div class="muted">Chưa thấy báo giá nào của khách này trong dữ liệu – mở trang Báo giá để extension ghi nhận.</div><div class="btns">${skip}</div></div>`;
-      const here = currentQuoteId() === q.id;
+      const here = q && currentQuoteId() === q.id;
       const busy = state.busy.has(`handover:${h.key}`);
-      return `<div class="box">${head}
-        <textarea class="suggest-edit handover-edit" data-key="${key}" rows="2">${esc(text)}</textarea>
-        <div class="btns">${here
-          ? `<button class="act primary" data-act="handover-send" data-key="${key}" data-code="${esc(q.code)}" ${busy ? 'disabled' : ''}>${busy ? 'Đang gửi…' : `📨 Gửi bình luận mới vào ${esc(q.code)}`}</button>`
-          : `<a class="act primary" data-nav data-keep href="/co-hoi/update/${q.id}" data-code="${esc(q.code)}">Mở ${esc(q.code)} để gửi</a>`}
+      const skip = `<button class="ho-skip" data-act="handover-skip" data-key="${key}" title="Không gửi, ẩn bàn giao này trên mọi máy">Bỏ qua</button>`;
+      const head = `<div class="ho-cust" title="${esc(h.customer)}">${esc(h.customer)}</div>
+        <div class="ho-flow"><span class="ho-from">${esc(from || '?')}</span><span class="ho-arrow">→</span><span class="ho-to">${esc(h.to)}</span></div>
+        <div class="ho-meta">${esc(h.by)} bàn giao${h.at ? ` · ${fmtTime(h.at)}` : ''}${q ? ` · báo giá gần nhất <b>${esc(q.code)}</b>` : ''}</div>`;
+      if (!q) return `<div class="ho-card">${head}<div class="ho-meta warnx">Chưa thấy báo giá nào của khách này – mở trang Báo giá để extension ghi nhận.</div><div class="ho-btns">${skip}</div></div>`;
+      return `<div class="ho-card${here ? ' here' : ''}">${head}
+        <textarea class="handover-edit ho-text" data-key="${key}" rows="3">${esc(text)}</textarea>
+        <div class="ho-btns">${here
+          ? `<button class="ho-send" data-act="handover-send" data-key="${key}" data-code="${esc(q.code)}" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> Đang gửi…' : `📨 Gửi vào ${esc(q.code)}`}</button>`
+          : `<a class="ho-open" data-nav data-keep href="/co-hoi/update/${q.id}" data-code="${esc(q.code)}">↗ Mở ${esc(q.code)} để gửi</a>`}
           ${skip}</div></div>`;
     });
-    return `<h3>🔁 Bàn giao khách hàng (${list.length})</h3><div class="hint muted">Bình luận mới trên báo giá gần nhất của khách. Xem lại rồi bấm gửi.</div>${items.join('')}`;
+    return `<div class="ho"><div class="side-sec">🔁 Bàn giao khách hàng · ${list.length}</div>${items.join('')}</div>`;
   }
 
   // Bấm 1 bình luận trong "Bình luận mới nhất" → đánh dấu đã đọc (lưu kho, đồng bộ)
