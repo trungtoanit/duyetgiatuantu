@@ -1166,6 +1166,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       max-height: none; overflow: auto; background: #fff; color: #1f2328; border-radius: 12px; font-size: 14px;
       box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 18px 22px; }
     .panel[hidden] { display: none; }
+    .panel.full { left: 0; top: 0; bottom: 0; width: 100vw !important; border-radius: 0; }
+    .grip { position: fixed; top: 12px; bottom: 60px; width: 12px; z-index: 2147483647; cursor: ew-resize; display: flex; align-items: center; justify-content: center; }
+    .grip[hidden] { display: none; }
+    .grip::after { content: ''; width: 4px; height: 56px; border-radius: 99px; background: #cbd5e1; transition: background .15s, height .15s; }
+    .grip:hover::after, .grip.on::after { background: #6366f1; height: 96px; }
+    .hbtns { display: flex; align-items: center; gap: 4px; }
+    .x.fs { font-size: 16px; }
     h2 { font-size: 15px; margin: 0 0 4px; }
     h3 { font-size: 13px; margin: 14px 0 6px; }
     .muted { color: #656d76; font-size: 12px; }
@@ -1391,6 +1398,50 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     try {
       localStorage.setItem('dgPanelOpen', open ? '1' : '0');
     } catch {}
+    layoutPanel();
+  }
+
+  // Toàn màn hình (dgPanelFull) và độ rộng kéo tay (dgPanelW) – giữ qua F5
+  const PANEL_LEFT = 16;
+  function layoutPanel() {
+    const p = root?.querySelector('.panel');
+    const g = root?.querySelector('.grip');
+    if (!p || !g) return;
+    const full = lsGet('dgPanelFull') === '1';
+    p.classList.toggle('full', full);
+    const maxW = window.innerWidth - PANEL_LEFT * 2;
+    const w = Math.min(maxW, Math.max(520, Number(lsGet('dgPanelW')) || Math.min(1760, maxW)));
+    p.style.width = full ? '' : `${w}px`;
+    g.hidden = p.hidden || full;
+    g.style.left = `${PANEL_LEFT + w - 6}px`;
+  }
+  function wireGrip(g) {
+    g.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      g.setPointerCapture(e.pointerId);
+      g.classList.add('on');
+      const move = (ev) => {
+        const w = Math.round(Math.min(window.innerWidth - PANEL_LEFT * 2, Math.max(520, ev.clientX - PANEL_LEFT)));
+        try {
+          localStorage.setItem('dgPanelW', String(w));
+        } catch {}
+        layoutPanel();
+      };
+      const up = () => {
+        g.classList.remove('on');
+        g.removeEventListener('pointermove', move);
+        g.removeEventListener('pointerup', up);
+      };
+      g.addEventListener('pointermove', move);
+      g.addEventListener('pointerup', up);
+    });
+    g.addEventListener('dblclick', () => {
+      try {
+        localStorage.removeItem('dgPanelW'); // bấm đúp: về độ rộng mặc định
+      } catch {}
+      layoutPanel();
+    });
+    window.addEventListener('resize', layoutPanel);
   }
 
   function mount() {
@@ -1399,7 +1450,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     host.id = 'dg-root';
     document.documentElement.append(host);
     root = host.attachShadow({ mode: 'open' });
-    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Đánh giá NVKD</button><div class="panel" hidden></div><div class="side" hidden></div>`;
+    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Đánh giá NVKD</button><div class="panel" hidden></div><div class="grip" hidden title="Kéo để dãn / thu hẹp · bấm đúp để về mặc định"></div><div class="side" hidden></div>`;
+    wireGrip(root.querySelector('.grip'));
     root.querySelector('.fab').onclick = () => {
       const open = root.querySelector('.panel').hidden;
       setPanelOpen(open);
@@ -1415,6 +1467,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       root.querySelector('.panel').hidden = false;
       render();
     }
+    layoutPanel();
     root.querySelector('.panel').addEventListener('click', onClick);
     wireSide(root.querySelector('.side'));
     resumeLoading();
@@ -2113,7 +2166,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       console.warn('[DG]', e);
       if (isOpen()) {
         root.querySelector('.panel').innerHTML = `
-          <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
+          <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
           <div class="err">${esc(e.message || e)}</div>`;
       }
     }
@@ -2299,7 +2352,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
 
     root.querySelector('.panel').innerHTML = `
-      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><button class="x" data-act="close">×</button></div>
+      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
       <div class="muted">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
       ${(() => {
         const done = all.filter((x) => collected[x.id] || comments[x.id]?.threads?.length).length;
@@ -2390,7 +2443,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!b) return;
     const act = b.dataset.act;
     const id = Number(b.dataset.id);
-    if (act === 'close') {
+    if (act === 'full') {
+      try {
+        localStorage.setItem('dgPanelFull', lsGet('dgPanelFull') === '1' ? '0' : '1');
+      } catch {}
+      layoutPanel();
+      render();
+    }
+    else if (act === 'close') {
       setPanelOpen(false);
       render();
     }
@@ -2492,6 +2552,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!root || !currentQuoteId()) return;
     if (!(await getSettings().catch(() => ({}))).autoOpen) return;
     root.querySelector('.panel').hidden = false;
+    layoutPanel();
     render();
   }
 
