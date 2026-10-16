@@ -1500,6 +1500,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-head h3 { margin: 0; }
     .hot-btn { white-space: nowrap; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
+    .hot-toggle { width: 26px; height: 26px; margin-right: 6px; border-radius: 8px; border: 1px solid #fed7aa; background: #fff; color: #c2410c;
+      font-size: 13px; cursor: pointer; vertical-align: middle; }
+    .hot-toggle:hover { background: #ffedd5; }
+    .hot-count { background: #ea580c; color: #fff; border-radius: 999px; padding: 0 9px; font-size: 13px; margin-left: 4px; }
+    .hotbox.collapsed { padding-top: 8px; padding-bottom: 8px; }
     .hot-done { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; color: #94a3b8; font-size: 15px;
       font-weight: 900; cursor: pointer; transition: all .15s; }
     .hot-done:hover { border-color: #16a34a; background: #16a34a; color: #fff; transform: scale(1.08); }
@@ -1664,7 +1669,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -3018,8 +3023,12 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           <span class="hot-side"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span><span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></a>`;
       })
       .join('');
+    const collapsed = lsGet('dgHotCollapsed') === '1';
+    const toggle = `<button class="hot-toggle" data-act="hot-toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button>`;
+    if (collapsed)
+      return `<div class="hotbox collapsed"><div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span></h3>${btn}</div></div>`;
     return `<div class="hotbox">
-      <div class="hot-head"><h3>🔥 Có thể chốt liền <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
+      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span> <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
       ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''}${hot.at < Date.now() - 6 * 3600e3 ? ' · đã cũ, nên phân tích lại' : ''}</div>` : '<div class="muted">Bấm nút để AI đọc luồng bình luận và chọn những báo giá chốt được ngay (tốn 1 lượt gọi Claude).</div>'}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
@@ -3176,6 +3185,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'close') {
       setPanelOpen(false);
+      render();
+    }
+    else if (act === 'hot-toggle') {
+      lsSet('dgHotCollapsed', lsGet('dgHotCollapsed') === '1' ? '0' : '1');
       render();
     }
     else if (act === 'sort') {
