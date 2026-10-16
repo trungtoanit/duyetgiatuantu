@@ -2104,7 +2104,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       "{P} check lại giúp anh, giá này khách đạt chưa?",
       "Giá anh duyệt khách thấy được không {p}?",
       "Khách có chịu mức giá này không {p}?",
-      "Giá bên mình khách so với bên khác thấy sao {p}?",
+      "Deal này khách ok chưa {p}",
       "Khách có cần mình điều chỉnh giá không {p}?",
       "Giá đã hợp với khách chưa {p}?",
       "Khách có chốt theo giá này không {p}?",
