@@ -241,6 +241,7 @@
 
   const ago = (sec) => {
     const h = hoursSince(sec);
+    if (h < 1) return h * 60 < 1 ? 'vừa xong' : `${Math.floor(h * 60)} phút trước`;
     return h >= 48 ? `${Math.floor(h / 24)} ngày trước` : `${Math.floor(h)} giờ trước`;
   };
 
