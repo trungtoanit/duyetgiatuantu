@@ -1236,7 +1236,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .9fr) minmax(0, 1.1fr) 104px 74px 136px 120px 52px; align-items: center;
+    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .45fr) minmax(0, 1.55fr) 104px 74px 136px 120px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread .item-head { position: sticky; top: -18px; z-index: 2; background: #f1f5f9; border-radius: 8px; margin-bottom: 4px;
       font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
