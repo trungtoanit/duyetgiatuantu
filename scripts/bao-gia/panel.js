@@ -278,10 +278,13 @@
       // Thông báo là của từng tài khoản CRM → khoá theo người đang đăng nhập
       const me = await kvGet('me');
       const who = me?.id ?? meName;
+      const cur = await kvGet('notifs');
       const patch = {};
       for (const n of data) {
-        const at = toSec(n.at);
-        patch[`${who}:${n.id}`] = { ...n, at, owner: who, ownerName: me?.name || meName, seenAt: Math.floor(Date.now() / 1000) };
+        const key = `${who}:${n.id}`;
+        const old = cur[key] || {};
+        // Đã bấm đọc trong bảng (readLocal) thì giữ là đã đọc dù CRM vẫn báo chưa đọc
+        patch[key] = { ...old, ...n, read: old.readLocal ? true : n.read, at: toSec(n.at), owner: who, ownerName: me?.name || meName, seenAt: Math.floor(Date.now() / 1000) };
       }
       await kvMerge('notifs', patch);
     } else if (kind === 'handovers') {
@@ -2595,14 +2598,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!items.length) return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất</div><div class="muted">Bấm chuông thông báo của CRM một lần để extension ghi lại.</div></div>`;
     const unread = items.filter((n) => n.read === false).length;
     const rows = items.map((n) => {
+      const nkey = `${n.owner}:${n.id}`;
       const code = n.text.match(/#?(BG\d+)/)?.[1];
       const q = code && byCode[code];
       const href = q ? `/bao-gia/update/${q.id}` : n.link ? String(n.link).replace(/^https?:\/\/[^/]+/, '') : n.oppId ? `/bao-gia/update/${n.oppId}` : '';
       const cls = `nitem ${n.read === false ? 'unread-n' : ''}`;
       const body = `<span class="ndot"></span><span class="ntext">${esc(n.text)}</span><span class="nago">${n.at ? ago(n.at) : ''}</span>`;
       return href
-        ? `<a class="${cls}" href="${esc(href)}" data-nav data-code="${esc(code || '')}" title="${esc(n.text)}">${body}</a>`
-        : `<div class="${cls}" title="${esc(n.text)}">${body}</div>`;
+        ? `<a class="${cls}" href="${esc(href)}" data-nav data-nkey="${esc(nkey)}" data-code="${esc(code || '')}" title="${esc(n.text)}">${body}</a>`
+        : `<div class="${cls}" data-nkey="${esc(nkey)}" title="${esc(n.text)}">${body}</div>`;
     });
     return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}</div>`;
   }
@@ -2628,7 +2632,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<h3>🔁 Bàn giao khách hàng (${list.length})</h3><div class="hint muted">Bình luận mới trên báo giá gần nhất của khách. Xem lại rồi bấm gửi.</div>${items.join('')}`;
   }
 
+  // Bấm 1 bình luận trong "Bình luận mới nhất" → đánh dấu đã đọc (lưu kho, đồng bộ)
+  async function markNotifRead(key) {
+    const n = (await kvGet('notifs'))[key];
+    if (!n || n.readLocal) return;
+    await kvMerge('notifs', { [key]: { ...n, read: true, readLocal: true, readAt: Math.floor(Date.now() / 1000) } });
+  }
+
   async function onClick(e) {
+    const nk = e.target.closest('[data-nkey]')?.dataset.nkey;
+    if (nk) {
+      const link = e.target.closest('a[data-nav]');
+      // Ctrl/Cmd/Shift-click: trình duyệt mở tab mới, trang này ở lại → ghi không cần chờ
+      if (link && (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey)) return void markNotifRead(nk).then(render);
+      if (link) e.preventDefault(); // chặn chuyển trang cho tới khi ghi xong (trang có thể tải lại hẳn)
+      await markNotifRead(nk).catch((err) => console.warn('[DG]', err));
+      if (!link) return render();
+    }
     // Giữ trạng thái mở/đóng của mục "Bộ câu hỏi tự học" qua các lần vẽ lại
     const sum = e.target.closest('details.learnbox > summary');
     if (sum) state.learnOpen = !sum.parentElement.open;
