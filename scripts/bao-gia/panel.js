@@ -1261,7 +1261,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .45fr) minmax(0, 1.55fr) 104px 74px 136px 120px 52px; align-items: center;
+    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px minmax(0, .45fr) 130px minmax(0, 1.55fr) 104px 74px 136px 120px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread .item-head { position: sticky; top: -18px; z-index: 2; background: #f1f5f9; border-radius: 8px; margin-bottom: 4px;
       font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
@@ -2635,8 +2635,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return `<a class="item ${q?.isRead === false ? 'q-unread' : q?.isRead === true ? 'q-read' : ''}" href="/bao-gia/update/${c.id}" data-nav data-code="${esc(q?.code || c.code)}" title="${esc(tip)}">
       <span class="it-no">${i + 1}</span>
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-cust">${custTag(q).trim()}</span>
       <span class="it-main">${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-cust">${custTag(q).trim()}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
@@ -2655,7 +2655,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       state.exportRows = rows; // nút Xuất Excel xuất đúng danh sách đang hiện (đã lọc / tìm / xếp)
       if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
-      return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Khách</span><span>Nhãn</span><span>Tên cơ hội</span><span>NVKD</span>
+      return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
         <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
@@ -2795,15 +2795,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       state.error = 'Danh sách đang trống – không có gì để xuất.';
       return render();
     }
-    const head = ['#', 'Mã BG', 'Mã KH', 'Tên khách hàng', 'Nhãn', 'Tên cơ hội', 'NVKD', 'Tình trạng', 'Đã đọc', 'Bình luận cuối', 'Người BL cuối', 'Số tiền', 'Flexo %', 'Giấy tấm %', 'Offset %', 'Điểm', 'Lý do điểm', 'Link'];
+    const head = ['#', 'Mã BG', 'Nhãn', 'Mã KH', 'Tên khách hàng', 'Tên cơ hội', 'NVKD', 'Tình trạng', 'Đã đọc', 'Bình luận cuối', 'Người BL cuối', 'Số tiền', 'Flexo %', 'Giấy tấm %', 'Offset %', 'Điểm', 'Lý do điểm', 'Link'];
     const data = rows.map(({ q, c, last, f }, i) => {
       const { flexo, offset } = marginParts(q);
       return [
         i + 1,
         q?.code || c?.code || '',
+        htmlText(`${kindTag(q)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.customer?.code || '',
         q?.customer?.name || '',
-        htmlText(`${kindTag(q)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.name || '',
         staffOf(q, c) || '',
         statusLabel(q?.quoteStatus),
@@ -2819,7 +2819,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         `${location.origin}/bao-gia/update/${c?.id ?? q?.id}`,
       ];
     });
-    const widths = [5, 10, 14, 36, 30, 50, 22, 14, 10, 14, 22, 16, 9, 10, 9, 7, 40, 42];
+    const widths = [5, 10, 30, 14, 36, 50, 22, 14, 10, 14, 22, 16, 9, 10, 9, 7, 40, 42];
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
     downloadBlob(buildXlsx([head, ...data], widths), `bao-gia-kha-thi-${stamp}.xlsx`);
