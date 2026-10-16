@@ -1225,8 +1225,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .9fr) minmax(0, 1.1fr) 104px 74px 128px 120px 52px; align-items: center;
+    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .9fr) minmax(0, 1.1fr) 104px 74px 136px 120px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
+    .unread .item-head { position: sticky; top: -18px; z-index: 2; background: #f1f5f9; border-radius: 8px; margin-bottom: 4px;
+      font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+    .unread .item-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .unread .item-head .it-amt { font-size: 14px; text-transform: none; letter-spacing: 0; color: #047857; background: #dcfce7; border-radius: 6px; padding: 2px 6px; }
     .unread a.item:hover { background: #f5f8ff; }
     .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .it-code { font-weight: 800; font-size: 14px; }
@@ -2400,23 +2404,32 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-pct">${pctCell(q)}</span>
       <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `🎯${f.score}` : ''}</span></a>`;
     };
+    // Dòng tiêu đề cột (dính trên đầu khi cuộn) + tổng tiền ngay trên cột Số tiền
+    const listRows = (items) => {
+      const rows = applyFilter(items);
+      if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
+      const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Khách</span><span>Nhãn</span><span>Tên cơ hội</span><span>NVKD</span>
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá">Σ ${money(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
+        rows.map(itemHtml).join('');
+    };
     const overdueBox = `
       <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}
         <button class="act chipbtn sortbtn" data-act="sort" title="Đổi cách sắp xếp">${sortMode() === 'erp' ? '↕ Xếp: như ERP' : '↕ Xếp: theo điểm'}</button></h3>
       <div class="hint muted">Báo giá chưa chốt, xếp theo điểm khả năng chốt đơn (hứa lên đơn, khách cho giá, tái bản, khách quen, mới trao đổi…).</div>
       ${feasible.length
-        ? `<div class="box unread">${applyFilter(feasible).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        ? `<div class="box unread">${listRows(feasible)}</div>`
         : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi.</div>'}
       ${unreadAll.length
         ? `<h3>📬 Chưa đọc (${unreadAll.length})${revenueHtml(unreadAll)}</h3><div class="hint muted">Toàn bộ báo giá đang in đậm (chưa đọc) trên CRM.</div>
-          <div class="box unread">${applyFilter(unreadAll).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+          <div class="box unread">${listRows(unreadAll)}</div>`
         : ''}
       ${samples.length
         ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
-          <div class="box unread">${applyFilter(samples).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+          <div class="box unread">${listRows(samples)}</div>`
         : ''}
       ${silent.length
-        ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${applyFilter(silent).map(itemHtml).join('') || '<span class="muted">Không có báo giá phù hợp bộ lọc</span>'}</div>`
+        ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${listRows(silent)}</div>`
         : ''}`;
 
 
