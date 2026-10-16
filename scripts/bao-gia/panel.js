@@ -1455,7 +1455,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .side { transition: width .2s ease; }
     .side:has(details[open]) { width: min(600px, calc(100vw - 32px)); }
     .side-sec { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 2px; }
-    .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 13px; }
+    .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eef2f7; font-size: 13px; display: grid; gap: 10px; }
+    .side-q > * { margin: 0 !important; }
+    /* Thông tin báo giá ở đầu thẻ */
+    .side-info { padding: 2px 0 10px; border-bottom: 1px solid #eef2f7; margin-bottom: 4px; }
+    .si-name { font-size: 15px; font-weight: 700; color: #0f172a; line-height: 1.35; }
+    .si-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; font-size: 12px; color: #64748b; }
+    .si-meta b { color: #334155; font-weight: 600; }
+    .si-meta .dot { color: #cbd5e1; }
+    .si-amt { margin-left: auto; font-weight: 800; font-size: 13px; color: #047857; }
+    .si-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .si-tags > * { margin: 0 !important; font-size: 11px; }
+    .side-h .kh { font-size: 11px; }
+    .st-pill { font-size: 11px; font-weight: 600; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 1px 8px; }
+    /* Lợi nhuận: các ô số cạnh nhau */
+    .mtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 4px; }
+    .mtile { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; background: #fbfdff; }
+    .mtile.flexo { border-color: #bfdbfe; background: #f5f9ff; }
+    .mtile.offset { border-color: #e9d5ff; background: #fbf7ff; }
+    .mt-l { font-size: 11px; font-weight: 700; color: #475569; }
+    .mt-v { margin-top: 2px; min-height: 30px; display: flex; align-items: center; }
+    .mt-v b { font-size: 24px; font-weight: 800; line-height: 1.1; }
+    .mt-v b.good { color: #047857; } .mt-v b.bad { color: #b91c1c; }
+    .mt-s { font-size: 11px; color: #64748b; }
+    .side-actions { display: grid !important; grid-template-columns: 1fr auto; gap: 8px; }
+    .side-actions .act { justify-content: center; }
     .side-q .btns { flex-wrap: wrap; }
     .side-q .act.hero { font-size: 14px; padding: 8px 14px; }
     .side-q textarea { font-size: 13px; }
@@ -2395,21 +2419,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '–'}` : '',
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
-    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${busy ? ' <span class="spinner"></span>' : ''}
+    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${collapsed ? '' : `${custTag(q)}${q?.quoteStatus ? `<span class="st-pill">${esc(statusLabel(q.quoteStatus))}</span>` : ''}`}${busy ? ' <span class="spinner"></span>' : ''}
       ${collapsed ? `<span class="side-mini">${mini}</span>` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
     if (collapsed) {
       el.innerHTML = header;
       placeSide(el);
       return;
     }
+    const [info, rest] = body.includes('<!--dg-split-->') ? body.split('<!--dg-split-->') : ['', body];
+    const tile = (cls, label, main, sub) => `<div class="mtile ${cls}"><div class="mt-l">${label}</div><div class="mt-v">${main}</div>${sub ? `<div class="mt-s">${sub}</div>` : ''}</div>`;
     el.innerHTML = `${header}
-      ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div>' : ''}
-      ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>`) : waitHtml(busy)}</div>` : ''}
-      ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : waitHtml(busy)}</div>` : ''}
+      ${info}
+      ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
+      ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? '<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo && !flexo.invalid ? `giấy tấm ${flexo.cost}%` : '') : ''}
+      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? 'đang bán' : '') : ''}
+      ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
       ${kinds.length ? marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`) : ''}
-      ${body}`;
+      ${rest}`;
     placeSide(el);
   }
 
@@ -2539,14 +2567,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const sg = suggests[qid];
       const last = lastComment(c);
       const mode = followMode(q, c);
+      const tags = `${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
       current = `
-        <div class="side-q"><div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
-            <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
-            ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
+        <div class="side-info">
+          <div class="si-name">${esc(q?.name || '')}</div>
+          <div class="si-meta">${avatarHtml(staffOf(q, c), 22)}<b>${esc(staffOf(q, c) || '?')}</b>
+            <span class="dot">·</span>💬 ${c?.threads?.length || 0} luồng${last ? `<span class="dot">·</span>BL cuối ${ago(last.createdAt)}` : ''}
+            ${q?.amount ? `<span class="si-amt">${money(q.amount)}</span>` : ''}</div>
+          ${tags.trim() ? `<div class="si-tags">${tags}</div>` : ''}
+        </div><!--dg-split-->
+        <div class="side-q">
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
           ${quickBox(q, c, mode)}
           ${ordersBox(q)}
-          <div class="btns">
+          <div class="btns side-actions">
             <button class="act hero" data-act="suggest" data-id="${qid}" ${state.busy.has(`c:${qid}`) ? 'disabled' : ''}>
               ${state.busy.has(`c:${qid}`) ? '<span class="spinner light"></span> Đang soạn câu hỏi…' : '💬 Gợi ý câu hỏi cho NVKD'}</button>
             ${btn('eval-quote', `q:${qid}`, '🤖 Đánh giá NVKD', 'Đang đánh giá…', `data-id="${qid}"`)}
