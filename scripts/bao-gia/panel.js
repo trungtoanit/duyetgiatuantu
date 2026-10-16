@@ -2348,7 +2348,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const filterChip = (f, cls, label) =>
       ` <button class="${cls} chipbtn${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">${label}</button>`;
     const revenueHtml = (items) => {
-      const total = items.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      // Tổng tiền theo danh sách đang lọc (các nhãn đếm vẫn tính trên cả danh sách để bấm chuyển lọc)
+      const shown = applyFilter(items);
+      const total = shown.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const zero = items.filter(({ q }) => noPrice(q)).length;
       const tgt = items.filter(({ c }) => targetPriceInfo(c)).length;
       const nodep = items.filter(({ c }) => noDepositInfo(c)).length;
@@ -2361,7 +2363,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
       const kinds = { flexo: 0, offset: 0, both: 0 };
       items.forEach(({ q }) => { const k = kindOf(q); if (k) kinds[k]++; });
-      return (total ? ` <span class="rev">💰 ${money(total)}</span>` : '') +
+      return (total ? ` <span class="rev" title="${state.filter ? `Tổng ${shown.length} báo giá đang lọc` : `Tổng ${items.length} báo giá`}">💰 ${money(total)}${state.filter ? ` <small>(${shown.length} đang lọc)</small>` : ''}</span>` : '') +
         (zero ? filterChip('zero', 'noprice', `⚠️ ${zero} chưa cho giá`) : '') +
         (tgt ? filterChip('tgt', 'tgt', `💲 ${tgt} khách cho giá`) : '') +
         (nodep ? filterChip('nodep', 'nodep', `🚫 ${nodep} chưa cọc`) : '') +
