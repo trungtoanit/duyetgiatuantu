@@ -493,7 +493,7 @@ Yêu cầu:
     // Câu kết ở gợi ý bình thường (thay cho kiểu hẹn giờ "phản hồi trước 11h")
     ketThuc: 'Làm việc với khách xong báo cáo lại cho anh.',
     // Chế độ chào lại: báo giá Thất bại hoặc im lặng quá 30 ngày
-    chaoLai: ['"Báo cáo lại khách hàng này nhé" (đúng 1 câu này, chỉ thêm xưng hô ở cuối)'],
+    chaoLai: ['"Báo cáo lại khách hàng này nhé/nha {xưng hô}" hoặc "Báo cáo lại khách hàng này {xưng hô} nhé/nha" (đúng 1 câu này, chọn 1 trong 4 cách)'],
     // Tình huống đặc biệt nhận ra từ nội dung bình luận – ưu tiên hơn các chế độ trên
     tinhHuong: [
       {
@@ -2190,6 +2190,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       "{d} chưa có thông tin mới, báo cáo lại nhé {p}. ",
       "{d} chưa nghe phản hồi, {p} báo cáo lại giúp anh. "
   ];
+  // Chào lại: các cách nói của cùng 1 câu "Báo cáo lại khách hàng này"
+  const REPORT_BACK = [
+    'Báo cáo lại khách hàng này nhé {p}.',
+    'Báo cáo lại khách hàng này nha {p}.',
+    'Báo cáo lại khách hàng này {p} nhé.',
+    'Báo cáo lại khách hàng này {p} nha.',
+  ];
   // Chọn cố định theo báo giá (không đổi mỗi lần vẽ lại); bấm "Gửi lại" thì đổi câu khác
   const pickFor = (arr, id, salt = 0) => arr[(Math.abs(Number(id) * 2654435761 + salt * 40503) >>> 0) % arr.length];
   const fillP = (t, p, d = '') => t.replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
@@ -2246,7 +2253,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return {
         icon: '💤',
         why: q.quoteStatus === 'REJECT' ? 'Báo giá thất bại' : `Im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`,
-        text: `Báo cáo lại khách hàng này nhé ${p}.`,
+        text: fillP(pickFor(REPORT_BACK, q.id, renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0), p),
       };
     return null;
   }
