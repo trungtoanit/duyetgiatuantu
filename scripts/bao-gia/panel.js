@@ -1390,12 +1390,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .mgnbox .link { color: #1d4ed8; font-size: 12px; text-decoration: underline; margin-left: 6px; }
     .mgnbox .expl { margin-top: 6px; font-size: 13px; color: #334155; }
     .mgnbox table { margin-top: 6px; font-size: 12px; }
-    .side { position: fixed; right: 16px; top: 130px; z-index: 2147483645; width: 280px; max-height: calc(100vh - 160px); overflow: auto;
+    .side { position: fixed; right: 16px; top: 130px; z-index: 2147483645; width: 440px; max-height: calc(100vh - 160px); overflow: auto;
       background: #fff; border: 1px solid #e9d5ff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); padding: 12px 14px;
       font-size: 13px; color: #1f2328; }
     .side[hidden] { display: none; }
     .side { transition: width .2s ease; }
-    .side:has(details[open]) { width: min(560px, calc(100vw - 32px)); }
+    .side:has(details[open]) { width: min(600px, calc(100vw - 32px)); }
+    .side-sec { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 2px; }
+    .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 13px; }
+    .side-q .btns { flex-wrap: wrap; }
+    .side-q .act.hero { font-size: 14px; padding: 8px 14px; }
+    .side-q textarea { font-size: 13px; }
     .side table td, .side table th { white-space: normal; }
     .warnx { color: #b45309; font-weight: 700; font-size: 12px; }
     .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; cursor: move; user-select: none; touch-action: none; }
@@ -1564,7 +1569,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     resumeLoading();
     maybeAutoOpen();
     let saveTimer;
-    root.querySelector('.panel').addEventListener('input', (e) => {
+    root.querySelector('.side').addEventListener('click', onClick);
+    const onInput = (e) => {
       const qe = e.target.closest('textarea.quick-edit');
       if (qe) {
         clearTimeout(saveTimer);
@@ -1587,7 +1593,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const cur = (await kvGet('suggests'))[id] || {};
         await kvMerge('suggests', { [id]: { ...cur, text: ta.value } });
       }, 500);
-    });
+    };
+    root.querySelector('.panel').addEventListener('input', onInput);
+    root.querySelector('.side').addEventListener('input', onInput);
     render();
   }
 
@@ -2158,18 +2166,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ? `<span class="calc"><span class="spinner"></span><span class="calc-bar"><i></i></span><span class="muted">đang tính…</span></span>`
       : `<span class="muted">chưa có</span><button class="side-btn calc-btn" data-side="calc" title="Tính lại ngay">↻ Tính ngay</button>`;
 
-  function renderSide(q) {
+  function renderSide(q, qid = q?.id, body = '') {
     const el = root?.querySelector('.side');
     if (!el) return;
-    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
-    if (!q || !kinds.length) {
+    if (!qid) {
       el.hidden = true;
       return;
     }
+    // Đang gõ trong ô câu hỏi / gợi ý của thẻ → không vẽ lại để khỏi mất chữ
+    const ae = root.activeElement;
+    if (ae && el.contains(ae) && ae.tagName === 'TEXTAREA') return;
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     const { flexo, offset } = marginParts(q);
     const busy = marginFetching.has(q.id);
     const oldFx = renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo);
-    if (IS_TOP && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
+    if (IS_TOP && q && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
     const open = el.querySelector('details')?.open;
     const collapsed = lsGet('dgSideCollapsed') === '1';
     el.hidden = false;
@@ -2178,7 +2189,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '–'}` : '',
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
-    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="grip">⠿</span>📊 ${esc(q.code)}${busy ? ' <span class="spinner"></span>' : ''}
+    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${busy ? ' <span class="spinner"></span>' : ''}
       ${collapsed ? `<span class="side-mini">${mini}</span>` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
     if (collapsed) {
       el.innerHTML = header;
@@ -2186,11 +2197,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return;
     }
     el.innerHTML = `${header}
+      ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div>' : ''}
       ${kinds.includes('flexo') ? `<div class="side-row"><span class="knd flexo">🟦 Flexo</span>${flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b><span class="muted">giấy tấm ${flexo.cost}%</span>`) : waitHtml(busy)}</div>` : ''}
       ${kinds.includes('offset') ? `<div class="side-row"><span class="knd offset">🟪 Offset</span>${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b><span class="muted">đang bán</span>` : waitHtml(busy)}</div>` : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
-      ${marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`)}`;
+      ${kinds.length ? marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`) : ''}
+      ${body}`;
     placeSide(el);
   }
 
@@ -2303,18 +2316,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}${handovers.length ? ` <span class="fab-badge">🔁 ${handovers.length}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
-    // Thẻ cố định bên phải trang báo giá: Flexo % / Offset % (luôn hiện, không trôi khi cuộn)
-    renderCtx.margins = await kvGet('margins');
-    renderCtx.quotes = quotes;
-    renderSide(quotes[currentQuoteId()]);
-    if (!isOpen()) return;
-    const editing = root.activeElement?.classList;
-    if (editing?.contains('suggest-edit') || editing?.contains('quick-edit')) return; // đang sửa – không vẽ lại
+    // Thẻ cố định bên phải trang báo giá: báo giá đang mở (câu hỏi gợi ý, % Flexo/Offset, mua hàng, đánh giá)
     avatars = avatarIndex(quotes);
     renderCtx = { comments, quotes, collected, orders: await kvGet('orders'), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
-
-
     const btn = (act, key, label, busyLabel, attrs = '') =>
       `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
 
@@ -2328,14 +2333,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const last = lastComment(c);
       const mode = followMode(q, c);
       current = `
-        <h3>Báo giá đang mở</h3>
-        <div class="box">
-          <div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
+        <div class="side-q"><div><b>${esc(q?.code || c?.code || '#' + qid)}</b>${custTag(q)}${kindTag(q)}${marginTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)} – ${esc(q?.name || '')}<br>
             <span class="muted who">${avatarHtml(staffOf(q, c), 20)}NVKD: ${esc(staffOf(q, c) || '?')} · ${esc(statusLabel(q?.quoteStatus))} · ${c?.threads?.length || 0} luồng bình luận
             ${last ? ` · bình luận cuối ${ago(last.createdAt)}` : ''}</span></div>
           ${noPrice(q) ? `<div class="warn danger">⚠️ Báo giá đang 0đ – chưa cho giá. Cần cho giá trước khi hỏi NVKD.</div>` : ''}
           ${quickBox(q, c, mode)}
-          ${marginBox(q)}
           ${ordersBox(q)}
           <div class="btns">
             <button class="act hero" data-act="suggest" data-id="${qid}" ${state.busy.has(`c:${qid}`) ? 'disabled' : ''}>
@@ -2353,6 +2355,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           ${ev ? `<div class="row label"><span>Đánh giá NVKD <span class="muted">(${new Date(ev.at).toLocaleString('vi-VN')})</span></span>${scoreHtml(ev)}</div><div class="result">${esc(ev.text)}</div>` : ''}
         </div>`;
     }
+
+    renderSide(quotes[qid], qid, current);
+    if (!isOpen()) return;
+    const editing = root.activeElement?.classList;
+    if (editing?.contains('handover-edit')) return; // đang sửa – không vẽ lại
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
@@ -2494,7 +2501,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${handoverBox(handovers, quotes)}
-      ${current}
       ${overdueBox}
       ${learnedBox(await kvGet('learned'))}
     `;
