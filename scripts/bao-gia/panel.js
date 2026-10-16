@@ -211,6 +211,7 @@
       .filter(
         (q) =>
           q.id && q.quoteStatus && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !hasOrder(q, comments[q.id]) &&
+          !(q.customer?.id && ordersMap?.[q.customer.id]?.orders?.some((o) => o.quote === q.code)) &&
           !isExcluded(staffOf(q, comments[q.id])) && q.createdAt && hoursSince(q.createdAt) <= 90 * 24,
       )
       .map((q) => {
@@ -1120,7 +1121,42 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
+  // Cập nhật gần realtime theo ERP: mỗi 3 phút đọc lại 3 trang đầu danh sách Báo giá (trạng thái mới nhất),
+  // và mở lại vài báo giá khả thi đã lâu chưa kiểm tra để bắt báo giá vừa lên đơn / chốt / thất bại.
+  const QUICK = { everyMin: 3, pages: 3, recheck: 4, recheckMin: 45 };
+  async function quickRefresh() {
+    if (!IS_TOP || collect.running || document.hidden) return;
+    if (!(await getSettings()).auto) return;
+    if ((await kvGet('fullCollect'))?.on) return;
+    if (!(await takeLock())) return;
+    collect.running = true;
+    try {
+      await collectListPages(QUICK.pages);
+      const [quotes, comments, collected, orders] = await Promise.all(['quotes', 'comments', 'collected', 'orders'].map((k) => kvGet(k)));
+      const now = Date.now() / 1000;
+      const stale = feasibleList(quotes, comments, orders)
+        .filter(({ q }) => !collected[q.id] || now - collected[q.id] > QUICK.recheckMin * 60)
+        .sort((a, b) => (collected[a.q.id] || 0) - (collected[b.q.id] || 0))
+        .slice(0, QUICK.recheck);
+      for (const { q } of stale) {
+        collect.current = `${q.code} · kiểm tra trạng thái`;
+        progress();
+        await loadInFrame(q.id);
+        await kvMerge('collected', { [q.id]: Math.floor(Date.now() / 1000) });
+        await sleep(1500);
+      }
+    } catch (e) {
+      console.warn('[DG] quickRefresh', e);
+    } finally {
+      collect.running = false;
+      collect.current = '';
+      await call({ type: 'kv.set', key: 'collectLock', value: null }).catch(() => {});
+      progress();
+    }
+  }
+
   if (IS_TOP) {
+    setInterval(() => quickRefresh(), QUICK.everyMin * 60 * 1000);
     setTimeout(() => runCollector(), 15000);
     setInterval(() => runCollector(), COLLECT.everyMin * 60 * 1000);
     // Nút "Chạy ngay" trong popup extension ghi kv collectNow = thời điểm bấm
@@ -1189,7 +1225,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .9fr) minmax(0, 1.1fr) 150px 74px 128px 120px 52px; align-items: center;
+    .unread a.item { display: grid; grid-template-columns: 34px 74px 130px minmax(0, .9fr) minmax(0, 1.1fr) 104px 74px 128px 120px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread a.item:hover { background: #f5f8ff; }
     .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2340,6 +2376,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
     };
     // Mỗi báo giá 1 dòng: mã | KH, loại, nhãn, tên | NVKD | bình luận cuối | tiền | % | điểm
+    // Tên gọn: 3 chữ → chữ cuối (Phan Văn Thịnh → Thịnh); 4 chữ trở lên → 2 chữ cuối (Lê Thị Đông Anh → Đông Anh)
+    const shortName = (n) => {
+      const w = (n || '').trim().split(/\s+/).filter(Boolean);
+      return w.length >= 4 ? w.slice(-2).join(' ') : w.length === 3 ? w[2] : w.join(' ');
+    };
     const itemHtml = ({ q, c, last, f }, i) => {
       const staff = staffOf(q, c);
       const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
@@ -2351,7 +2392,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-cust">${custTag(q).trim()}</span>
       <span class="it-main">${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
-      <span class="it-who">${avatarHtml(staff, 20)}<span>${esc(staff || '?')}</span></span>
+      <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
       <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
       <span class="it-pct">${pctCell(q)}</span>
