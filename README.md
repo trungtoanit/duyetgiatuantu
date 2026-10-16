@@ -62,6 +62,12 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### ⬇️ Xuất Excel
+
+Nút **⬇️ Xuất Excel** cạnh nút xếp của bảng "Báo giá khả thi & chưa đọc": tải đúng danh sách đang hiện
+(theo bộ lọc, ô tìm kiếm, cách xếp) ra file `.xlsx` – mã BG, mã/tên khách, nhãn, tên cơ hội, NVKD, tình trạng,
+đã đọc, bình luận cuối, số tiền, Flexo % / giấy tấm % / Offset %, điểm + lý do điểm, link báo giá.
+
 ### 💬 Bình luận mới nhất
 
 Đầu bảng 📊 (bên phải) hiện 8 thông báo bình luận mới nhất từ chuông của CRM. Thông báo chưa đọc (theo CRM)

@@ -2151,6 +2151,100 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<div class="amt-pct" title="Flexo: % còn lại sau giấy tấm · Offset: đang bán %">${segs.join(' · ')}${none ? ' <span class="muted">% đang chờ tính</span>' : ''}</div>`;
   };
   // Ô % gọn trong danh sách 1 dòng
+  // ---------- Xuất Excel (.xlsx) ----------
+  // Tự đóng gói file .xlsx (zip không nén) – không cần thư viện ngoài.
+  const CRC_T = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  const crc32 = (u8) => {
+    let c = 0xffffffff;
+    for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  function zipStore(files) {
+    const enc = new TextEncoder();
+    const parts = [];
+    const central = [];
+    let offset = 0;
+    for (const [name, text] of Object.entries(files)) {
+      const nameB = enc.encode(name);
+      const data = enc.encode(text);
+      const crc = crc32(data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      local.setUint16(4, 20, true);
+      local.setUint16(6, 0x0800, true); // tên file UTF-8
+      local.setUint32(14, crc, true);
+      local.setUint32(18, data.length, true);
+      local.setUint32(22, data.length, true);
+      local.setUint16(26, nameB.length, true);
+      parts.push(new Uint8Array(local.buffer), nameB, data);
+      const cen = new DataView(new ArrayBuffer(46));
+      cen.setUint32(0, 0x02014b50, true);
+      cen.setUint16(4, 20, true);
+      cen.setUint16(6, 20, true);
+      cen.setUint16(8, 0x0800, true);
+      cen.setUint32(16, crc, true);
+      cen.setUint32(20, data.length, true);
+      cen.setUint32(24, data.length, true);
+      cen.setUint16(28, nameB.length, true);
+      cen.setUint32(42, offset, true);
+      central.push(new Uint8Array(cen.buffer), nameB);
+      offset += 30 + nameB.length + data.length;
+    }
+    const cenSize = central.reduce((a, b) => a + b.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, Object.keys(files).length, true);
+    end.setUint16(10, Object.keys(files).length, true);
+    end.setUint32(12, cenSize, true);
+    end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  const xmlEsc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+  // rows: mảng các dòng; ô là số → kiểu số, còn lại là chữ. Dòng đầu là tiêu đề (in đậm, cố định khi cuộn).
+  function buildXlsx(rows, widths = [], sheetName = 'Báo giá') {
+    const col = (i) => (i >= 26 ? String.fromCharCode(64 + Math.floor(i / 26)) : '') + String.fromCharCode(65 + (i % 26));
+    const sheetRows = rows
+      .map((r, ri) => `<row r="${ri + 1}">${r
+        .map((v, ci) => {
+          const ref = `${col(ci)}${ri + 1}`;
+          const st = ri === 0 ? ' s="1"' : '';
+          if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}" s="${ri ? 2 : 1}"><v>${v}</v></c>`;
+          if (v == null || v === '') return '';
+          return `<c r="${ref}" t="inlineStr"${st}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+        })
+        .join('')}</row>`)
+      .join('');
+    const cols = widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+    const last = `${col(Math.max(0, (rows[0] || []).length - 1))}${rows.length}`;
+    return zipStore({
+      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
+      '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+      'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc(sheetName.slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      'xl/_rels/workbook.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+      'xl/styles.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE2E8F0"/></patternFill></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>',
+      'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${sheetRows}</sheetData>${rows.length > 1 ? `<autoFilter ref="A1:${last}"/>` : ''}</worksheet>`,
+    });
+  }
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+  const htmlText = (h) => String(h || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+
   const pctCell = (q) => {
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return '';
@@ -2558,6 +2652,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     const listRows = (items) => {
       const rows = applyFilter(items);
+      state.exportRows = rows; // nút Xuất Excel xuất đúng danh sách đang hiện (đã lọc / tìm / xếp)
       if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Khách</span><span>Nhãn</span><span>Tên cơ hội</span><span>NVKD</span>
@@ -2571,7 +2666,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const overdueBox = `
       <div class="sec-head"><h3>🎯 Báo giá khả thi & chưa đọc <span class="cnt">${merged.length}</span></h3>
         <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged)}
-        <button class="sortbtn2" data-act="sort" title="Đổi cách sắp xếp">↕ ${sortMode() === 'erp' ? 'Như ERP' : 'Theo điểm'}</button></div></div>
+        <button class="sortbtn2" data-act="sort" title="Đổi cách sắp xếp">↕ ${sortMode() === 'erp' ? 'Như ERP' : 'Theo điểm'}</button>
+        <button class="sortbtn2" data-act="export-xlsx" title="Tải danh sách đang hiện (theo bộ lọc / tìm kiếm) ra file Excel">⬇️ Xuất Excel</button></div></div>
       ${filterBar(merged)}
       <div class="hint muted">Báo giá chưa chốt có điểm khả năng chốt đơn (🎯) + mọi báo giá chưa đọc (in đậm) trên CRM. Bấm “📬 chưa đọc” để chỉ xem báo giá chưa đọc.</div>
       ${merged.length
@@ -2691,6 +2787,42 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         crmTried[n.id] = Date.now();
         pushReadToCrm(n.id);
       });
+  }
+
+  function exportList() {
+    const rows = state.exportRows || [];
+    if (!rows.length) {
+      state.error = 'Danh sách đang trống – không có gì để xuất.';
+      return render();
+    }
+    const head = ['#', 'Mã BG', 'Mã KH', 'Tên khách hàng', 'Nhãn', 'Tên cơ hội', 'NVKD', 'Tình trạng', 'Đã đọc', 'Bình luận cuối', 'Người BL cuối', 'Số tiền', 'Flexo %', 'Giấy tấm %', 'Offset %', 'Điểm', 'Lý do điểm', 'Link'];
+    const data = rows.map(({ q, c, last, f }, i) => {
+      const { flexo, offset } = marginParts(q);
+      return [
+        i + 1,
+        q?.code || c?.code || '',
+        q?.customer?.code || '',
+        q?.customer?.name || '',
+        htmlText(`${kindTag(q)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
+        q?.name || '',
+        staffOf(q, c) || '',
+        statusLabel(q?.quoteStatus),
+        q?.isRead === false ? 'Chưa đọc' : q?.isRead === true ? 'Đã đọc' : '',
+        last ? fmtTime(last.createdAt) : 'Chưa có bình luận',
+        last?.staff?.name || '',
+        noPrice(q) ? 'Chưa cho giá' : Number(q?.amount) || '',
+        flexo ? (flexo.invalid ? 'PO>BG' : flexo.rest) : '',
+        flexo ? flexo.cost : '',
+        offset ?? '',
+        f ? f.score : '',
+        f ? f.reasons.join(', ') : '',
+        `${location.origin}/bao-gia/update/${c?.id ?? q?.id}`,
+      ];
+    });
+    const widths = [5, 10, 14, 36, 30, 50, 22, 14, 10, 14, 22, 16, 9, 10, 9, 7, 40, 42];
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    downloadBlob(buildXlsx([head, ...data], widths), `bao-gia-kha-thi-${stamp}.xlsx`);
   }
 
   async function onClick(e) {
@@ -2815,6 +2947,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (x) await kvMerge('learned', { [k]: { ...x, off: true, offAt: Date.now() } });
       render();
     }
+    else if (act === 'export-xlsx') exportList();
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
