@@ -1414,7 +1414,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .fchip.on b { background: rgba(255,255,255,.25); color: #fff; }
     .fchip.blue { --c: #1d4ed8; --bg: #dbeafe; } .fchip.slate { --c: #475569; --bg: #e2e8f0; } .fchip.red { --c: #dc2626; --bg: #fee2e2; }
     .fchip.amber { --c: #b45309; --bg: #fef3c7; } .fchip.sky { --c: #0369a1; --bg: #e0f2fe; } .fchip.pink { --c: #be185d; --bg: #fce7f3; }
-    .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
+    .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
     .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
       color: #fff; border-radius: 999px; padding: 4px 12px; }
     button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
@@ -2582,6 +2582,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       contract: ({ c }) => contractInfo(c),
       nocmt: ({ c }) => !c?.threads?.length,
       unread: ({ q }) => q?.isRead === false,
+      feaUnread: ({ q, f }) => !!f && q?.isRead === false, // vừa khả thi (có 🎯) vừa chưa đọc
       sampleOrder: ({ q, c }) => sampleInfo(c) && hasOrderFull(q, c),
       sampleNo: ({ q, c }) => sampleInfo(c) && !hasOrderFull(q, c),
       lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
@@ -2603,7 +2604,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       `<span class="fi">${icon}</span>${label}<b>${n}</b></button>`;
     const totalBadge = (items, both = false) => {
       const shown = applyFilter(items);
-      const pick = both ? shown.filter(isBoth) : shown;
+      const pick = both ? shown.filter(FILTERS.feaUnread) : shown;
       const total = pick.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const tip = both
         ? `${money(total)} · ${pick.length} báo giá vừa khả thi (có 🎯) vừa chưa đọc${state.filter ? ' (trong bộ lọc đang chọn)' : ''}`
@@ -2619,6 +2620,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const groups = [
         ['Trạng thái', [
           ['unread', 'blue', '📬', 'Chưa đọc', cnt(FILTERS.unread)],
+          ['feaUnread', 'green', '🎯', 'Khả thi & chưa đọc', cnt(FILTERS.feaUnread)],
           ['nocmt', 'slate', '📭', 'Chưa có bình luận', cnt(FILTERS.nocmt)],
           ['zero', 'red', '⚠️', 'Chưa cho giá', cnt(FILTERS.zero)],
         ]],
@@ -2683,16 +2685,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const f = (v) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return n >= 1e9 ? `${f(n / 1e9)} tỷ` : n >= 1e6 ? `${f(n / 1e6)} triệu` : money(n);
     };
-    // Báo giá vừa khả thi (có điểm 🎯) vừa chưa đọc – Σ của bảng chính chỉ cộng nhóm này
-    const isBoth = ({ q, f }) => !!f && q?.isRead === false;
     const listRows = (items, forExport = false) => {
       const rows = applyFilter(items);
       // Nút Xuất Excel xuất đúng bảng chính đang hiện (đã lọc / tìm / xếp) – không lấy các bảng phụ bên dưới
       if (forExport) state.exportRows = rows;
       if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
-      const sumRows = forExport ? rows.filter(isBoth) : rows;
-      const total = sumRows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
-      const sumTip = forExport ? `Khả thi & chưa đọc: ${sumRows.length} báo giá – ${money(total)}` : `Tổng ${rows.length} báo giá: ${money(total)}`;
+      const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      const sumTip = `Tổng ${rows.length} báo giá đang hiện: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
         <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
@@ -2704,7 +2703,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     state.exportRows = []; // bảng chính trống thì không xuất danh sách cũ
     const overdueBox = `
       <div class="sec-head"><h3>🎯 Báo giá khả thi & chưa đọc <span class="cnt">${merged.length}</span></h3>
-        <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged, true)}
+        <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged)}
         <button class="sortbtn2" data-act="sort" title="Đổi cách sắp xếp">↕ ${sortMode() === 'erp' ? 'Như ERP' : 'Theo điểm'}</button>
         <button class="sortbtn2" data-act="export-xlsx" title="Tải danh sách đang hiện (theo bộ lọc / tìm kiếm) ra file Excel">⬇️ Xuất Excel</button></div></div>
       ${filterBar(merged)}
@@ -2865,15 +2864,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const ai = head.indexOf('Số tiền');
     const colL = String.fromCharCode(65 + ai);
     const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
-    const sumRow = head.map((_, i) => (i === ai - 1 ? { t: `Tổng tất cả ${rows.length} báo giá`, bold: true } : i === ai ? { f: `SUBTOTAL(9,${colL}2:${colL}${rows.length + 1})`, v: total, bold: true } : ''));
-    // Khả thi & chưa đọc (khớp Σ trên bảng): cột "Đã đọc" = "Chưa đọc" và cột "Điểm" có giá trị
-    const L = (name) => String.fromCharCode(65 + head.indexOf(name));
-    const n1 = rows.length + 1;
-    const both = rows.filter(({ q, f }) => f && q?.isRead === false);
-    const bothTotal = both.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
-    const bothRow = head.map((_, i) => (i === ai - 1 ? { t: `Khả thi & chưa đọc (${both.length} báo giá)`, bold: true }
-      : i === ai ? { f: `SUMIFS(${colL}2:${colL}${n1},${L('Đã đọc')}2:${L('Đã đọc')}${n1},"Chưa đọc",${L('Điểm')}2:${L('Điểm')}${n1},"<>")`, v: bothTotal, bold: true } : ''));
-    downloadBlob(buildXlsx([head, ...data, bothRow, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
+    const sumRow = head.map((_, i) => (i === ai - 1 ? { t: `Tổng ${rows.length} báo giá`, bold: true } : i === ai ? { f: `SUBTOTAL(9,${colL}2:${colL}${rows.length + 1})`, v: total, bold: true } : ''));
+    downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
   }
 
   async function onClick(e) {
