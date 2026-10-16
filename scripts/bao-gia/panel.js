@@ -287,6 +287,11 @@
         patch[key] = { ...old, ...n, read: old.readLocal ? true : n.read, at: toSec(n.at), owner: who, ownerName: me?.name || meName, seenAt: Math.floor(Date.now() / 1000) };
       }
       await kvMerge('notifs', patch);
+    } else if (kind === 'notifReadDone') {
+      const me = await kvGet('me');
+      const key = `${me?.id ?? meName}:${data.id}`;
+      const n = (await kvGet('notifs'))[key];
+      if (n) await kvMerge('notifs', { [key]: { ...n, crmRead: !!data.ok, crmStatus: data.status, crmAt: Math.floor(Date.now() / 1000) } });
     } else if (kind === 'handovers') {
       await saveHandovers(data);
     } else if (kind === 'comments') {
@@ -309,6 +314,12 @@
   const toSec = (v) => {
     if (v == null || v === '') return null;
     if (typeof v === 'number') return v > 1e12 ? Math.floor(v / 1000) : v;
+    if (/^\d+$/.test(v)) return toSec(Number(v));
+    const vn = String(v).match(/(\d{1,2}):(\d{2}),?\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/) || String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+    if (vn) {
+      const [h, mi, d, mo, y] = vn[0].includes(',') || /^\d{1,2}:/.test(vn[0]) ? vn.slice(1) : [vn[4], vn[5], vn[1], vn[2], vn[3]];
+      return Math.floor(new Date(+y, +mo - 1, +d, +h, +mi).getTime() / 1000);
+    }
     const t = Date.parse(v);
     return Number.isNaN(t) ? null : Math.floor(t / 1000);
   };
@@ -1293,6 +1304,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .nitem .ndot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
     .nitem.unread-n { color: #0f172a; font-weight: 700; background: #f0f6ff; }
     .nitem.unread-n .ndot { background: #2563eb; }
+    .nhint { font-size: 11px; margin-top: 4px; }
     @media (max-width: 900px) { .headrow { flex-direction: column; } .nbox { width: 100%; } }
     .warn { background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
     .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
@@ -2563,7 +2575,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         return `<div class="cov"><div class="cov-bar"><span style="width:${pctDone}%"></span></div><span>Extension đã đọc <b>${pctDone}%</b> (${done}/${all.length})${pctDone < 100 ? ' – bấm <b>📦 Thu thập toàn bộ</b> trong popup để đọc 100%' : ' ✅'}</span></div>`;
       })()}
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
-      ${notifBox(await kvGet('notifs'), quotes, await kvGet('me'))}</div>
+      ${await (async () => {
+        const [ns, me] = [await kvGet('notifs'), await kvGet('me')];
+        syncPendingReads(ns, me?.id ?? meName);
+        return notifBox(ns, quotes, me);
+      })()}</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${handoverBox(handovers, quotes)}
       ${overdueBox}
@@ -2601,14 +2617,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const nkey = `${n.owner}:${n.id}`;
       const code = n.text.match(/#?(BG\d+)/)?.[1];
       const q = code && byCode[code];
-      const href = q ? `/bao-gia/update/${q.id}` : n.link ? String(n.link).replace(/^https?:\/\/[^/]+/, '') : n.oppId ? `/bao-gia/update/${n.oppId}` : '';
+      // Mã BG trùng id báo giá (BG26686 → /bao-gia/update/26686)
+      const href = q ? `/bao-gia/update/${q.id}` : code ? `/bao-gia/update/${code.slice(2)}` : n.link ? String(n.link).replace(/^https?:\/\/[^/]+/, '') : n.oppId ? `/bao-gia/update/${n.oppId}` : '';
       const cls = `nitem ${n.read === false ? 'unread-n' : ''}`;
       const body = `<span class="ndot"></span><span class="ntext">${esc(n.text)}</span><span class="nago">${n.at ? ago(n.at) : ''}</span>`;
       return href
-        ? `<a class="${cls}" href="${esc(href)}" data-nav data-nkey="${esc(nkey)}" data-code="${esc(code || '')}" title="${esc(n.text)}">${body}</a>`
+        ? `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener" data-nkey="${esc(nkey)}" title="${esc(n.text)}">${body}</a>`
         : `<div class="${cls}" data-nkey="${esc(nkey)}" title="${esc(n.text)}">${body}</div>`;
     });
-    return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}</div>`;
+    const tpl = lsGet('dgNotifReadTpl');
+    return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}
+      ${tpl ? '' : '<div class="muted nhint">Để đồng bộ "đã đọc" lên CRM: bấm 1 thông báo trong chuông CRM một lần để extension học cách CRM đánh dấu đã đọc.</div>'}</div>`;
   }
 
   function handoverBox(list, quotes) {
@@ -2633,22 +2652,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // Bấm 1 bình luận trong "Bình luận mới nhất" → đánh dấu đã đọc (lưu kho, đồng bộ)
+  const pushReadToCrm = (id) => document.dispatchEvent(new CustomEvent('dg:notifRead', { detail: String(id) })); // hook.js gửi lệnh của CRM
   async function markNotifRead(key) {
     const n = (await kvGet('notifs'))[key];
-    if (!n || n.readLocal) return;
+    if (!n) return;
+    if (!n.crmRead) pushReadToCrm(n.id);
+    if (n.readLocal) return;
     await kvMerge('notifs', { [key]: { ...n, read: true, readLocal: true, readAt: Math.floor(Date.now() / 1000) } });
+  }
+  // Đã đọc trong bảng nhưng chưa lên CRM (vd. trước khi extension học được lệnh) → gửi bù, mỗi dòng tối đa 1 lần / 10 phút
+  const crmTried = {};
+  function syncPendingReads(notifs, who) {
+    if (!lsGet('dgNotifReadTpl')) return;
+    Object.values(notifs || {})
+      .filter((n) => n.owner === who && n.readLocal && !n.crmRead && Date.now() - (crmTried[n.id] || 0) > 600000)
+      .slice(0, 10)
+      .forEach((n) => {
+        crmTried[n.id] = Date.now();
+        pushReadToCrm(n.id);
+      });
   }
 
   async function onClick(e) {
+    // Bình luận mới nhất: trình duyệt tự mở báo giá ở tab mới (target=_blank), trang này đánh dấu đã đọc
     const nk = e.target.closest('[data-nkey]')?.dataset.nkey;
-    if (nk) {
-      const link = e.target.closest('a[data-nav]');
-      // Ctrl/Cmd/Shift-click: trình duyệt mở tab mới, trang này ở lại → ghi không cần chờ
-      if (link && (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey)) return void markNotifRead(nk).then(render);
-      if (link) e.preventDefault(); // chặn chuyển trang cho tới khi ghi xong (trang có thể tải lại hẳn)
-      await markNotifRead(nk).catch((err) => console.warn('[DG]', err));
-      if (!link) return render();
-    }
+    if (nk) return void markNotifRead(nk).then(render).catch((err) => console.warn('[DG]', err));
     // Giữ trạng thái mở/đóng của mục "Bộ câu hỏi tự học" qua các lần vẽ lại
     const sum = e.target.closest('details.learnbox > summary');
     if (sum) state.learnOpen = !sum.parentElement.open;

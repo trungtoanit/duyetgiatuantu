@@ -141,11 +141,12 @@
       title: strip(pick(o, ['title', 'name', 'subject', 'type'])),
       text,
       read,
-      at: pick(o, ['createdAt', 'created_at', 'time', 'updatedAt']),
+      at: pick(o, ['createdAt', 'created_at', 'createdDate', 'created', 'sentAt', 'time', 'date', 'updatedAt']),
       link: pick(o, ['link', 'url', 'path', 'href']) ?? pick(data, ['link', 'url', 'path']),
       oppId: pick(o, ['opportunityId', 'objectId', 'refId']) ?? o.opportunity?.id ?? pick(data, ['opportunityId', 'id']),
     };
   }
+  const notifIds = new Set();
   function emitNotifs(d) {
     let best = null;
     const walk = (o, depth) => {
@@ -159,6 +160,7 @@
     };
     walk(d, 0);
     const list = (best || []).map(slimNotif).filter((n) => n && n.id != null);
+    list.forEach((n) => notifIds.add(String(n.id)));
     if (list.length) emit('notifs', list);
   }
 
@@ -262,15 +264,64 @@
   const blocked = (method, url) =>
     COLLECTOR && (String(method || 'GET').toUpperCase() !== 'GET' || /\/opportunity\/\d+\/read\b/.test(String(url)));
 
+  // ---- Đồng bộ "đã đọc" thông báo lên CRM ----
+  // Không đoán API: khi người dùng bấm 1 thông báo trong chuông, CRM gửi 1 lệnh (PUT/POST…) có id thông báo.
+  // Ghi lại mẫu lệnh đó (id → {id}) vào localStorage; header đăng nhập lấy từ chính các request của trang
+  // (chỉ giữ trong bộ nhớ). Bảng 📊 phát sự kiện "dg:notifRead" → gửi lại đúng lệnh đó với id mới.
+  const TPL_KEY = 'dgNotifReadTpl';
+  let lastHeaders = null;
+  const setHeader = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.setRequestHeader = function (k, v) {
+    (this.__dgH ||= {})[k] = v;
+    return setHeader.apply(this, arguments);
+  };
+  function learnReadTpl(method, url, body) {
+    if (COLLECTOR || /^GET$/i.test(method) || !/noti/i.test(url) || !API.test(url)) return;
+    const b = typeof body === 'string' ? body : '';
+    const path = url.split('?');
+    for (const id of notifIds) {
+      // id phải là 1 đoạn đường dẫn / giá trị query (/123/, ?id=123) hoặc 1 giá trị trong JSON ([123], "id":123, "123")
+      const inUrl = new RegExp(`([/=])${id}(?=[/&?#]|$)`, 'g');
+      const inBody = new RegExp(`([\\[:,\\s"])${id}(?=[\\]},\\s"])`, 'g');
+      if (!inUrl.test(path[0] + (path[1] ? '?' + path[1] : '')) && !(b && new RegExp(inBody.source).test(b))) continue;
+      try {
+        localStorage.setItem(TPL_KEY, JSON.stringify({ method: method.toUpperCase(), url: url.replace(inUrl, '$1{id}'), body: b ? b.replace(inBody, '$1{id}') : '', at: Date.now() }));
+      } catch {}
+      return;
+    }
+  }
+  document.addEventListener('dg:notifRead', (e) => {
+    let tpl;
+    try {
+      tpl = JSON.parse(localStorage.getItem(TPL_KEY) || 'null');
+    } catch {}
+    const id = String(e.detail || '');
+    if (!tpl || !id || COLLECTOR) return;
+    const x = new XMLHttpRequest();
+    x.open(tpl.method, tpl.url.replaceAll('{id}', id));
+    for (const [k, v] of Object.entries(lastHeaders || {})) {
+      try {
+        x.setRequestHeader(k, v);
+      } catch {}
+    }
+    x.addEventListener('loadend', () => emit('notifReadDone', { id, ok: x.status >= 200 && x.status < 300, status: x.status }));
+    x.send(tpl.body ? tpl.body.replaceAll('{id}', id) : null);
+  });
+
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__dgUrl = String(url);
+    this.__dgMethod = String(method || 'GET');
     this.__dgBlocked = blocked(method, url);
     return open.apply(this, arguments);
   };
-  XMLHttpRequest.prototype.send = function () {
+  XMLHttpRequest.prototype.send = function (body) {
     if (this.__dgBlocked) return; // không gửi
     this.addEventListener('load', () => {
       try {
+        if (this.status >= 200 && this.status < 300 && API.test(this.__dgUrl)) {
+          if (this.__dgH) lastHeaders = this.__dgH; // header đăng nhập hiện tại của trang
+          learnReadTpl(this.__dgMethod, this.__dgUrl, body);
+        }
         if (this.status === 200 && (this.responseType === '' || this.responseType === 'text')) {
           handle(this.responseURL || this.__dgUrl, this.responseText);
         }
@@ -288,6 +339,8 @@
     const res = await origFetch.apply(this, arguments);
     try {
       const url = typeof input === 'string' ? input : input.url;
+      if (res.ok && API.test(url) && init?.headers) lastHeaders = Object.fromEntries(new Headers(init.headers));
+      if (res.ok) learnReadTpl(init?.method || input?.method || 'GET', url, init?.body);
       if (API.test(url) && res.ok) res.clone().text().then((t) => handle(url, t)).catch(() => {});
     } catch {}
     return res;

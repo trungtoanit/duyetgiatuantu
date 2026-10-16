@@ -67,6 +67,10 @@ Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh
 Đầu bảng 📊 (bên phải) hiện 8 thông báo bình luận mới nhất từ chuông của CRM. Thông báo chưa đọc (theo CRM)
 in đậm, có chấm xanh. Bấm vào để mở đúng báo giá. Danh sách thông báo kèm trạng thái đã đọc / chưa đọc được
 lưu vào kho dữ liệu (`notifs`, đồng bộ Supabase), tách theo từng tài khoản CRM.
+Bấm một dòng: mở báo giá ở tab mới và đánh dấu đã đọc (giữ qua các lần tải chuông sau).
+Đồng bộ "đã đọc" lên CRM: extension không đoán API mà tự học – bấm 1 thông báo trong chuông CRM một lần,
+hook ghi lại lệnh "đánh dấu đã đọc" mà CRM gửi (mẫu lưu ở `localStorage.dgNotifReadTpl`), rồi gửi lại lệnh đó
+cho mỗi bình luận bạn bấm trong bảng (kể cả các dòng đã bấm trước đó).
 
 ### 🔁 Bàn giao khách hàng
 
