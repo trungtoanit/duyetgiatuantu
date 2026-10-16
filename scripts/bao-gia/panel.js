@@ -1337,6 +1337,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sec-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
     .sec-head .cnt { background: #1d4ed8; color: #fff; border-radius: 999px; padding: 1px 10px; font-size: 13px; }
     .sec-right { display: flex; align-items: center; gap: 8px; }
+    .search { display: flex; align-items: center; gap: 6px; border: 1px solid #cbd5e1; border-radius: 999px; padding: 4px 12px; background: #fff;
+      width: 300px; transition: border-color .15s, box-shadow .15s; }
+    .search:focus-within { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .search input { border: 0; outline: 0; font: inherit; font-size: 13px; width: 100%; background: transparent; color: #0f172a; }
     .sec-right .rev { margin: 0; font-size: 15px; padding: 4px 12px; }
     .sortbtn2 { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #334155;
       border-radius: 999px; padding: 4px 12px; }
@@ -1570,7 +1574,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     maybeAutoOpen();
     let saveTimer;
     root.querySelector('.side').addEventListener('click', onClick);
+    let searchTimer;
     const onInput = (e) => {
+      const se = e.target.closest('input.dg-search');
+      if (se) {
+        state.search = se.value;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(async () => {
+          await render();
+          // Vẽ lại xong → đặt lại con trỏ vào ô tìm
+          const el = root.querySelector('input.dg-search');
+          if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          }
+        }, 250);
+        return;
+      }
       const qe = e.target.closest('textarea.quick-edit');
       if (qe) {
         clearTimeout(saveTimer);
@@ -2382,7 +2402,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       offset: ({ q }) => kindOf(q) === 'offset',
       both: ({ q }) => kindOf(q) === 'both',
     };
-    const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items);
+    // Tìm theo tên cơ hội / mã KH / tên khách / mã BG – không phân biệt dấu, hoa thường
+    const fold = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+    const needle = fold(state.search).trim();
+    const searchHit = ({ q, c }) =>
+      !needle || fold(`${q?.name || ''} ${q?.customer?.code || ''} ${q?.customer?.name || ''} ${q?.code || c?.code || ''}`).includes(needle);
+    const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items).filter(searchHit);
     const filterChip = (f, cls, label) =>
       ` <button class="${cls} chipbtn${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">${label}</button>`;
     // Thanh lọc: chia nhóm (Trạng thái · Tín hiệu khách · Lợi nhuận & loại hàng); chip đang chọn tô đậm màu nhóm
@@ -2474,7 +2499,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const unreadN = merged.filter(({ q }) => q?.isRead === false).length;
     const overdueBox = `
       <div class="sec-head"><h3>🎯 Báo giá khả thi & chưa đọc <span class="cnt">${merged.length}</span></h3>
-        <div class="sec-right">${totalBadge(merged)}
+        <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged)}
         <button class="sortbtn2" data-act="sort" title="Đổi cách sắp xếp">↕ ${sortMode() === 'erp' ? 'Như ERP' : 'Theo điểm'}</button></div></div>
       ${filterBar(merged)}
       <div class="hint muted">Báo giá chưa chốt có điểm khả năng chốt đơn (🎯) + mọi báo giá chưa đọc (in đậm) trên CRM. Bấm “📬 chưa đọc” để chỉ xem báo giá chưa đọc.</div>
@@ -2490,6 +2515,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         : ''}`;
 
 
+    const searchFocused = root.activeElement?.classList?.contains('dg-search');
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
       <div class="muted">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
@@ -2504,6 +2530,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${overdueBox}
       ${learnedBox(await kvGet('learned'))}
     `;
+    if (searchFocused) {
+      const el = root.querySelector('input.dg-search');
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    }
     // Ảnh lỗi → chữ cái đầu
     root.querySelectorAll('img.ava').forEach((img) =>
       img.addEventListener('error', () => {
