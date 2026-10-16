@@ -116,6 +116,52 @@
     children: (f.children || []).map(slimComment),
   });
 
+  // Danh sách thông báo (chuông): dò mảng thông báo trong dữ liệu (không phụ thuộc tên trường),
+  // rút gọn mỗi thông báo: nội dung, thời gian, đã đọc/chưa đọc, link / mã báo giá.
+  const strip = (t) => String(t || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const pick = (o, keys) => {
+    for (const k of keys) if (o?.[k] != null && o[k] !== '') return o[k];
+    return undefined;
+  };
+  function slimNotif(o) {
+    const strs = Object.entries(o).filter(([, v]) => typeof v === 'string');
+    const text = strip(pick(o, ['content', 'description', 'body', 'message', 'text', 'msg']) ?? strs.map(([, v]) => v).sort((a, b) => b.length - a.length)[0]);
+    if (!text) return null;
+    // Cờ đã đọc: isRead / read / seen / isSeen / readAt / status 'READ'...
+    let read;
+    for (const [k, v] of Object.entries(o)) {
+      if (/^(is_?)?(read|seen|viewed)$/i.test(k)) read = !!v;
+      else if (/^(read|seen)_?at$/i.test(k)) read = v != null && v !== '';
+      else if (/^(is_?)?unread$/i.test(k)) read = !v;
+    }
+    if (read === undefined && typeof o.status === 'string' && /read|seen|unread|new/i.test(o.status)) read = /^(read|seen)$/i.test(o.status);
+    const data = o.data && typeof o.data === 'object' ? o.data : {};
+    return {
+      id: o.id ?? o._id,
+      title: strip(pick(o, ['title', 'name', 'subject', 'type'])),
+      text,
+      read,
+      at: pick(o, ['createdAt', 'created_at', 'time', 'updatedAt']),
+      link: pick(o, ['link', 'url', 'path', 'href']) ?? pick(data, ['link', 'url', 'path']),
+      oppId: pick(o, ['opportunityId', 'objectId', 'refId']) ?? o.opportunity?.id ?? pick(data, ['opportunityId', 'id']),
+    };
+  }
+  function emitNotifs(d) {
+    let best = null;
+    const walk = (o, depth) => {
+      if (!o || typeof o !== 'object' || depth > 4) return;
+      if (Array.isArray(o)) {
+        const objs = o.filter((x) => x && typeof x === 'object' && !Array.isArray(x) && (x.id ?? x._id) != null);
+        if (objs.length && (!best || objs.length > best.length)) best = objs;
+        return;
+      }
+      Object.values(o).forEach((v) => walk(v, depth + 1));
+    };
+    walk(d, 0);
+    const list = (best || []).map(slimNotif).filter((n) => n && n.id != null);
+    if (list.length) emit('notifs', list);
+  }
+
   function handle(url, text) {
     if (!API.test(url)) return;
     let d;
@@ -133,7 +179,7 @@
       return;
     }
     // Thông báo (chuông): tìm các câu "X đã bàn giao khách hàng Y cho nhân viên Z" ở bất kỳ đâu trong dữ liệu
-    if (/notif/i.test(url)) {
+    if (/noti/i.test(url)) {
       const found = [];
       const walk = (o) => {
         if (!o || typeof o !== 'object') return;
@@ -146,6 +192,7 @@
       };
       walk(d);
       if (found.length) emit('handovers', found);
+      emitNotifs(d);
       return;
     }
     // Danh sách báo giá (trang /bao-gia)

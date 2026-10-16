@@ -62,6 +62,12 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### 💬 Bình luận mới nhất
+
+Đầu bảng 📊 (bên phải) hiện 8 thông báo bình luận mới nhất từ chuông của CRM. Thông báo chưa đọc (theo CRM)
+in đậm, có chấm xanh. Bấm vào để mở đúng báo giá. Danh sách thông báo kèm trạng thái đã đọc / chưa đọc được
+lưu vào kho dữ liệu (`notifs`, đồng bộ Supabase), tách theo từng tài khoản CRM.
+
 ### 🔁 Bàn giao khách hàng
 
 Khi chuông thông báo của CRM có "A đã bàn giao khách hàng X cho nhân viên B" (trong 14 ngày gần nhất),

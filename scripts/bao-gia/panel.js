@@ -274,6 +274,16 @@
       await kvMerge('margins', { [data.code]: cur });
     } else if (kind === 'orders') {
       await kvMerge('orders', { [data.customerId]: { ...data, at: Math.floor(Date.now() / 1000) } });
+    } else if (kind === 'notifs') {
+      // Thông báo là của từng tài khoản CRM → khoá theo người đang đăng nhập
+      const me = await kvGet('me');
+      const who = me?.id ?? meName;
+      const patch = {};
+      for (const n of data) {
+        const at = toSec(n.at);
+        patch[`${who}:${n.id}`] = { ...n, at, owner: who, ownerName: me?.name || meName, seenAt: Math.floor(Date.now() / 1000) };
+      }
+      await kvMerge('notifs', patch);
     } else if (kind === 'handovers') {
       await saveHandovers(data);
     } else if (kind === 'comments') {
@@ -1267,6 +1277,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     textarea.suggest-edit { width: 100%; min-height: 110px; border: 1px solid #c8d6f5; border-radius: 8px; padding: 10px;
       background: #eef4ff; font: inherit; line-height: 1.5; resize: vertical; margin-top: 8px; color: inherit; }
     .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    /* Đầu bảng: thông tin bên trái, "Bình luận mới nhất" bên phải */
+    .headrow { display: flex; gap: 16px; align-items: flex-start; }
+    .headinfo { flex: 1 1 auto; min-width: 0; }
+    .nbox { flex: 0 1 560px; min-width: 280px; border: 1px solid #dbe4f0; border-radius: 10px; padding: 6px 8px; background: #fbfdff; }
+    .nbox-h { font-weight: 700; font-size: 12px; color: #334155; margin-bottom: 2px; }
+    .nbadge { background: #ef4444; color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; margin-left: 4px; }
+    .nitem { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; font-size: 12px; color: #64748b; text-decoration: none; }
+    a.nitem:hover { background: #eef4ff; }
+    .nitem .ntext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nitem .nago { flex: none; font-size: 11px; color: #94a3b8; }
+    .nitem .ndot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+    .nitem.unread-n { color: #0f172a; font-weight: 700; background: #f0f6ff; }
+    .nitem.unread-n .ndot { background: #2563eb; }
+    @media (max-width: 900px) { .headrow { flex-direction: column; } .nbox { width: 100%; } }
     .warn { background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
     .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
     .label { margin-top: 10px; font-weight: 600; }
@@ -2529,13 +2553,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const searchFocused = root.activeElement?.classList?.contains('dg-search');
     root.querySelector('.panel').innerHTML = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
-      <div class="muted">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
+      <div class="headrow"><div class="muted headinfo">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
       ${(() => {
         const done = all.filter((x) => collected[x.id] || comments[x.id]?.threads?.length).length;
         const pctDone = all.length ? Math.round((done / all.length) * 100) : 0;
         return `<div class="cov"><div class="cov-bar"><span style="width:${pctDone}%"></span></div><span>Extension đã đọc <b>${pctDone}%</b> (${done}/${all.length})${pctDone < 100 ? ' – bấm <b>📦 Thu thập toàn bộ</b> trong popup để đọc 100%' : ' ✅'}</span></div>`;
       })()}
       Bật/tắt thu thập ngầm, tự mở bảng và xem chi phí Claude trong popup của extension.</div>
+      ${notifBox(await kvGet('notifs'), quotes, await kvGet('me'))}</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${handoverBox(handovers, quotes)}
       ${overdueBox}
@@ -2556,6 +2581,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         img.replaceWith(span);
       }),
     );
+  }
+
+  // Bình luận mới nhất từ chuông thông báo của CRM (đã đọc / chưa đọc theo CRM); bấm để mở báo giá
+  function notifBox(notifs, quotes, me) {
+    const who = me?.id ?? meName;
+    const byCode = {};
+    for (const q of Object.values(quotes)) if (q?.code) byCode[q.code] = q;
+    const items = Object.values(notifs || {})
+      .filter((n) => n.owner === who && /bình luận/i.test(`${n.title} ${n.text}`))
+      .sort((a, b) => (b.at || 0) - (a.at || 0))
+      .slice(0, 8);
+    if (!items.length) return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất</div><div class="muted">Bấm chuông thông báo của CRM một lần để extension ghi lại.</div></div>`;
+    const unread = items.filter((n) => n.read === false).length;
+    const rows = items.map((n) => {
+      const code = n.text.match(/#?(BG\d+)/)?.[1];
+      const q = code && byCode[code];
+      const href = q ? `/bao-gia/update/${q.id}` : n.link ? String(n.link).replace(/^https?:\/\/[^/]+/, '') : n.oppId ? `/bao-gia/update/${n.oppId}` : '';
+      const cls = `nitem ${n.read === false ? 'unread-n' : ''}`;
+      const body = `<span class="ndot"></span><span class="ntext">${esc(n.text)}</span><span class="nago">${n.at ? ago(n.at) : ''}</span>`;
+      return href
+        ? `<a class="${cls}" href="${esc(href)}" data-nav data-code="${esc(code || '')}" title="${esc(n.text)}">${body}</a>`
+        : `<div class="${cls}" title="${esc(n.text)}">${body}</div>`;
+    });
+    return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất${unread ? ` <span class="nbadge">${unread} chưa đọc</span>` : ''}</div>${rows.join('')}</div>`;
   }
 
   function handoverBox(list, quotes) {
