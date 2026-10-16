@@ -266,7 +266,14 @@
       await kvMerge('quotes', patch);
     } else if (kind === 'quote') {
       const cur = await kvGet('quotes');
-      await kvMerge('quotes', { [data.id]: { ...cur[data.id], ...definedOnly(data) } });
+      const old = cur[data.id] || {};
+      const next = definedOnly(data);
+      // Trang chi tiết có thể thiếu người phụ trách khách → giữ NVKD (cột Sale) đã có từ danh sách
+      if (next.staffKey === 'staff' && old.staffKey && old.staffKey !== 'staff') {
+        next.staff = old.staff;
+        next.staffKey = old.staffKey;
+      }
+      await kvMerge('quotes', { [data.id]: { ...old, ...next } });
     } else if (kind === 'margin') {
       const all = await kvGet('margins');
       const cur = all[data.code] || { products: {} };
@@ -1285,8 +1292,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .it-ago { color: #64748b; font-size: 12px; text-align: right; }
     .it-amt { text-align: right; font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
     .it-amt .noprice { margin-left: 0; font-size: 11px; padding: 0 6px; }
-    .it-pct { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
-    .it-pct b.good { color: #047857; } .it-pct b.bad { color: #b91c1c; }
+    .it-pct { display: flex; justify-content: flex-end; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .pc { width: 50px; flex: none; text-align: center; border-radius: 6px; padding: 2px 0; font-weight: 800; border-left: 3px solid transparent; }
+    .pc.f { background: #eff6ff; border-left-color: #3b82f6; }
+    .pc.o { background: #faf5ff; border-left-color: #a855f7; }
+    .pc.good { color: #047857; } .pc.bad { color: #b91c1c; }
+    .pc.wait { color: #94a3b8; font-weight: 600; }
+    .pc.warn { color: #b45309; font-size: 10px; }
     .it-fea { text-align: right; font-weight: 800; color: #1d4ed8; }
     .it-fea .fea { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 800; }
     .item-main { flex: 1; min-width: 0; }
@@ -2328,11 +2340,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return '';
     const { flexo, offset } = marginParts(q);
-    const segs = [];
-    if (kinds.includes('flexo'))
-      segs.push(flexo ? (flexo.invalid ? '🟦 <span class="warnx">PO&gt;BG</span>' : `🟦<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '🟦<span class="muted">…</span>');
-    if (kinds.includes('offset')) segs.push(offset != null ? `🟪<b class="${pctCls(offset)}">${offset}%</b>` : '🟪<span class="muted">…</span>');
-    return segs.join(' ');
+    // 2 ô cố định: Flexo (trái) · Offset (phải) – không có loại đó thì để ô trống cho thẳng cột
+    const fmt = (v) => `${Math.round(v)}%`;
+    const fx = !kinds.includes('flexo')
+      ? '<span class="pc"></span>'
+      : flexo
+        ? flexo.invalid
+          ? '<span class="pc f warn" title="Tổng PO giấy tấm lớn hơn giá trị báo giá">PO&gt;BG</span>'
+          : `<span class="pc f ${pctCls(flexo.rest)}" title="Flexo: còn ${flexo.rest}% sau giấy tấm">${fmt(flexo.rest)}</span>`
+        : '<span class="pc f wait" title="Flexo: đang chờ tính">…</span>';
+    const of = !kinds.includes('offset')
+      ? '<span class="pc"></span>'
+      : offset != null
+        ? `<span class="pc o ${pctCls(offset)}" title="Offset: đang bán ${offset}%">${fmt(offset)}</span>`
+        : '<span class="pc o wait" title="Offset: đang chờ tính">…</span>';
+    return fx + of;
   };
   const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
 
@@ -2757,7 +2779,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const sumTip = `Tổng ${rows.length} báo giá đang hiện: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
