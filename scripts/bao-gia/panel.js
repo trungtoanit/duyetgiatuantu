@@ -2897,7 +2897,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     for (const q of Object.values(quotes)) if (q?.code) byCode[q.code] = q;
     const items = Object.values(notifs || {})
       // Bỏ bình luận của chính mình ("Nguyễn Trung Toán vừa bình luận vào…")
-      .filter((n) => n.owner === who && /bình luận/i.test(`${n.title} ${n.text}`) && !n.text.startsWith(`${myName(me)} vừa bình luận`))
+      .filter((n) => n.owner === who && /bình luận vào khách hàng/i.test(n.text || "") && !n.text.startsWith(`${myName(me)} vừa bình luận`))
       .sort((a, b) => (b.at || 0) - (a.at || 0))
       .slice(0, 8);
     if (!items.length) return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất</div><div class="muted">Bấm chuông thông báo của CRM một lần để extension ghi lại.</div></div>`;
