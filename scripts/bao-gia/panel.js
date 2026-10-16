@@ -1333,6 +1333,32 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .tgt { margin-left: 6px; display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     button.chipbtn { cursor: pointer; font: inherit; font-size: 13px; }
+    .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 8px; }
+    .sec-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .sec-head .cnt { background: #1d4ed8; color: #fff; border-radius: 999px; padding: 1px 10px; font-size: 13px; }
+    .sec-right { display: flex; align-items: center; gap: 8px; }
+    .sec-right .rev { margin: 0; font-size: 15px; padding: 4px 12px; }
+    .sortbtn2 { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #334155;
+      border-radius: 999px; padding: 4px 12px; }
+    .sortbtn2:hover { border-color: #6366f1; color: #4338ca; }
+    .fbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 18px; background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; }
+    .fgroup { display: flex; align-items: center; gap: 8px; }
+    .fname { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+    .fchips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .fchip { --c: #475569; --bg: #f1f5f9; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font: inherit; font-size: 13px;
+      font-weight: 600; color: #334155; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 4px 3px 10px;
+      transition: border-color .15s, box-shadow .15s, transform .1s; }
+    .fchip .fi { font-size: 12px; }
+    .fchip b { min-width: 22px; text-align: center; font-size: 12px; color: var(--c); background: var(--bg); border-radius: 999px; padding: 1px 7px; }
+    .fchip:hover { border-color: var(--c); box-shadow: 0 2px 8px rgba(15,23,42,.08); transform: translateY(-1px); }
+    .fchip.on { background: var(--c); border-color: var(--c); color: #fff; }
+    .fchip.on b { background: rgba(255,255,255,.25); color: #fff; }
+    .fchip.blue { --c: #1d4ed8; --bg: #dbeafe; } .fchip.slate { --c: #475569; --bg: #e2e8f0; } .fchip.red { --c: #dc2626; --bg: #fee2e2; }
+    .fchip.amber { --c: #b45309; --bg: #fef3c7; } .fchip.sky { --c: #0369a1; --bg: #e0f2fe; } .fchip.pink { --c: #be185d; --bg: #fce7f3; }
+    .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
+    .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
+      color: #fff; border-radius: 999px; padding: 4px 12px; }
     button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
     .nodep { margin-left: 6px; display: inline-block; background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
@@ -2352,36 +2378,52 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const applyFilter = (items) => (FILTERS[state.filter] ? items.filter(FILTERS[state.filter]) : items);
     const filterChip = (f, cls, label) =>
       ` <button class="${cls} chipbtn${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">${label}</button>`;
-    const revenueHtml = (items) => {
-      // Tổng tiền theo danh sách đang lọc (các nhãn đếm vẫn tính trên cả danh sách để bấm chuyển lọc)
+    // Thanh lọc: chia nhóm (Trạng thái · Tín hiệu khách · Lợi nhuận & loại hàng); chip đang chọn tô đậm màu nhóm
+    const fchip = (f, tone, icon, label, n) =>
+      `<button class="fchip ${tone}${state.filter === f ? ' on' : ''}" data-act="filter" data-f="${f}" title="Bấm để lọc / bỏ lọc">` +
+      `<span class="fi">${icon}</span>${label}<b>${n}</b></button>`;
+    const totalBadge = (items) => {
       const shown = applyFilter(items);
       const total = shown.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
-      const zero = items.filter(({ q }) => noPrice(q)).length;
-      const tgt = items.filter(({ c }) => targetPriceInfo(c)).length;
-      const nodep = items.filter(({ c }) => noDepositInfo(c)).length;
-      const high = items.filter(({ c }) => highPriceInfo(c)).length;
-      const credit = items.filter(({ c }) => creditInfo(c)).length;
-      const promise = items.filter(({ q, c }) => promiseInfo(q, c)).length;
-      const sample = items.filter(({ c }) => sampleInfo(c)).length;
-      const contract = items.filter(({ c }) => contractInfo(c)).length;
-      const nocmt = items.filter(({ c }) => !c?.threads?.length).length;
-      const lowm = items.filter(({ q }) => (marginOf(q) ?? 100) < 30).length;
+      return total
+        ? `<span class="rev" title="${money(total)} · ${state.filter ? `${shown.length} báo giá đang lọc` : `${items.length} báo giá`}">💰 ${moneyShort(total)}${state.filter ? ` <small>· ${shown.length} đang lọc</small>` : ''}</span>`
+        : '';
+    };
+    const filterBar = (items) => {
+      const cnt = (fn) => items.filter(fn).length;
       const kinds = { flexo: 0, offset: 0, both: 0 };
       items.forEach(({ q }) => { const k = kindOf(q); if (k) kinds[k]++; });
-      return (total ? ` <span class="rev" title="${state.filter ? `Tổng ${shown.length} báo giá đang lọc` : `Tổng ${items.length} báo giá`}">💰 ${money(total)}${state.filter ? ` <small>(${shown.length} đang lọc)</small>` : ''}</span>` : '') +
-        (zero ? filterChip('zero', 'noprice', `⚠️ ${zero} chưa cho giá`) : '') +
-        (tgt ? filterChip('tgt', 'tgt', `💲 ${tgt} khách cho giá`) : '') +
-        (nodep ? filterChip('nodep', 'nodep', `🚫 ${nodep} chưa cọc`) : '') +
-        (high ? filterChip('high', 'hip', `💸 ${high} giá cao`) : '') +
-        (credit ? filterChip('credit', 'crd', `🧾 ${credit} xin công nợ`) : '') +
-        (promise ? filterChip('promise', 'prm', `🤝 ${promise} hứa lên đơn`) : '') +
-        (sample ? filterChip('sample', 'smp', `✂️ ${sample} cắt mẫu`) : '') +
-        (contract ? filterChip('contract', 'ctr', `📝 ${contract} hợp đồng`) : '') +
-        (nocmt ? filterChip('nocmt', 'ncm', `📭 ${nocmt} chưa có bình luận`) : '') +
-        (lowm ? filterChip('lowm', 'mgn low', `📈 ${lowm} bán dưới 30%`) : '') +
-        Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => filterChip(k, `knd ${k}`, `${KIND_LABEL[k]} ${n}`)).join('') +
-        (state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : '');
+      const groups = [
+        ['Trạng thái', [
+          ['unread', 'blue', '📬', 'Chưa đọc', cnt(FILTERS.unread)],
+          ['nocmt', 'slate', '📭', 'Chưa có bình luận', cnt(FILTERS.nocmt)],
+          ['zero', 'red', '⚠️', 'Chưa cho giá', cnt(FILTERS.zero)],
+        ]],
+        ['Tín hiệu khách', [
+          ['tgt', 'blue', '💲', 'Khách cho giá', cnt(FILTERS.tgt)],
+          ['promise', 'amber', '🤝', 'Hứa lên đơn', cnt(FILTERS.promise)],
+          ['contract', 'sky', '📝', 'Hợp đồng', cnt(FILTERS.contract)],
+          ['sample', 'pink', '✂️', 'Cắt mẫu', cnt(FILTERS.sample)],
+          ['high', 'orange', '💸', 'Giá cao', cnt(FILTERS.high)],
+          ['credit', 'teal', '🧾', 'Xin công nợ', cnt(FILTERS.credit)],
+          ['nodep', 'red', '🚫', 'Chưa cọc', cnt(FILTERS.nodep)],
+        ]],
+        ['Lợi nhuận & loại', [
+          ['lowm', 'red', '📈', 'Bán dưới 30%', cnt(FILTERS.lowm)],
+          ['flexo', 'blue', '🟦', 'Flexo', kinds.flexo],
+          ['offset', 'violet', '🟪', 'Offset', kinds.offset],
+          ['both', 'violet', '🟦🟪', 'Flexo + Offset', kinds.both],
+        ]],
+      ];
+      return `<div class="fbar">${groups
+        .map(([name, chips]) => {
+          const html = chips.filter((c) => c[4] || state.filter === c[0]).map((c) => fchip(...c)).join('');
+          return html ? `<div class="fgroup"><span class="fname">${name}</span><div class="fchips">${html}</div></div>` : '';
+        })
+        .join('')}${state.filter ? '<button class="fclear" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</div>`;
     };
+    // (giữ tên cũ cho các chỗ khác)
+    const revenueHtml = (items) => totalBadge(items) + filterBar(items);
     // Mỗi báo giá 1 dòng: mã | KH, loại, nhãn, tên | NVKD | bình luận cuối | tiền | % | điểm
     // Tên gọn: 3 chữ → chữ cuối (Phan Văn Thịnh → Thịnh); 4 chữ trở lên → 2 chữ cuối (Lê Thị Đông Anh → Đông Anh)
     const shortName = (n) => {
@@ -2424,8 +2466,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const merged = [...feasible, ...unreadAll.filter(({ q }) => !feasibleIds.has(q.id)).map((x) => ({ ...x, f: null }))].sort(sortByErp);
     const unreadN = merged.filter(({ q }) => q?.isRead === false).length;
     const overdueBox = `
-      <h3>🎯 Báo giá khả thi & chưa đọc (${merged.length})${unreadN ? filterChip('unread', 'ncm', `📬 ${unreadN} chưa đọc`) : ''}${revenueHtml(merged)}
-        <button class="act chipbtn sortbtn" data-act="sort" title="Đổi cách sắp xếp">${sortMode() === 'erp' ? '↕ Xếp: như ERP' : '↕ Xếp: theo điểm'}</button></h3>
+      <div class="sec-head"><h3>🎯 Báo giá khả thi & chưa đọc <span class="cnt">${merged.length}</span></h3>
+        <div class="sec-right">${totalBadge(merged)}
+        <button class="sortbtn2" data-act="sort" title="Đổi cách sắp xếp">↕ ${sortMode() === 'erp' ? 'Như ERP' : 'Theo điểm'}</button></div></div>
+      ${filterBar(merged)}
       <div class="hint muted">Báo giá chưa chốt có điểm khả năng chốt đơn (🎯) + mọi báo giá chưa đọc (in đậm) trên CRM. Bấm “📬 chưa đọc” để chỉ xem báo giá chưa đọc.</div>
       ${merged.length
         ? `<div class="box unread">${listRows(merged)}</div>`
@@ -2435,7 +2479,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <div class="box unread">${listRows(samples)}</div>`
         : ''}
       ${silent.length
-        ? `<h3>📭 Chưa có bình luận (${silent.length})${revenueHtml(silent)}</h3><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${listRows(silent)}</div>`
+        ? `<div class="sec-head"><h3>📭 Chưa có bình luận <span class="cnt">${silent.length}</span></h3><div class="sec-right">${totalBadge(silent)}</div></div><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${listRows(silent)}</div>`
         : ''}`;
 
 
