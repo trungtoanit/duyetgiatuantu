@@ -2209,7 +2209,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   const xmlEsc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
   // rows: mảng các dòng; ô là số → kiểu số, còn lại là chữ. Dòng đầu là tiêu đề (in đậm, cố định khi cuộn).
-  function buildXlsx(rows, widths = [], sheetName = 'Báo giá') {
+  function buildXlsx(rows, widths = [], sheetName = 'Báo giá', filterRows = rows.length) {
     const col = (i) => (i >= 26 ? String.fromCharCode(64 + Math.floor(i / 26)) : '') + String.fromCharCode(65 + (i % 26));
     const sheetRows = rows
       .map((r, ri) => `<row r="${ri + 1}">${r
@@ -2217,20 +2217,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           const ref = `${col(ci)}${ri + 1}`;
           const st = ri === 0 ? ' s="1"' : '';
           if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}" s="${ri ? 2 : 1}"><v>${v}</v></c>`;
+          if (v && typeof v === 'object' && v.f) return `<c r="${ref}" s="${v.bold ? 1 : 2}"><f>${xmlEsc(v.f)}</f>${Number.isFinite(v.v) ? `<v>${v.v}</v>` : ''}</c>`;
+          if (v && typeof v === 'object' && v.bold) return `<c r="${ref}" t="inlineStr" s="1"><is><t xml:space="preserve">${xmlEsc(v.t)}</t></is></c>`;
           if (v == null || v === '') return '';
           return `<c r="${ref}" t="inlineStr"${st}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
         })
         .join('')}</row>`)
       .join('');
     const cols = widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
-    const last = `${col(Math.max(0, (rows[0] || []).length - 1))}${rows.length}`;
+    const last = `${col(Math.max(0, (rows[0] || []).length - 1))}${filterRows}`;
     return zipStore({
       '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
       '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
       'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc(sheetName.slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
       'xl/_rels/workbook.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
       'xl/styles.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE2E8F0"/></patternFill></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>',
-      'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${sheetRows}</sheetData>${rows.length > 1 ? `<autoFilter ref="A1:${last}"/>` : ''}</worksheet>`,
+      'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${sheetRows}</sheetData>${filterRows > 1 ? `<autoFilter ref="A1:${last}"/>` : ''}</worksheet>`,
     });
   }
   function downloadBlob(blob, name) {
@@ -2650,9 +2652,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const f = (v) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return n >= 1e9 ? `${f(n / 1e9)} tỷ` : n >= 1e6 ? `${f(n / 1e6)} triệu` : money(n);
     };
-    const listRows = (items) => {
+    const listRows = (items, forExport = false) => {
       const rows = applyFilter(items);
-      state.exportRows = rows; // nút Xuất Excel xuất đúng danh sách đang hiện (đã lọc / tìm / xếp)
+      // Nút Xuất Excel xuất đúng bảng chính đang hiện (đã lọc / tìm / xếp) – không lấy các bảng phụ bên dưới
+      if (forExport) state.exportRows = rows;
       if (!rows.length) return '<span class="muted">Không có báo giá phù hợp bộ lọc</span>';
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
@@ -2663,6 +2666,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const feasibleIds = new Set(feasible.map(({ q }) => q.id));
     const merged = [...feasible, ...unreadAll.filter(({ q }) => !feasibleIds.has(q.id)).map((x) => ({ ...x, f: null }))].sort(sortByErp);
     const unreadN = merged.filter(({ q }) => q?.isRead === false).length;
+    state.exportRows = []; // bảng chính trống thì không xuất danh sách cũ
     const overdueBox = `
       <div class="sec-head"><h3>🎯 Báo giá khả thi & chưa đọc <span class="cnt">${merged.length}</span></h3>
         <div class="sec-right"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên cơ hội, mã KH…" value="${esc(state.search || '')}"></label>${totalBadge(merged)}
@@ -2671,7 +2675,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${filterBar(merged)}
       <div class="hint muted">Báo giá chưa chốt có điểm khả năng chốt đơn (🎯) + mọi báo giá chưa đọc (in đậm) trên CRM. Bấm “📬 chưa đọc” để chỉ xem báo giá chưa đọc.</div>
       ${merged.length
-        ? `<div class="box unread">${listRows(merged)}</div>`
+        ? `<div class="box unread">${listRows(merged, true)}</div>`
         : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi hoặc chưa đọc.</div>'}
       ${samples.length
         ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
@@ -2822,7 +2826,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const widths = [5, 10, 30, 14, 36, 50, 22, 14, 10, 14, 22, 16, 9, 10, 9, 7, 40, 42];
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-    downloadBlob(buildXlsx([head, ...data], widths), `bao-gia-kha-thi-${stamp}.xlsx`);
+    // Dòng tổng: SUBTOTAL(9, …) – lọc trong Excel thì tổng tự tính lại theo dòng đang hiện
+    const ai = head.indexOf('Số tiền');
+    const colL = String.fromCharCode(65 + ai);
+    const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+    const sumRow = head.map((_, i) => (i === ai - 1 ? { t: `Tổng ${rows.length} báo giá`, bold: true } : i === ai ? { f: `SUBTOTAL(9,${colL}2:${colL}${rows.length + 1})`, v: total, bold: true } : ''));
+    downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
   }
 
   async function onClick(e) {
