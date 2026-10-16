@@ -1462,7 +1462,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .side table td, .side table th { white-space: normal; }
     .warnx { color: #b45309; font-weight: 700; font-size: 12px; }
     .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; cursor: move; user-select: none; touch-action: none; }
-    .side .grip { color: #94a3b8; font-size: 14px; }
+    .side .side-grip { color: #94a3b8; font-size: 14px; }
     .side-btn { margin-left: auto; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; width: 24px; height: 22px; cursor: pointer; font-size: 12px; line-height: 1; }
     .side.collapsed { width: auto; padding: 8px 10px; }
     .side.collapsed .side-h { margin-bottom: 0; }
@@ -2272,7 +2272,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kinds.includes('flexo') ? `🟦 ${flexo ? (flexo.invalid ? '⚠️' : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : '–'}` : '',
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
-    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${busy ? ' <span class="spinner"></span>' : ''}
+    const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${busy ? ' <span class="spinner"></span>' : ''}
       ${collapsed ? `<span class="side-mini">${mini}</span>` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
     if (collapsed) {
       el.innerHTML = header;
