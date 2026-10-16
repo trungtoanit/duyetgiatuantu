@@ -320,7 +320,7 @@
       const cur = await kvGet('comments');
       const patch = {};
       for (const c of data) {
-        patch[c.id] = { id: c.id, code: c.code, threads: mergeThreads(cur[c.id]?.threads, c.threads) };
+        patch[c.id] = { id: c.id, code: c.code, customerId: c.customerId ?? cur[c.id]?.customerId, threads: mergeThreads(cur[c.id]?.threads, c.threads) };
       }
       await kvMerge('comments', patch);
     }
@@ -2154,8 +2154,29 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const selfFix = (t, p) => (p === 'anh' ? t.replace(/\b(giúp|với|cho|báo|tính lại|duyệt|hỗ trợ) anh\b/g, '$1 em').replace(/Giá anh duyệt/g, 'Giá em duyệt') : t);
 
   // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
+  // Bình luận mới nhất trong mọi báo giá cùng khách; trả về nếu đó là dòng "… lên đơn hàng …" / "Mã đơn hàng Misa"
+  const ORDER_NOTE_RE = /lên đơn hàng|mã đơn hàng misa/i;
+  function lastCustomerOrderNote(q) {
+    const cid = q?.customer?.id;
+    if (!cid) return null;
+    let latest = null;
+    const walk = (t) => {
+      if (t.createdAt && (!latest || t.createdAt > latest.createdAt)) latest = t;
+      (t.children || []).forEach(walk);
+    };
+    for (const c2 of Object.values(renderCtx.comments || {})) {
+      if (c2.id !== q.id && c2.customerId !== cid && renderCtx.quotes?.[c2.id]?.customer?.id !== cid) continue;
+      (c2.threads || []).forEach(walk);
+    }
+    return latest && ORDER_NOTE_RE.test(latest.text || '') ? latest : null;
+  }
   function quickQuestion(q, c, mode, p) {
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
+    // Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã lâu → hỏi vì sao lâu chưa xuống đơn
+    const lo = lastCustomerOrderNote(q);
+    if (lo && hoursSince(lo.createdAt) >= 30 * 24) {
+      return { icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: `Vì sao khách hàng này lâu chưa xuống đơn hàng vậy ${p}?` };
+    }
     // Chưa có bình luận nào (đã mở xem/ thu thập mà không thấy) → hỏi NVKD vì sao chưa có thông tin
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
     if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {

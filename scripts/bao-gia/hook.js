@@ -276,7 +276,9 @@
       for (const f of d.fileAttaches) {
         const o = f.opportunity;
         if (!o?.id) continue;
-        (byOpp[o.id] ||= { id: o.id, code: o.code, threads: [] }).threads.push(slimComment(f));
+        // Khách của báo giá (để gom bình luận mọi báo giá cùng khách)
+        const cust = o.customer?.id ?? o.customerId ?? f.customer?.id ?? f.customerId ?? Number(url.match(/[?&]customerId=(\d+)/)?.[1]) ?? undefined;
+        (byOpp[o.id] ||= { id: o.id, code: o.code, customerId: cust || undefined, threads: [] }).threads.push(slimComment(f));
       }
       const list = Object.values(byOpp);
       if (list.length) emit('comments', list);
