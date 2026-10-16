@@ -1064,6 +1064,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return true;
   }
 
+  let lastListRun = 0;
   async function runCollector(force = false) {
     if (!IS_TOP || collect.running) return;
     if (!force && !(await getSettings()).auto) return;
@@ -1076,7 +1077,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     try {
       // Thu thập toàn bộ: đọc hết các trang danh sách ở lượt đầu, các lượt sau chỉ đọc bình luận
       const fc = full ? await kvGet('fullCollect') : null;
-      if (!full) await collectListPages();
+      // Đọc 10 trang danh sách tối đa 30 phút/lần (lượt cập nhật nhanh 2 phút đã đọc 3 trang đầu)
+      if (!full && Date.now() - lastListRun > 30 * 60000) {
+        lastListRun = Date.now();
+        await collectListPages();
+      }
       else if (!fc.listDone) {
         await collectListPages(999);
         await call({ type: 'kv.set', key: 'fullCollect', value: { ...fc, listDone: Date.now() } });
@@ -1219,6 +1224,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Nút "Chạy ngay" trong popup extension ghi kv collectNow = thời điểm bấm
     let handledNow = Date.now();
     let lastFullRun = 0;
+    let lastAutoCheck = Date.now();
     setInterval(async () => {
       if (collect.running) return;
       const t = await call({ type: 'kv.get', key: 'collectNow' }).catch(() => null);
@@ -1230,7 +1236,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const fc = await call({ type: 'kv.get', key: 'fullCollect' }).catch(() => null);
       if (fc?.on && Date.now() - lastFullRun > 60000 && Date.now() - collect.lastRun > 60000) {
         lastFullRun = Date.now();
-        runCollector(true);
+        return runCollector(true);
+      }
+      // Thu thập ngầm đang bật: còn báo giá chưa đọc / cần đọc lại → tự chạy tiếp, nghỉ 2 phút giữa các lượt (không cần bấm "Chạy ngay")
+      if (!fc?.on && Date.now() - collect.lastRun > 120000 && Date.now() - lastAutoCheck > 120000) {
+        lastAutoCheck = Date.now();
+        if (!(await getSettings()).auto) return;
+        const [quotes, comments, collected] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('collected')]);
+        if (pickQueue(quotes, comments, collected).length) runCollector();
       }
     }, 3000);
   }
