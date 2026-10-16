@@ -1284,6 +1284,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .it-pct { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
     .it-pct b.good { color: #047857; } .it-pct b.bad { color: #b91c1c; }
     .it-fea { text-align: right; font-weight: 800; color: #1d4ed8; }
+    .it-fea .fea { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 800; }
     .item-main { flex: 1; min-width: 0; }
     .item-amt { flex: none; min-width: 150px; text-align: right; font-size: 16px; font-weight: 800; color: #047857;
       font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -2525,6 +2526,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const w = (n || '').trim().split(/\s+/).filter(Boolean);
       return w.length >= 4 ? w.slice(-2).join(' ') : w.length === 3 ? w[2] : w.join(' ');
     };
+    // Màu điểm khả thi: dưới 30 xám, 30 → cam, càng cao càng xanh lá (đậm nhất từ 110 điểm)
+    const feaStyle = (score) => {
+      if (score < 30) return 'color:#94a3b8;background:#f1f5f9';
+      const t = Math.min(1, (score - 30) / 80);
+      const hue = Math.round(30 + t * 112); // 30 = cam, 142 = xanh lá
+      return `color:hsl(${hue},75%,${Math.round(40 - t * 12)}%);background:hsl(${hue},80%,${Math.round(95 - t * 6)}%)`;
+    };
     const itemHtml = ({ q, c, last, f }, i) => {
       const staff = staffOf(q, c);
       const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
@@ -2540,7 +2548,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
       <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
       <span class="it-pct">${pctCell(q)}</span>
-      <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `🎯${f.score}` : ''}</span></a>`;
+      <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `<b class="fea" style="${feaStyle(f.score)}">🎯${f.score}</b>` : ''}</span></a>`;
     };
     // Dòng tiêu đề cột (dính trên đầu khi cuộn) + tổng tiền ngay trên cột Số tiền
     // 20.315.464.107đ → "20,32 tỷ"; dưới 1 tỷ → "845,20 triệu"
