@@ -2341,6 +2341,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       sample: ({ c }) => sampleInfo(c),
       contract: ({ c }) => contractInfo(c),
       nocmt: ({ c }) => !c?.threads?.length,
+      unread: ({ q }) => q?.isRead === false,
       sampleOrder: ({ q, c }) => sampleInfo(c) && hasOrderFull(q, c),
       sampleNo: ({ q, c }) => sampleInfo(c) && !hasOrderFull(q, c),
       lowm: ({ q }) => (marginOf(q) ?? 100) < 30,
@@ -2418,17 +2419,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct">%</span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
+    // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
+    const feasibleIds = new Set(feasible.map(({ q }) => q.id));
+    const merged = [...feasible, ...unreadAll.filter(({ q }) => !feasibleIds.has(q.id)).map((x) => ({ ...x, f: null }))].sort(sortByErp);
+    const unreadN = merged.filter(({ q }) => q?.isRead === false).length;
     const overdueBox = `
-      <h3>🎯 Báo giá khả thi (${feasible.length})${revenueHtml(feasible)}
+      <h3>🎯 Báo giá khả thi & chưa đọc (${merged.length})${unreadN ? filterChip('unread', 'ncm', `📬 ${unreadN} chưa đọc`) : ''}${revenueHtml(merged)}
         <button class="act chipbtn sortbtn" data-act="sort" title="Đổi cách sắp xếp">${sortMode() === 'erp' ? '↕ Xếp: như ERP' : '↕ Xếp: theo điểm'}</button></h3>
-      <div class="hint muted">Báo giá chưa chốt, xếp theo điểm khả năng chốt đơn (hứa lên đơn, khách cho giá, tái bản, khách quen, mới trao đổi…).</div>
-      ${feasible.length
-        ? `<div class="box unread">${listRows(feasible)}</div>`
-        : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi.</div>'}
-      ${unreadAll.length
-        ? `<h3>📬 Chưa đọc (${unreadAll.length})${revenueHtml(unreadAll)}</h3><div class="hint muted">Toàn bộ báo giá đang in đậm (chưa đọc) trên CRM.</div>
-          <div class="box unread">${listRows(unreadAll)}</div>`
-        : ''}
+      <div class="hint muted">Báo giá chưa chốt có điểm khả năng chốt đơn (🎯) + mọi báo giá chưa đọc (in đậm) trên CRM. Bấm “📬 chưa đọc” để chỉ xem báo giá chưa đọc.</div>
+      ${merged.length
+        ? `<div class="box unread">${listRows(merged)}</div>`
+        : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi hoặc chưa đọc.</div>'}
       ${samples.length
         ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
           <div class="box unread">${listRows(samples)}</div>`
