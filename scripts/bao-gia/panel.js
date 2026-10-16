@@ -461,7 +461,7 @@ Yêu cầu:
           'Giá anh gửi khách thấy sao rồi em, có ổn không?',
           'Báo giá này khách phản hồi sao rồi em? Có vướng chỗ nào không để anh hỗ trợ.',
           'Em ơi khách xem giá chưa, thấy ok không em?',
-          'Giá này khách có ý kiến gì không em? Cần anh điều chỉnh gì thì báo anh nhé.',
+          'Giá này khách có ý vấn đề gì không em?',
           'Khách nhận giá rồi thấy thế nào em, có hợp không?',
           'Em hỏi thăm khách giúp anh giá này ổn chưa nhé, khách cần gì thêm không?',
         ],
