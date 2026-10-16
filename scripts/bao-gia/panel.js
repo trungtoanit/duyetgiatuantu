@@ -204,7 +204,11 @@
     }
   };
   const rankOf = (q) => (Number.isFinite(q?.erpRank) ? q.erpRank : 1e9);
-  const sortByErp = (a, b) => (sortMode() === 'erp' ? rankOf(a.q) - rankOf(b.q) : 0);
+  // ERP xếp danh sách Báo giá theo thời gian cập nhật mới nhất (updatedAt giảm dần) → xếp theo đúng trường đó,
+  // không phụ thuộc vị trí ghi lại lúc thu thập (vị trí cũ bị lệch khi báo giá khác vừa được sửa)
+  const tsOf = (v) => (v ? (v > 1e11 ? v / 1000 : v) : 0);
+  const sortByErp = (a, b) =>
+    sortMode() === 'erp' ? tsOf(b.q?.updatedAt) - tsOf(a.q?.updatedAt) || rankOf(a.q) - rankOf(b.q) : 0;
 
   function feasibleList(quotes, comments, ordersMap) {
     return Object.values(quotes)
@@ -1123,13 +1127,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Cập nhật gần realtime theo ERP: mỗi 3 phút đọc lại 3 trang đầu danh sách Báo giá (trạng thái mới nhất),
   // và mở lại vài báo giá khả thi đã lâu chưa kiểm tra để bắt báo giá vừa lên đơn / chốt / thất bại.
-  const QUICK = { everyMin: 3, pages: 3, recheck: 4, recheckMin: 45 };
+  const QUICK = { everyMin: 2, pages: 3, recheck: 4, recheckMin: 45 };
+  let quickLast = 0;
   async function quickRefresh() {
     if (!IS_TOP || collect.running || document.hidden) return;
     if (!(await getSettings()).auto) return;
     if ((await kvGet('fullCollect'))?.on) return;
     if (!(await takeLock())) return;
     collect.running = true;
+    quickLast = Date.now();
     try {
       await collectListPages(QUICK.pages);
       const [quotes, comments, collected, orders] = await Promise.all(['quotes', 'comments', 'collected', 'orders'].map((k) => kvGet(k)));
@@ -1157,7 +1163,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   if (IS_TOP) {
     setInterval(() => quickRefresh(), QUICK.everyMin * 60 * 1000);
-    setTimeout(() => runCollector(), 15000);
+    setTimeout(() => quickRefresh(), 8000); // vừa mở trang → cập nhật ngay
+    // Quay lại tab / mở bảng mà đã hơn 1 phút chưa cập nhật → cập nhật ngay
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && Date.now() - quickLast > 60000) quickRefresh();
+    });
+    setTimeout(() => runCollector(), 90000); // sau lượt cập nhật nhanh đầu tiên
     setInterval(() => runCollector(), COLLECT.everyMin * 60 * 1000);
     // Nút "Chạy ngay" trong popup extension ghi kv collectNow = thời điểm bấm
     let handledNow = Date.now();
