@@ -1438,26 +1438,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sortbtn2 { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #334155;
       border-radius: 999px; padding: 4px 12px; }
     .sortbtn2:hover { border-color: #6366f1; color: #4338ca; }
-    .fbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 18px; background: #f8fafc; border: 1px solid #e2e8f0;
-      border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; }
-    .fgroup { display: flex; align-items: center; gap: 8px; }
-    .fname { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
-    .fchips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .fchip { --c: #475569; --bg: #f1f5f9; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font: inherit; font-size: 13px;
-      font-weight: 600; color: #334155; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 4px 3px 10px;
-      transition: border-color .15s, box-shadow .15s, transform .1s; }
-    .fchip .fi { font-size: 12px; }
-    .fchip b { min-width: 22px; text-align: center; font-size: 12px; color: var(--c); background: var(--bg); border-radius: 999px; padding: 1px 7px; }
-    .fchip:hover { border-color: var(--c); box-shadow: 0 2px 8px rgba(15,23,42,.08); transform: translateY(-1px); }
+    .fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; background: #f8fafc; border: 1px solid #eef2f7;
+      border-radius: 10px; padding: 6px 10px; margin-bottom: 6px; }
+    .fgroup { display: flex; align-items: center; gap: 6px; }
+    .fname { font-size: 9px; font-weight: 800; color: #a3aec2; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+    .fchips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .fchip { --c: #475569; --bg: #f1f5f9; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font: inherit; font-size: 12px;
+      font-weight: 600; line-height: 1.2; color: #334155; background: #fff; border: 1px solid #e5e9f0; border-radius: 999px; padding: 1px 2px 1px 8px;
+      transition: border-color .15s, box-shadow .15s; }
+    .fchip .fi { font-size: 11px; }
+    .fchip b { min-width: 18px; text-align: center; font-size: 11px; color: var(--c); background: var(--bg); border-radius: 999px; padding: 0 5px; }
+    .fchip:hover { border-color: var(--c); box-shadow: 0 1px 4px rgba(15,23,42,.08); }
     .fchip.on { background: var(--c); border-color: var(--c); color: #fff; }
     .fchip.on b { background: rgba(255,255,255,.25); color: #fff; }
     .fchip.blue { --c: #1d4ed8; --bg: #dbeafe; } .fchip.slate { --c: #475569; --bg: #e2e8f0; } .fchip.red { --c: #dc2626; --bg: #fee2e2; }
     .fchip.amber { --c: #b45309; --bg: #fef3c7; } .fchip.sky { --c: #0369a1; --bg: #e0f2fe; } .fchip.pink { --c: #be185d; --bg: #fce7f3; }
     .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
     .fchip.staff { --c: #0f766e; --bg: #ccfbf1; padding-left: 4px; }
-    .fchip.staff .ava { width: 18px; height: 18px; font-size: 9px; }
-    .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
-      color: #fff; border-radius: 999px; padding: 4px 12px; }
+    .fchip.staff .ava { width: 16px !important; height: 16px !important; font-size: 8px; }
+    .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
+      color: #fff; border-radius: 999px; padding: 2px 10px; }
     button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
     .nodep { margin-left: 6px; display: inline-block; background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
@@ -2844,7 +2844,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       items.forEach(({ q, c }) => { const n = staffOf(q, c); if (n) byStaff[n] = (byStaff[n] || 0) + 1; });
       const staffChips = Object.entries(byStaff)
         .sort((a, b) => b[1] - a[1])
-        .map(([n, k]) => `<button class="fchip staff${staffSel === n ? ' on' : ''}" data-act="staff" data-staff="${esc(n)}" title="${esc(n)} – bấm để lọc / bỏ lọc">${avatarHtml(n, 18)}${esc(shortName(n))}<b>${k}</b></button>`)
+        .map(([n, k]) => `<button class="fchip staff${staffSel === n ? ' on' : ''}" data-act="staff" data-staff="${esc(n)}" title="${esc(n)} – bấm để lọc / bỏ lọc">${avatarHtml(n, 16)}${esc(shortName(n))}<b>${k}</b></button>`)
         .join('');
       return `<div class="fbar">${groups
         .map(([name, chips]) => {
