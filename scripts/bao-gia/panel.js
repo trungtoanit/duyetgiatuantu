@@ -1459,8 +1459,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
     .fchip.staff { --c: #0f766e; --bg: #ccfbf1; padding-left: 4px; }
     .fchip.staff .ava { width: 16px !important; height: 16px !important; font-size: 8px; }
-    .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
-      color: #fff; border-radius: 999px; padding: 2px 10px; }
+    .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
+      color: #fff; border-radius: 999px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px;
+      animation: dgClearPulse 1.8s ease-out infinite; transition: background .2s, transform .15s; }
+    .fclear .fx { display: inline-block; transition: transform .25s ease; }
+    .fclear:hover { background: #dc2626; transform: scale(1.06); animation-play-state: paused; }
+    .fclear:hover .fx { transform: rotate(90deg); }
+    .fclear:active { transform: scale(.94); }
+    /* Vòng sáng lan ra theo nhịp – nhắc đang lọc, bấm để xem lại toàn bộ */
+    @keyframes dgClearPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, .55); } 70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    @media (prefers-reduced-motion: reduce) { .fclear { animation: none; } }
     button.chipbtn.on { outline: 2px solid currentColor; outline-offset: 1px; }
     .nodep { margin-left: 6px; display: inline-block; background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
@@ -2874,7 +2882,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           const html = chips.filter((c) => c[4] || state.filter === c[0]).map((c) => fchip(...c)).join('');
           return html ? `<div class="fgroup"><span class="fname">${name}</span><div class="fchips">${html}</div></div>` : '';
         })
-        .join('')}${staffChips ? `<div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>` : ''}${state.filter || staffSel ? '<button class="fclear" data-act="filter-clear">✕ Bỏ lọc</button>' : ''}</div>`;
+        .join('')}${staffChips ? `<div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>` : ''}${state.filter || staffSel ? '<button class="fclear" data-act="filter-clear"><span class="fx">✕</span> Bỏ lọc</button>' : ''}</div>`;
     };
     // (giữ tên cũ cho các chỗ khác)
     const revenueHtml = (items) => totalBadge(items) + filterBar(items);
