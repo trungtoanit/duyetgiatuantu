@@ -67,7 +67,7 @@ Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh
 Ô cam ở đầu bảng 📊: bấm **🔥 AI chọn đơn chốt được liền** → Claude đọc 40 báo giá khả thi điểm cao nhất
 (thông tin + 8 bình luận gần nhất + lịch sử mua hàng), chọn tối đa 10 báo giá chốt được trong vài ngày tới, mỗi đơn có
 % khả năng, lý do (tín hiệu trong bình luận) và việc cần làm ngay. Bấm một dòng để mở báo giá. Kết quả lưu trong
-kho dữ liệu (`aiHot`, đồng bộ) – không tự chạy lại, bấm **🔄 Phân tích lại** khi cần (mỗi lần 1 lượt gọi Claude).
+kho dữ liệu (`aiHot`, đồng bộ) – **tự phân tích mỗi sáng từ 7h** (giờ VN) khi có tab CRM mở và bật thu thập ngầm; máy nào chạy trước thì các máy khác dùng chung kết quả. Bấm **🔄 Phân tích lại** để chạy ngay (mỗi lần 1 lượt gọi Claude).
 
 ### ⬇️ Xuất Excel
 

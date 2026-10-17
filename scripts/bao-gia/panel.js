@@ -3067,6 +3067,30 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
   }
 
+  // Tự phân tích mỗi sáng: từ 7h (giờ VN), nếu kết quả mới nhất có trước 7h hôm nay thì chạy 1 lần.
+  // Kết quả đồng bộ giữa các máy nên máy nào mở CRM trước sẽ chạy; khoá ngắn để 2 tab không chạy cùng lúc.
+  const HOT_MORNING_HOUR = 7;
+  function morningStart() {
+    const vn = new Date(Date.now() + 7 * 3600e3); // giờ VN dạng UTC
+    const start = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate(), HOT_MORNING_HOUR) - 7 * 3600e3;
+    return Date.now() >= start ? start : null; // chưa tới 7h sáng thì chưa chạy
+  }
+  async function maybeMorningHot() {
+    const start = morningStart();
+    if (!start || state.busy.has('hot') || !(await getSettings()).auto) return;
+    const hot = (await kvGet('aiHot')).latest;
+    if (hot?.at >= start) return;
+    const lock = await kvGet('hotLock');
+    if (lock?.at && Date.now() - lock.at < 10 * 60e3 && lock.tab !== TAB_ID) return;
+    await call({ type: 'kv.set', key: 'hotLock', value: { tab: TAB_ID, at: Date.now() } });
+    await analyzeHot();
+    render();
+  }
+  if (IS_TOP) {
+    setTimeout(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 45000); // đợi dữ liệu tải xong
+    setInterval(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 10 * 60e3);
+  }
+
   function hotBox(hot, quotes, done = {}) {
     const busy = state.busy.has('hot');
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
@@ -3095,7 +3119,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
     return `<div class="hotbox">
       <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span> <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
-      ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''}${hot.at < Date.now() - 6 * 3600e3 ? ' · đã cũ, nên phân tích lại' : ''}</div>` : '<div class="muted">Bấm nút để AI đọc luồng bình luận và chọn những báo giá chốt được ngay (tốn 1 lượt gọi Claude).</div>'}
+      ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''} · tự phân tích lại mỗi sáng từ ${HOT_MORNING_HOUR}h</div>` : `<div class="muted">Tự phân tích mỗi sáng từ ${HOT_MORNING_HOUR}h khi mở CRM, hoặc bấm nút để chạy ngay (mỗi lần 1 lượt gọi Claude).</div>`}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
   }
