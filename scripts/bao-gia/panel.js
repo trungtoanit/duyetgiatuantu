@@ -2969,7 +2969,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // Bỏ bình luận của chính mình ("Nguyễn Trung Toán vừa bình luận vào…")
       .filter((n) => n.owner === who && /bình luận vào khách hàng/i.test(n.text || "") && !n.text.startsWith(`${myName(me)} vừa bình luận`))
       .sort((a, b) => (b.at || 0) - (a.at || 0))
-      .slice(0, 8);
+      .slice(0, 8)
+      // Đã đọc hết → chỉ giữ 2 bình luận mới nhất cho gọn
+      .filter((n, i, arr) => i < 2 || arr.some((x) => x.read === false));
     if (!items.length) return `<div class="nbox"><div class="nbox-h">💬 Bình luận mới nhất</div><div class="muted">Bấm chuông thông báo của CRM một lần để extension ghi lại.</div></div>`;
     const unread = items.filter((n) => n.read === false).length;
     const rows = items.map((n) => {
