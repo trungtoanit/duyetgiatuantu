@@ -613,6 +613,9 @@ Quy tắc:
           ? 'BÁO GIÁ ĐANG 0đ: quản lý CHƯA cho giá. KHÔNG hỏi NVKD "giá đạt chưa / khách phản hồi giá"; nếu cần thì chỉ hỏi NVKD còn thiếu thông tin gì để quản lý tính giá.'
           : '',
         q?.isReprint ? 'ĐƠN TÁI BẢN: sản phẩm của báo giá đã có mã SP (tái bản) – chỉ hỏi khách xuống đơn tái bản chưa.' : '',
+        mode && !q?.isReprint && offsetGap(q, c)
+          ? 'KHÁCH CHƯA CÓ BÁO GIÁ OFFSET và đã lâu không có báo giá mới: chỉ hỏi đúng 1 câu "Khách hàng này có dùng offset không <xưng hô>?" (ưu tiên hơn chế độ hỏi nhanh / chào lại).'
+          : '',
         mode === 'hoiNhanh'
           ? `CHẾ ĐỘ HỎI NHANH: đã quá ${FOLLOW_UP_HOURS} giờ từ bình luận cuối mà báo giá chưa chốt – chỉ 1 câu ngắn theo các ý hỏi nhanh (trừ khi khớp TÌNH HUỐNG ĐẶC BIỆT).`
           : '',
@@ -2220,6 +2223,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return latest && ORDER_NOTE_RE.test(latest.text || '') ? latest : null;
   }
+  // Mọi báo giá của cùng khách: chưa có báo giá Offset nào + báo giá gần nhất đã quá 30 ngày
+  // + quản lý chưa hỏi về offset trong luồng này → nên hỏi khách có dùng offset không
+  function offsetGap(q, c) {
+    const key = custKey(q);
+    if (!key) return false;
+    const mine = Object.values(renderCtx.quotes || {}).filter((x) => custKey(x) === key);
+    if (!mine.length || mine.some((x) => (x.kinds || (x.offset ? ['offset'] : [])).includes('offset'))) return false;
+    const newest = Math.max(...mine.map((x) => x.createdAt || 0));
+    if (!newest || hoursSince(newest) < 30 * 24) return false;
+    let asked = false;
+    const walk = (t) => {
+      if (t.staff?.name === meName && /offset/i.test(t.text || '')) asked = true;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return !asked;
+  }
+
   function quickQuestion(q, c, mode, p) {
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
     // Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã lâu → hỏi vì sao lâu chưa xuống đơn
@@ -2243,6 +2264,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const h = last ? hoursSince(last.createdAt) : 0;
     const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
     if (q.isReprint) return { icon: '🔁', why: 'Đơn tái bản', text: `${lead}Khách xuống đơn tái bản chưa ${p}?` };
+    // Khách chưa từng có báo giá Offset và đã lâu không có báo giá mới → hỏi khách có dùng offset không
+    if (mode && offsetGap(q, c)) return { icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: `Khách hàng này có dùng offset không ${p}?` };
     if (mode === 'hoiNhanh') {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
       const lead2 = h >= 72 ? fillP(pickFor(SILENT_LEAD, q.id, salt + 7), p, humanDuration(h)) : '';
