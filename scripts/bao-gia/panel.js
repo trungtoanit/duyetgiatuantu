@@ -3227,7 +3227,11 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     // Bình luận mới nhất: trình duyệt tự mở báo giá ở tab mới (target=_blank), trang này đánh dấu đã đọc
     const nk = e.target.closest('[data-nkey]')?.dataset.nkey;
-    if (nk) return void markNotifRead(nk).then(render).catch((err) => console.warn('[DG]', err));
+    if (nk) {
+      // Báo giá mở ở tab mới (target=_blank) → thu gọn bảng ở tab này
+      if (e.target.closest('a[data-nkey]')) setPanelOpen(false);
+      return void markNotifRead(nk).then(render).catch((err) => console.warn('[DG]', err));
+    }
     // Giữ trạng thái mở/đóng của mục "Bộ câu hỏi tự học" qua các lần vẽ lại
     const sum = e.target.closest('details.learnbox > summary');
     if (sum) state.learnOpen = !sum.parentElement.open;
