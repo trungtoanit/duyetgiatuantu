@@ -1298,7 +1298,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .result { white-space: pre-wrap; background: #f6f8fa; border-radius: 8px; padding: 10px; margin-top: 8px; line-height: 1.5; }
     .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 10px; }
     .unread a { color: #1d4ed8; text-decoration: none; display: block; padding: 5px 0; border-bottom: 1px solid #eaeef2; }
-    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px minmax(0, .45fr) 130px minmax(0, 1.55fr) 104px 74px 136px 120px 52px; align-items: center;
+    .unread a.item, .unread .item-head { display: grid; grid-template-columns: 34px 74px minmax(0, .45fr) 130px minmax(0, 1.55fr) 104px 74px 84px 136px 120px 52px; align-items: center;
       gap: 10px; padding: 6px 4px; border-radius: 6px; font-size: 13px; }
     .unread .item-head { position: sticky; top: -18px; z-index: 2; background: #f1f5f9; border-radius: 8px; margin-bottom: 4px;
       font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
@@ -1318,6 +1318,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .it-ago { color: #64748b; font-size: 12px; text-align: right; }
     .it-amt { text-align: right; font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
     .it-amt .noprice { margin-left: 0; font-size: 11px; padding: 0 6px; }
+    .it-date { color: #64748b; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .it-date.new { color: #0f766e; font-weight: 700; }
     .it-pct { display: flex; justify-content: flex-end; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
     .pc { width: 50px; flex: none; text-align: center; border-radius: 6px; padding: 2px 0; font-weight: 800; border-left: 3px solid transparent; }
     .pc.f { background: #eff6ff; border-left-color: #3b82f6; }
@@ -2907,6 +2909,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
+      ${dateCell(q?.createdAt)}
       <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
       <span class="it-pct">${pctCell(q)}</span>
       <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `<b class="fea" style="${feaStyle(f.score)}">🎯${f.score}</b>` : ''}</span></a>`;
@@ -2917,6 +2920,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const f = (v) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return n >= 1e9 ? `${f(n / 1e9)} tỷ` : n >= 1e6 ? `${f(n / 1e6)} triệu` : money(n);
     };
+    // Ngày tạo báo giá: dưới 7 ngày ghi "x giờ/ngày trước" (xanh), còn lại dd/mm/yyyy
+    const dmy = (sec) => new Date(sec * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const dateCell = (sec) => {
+      if (!sec) return '<span class="it-date"></span>';
+      const fresh = hoursSince(sec) < 7 * 24;
+      return `<span class="it-date${fresh ? ' new' : ''}" title="Tạo lúc ${esc(fmtTime(sec))} ${esc(dmy(sec).slice(-4))}">${fresh ? ago(sec) : dmy(sec)}</span>`;
+    };
     const listRows = (items, forExport = false) => {
       const rows = applyFilter(items);
       // Nút Xuất Excel xuất đúng bảng chính đang hiện (đã lọc / tìm / xếp) – không lấy các bảng phụ bên dưới
@@ -2925,7 +2935,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const sumTip = `Tổng ${rows.length} báo giá đang hiện: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-date">Ngày tạo</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
@@ -3211,7 +3221,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       state.error = 'Danh sách đang trống – không có gì để xuất.';
       return render();
     }
-    const head = ['#', 'Mã BG', 'Nhãn', 'Mã KH', 'Tên khách hàng', 'Tên cơ hội', 'NVKD', 'Tình trạng', 'Đã đọc', 'Bình luận cuối', 'Người BL cuối', 'Số tiền', 'Flexo %', 'Giấy tấm %', 'Offset %', 'Điểm', 'Lý do điểm', 'Link'];
+    const head = ['#', 'Mã BG', 'Nhãn', 'Mã KH', 'Tên khách hàng', 'Tên cơ hội', 'NVKD', 'Tình trạng', 'Đã đọc', 'Ngày tạo', 'Bình luận cuối', 'Người BL cuối', 'Số tiền', 'Flexo %', 'Giấy tấm %', 'Offset %', 'Điểm', 'Lý do điểm', 'Link'];
     const data = rows.map(({ q, c, last, f }, i) => {
       const { flexo, offset } = marginParts(q);
       return [
@@ -3224,6 +3234,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         staffOf(q, c) || '',
         statusLabel(q?.quoteStatus),
         q?.isRead === false ? 'Chưa đọc' : q?.isRead === true ? 'Đã đọc' : '',
+        q?.createdAt ? new Date(q.createdAt * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
         last ? fmtTime(last.createdAt) : 'Chưa có bình luận',
         last?.staff?.name || '',
         noPrice(q) ? 'Chưa cho giá' : Number(q?.amount) || '',
@@ -3235,7 +3246,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         `${location.origin}/bao-gia/update/${c?.id ?? q?.id}`,
       ];
     });
-    const widths = [5, 10, 30, 14, 36, 50, 22, 14, 10, 14, 22, 16, 9, 10, 9, 7, 40, 42];
+    const widths = [5, 10, 30, 14, 36, 50, 22, 14, 10, 12, 14, 22, 16, 9, 10, 9, 7, 40, 42];
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
     // Dòng tổng: SUBTOTAL(9, …) – lọc trong Excel thì tổng tự tính lại theo dòng đang hiện
