@@ -490,8 +490,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'syncNow') await sync(true);
     if (msg.type === 'setBalance') await setBalance(msg.amount);
     if (msg.type === 'shareTeam') {
-      await pushRemote('teamConfig', { main: { anthropicKey: msg.anthropicKey || '', model: msg.model || '' } });
-      await chrome.storage.local.set({ teamConfig: { anthropicKey: msg.anthropicKey || '', model: msg.model || '' } });
+      // Cài đặt dùng chung cho cả nhóm (lưu trên Supabase): mọi trường trừ thông tin kết nối Supabase
+      // (URL / key / mật khẩu nhóm phải có sẵn trong gói cài team.json thì mới đọc được máy chủ)
+      const SHARE = ['owner', 'repo', 'branch', 'dir', 'token', 'intervalMinutes', 'anthropicKey', 'model'];
+      const team = Object.fromEntries(SHARE.filter((k) => msg[k] != null && msg[k] !== '').map((k) => [k, msg[k]]));
+      if (msg.anthropicKey != null) team.anthropicKey = msg.anthropicKey || '';
+      await pushRemote('teamConfig', { main: team });
+      await chrome.storage.local.set({ teamConfig: team });
     }
     if (msg.type === 'syncAll') await syncAllNow().catch((e) => setSyncStatus({ error: String(e.message || e) }));
     const [cfg, local] = await Promise.all([

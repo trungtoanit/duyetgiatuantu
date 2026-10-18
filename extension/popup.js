@@ -115,8 +115,9 @@ form.onsubmit = async (e) => {
   const config = Object.fromEntries(new FormData(form));
   config.intervalMinutes = Number(config.intervalMinutes) || 1;
   await chrome.storage.sync.set({ config }); // background tự đồng bộ lại khi config đổi
-  if ($('shareTeam').checked && config.anthropicKey) {
-    await chrome.runtime.sendMessage({ type: 'shareTeam', anthropicKey: config.anthropicKey, model: config.model });
+  if ($('shareTeam').checked) {
+    const { supabaseUrl, supabaseKey, teamSecret, ...shared } = config; // thông tin Supabase không đưa lên máy chủ
+    await chrome.runtime.sendMessage({ type: 'shareTeam', ...shared });
   }
   setTimeout(() => send('getStatus'), 1500);
 };
