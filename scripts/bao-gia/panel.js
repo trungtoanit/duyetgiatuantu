@@ -329,7 +329,8 @@
         if (!changed && JSON.stringify(customer) === JSON.stringify(old.customer || {})) continue;
         patch[g.customerId] = { ...old, customer, orders: [...byId.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 600) };
       }
-      if (Object.keys(patch).length) await kvMerge('orders', patch);
+      if (!Object.keys(patch).length) return; // không có gì mới → không vẽ lại bảng
+      await kvMerge('orders', patch);
     } else if (kind === 'orders') {
       // Gộp theo mã đơn với các trang đã đọc trước (trang 2, 3… của lịch sử mua hàng), mới nhất trước
       const old = (await kvGet('orders'))[data.customerId];
@@ -1682,7 +1683,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rp-start:hover { filter: brightness(1.08); } .rp-start.big { font-size: 15px; padding: 10px 20px; }
     .rp-startrow { margin: 12px; }
     .rp-prog { height: 6px; background: #e0e7ff; } .rp-prog i { display: block; height: 100%; background: linear-gradient(90deg, #f59e0b, #22c55e); transition: width .4s; }
-    .rp-card { margin: 14px 12px; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; animation: wkIn .35s ease both; }
+    .rp-card { margin: 14px 12px; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; }
+    .rp-card.anim { animation: wkIn .35s ease both; }
     .rp-step { font-size: 12px; font-weight: 800; color: #6366f1; text-transform: uppercase; letter-spacing: .06em; }
     .rp-name { font-size: 22px; font-weight: 900; margin-top: 2px; display: flex; align-items: center; gap: 10px; }
     .rp-name .sc-link { font-size: 22px; }
@@ -3340,6 +3342,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })
       .join('')}</div>`;
     const g = list[idx];
+    // Hiệu ứng chỉ khi đổi sang khách khác (bảng tự vẽ lại khi có dữ liệu mới – không được nhấp nháy như F5)
+    const cardAnim = state.rpAnimKey !== `${key}:${g.cid}`;
+    state.rpAnimKey = `${key}:${g.cid}`;
     const od = (orders || {})[g.cid];
     const sixAgo = Date.now() / 1000 - 183 * 86400;
     const won = (od?.orders || [])
@@ -3367,11 +3372,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .join('');
     return `<div class="ctab wk rp">${head}
       ${chips}
-      <div class="rp-card">
+      <div class="rp-card${cardAnim ? ' anim' : ''}">
         <div class="rp-step">Khách ${idx + 1}/${total} · <span class="rp-st ${g.total > 0 ? 'won' : 'open'}">${g.total > 0 ? '✓ Đã chốt được (có đơn 6 tháng)' : '⏳ Chưa chốt được'}</span></div>
         <div class="rp-name"><a class="sc-link" href="/khach-hang/view/${g.cid}?t=order" target="_blank" rel="noopener" title="${esc(g.name)}">${esc(shortCompany(g.name))}</a>
           ${g.trend != null ? `<span class="ct-chg ${g.trend >= 0 ? 'up' : 'down'}">${g.trend >= 0 ? '↑' : '↓'}${Math.abs(g.trend)}%</span>` : ''}</div>
-        <div class="rp-meta">Doanh thu 6 tháng ${moneyShortG(g.total)}${lastOrder ? ` · đơn gần nhất ${esc(lastOrder.code)} ${ago(lastOrder.at)}` : ' · chưa có đơn trong dữ liệu'}${g.pending.length ? ` · <b>${g.pending.length} báo giá tồn đọng (${moneyShortG(g.pendingAmount)})</b>` : ''}</div>
+        <div class="rp-meta">Doanh thu 6 tháng ${moneyShortG(g.total)}${lastOrder ? ` · đơn gần nhất ${esc(lastOrder.code)} ${ago(lastOrder.at)}` : ' · chưa có đơn trong dữ liệu'}${g.pending.length ? ` · <b>${g.pending.length} báo giá tồn đọng${g.pendingAmount ? ` (${moneyShortG(g.pendingAmount)})` : ' (chưa cho giá)'}</b>` : ''}</div>
         <div class="rp-grid"><div><div class="rp-sec">📊 Doanh thu 6 tháng (sau VAT)</div><div class="rp-spark">${spark}</div></div>
           <div><div class="rp-sec">⏳ Chưa chốt – báo giá tồn đọng (${g.pending.length})</div>${pend || '<div class="muted">Không có báo giá tồn đọng</div>'}
             <div class="rp-sec">✅ Đã chốt – đơn hàng 6 tháng (${won.length})</div>${wonHtml}</div></div>
