@@ -3766,7 +3766,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       }
     }
-    return t || name;
+    return String(t || name || '').toLocaleUpperCase('vi'); // tên công ty luôn viết hoa toàn bộ
   };
 
   // Mở tab Khách hàng → tự đọc ngầm lại đơn hàng của khách đã cũ (> 12 giờ) hoặc còn thiếu trang, mỗi khách tối đa 1 lần / phiên
