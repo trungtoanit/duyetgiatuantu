@@ -1690,6 +1690,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rp-mv { font-size: 10px; font-weight: 700; color: #047857; margin-top: 3px; white-space: nowrap; } .rp-ml { font-size: 10px; color: #94a3b8; }
     .rp-q { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; } .rp-q a { color: #1d4ed8; text-decoration: none; }
     .rp-qa { float: right; font-weight: 800; color: #047857; } .rp-ql { font-size: 12px; color: #475569; margin-top: 2px; }
+    .rp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 12px 0; max-height: 120px; overflow: auto; }
+    .rp-chip { font: inherit; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; cursor: pointer; border: 1.5px solid; max-width: 220px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rp-chip.ok { background: #dcfce7; color: #166534; border-color: #4ade80; }
+    .rp-chip.no { background: #fee2e2; color: #991b1b; border-color: #f87171; }
+    .rp-chip.cur { box-shadow: 0 0 0 3px rgba(99,102,241,.45); transform: scale(1.05); }
+    .rp-st { border-radius: 999px; padding: 1px 8px; font-size: 11px; } .rp-st.won { background: #dcfce7; color: #166534; } .rp-st.open { background: #fef3c7; color: #92400e; }
+    .rp-q.won b { color: #166534; } .rp-more { font-size: 12px; padding: 4px 0; }
     .rp-text { width: 100%; border: 1.5px solid #c7d2fe; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
     .rp-text:focus { outline: 3px solid rgba(99,102,241,.2); border-color: #6366f1; }
     .rp-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
@@ -3317,8 +3325,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th class="num">Tháng ${months[5].label}</th><th class="num">Xu hướng</th><th class="num">Tồn đọng</th><th>Bình luận báo cáo</th><th></th></tr></thead>
         <tbody>${rowsHtml || '<tr><td colspan="7" class="muted">Không có khách hàng nào.</td></tr>'}</tbody></table></div></div>`;
     }
+    // Danh sách nút từng khách: xanh lá = đã có bình luận báo cáo, đỏ = chưa; ✓ đã chốt (có đơn 6 tháng) / ⏳ chưa chốt
+    const chips = `<div class="rp-chips">${list
+      .map((x, i) => {
+        const done = !!rep.items?.[x.cid]?.comment?.trim();
+        const won = x.total > 0;
+        return `<button class="rp-chip ${done ? 'ok' : 'no'}${i === idx ? ' cur' : ''}" data-act="report-goto" data-i="${i}" title="${esc(x.name)} – ${done ? 'đã báo cáo' : 'chưa báo cáo'} · ${won ? 'đã chốt (có đơn)' : 'chưa chốt'}">${won ? '✓' : '⏳'} ${esc(shortCompany(x.name))}</button>`;
+      })
+      .join('')}</div>`;
     const g = list[idx];
     const od = (orders || {})[g.cid];
+    const sixAgo = Date.now() / 1000 - 183 * 86400;
+    const won = (od?.orders || [])
+      .filter((o) => (o.at > 1e11 ? o.at / 1000 : o.at) >= sixAgo)
+      .sort((a, b) => b.at - a.at);
+    const wonHtml = won.length
+      ? won
+          .slice(0, 6)
+          .map((o) => `<div class="rp-q won"><b>${esc(o.code || '')}</b> ${o.quote ? `<span class="muted">· ${esc(o.quote)}</span>` : ''} <span class="muted">· ${ago(o.at)} · ${esc(o.status || '')}</span><span class="rp-qa">${money(orderAfterVat(o))}</span></div>`)
+          .join('') + (won.length > 6 ? `<div class="muted rp-more">… và ${won.length - 6} đơn khác</div>` : '')
+      : '<div class="muted">Chưa có đơn nào trong 6 tháng</div>';
     const lastOrder = od?.orders?.length ? [...od.orders].sort((a, b) => b.at - a.at)[0] : null;
     const maxM = Math.max(...g.m, 1);
     const spark = g.m
@@ -3334,13 +3360,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })
       .join('');
     return `<div class="ctab wk rp">${head}
+      ${chips}
       <div class="rp-card">
-        <div class="rp-step">Khách ${idx + 1}/${total}</div>
+        <div class="rp-step">Khách ${idx + 1}/${total} · <span class="rp-st ${g.total > 0 ? 'won' : 'open'}">${g.total > 0 ? '✓ Đã chốt được (có đơn 6 tháng)' : '⏳ Chưa chốt được'}</span></div>
         <div class="rp-name"><a class="sc-link" href="/khach-hang/view/${g.cid}?t=order" target="_blank" rel="noopener" title="${esc(g.name)}">${esc(shortCompany(g.name))}</a>
           ${g.trend != null ? `<span class="ct-chg ${g.trend >= 0 ? 'up' : 'down'}">${g.trend >= 0 ? '↑' : '↓'}${Math.abs(g.trend)}%</span>` : ''}</div>
         <div class="rp-meta">Doanh thu 6 tháng ${moneyShortG(g.total)}${lastOrder ? ` · đơn gần nhất ${esc(lastOrder.code)} ${ago(lastOrder.at)}` : ' · chưa có đơn trong dữ liệu'}${g.pending.length ? ` · <b>${g.pending.length} báo giá tồn đọng (${moneyShortG(g.pendingAmount)})</b>` : ''}</div>
         <div class="rp-grid"><div><div class="rp-sec">📊 Doanh thu 6 tháng (sau VAT)</div><div class="rp-spark">${spark}</div></div>
-          <div><div class="rp-sec">📝 Báo giá tồn đọng</div>${pend || '<div class="muted">Không có báo giá tồn đọng</div>'}</div></div>
+          <div><div class="rp-sec">⏳ Chưa chốt – báo giá tồn đọng (${g.pending.length})</div>${pend || '<div class="muted">Không có báo giá tồn đọng</div>'}
+            <div class="rp-sec">✅ Đã chốt – đơn hàng 6 tháng (${won.length})</div>${wonHtml}</div></div>
         <div class="rp-sec">✍️ Bình luận báo cáo về khách hàng này</div>
         <textarea class="rp-text" data-key="${esc(key)}" data-cid="${g.cid}" rows="4" placeholder="Tình hình khách, kế hoạch tuần tới, khó khăn cần hỗ trợ…">${esc(rep.items?.[g.cid]?.comment || '')}</textarea>
         <div class="rp-nav"><button class="act" data-act="report-goto" data-i="${idx - 1}" ${idx === 0 ? 'disabled' : ''}>← Trước</button>
