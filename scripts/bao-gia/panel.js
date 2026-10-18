@@ -1765,6 +1765,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-name a { color: #1d4ed8; font-weight: 800; text-decoration: none; text-transform: uppercase; }
     .ct-name a:hover { text-decoration: underline; }
     .ct-name .kh { margin-left: 6px; font-size: 10px; }
+    .kh.none { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; text-decoration: line-through; text-decoration-color: #94a3b8; }
     .ct-name { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
     .ct-chg { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 800; }
     .ct-chg.up { color: #16a34a; } .ct-chg.down { color: #dc2626; }
@@ -2945,8 +2946,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const noPrice = (q) => q != null && q.amount != null && Number(q.amount) === 0;
   const noPriceTag = (q) => (noPrice(q) ? ' <span class="noprice">⚠️ Chưa cho giá</span>' : '');
 
-  const custTag = (q) =>
-    q?.customer?.code ? ` <span class="kh" title="${esc(q.customer.name || '')}">${esc(q.customer.code)}</span>` : '';
+  // Khách chưa từng lên đơn (đã có dữ liệu lịch sử mua hàng, 0 đơn) → mã khách xám tro, gạch ngang
+  const custNoOrder = (q) => {
+    const od = q?.customer?.id && renderCtx.orders?.[q.customer.id];
+    return !!od && orderSummary(od)?.count === 0;
+  };
+  const custTag = (q) => {
+    if (!q?.customer?.code) return '';
+    const none = custNoOrder(q);
+    return ` <span class="kh${none ? ' none' : ''}" title="${esc(q.customer.name || '')}${none ? ' · khách chưa lên đơn nào' : ''}">${esc(q.customer.code)}</span>`;
+  };
 
   // Xưng hô với NVKD: đoán từ các bình luận cũ của quản lý gửi chính NVKD đó (chị / anh / em)
   function addressFor(staff, comments, quotes) {
