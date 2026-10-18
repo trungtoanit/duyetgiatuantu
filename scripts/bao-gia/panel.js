@@ -1558,6 +1558,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-tools .search { background: rgba(255,255,255,.95); }
     .ct-btn { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,.6); background: transparent; color: #fff;
       border-radius: 10px; padding: 6px 12px; }
+    .ct-btn small { font-weight: 600; opacity: .8; font-size: 11px; }
     .ct-btn b { background: rgba(255,255,255,.25); border-radius: 999px; padding: 0 7px; margin-left: 4px; }
     .ct-btn.on { background: #fbbf24; border-color: #fbbf24; color: #1f2937; }
     .ctab .fbar { margin: 8px 12px; }
@@ -2971,8 +2972,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- Tab "Báo cáo tuần": doanh số (sau VAT) theo NVKD từ thứ 2 đến thứ 7 ----------
   // Đơn hàng lấy từ lịch sử mua hàng đã thu thập (kv 'orders'); NVKD = người phụ trách khách (cột Sale của ERP).
   function weekTab(quotes, orders) {
-    const off = state.weekOff || 0;
     const now = new Date();
+    // Chỉ các tuần thuộc tháng này: từ tuần chứa ngày 1 tới tuần hiện tại
+    const monOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+    const firstMon = monOf(new Date(now.getFullYear(), now.getMonth(), 1));
+    const minOff = -Math.round((monOf(now) - firstMon) / (7 * 86400e3));
+    const off = Math.max(minOff, Math.min(0, state.weekOff || 0));
     const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) + off * 7);
     const days = [...Array(6)].map((_, i) => new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
     const start = mon.getTime() / 1000;
@@ -3040,9 +3045,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<div class="ctab wk${anim ? ' anim' : ''}">
       <div class="ct-head"><div><div class="ct-title">📅 Báo cáo tuần</div>
         <div class="ct-sub">Thứ 2 ${dd(days[0])} → Thứ 7 ${dd(days[5])}/${days[5].getFullYear()} · ${rows.reduce((a, r) => a + r.n, 0)} đơn · tổng ${moneyShortG(grand)} (sau VAT)</div></div>
-        <div class="ct-tools"><button class="ct-btn" data-act="week-nav" data-off="-1">‹ Tuần trước</button>
-          <button class="ct-btn${off === 0 ? ' on' : ''}" data-act="week-nav" data-off="0">Tuần này</button>
-          <button class="ct-btn" data-act="week-nav" data-off="1" ${off >= 0 ? 'disabled' : ''}>Tuần sau ›</button></div></div>
+        <div class="ct-tools">${[...Array(-minOff + 1)]
+          .map((_, k) => {
+            const o = minOff + k;
+            const m = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) + o * 7);
+            const sat = new Date(m.getFullYear(), m.getMonth(), m.getDate() + 5);
+            return `<button class="ct-btn${o === off ? ' on' : ''}" data-act="week-set" data-off="${o}" title="Thứ 2 ${dd(m)} → Thứ 7 ${dd(sat)}">Tuần ${k + 1}<small> ${dd(m)}–${dd(sat)}</small></button>`;
+          })
+          .join('')}</div></div>
       ${meBox}
       <div class="ct-wrap"><table class="ct">
         <thead><tr><th>Hạng</th><th>NVKD</th>${days.map((d, k) => `<th class="num${d.getTime() === today ? ' wk-today' : ''}">${DAY[k]} ${dd(d)}</th>`).join('')}<th class="num">Tổng tuần</th><th class="num">Số đơn</th></tr>
@@ -3894,8 +3904,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       state.weekAnimKey = null;
       render();
     }
-    else if (act === 'week-nav') {
-      state.weekOff = b.dataset.off === '0' ? 0 : (state.weekOff || 0) + Number(b.dataset.off);
+    else if (act === 'week-set') {
+      state.weekOff = Number(b.dataset.off) || 0;
       render();
     }
     else if (act === 'week-open') {
