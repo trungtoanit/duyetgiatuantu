@@ -325,7 +325,8 @@
         const cid = c.id ?? o.customerId ?? o.opportunity?.customerId;
         if (!cid) continue;
         const sale = c.staff || c.sale || o.staff || o.opportunity?.staff;
-        (byCust[cid] ||= { customerId: cid, customer: { name: c.name, code: c.code, staff: sale?.name || undefined }, orders: [] }).orders.push(mapOrder(o));
+        const cname = c.name || c.fullName || c.companyName || c.customerName || c.misaCustomer?.name || o.customerName || o.misaCustomer?.name || undefined;
+        (byCust[cid] ||= { customerId: cid, customer: { name: cname, code: c.code || c.shortName || undefined, staff: sale?.name || undefined }, orders: [] }).orders.push(mapOrder(o));
       }
       const list = Object.values(byCust);
       if (list.length) emit('ordersAll', list);
