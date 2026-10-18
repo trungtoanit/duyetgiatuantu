@@ -1708,7 +1708,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rps.live i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: rpBlink 1s ease-in-out infinite; }
     @keyframes rpBlink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.6); } }
     .rps.mid { color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; }
-    .rps.none { color: #64748b; background: #f1f5f9; border: 1px dashed #cbd5e1; }
+    /* Chưa báo cáo: nhãn đỏ, đồng hồ báo thức rung lắc + nhãn nhấp nháy để thúc giục */
+    .rps.none { color: #fff; background: linear-gradient(90deg, #dc2626, #ef4444); border: 0; animation: rpUrge 1.2s ease-in-out infinite; }
+    .rp-alarm { display: inline-block; font-size: 14px; animation: rpRing .6s ease-in-out infinite; transform-origin: 50% 10%; }
+    @keyframes rpRing { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-18deg); } 40% { transform: rotate(16deg); } 60% { transform: rotate(-10deg); } 80% { transform: rotate(8deg); } }
+    @keyframes rpUrge { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); } 60% { box-shadow: 0 0 0 7px rgba(239,68,68,0); } }
     .rp-pbar { height: 8px; border-radius: 99px; background: #fde7cf; overflow: hidden; }
     .rp-pbar i { display: block; height: 100%; width: var(--w); border-radius: 99px; background: linear-gradient(90deg, #f59e0b, #f97316);
       background-size: 200% 100%; animation: wkGrad 2s linear infinite; }
@@ -3634,7 +3638,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           ? `<span class="rps live"><i></i>Đang làm${x.lastBy && norm(x.lastBy) !== norm(staff) ? ` · ${esc(shortName(x.lastBy))}` : ''}</span>`
           : x.n
             ? `<span class="rps mid">✍️ Làm dở · ${ago(Math.floor(x.last / 1000))}</span>`
-            : `<span class="rps none">⏳ Chưa bắt đầu</span>`;
+            : `<span class="rps none" title="Chưa viết báo cáo tuần – nhắc làm ngay"><b class="rp-alarm">⏰</b>Chưa báo cáo · Nhanh lên!</span>`;
       return `<div class="rp-cell">${label}<div class="rp-pbar ${x.done ? 'done' : x.live ? 'live' : ''}"><i style="--w:${x.done ? 100 : pct}%"></i></div><div class="rp-pn">${x.n}/${x.total} khách · ${x.done ? 100 : pct}%</div></div>`;
     };
     // Quản trị bấm vào 1 NVKD → màn hình riêng của NVKD đó
@@ -3767,7 +3771,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <thead><tr><th>Hạng</th><th>NVKD</th><th class="wk-rp-h">📝 Báo cáo tuần</th>${days.map((d, k) => `<th class="num${d.getTime() === today ? ' wk-today' : ''}">${DAY[k]} ${dd(d)}</th>`).join('')}<th class="num">Tổng tuần</th><th class="num">Số đơn</th></tr>
           <tr class="ct-sum"><td></td><td>Σ ${rows.length} NVKD</td><td>${(() => {
             const st = rows.map((r) => reportInfo(r.staff));
-            return `<span class="wk-rp-sum">✅ ${st.filter((x) => x.done).length} xong · ✍️ ${st.filter((x) => !x.done && x.n).length} đang làm · ⏳ ${st.filter((x) => !x.n).length} chưa</span>`;
+            return `<span class="wk-rp-sum">✅ ${st.filter((x) => x.done).length} xong · ✍️ ${st.filter((x) => !x.done && x.n).length} đang làm · ⏰ ${st.filter((x) => !x.n).length} chưa báo cáo</span>`;
           })()}</td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(grand)}</td><td class="num">${rows.reduce((a, r) => a + r.n, 0)}</td></tr></thead>
         <tbody>${body || '<tr><td colspan="11" class="muted">Tuần này chưa có đơn hàng nào trong dữ liệu đã thu thập.</td></tr>'}</tbody></table></div>
       <div class="muted ct-note">Doanh số sau VAT theo ngày lên đơn, tính cho NVKD phụ trách khách. Số liệu từ lịch sử mua hàng extension đã thu thập (tự cập nhật ngầm) – bấm 1 dòng để xem từng đơn.</div>
