@@ -2819,7 +2819,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Tên công ty gọn: bỏ các chữ loại hình / ngành nghề ở đầu
   // "CÔNG TY TNHH SẢN XUẤT THƯƠNG MẠI PHONG TÍN" → "PHONG TÍN", "CÔNG TY CỔ PHẦN S&S GLOVE" → "S&S GLOVE"
-  const CO_WORDS = ['chi nhánh', 'công ty', 'cty', 'liên doanh', 'tnhh', 'cổ phần', 'cp', 'mtv', 'một thành viên', 'sản xuất', 'sx', 'thương mại', 'tm',
+  const CO_WORDS = ['chi nhánh', 'hộ kinh doanh', 'hkd', 'công ty', 'cty', 'liên doanh', 'tnhh', 'cổ phần', 'cp', 'mtv', 'một thành viên', 'sản xuất', 'sx', 'thương mại', 'tm',
     'dịch vụ', 'dv', 'xuất nhập khẩu', 'xnk', 'đầu tư', 'và', '&', '-', ','];
   const shortCompany = (name) => {
     // Bỏ chữ "CHI NHÁNH" ở bất kỳ đâu trong tên (vd. "ABC - CHI NHÁNH BÌNH DƯƠNG" → "ABC - BÌNH DƯƠNG")
