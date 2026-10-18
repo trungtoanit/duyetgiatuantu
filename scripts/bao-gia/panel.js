@@ -1534,7 +1534,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-dash { color: #cbd5e1; }
     .ct-grp { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; background: #64748b; color: #fff; }
     .ct-grp.hot { background: #ef4444; }
-    .ct-who { display: flex; align-items: center; gap: 6px; color: #334155; }
+    .ct-who { display: inline-flex; align-items: center; gap: 6px; color: #334155; vertical-align: middle; }
     .ct-total { color: #047857; }
     .ct-note { padding: 8px 14px; font-size: 12px; }
     .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
@@ -2873,9 +2873,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('');
         return `<tr><td class="ct-no">${i + 1}</td>
-          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${r.code ? `<span class="kh">${esc(r.code)}</span>` : ''}${arrow(r.trend)}</td>
+          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}</td>
           <td><span class="ct-grp ${r.active >= 4 ? 'hot' : ''}">${r.active >= 4 ? 'Ưu tiên' : 'Thường'}</span></td>
-          <td class="ct-who" title="${esc(r.staff)}">${r.staff ? `${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}` : ''}</td>
+          <td title="${esc(r.staff)}">${r.staff ? `<span class="ct-who">${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}</span>` : ''}</td>
           ${cells}<td class="num ct-total">${money(r.total)}</td></tr>`;
       })
       .join('');
