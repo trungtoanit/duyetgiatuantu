@@ -2822,10 +2822,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const CO_WORDS = ['chi nhánh', 'hộ kinh doanh', 'hkd', 'công ty', 'cty', 'liên doanh', 'tnhh', 'cổ phần', 'cp', 'mtv', 'một thành viên', 'sản xuất', 'sx', 'thương mại', 'tm',
     'dịch vụ', 'dv', 'xuất nhập khẩu', 'xnk', 'đầu tư', 'và', '&', '-', ','];
   const shortCompany = (name) => {
-    // Bỏ chữ "CHI NHÁNH" ở bất kỳ đâu trong tên (vd. "ABC - CHI NHÁNH BÌNH DƯƠNG" → "ABC - BÌNH DƯƠNG")
-    let t = String(name || '').normalize('NFC').replace(/chi nhánh/giu, ' ').replace(/\s+/g, ' ').replace(/\s*-\s*-\s*/g, ' - ').trim().replace(/^[-,\s]+|[-,\s]+$/g, '');
+    // Bỏ chữ "CHI NHÁNH", "SẢN XUẤT", "TRÁCH NHIỆM HỮU HẠN" ở bất kỳ đâu trong tên (vd. "ABC - CHI NHÁNH BÌNH DƯƠNG" → "ABC - BÌNH DƯƠNG")
+    let t = String(name || '').normalize('NFC').replace(/chi nhánh|sản xuất|trách nhiệm hữu hạn/giu, ' ').replace(/\s+/g, ' ').replace(/\s*-\s*-\s*/g, ' - ').trim().replace(/^[-,\s]+|[-,\s]+$/g, '');
     for (let changed = true; changed; ) {
       changed = false;
+      // Viết tắt ghép: TM-SX, TM-DV-SX, SX-TM…
+      const ab = t.match(/^(?:tm|sx|dv|xnk)(?:\s*[-&,]\s*(?:tm|sx|dv|xnk))+\s+/iu);
+      if (ab) {
+        t = t.slice(ab[0].length).trim();
+        changed = true;
+      }
       for (const w of CO_WORDS) {
         if (t.toLowerCase().startsWith(w + ' ') || t.toLowerCase() === w) {
           t = t.slice(w.length).trim();
