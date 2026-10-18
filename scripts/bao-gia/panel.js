@@ -574,7 +574,7 @@ Yêu cầu:
         hoi: 'Kết quả của báo giá này sao rồi?',
       },
       {
-        khi: 'bình luận CUỐI CÙNG của luồng là quản lý đã cho giá / duyệt giá (vd. "A cho em giá đã bao gồm khuôn + bản in", "E cho chị giá nhé", "E duyệt giá nhé chị") và sau đó NVKD chưa phản hồi gì',
+        khi: 'bình luận CUỐI CÙNG của luồng là quản lý đã cho giá / duyệt giá (vd. "A cho em giá đã bao gồm khuôn + bản in", "E cho chị giá nhé", "E duyệt giá nhé chị"; hoặc bình luận của quản lý KÈM HÌNH ẢNH – thường là hình bảng giá màu đỏ = đã cho giá) và sau đó NVKD chưa phản hồi gì – hỏi NVKD đã báo giá cho khách chưa, khách phản hồi giá cao / thấp thế nào',
         // Nhiều phiên bản mềm mại – mỗi lần gợi ý chọn ngẫu nhiên 1 câu
         hoi: [
           'Giá anh gửi khách thấy sao rồi em, có ổn không?',
@@ -3062,6 +3062,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     'Khách chưa lên đơn hả {p}, lý do gì vậy?',
   ];
 
+  // Sếp cho giá: bình luận CUỐI CÙNG là của sếp, kèm hình (bảng giá đỏ) hoặc câu "cho em giá / duyệt giá"
+  const BOSS_PRICE_RE = /(cho|gửi|duyệt|chốt)\s*(em|chị|anh|e|c|a)?\s*giá|giá\s*(như|trong)\s*(hình|ảnh|file)/iu;
+  const IMG_RE = /\.(png|jpe?g|webp|heic|gif)$/i;
+  function bossPriceInfo(c) {
+    const last = lastComment(c);
+    if (!last || norm(last.staff?.name) !== norm(meName)) return null;
+    // Đính kèm là hình (hoặc không rõ đuôi) – bỏ qua file tài liệu pdf / excel / word
+    const img = !!last.file && (IMG_RE.test(last.file) || !/\.(pdf|xlsx?|docx?|zip|rar|ai|cdr)$/i.test(last.file));
+    return img || BOSS_PRICE_RE.test(last.text || '') ? { ...last, img } : null;
+  }
+  const BOSS_PRICE_ASK = [
+    'Giá anh gửi rồi, {p} báo khách chưa? Khách phản hồi giá cao hay thấp thế nào {p}?',
+    '{P} báo giá cho khách chưa, khách thấy giá cao hay thấp vậy {p}?',
+    'Khách nhận giá rồi phản hồi sao {p}, giá cao hay thấp so với bên khác?',
+    'Giá này {p} gửi khách chưa? Khách chê cao hay ok rồi {p}?',
+  ];
+
   // Chào lại: các cách nói của cùng 1 câu "Báo cáo lại khách hàng này"
   const REPORT_BACK = [
     'Báo cáo lại khách hàng này nhé {p}.',
@@ -3137,6 +3154,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (pr && hoursSince(pr.at) >= 24) {
       const lead0 = hoursSince(pr.at) >= 72 ? `${humanDuration(hoursSince(pr.at))} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
       return { icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: `${lead0}Khách hứa lên đơn mà sao chưa lên vậy ${p}, lý do gì ${p}?` };
+    }
+    // Sếp đã cho giá (hình bảng giá đỏ / "cho em giá") là bình luận cuối, quá 12 giờ NVKD chưa phản hồi → hỏi khách phản hồi giá
+    const bp = bossPriceInfo(c);
+    if (bp && hoursSince(bp.createdAt) >= FOLLOW_UP_HOURS) {
+      const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
+      const hb = hoursSince(bp.createdAt);
+      const lead3 = hb >= 72 ? `${humanDuration(hb)} chưa có phản hồi. ` : '';
+      return {
+        icon: '💰',
+        why: `Sếp đã cho giá${bp.img ? ' (hình)' : ''} ${humanDuration(hb)} trước, NVKD chưa phản hồi`,
+        text: selfFix(lead3 + fillP(pickFor(BOSS_PRICE_ASK, q.id, salt), p), p),
+      };
     }
     if (noPrice(q)) return null;
     const last = lastComment(c);
