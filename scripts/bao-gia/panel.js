@@ -3755,6 +3755,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const SALE_TABS = ['hot', 'deal', 'week']; // mặc định cho NVKD khi mới cấp quyền
   let PERMS = {};
   let MY_ACCESS = true;
+  let MY_ADMIN = false; // quản trị (cập nhật mỗi lần vẽ bảng)
   const builtinAdmin = (me) =>
     me?.isAdmin === true ||
     me?.username === 'admin' ||
@@ -4493,6 +4494,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     PERMS = (await kvGet('perms')) || {};
     const perm = userPerm(meObj);
     MY_ACCESS = perm.access;
+    MY_ADMIN = perm.admin;
     // Ghi nhận người đã mở extension (để quản trị thấy và cấp quyền) – mỗi phiên 1 lần
     if (meObj?.name && !state.seenSaved) {
       state.seenSaved = true;
@@ -5534,6 +5536,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   const DEAL_PCT_MAX = 25;
   function dealSliderHint() {
     if (!IS_TOP || !currentQuoteId()) return;
+    if (!MY_ADMIN) return document.getElementById('dg-deal-hint')?.remove(); // chỉ quản trị thấy
     const lbl = [...document.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^%\s*Deal$/i.test(e.textContent.trim()));
     const row = lbl?.closest('.ant-row, .ant-form-item') || lbl?.parentElement;
     const slider = row?.querySelector('.ant-slider') || lbl?.parentElement?.parentElement?.querySelector('.ant-slider');
