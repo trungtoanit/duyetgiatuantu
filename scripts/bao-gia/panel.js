@@ -2387,6 +2387,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .mt-v b { font-size: 24px; font-weight: 800; line-height: 1.1; }
     .mt-v b.good { color: #047857; } .mt-v b.bad { color: #b91c1c; }
     .mt-s { font-size: 11px; color: #64748b; }
+    .mt-diff { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .mt-diff span { display: block; font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; opacity: .8; }
+    .mt-diff b { display: block; font-size: 22px; font-weight: 800; line-height: 1.15; }
+    .mt-diff.neg { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
     .side-actions { display: grid !important; grid-template-columns: 1fr auto; gap: 8px; }
     .side-actions .act { justify-content: center; }
     .side-q .btns { flex-wrap: wrap; }
@@ -3523,7 +3527,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${ho}
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
-      ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ Giấy tấm vượt BG ${trM(-flexo.diff)}</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? (flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}% · chênh ${trM(flexo.diff)}`) : '') : ''}
+      ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>` : '') : ''}
       ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? 'đang bán' : '') : ''}
       ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
