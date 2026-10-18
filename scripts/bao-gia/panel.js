@@ -2066,7 +2066,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     @media (prefers-reduced-motion: reduce) { .hotbox.collapsed.has-data, .hotbox.collapsed.has-data * { animation: none !important; } }
     .hot-sum { margin-left: 8px; font-size: 14px; font-weight: 900; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 999px; padding: 1px 10px; }
     .dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 12px; margin: 12px; }
-    .dl-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px 14px; background: #fff; display: grid; gap: 6px; animation: wkIn .4s ease both; }
+    .dl-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px 14px; background: #fff; display: grid; gap: 6px; }
+    .dl.anim .dl-card { animation: wkIn .4s ease both; }
     .dl-card:hover { border-color: #c7d2fe; box-shadow: 0 4px 14px rgba(79,70,229,.08); }
     .dl-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .dl-code { font-weight: 900; color: #1d4ed8; text-decoration: none; } .dl-code:hover { text-decoration: underline; }
@@ -3214,8 +3215,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const col = lsGet('dgSideCollapsed') === '1';
       el.hidden = false;
       el.classList.toggle('collapsed', col);
-      el.innerHTML = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>🔁 Bàn giao khách hàng <span class="ho-n">${hoN}</span>
-        <button class="side-btn" data-side="toggle" title="${col ? 'Mở rộng' : 'Thu gọn'}">${col ? '▸' : '▾'}</button></div>${col ? '' : ho}`;
+      setSideHtml(el, `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>🔁 Bàn giao khách hàng <span class="ho-n">${hoN}</span>
+        <button class="side-btn" data-side="toggle" title="${col ? 'Mở rộng' : 'Thu gọn'}">${col ? '▸' : '▾'}</button></div>${col ? '' : ho}`);
       placeSide(el);
       return;
     }
@@ -3235,13 +3236,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${collapsed ? '' : `${custTag(q)}${q?.quoteStatus ? `<span class="st-pill">${esc(statusLabel(q.quoteStatus))}</span>` : ''}`}${busy ? ' <span class="spinner"></span>' : ''}
       ${collapsed ? `<span class="side-mini">${mini}</span>${hoN ? ` <span class="ho-n" title="Bàn giao khách hàng cần xử lý">🔁 ${hoN}</span>` : ''}` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
     if (collapsed) {
-      el.innerHTML = header;
+      setSideHtml(el, header);
       placeSide(el);
       return;
     }
     const [info, rest] = body.includes('<!--dg-split-->') ? body.split('<!--dg-split-->') : ['', body];
     const tile = (cls, label, main, sub) => `<div class="mtile ${cls}"><div class="mt-l">${label}</div><div class="mt-v">${main}</div>${sub ? `<div class="mt-s">${sub}</div>` : ''}</div>`;
-    el.innerHTML = `${header}
+    setSideHtml(el, `${header}
       ${ho}
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
@@ -3251,7 +3252,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
       ${kinds.length ? marginBox(q, true).replace('<details class="mgnbox">', `<details class="mgnbox side-d"${open ? ' open' : ''}>`) : ''}
-      ${rest}`;
+      ${rest}`);
     placeSide(el);
   }
 
@@ -4060,6 +4061,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ? `<span class="fulltip"><span class="ft-ic">⛶</span>Báo cáo hiển thị đầy đủ nhất ở chế độ toàn màn hình<button class="ft-ok" data-act="full">Đồng ý – mở toàn màn hình</button></span>`
       : '';
 
+  let lastPanelHtml = '';
+  let lastSideHtml = '';
+  const setSideHtml = (el, html) => {
+    if (html === lastSideHtml && el.innerHTML) return; // không đổi → không vẽ lại
+    lastSideHtml = html;
+    el.innerHTML = html;
+  };
   async function renderInner() {
     meName = myName(await kvGet('me'));
     const [quotes, comments, evals, suggests, collected, settings] = await Promise.all([
@@ -4365,7 +4373,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         syncPendingReads(ns, me?.id ?? meName);
         return notifBox(ns, quotes, me);
       })()}</div>`;
-    root.querySelector('.panel').innerHTML = `
+    const panelHtml = `
       <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns">${fullTip()}<button class="x fs${needFull() ? ' urge' : ''}" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
@@ -4393,6 +4401,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           : bar + headHtml + overdueBox + learnedBox(await kvGet('learned'));
       })()}
     `;
+    // Chỉ vẽ lại khi nội dung thật sự thay đổi (bảng tự cập nhật liên tục – không để nhấp nháy / mất vị trí)
+    const panelEl = root.querySelector('.panel');
+    if (panelHtml !== lastPanelHtml || !panelEl.innerHTML) {
+      lastPanelHtml = panelHtml;
+      panelEl.innerHTML = panelHtml;
+    }
     if (searchFocused) {
       const el = root.querySelector('input.dg-search');
       el?.focus();
@@ -4578,7 +4592,9 @@ Không markdown, không giải thích ngoài JSON.`;
         </div>`;
       })
       .join('');
-    return `<div class="ctab wk dl">
+    const dlAnim = state.dealAnimKey !== `${staff}:${ai?.at || 0}`; // hiệu ứng chỉ khi đổi NVKD / có kết quả mới
+    state.dealAnimKey = `${staff}:${ai?.at || 0}`;
+    return `<div class="ctab wk dl${dlAnim ? ' anim' : ''}">
       <div class="ct-head"><span class="ct-who">${avatarHtml(staff, 36)}<span><div class="ct-title">🧠 Phân tích deal · ${esc(staff)}</div>
         <div class="ct-sub">${deals.length} báo giá đang mở (90 ngày) · ${moneyShortG(deals.reduce((a, q) => a + (Number(q.amount) || 0), 0))}${ai ? ` · AI phân tích lúc ${new Date(ai.at).toLocaleString('vi-VN')}` : ' · chưa phân tích'}</div></span></span>
         <button class="rp-start cta" data-act="deal-run" data-staff="${esc(staff)}" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các deal…' : `🧠 ${ai ? 'Phân tích lại' : 'Phân tích deal'}`}<span class="cta-sub">AI đọc ${Math.min(deals.length, DEAL_MAX)} báo giá lớn nhất · gợi ý bước kế tiếp</span></button></div>
@@ -4900,6 +4916,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'tab') {
       lsSet('dgTab', b.dataset.tab);
+      state.dealAnimKey = null;
       state.weekAnimKey = null;
       render();
     }
