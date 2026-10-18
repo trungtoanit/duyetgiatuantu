@@ -1186,8 +1186,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const was = fx.amountAt ?? fx.quoteTotal;
     return !!was && Math.abs(was - q.amount) / q.amount > 0.005;
   };
+  // Báo giá tính Flexo trước khi có kiểm tra giá giấy tấm 0đ/m2 → mở lại 1 lần để kiểm tra
+  const SHEET_SINCE = 1792344732;
   const flexoStale = (fx, q) =>
-    !fx || fx.mode !== FLEXO_MODE || (fx.missing?.length > 0 && Date.now() / 1000 - fx.at > 3600) || flexoAmountChanged(fx, q);
+    !fx || fx.mode !== FLEXO_MODE || (fx.missing?.length > 0 && Date.now() / 1000 - fx.at > 3600) || flexoAmountChanged(fx, q) ||
+    (!!q && q.noSheetAt == null && (fx.at || 0) < SHEET_SINCE);
 
   async function readFlexoCost(f, q) {
     const doc = f.contentDocument;
@@ -5525,9 +5528,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const hotSum = items.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0); // tổng tiền các báo giá đang gợi ý
     // Tổng chênh lệch (Flexo: BG − giấy tấm · Offset: Σ giá × SL × đang bán %) của các deal đã tính được
     const diffs = items.map((x) => diffVal(quotes[x.id])).filter((v) => v != null);
+    const noSheetN = items.filter((x) => quotes[x.id]?.noSheet).length;
     const diffSum = diffs.reduce((a, v) => a + v, 0);
     const diffTag = diffs.length
-      ? `<span class="hot-diff" title="Tổng chênh lệch của ${diffs.length}/${items.length} deal đã tính được: ${money(Math.round(diffSum))}">📈 Chênh lệch ${Math.abs(diffSum) >= 1e9 ? `${(diffSum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(diffSum)}</span>`
+      ? `<span class="hot-diff" title="Tổng chênh lệch của ${diffs.length}/${items.length} deal đã tính được: ${money(Math.round(diffSum))}${noSheetN ? ` · không cộng ${noSheetN} deal chưa có giá giấy tấm` : ''}">📈 Chênh lệch ${Math.abs(diffSum) >= 1e9 ? `${(diffSum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(diffSum)}</span>`
       : '';
     // Tin nhắn tóm tắt gửi nhóm: gom theo NVKD (thứ tự theo deal xếp hạng cao nhất của mỗi người)
     const byStaff = new Map();
