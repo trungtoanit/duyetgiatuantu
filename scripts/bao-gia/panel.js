@@ -312,6 +312,8 @@
           next.staff = old.staff;
           next.staffKey = old.staffKey;
         }
+        // Giữ dấu "chưa có giá giấy tấm" (đọc từ trang chi tiết, danh sách không có)
+        if (old?.noSheetAt) Object.assign(next, { noSheet: old.noSheet, noSheetN: old.noSheetN, noSheetAt: old.noSheetAt });
         patch[q.id] = next;
       }
       await kvMerge('quotes', patch);
@@ -2106,6 +2108,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .fchip.green { --c: #16a34a; --bg: #dcfce7; }
     .it-main .bok { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
+    .nosheet { margin-left: 6px; display: inline-block; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 999px; padding: 0 9px;
+      font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
+    .it-main .nosheet { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .ctr { margin-left: 6px; display: inline-block; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .mgnbox { margin-top: 8px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
@@ -2892,6 +2897,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const t = bossOkInfo(q, c);
     return t ? ` <span class="bok" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">✅ Lấy đơn</span>` : '';
   };
+  // Có sản phẩm giá giấy tấm 0đ/m2 → chưa có giá giấy tấm (Flexo chưa chính xác)
+  const noSheetTag = (q) => (q?.noSheet ? ` <span class="nosheet" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – cần cập nhật giá giấy tấm">🧻 Chưa có giá giấy tấm</span>` : '');
   const contractTag = (c) => {
     const t = contractInfo(c);
     return t ? ` <span class="ctr" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">📝 Hợp đồng</span>` : '';
@@ -4473,7 +4480,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const sg = suggests[qid];
       const last = lastComment(c);
       const mode = followMode(q, c);
-      const tags = `${kindTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
+      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
       current = `
         <div class="side-info">
           <div class="si-name">${esc(q?.name || '')}</div>
@@ -4522,6 +4529,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       sample: ({ c }) => sampleInfo(c),
       contract: ({ c }) => contractInfo(c),
       bossok: ({ q, c }) => bossOkInfo(q, c),
+      nosheet: ({ q }) => !!q?.noSheet,
       nocmt: ({ c }) => !c?.threads?.length,
       unread: ({ q }) => q?.isRead === false,
       feaUnread: ({ q, f }) => !!f && q?.isRead === false, // vừa khả thi (có 🎯) vừa chưa đọc
@@ -4581,6 +4589,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ]],
         ['Lợi nhuận & loại', [
           ['lowm', 'red', '📈', 'Bán dưới 30%', cnt(FILTERS.lowm)],
+          ['nosheet', 'red', '🧻', 'Chưa có giá giấy tấm', cnt(FILTERS.nosheet)],
           ['flexo', 'blue', '🟦', 'Flexo', kinds.flexo],
           ['offset', 'violet', '🟪', 'Offset', kinds.offset],
           ['both', 'violet', '🟦🟪', 'Flexo + Offset', kinds.both],
@@ -4619,7 +4628,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-no">${i + 1}</span>
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${kindTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-main">${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-cust">${custTag(q).trim()}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
@@ -5375,6 +5384,24 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     setInterval(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 5 * 60e3);
   }
 
+  // ---------- Giá giấy tấm 0đ/m2 trên trang chi tiết báo giá → nhãn "Chưa có giá giấy tấm" ----------
+  // Đọc ô "x/m2" dưới cột Ngày update của bảng sản phẩm (cả trang đang mở lẫn khung thu thập ngầm).
+  let sheetSaved = '';
+  async function scanSheetPrice() {
+    const qid = currentQuoteId();
+    if (!qid) return;
+    const cells = [...document.querySelectorAll('span, div, td')].filter((e) => !e.children.length && /\/\s*m2$/i.test(e.textContent.trim()));
+    if (!cells.length) return; // bảng sản phẩm chưa tải
+    const zero = cells.filter((e) => /^0\s*(đ|vnđ|vnd)?\s*\/\s*m2$/i.test(e.textContent.trim().replace(/\s+/g, ' '))).length;
+    const key = `${qid}:${zero}`;
+    if (key === sheetSaved) return;
+    const old = (await kvGet('quotes'))[qid];
+    sheetSaved = key;
+    if (!old || (!!old.noSheet === zero > 0 && old.noSheetN === zero)) return;
+    await kvMerge('quotes', { [qid]: { ...old, noSheet: zero > 0, noSheetN: zero, noSheetAt: Math.floor(Date.now() / 1000) } });
+  }
+  setInterval(() => scanSheetPrice().catch(() => {}), 1500);
+
   function hotBox(hot, quotes, done = {}, inTab = false) {
     const busy = state.busy.has('hot');
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
@@ -5475,7 +5502,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         i + 1,
         q?.createdAt ? new Date(q.createdAt * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
         q?.code || c?.code || '',
-        htmlText(`${kindTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
+        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.customer?.code || '',
         q?.customer?.name || '',
         q?.name || '',
