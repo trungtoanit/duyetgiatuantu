@@ -3187,7 +3187,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <span class="ct-who">${avatarHtml(staff, 44)}<span><div class="ct-title">${esc(staff)}</div>
         <div class="ct-sub">${rank >= 0 ? `Hạng ${rank + 1}/${allRows.length} tuần này · ${money(allRows[rank].total)} · ${allRows[rank].n} đơn` : 'Chưa có doanh số tuần này'}</div></span></span>
         <span class="sc-medal">${rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank >= 0 ? `#${rank + 1}` : '🏁'}</span></div>
-      ${staffOverview(staff, info, orders, now, dd)}
       <div class="sc-kpis">
         ${kpi('👥', 'Khách hàng phụ trách', custs.size, `${trendRows.length} khách có đơn trong 6 tháng`)}
         ${kpi('📝', 'Báo giá chưa chốt', open.length, `${pending.length} khách · trong 90 ngày`, 'warn')}
