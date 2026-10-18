@@ -3690,6 +3690,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     for (const [cid, od] of Object.entries(orders || {})) if (!info[cid]?.staff && od?.customer?.staff) info[cid] = { ...od.customer, at: 0 };
     const rows = [];
     for (const [cid, od] of Object.entries(orders || {})) {
+      if (!/^\d+$/.test(cid)) continue; // nhóm đơn từ trang Misa chưa khớp được khách CRM → không phải 1 khách cụ thể
       const m = [0, 0, 0, 0, 0, 0];
       for (const o of od?.orders || []) {
         const i = o.at ? idx(o.at) : -1;
