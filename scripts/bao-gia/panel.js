@@ -2817,6 +2817,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return { months, rows };
   }
 
+  // Tên công ty gọn: bỏ các chữ loại hình / ngành nghề ở đầu
+  // "CÔNG TY TNHH SẢN XUẤT THƯƠNG MẠI PHONG TÍN" → "PHONG TÍN", "CÔNG TY CỔ PHẦN S&S GLOVE" → "S&S GLOVE"
+  const CO_WORDS = ['chi nhánh', 'công ty', 'cty', 'tnhh', 'cổ phần', 'cp', 'mtv', 'một thành viên', 'sản xuất', 'sx', 'thương mại', 'tm',
+    'dịch vụ', 'dv', 'xuất nhập khẩu', 'xnk', 'đầu tư', 'và', '&', '-', ','];
+  const shortCompany = (name) => {
+    let t = String(name || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const w of CO_WORDS) {
+        if (t.toLowerCase().startsWith(w + ' ') || t.toLowerCase() === w) {
+          t = t.slice(w.length).trim();
+          changed = true;
+        }
+      }
+    }
+    return t || name;
+  };
+
   function custTab({ months, rows }) {
     const fold = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
     const needle = fold(state.search).trim();
@@ -2846,7 +2864,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('');
         return `<tr><td class="ct-no">${i + 1}</td>
-          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(r.name)}</a>${r.code ? `<span class="kh">${esc(r.code)}</span>` : ''}${arrow(r.trend)}</td>
+          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${r.code ? `<span class="kh">${esc(r.code)}</span>` : ''}${arrow(r.trend)}</td>
           <td><span class="ct-grp ${r.active >= 4 ? 'hot' : ''}">${r.active >= 4 ? 'Ưu tiên' : 'Thường'}</span></td>
           <td class="ct-who" title="${esc(r.staff)}">${r.staff ? `${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}` : ''}</td>
           ${cells}<td class="num ct-total">${money(r.total)}</td></tr>`;
