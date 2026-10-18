@@ -3523,6 +3523,11 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   }
 
   async function onClick(e) {
+    // Tab Khách hàng: bấm tên khách → mở trang khách ở tab mới (trình duyệt tự mở) và thu gọn bảng
+    if (e.target.closest('.ct-name a')) {
+      setPanelOpen(false);
+      return render();
+    }
     // ✓ Hoàn thành 1 dòng "Có thể chốt liền" (nút nằm trong link → chặn chuyển trang)
     const hd = e.target.closest('[data-act="hot-done"]');
     if (hd) {
