@@ -315,7 +315,7 @@
         // Giữ dấu "chưa có giá giấy tấm" (đọc từ trang chi tiết, danh sách không có)
         if (old?.noSheetAt) Object.assign(next, { noSheet: old.noSheet, noSheetN: old.noSheetN, noSheetAt: old.noSheetAt });
         // Đã lên đơn (thấy ở trang chi tiết) thì giữ – danh sách có thể không có trường mã đơn Misa
-        if (old?.hasOrder) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
+        if (old?.hasOrder && old.orderCode) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
         patch[q.id] = next;
       }
       await kvMerge('quotes', patch);
@@ -328,7 +328,7 @@
         next.staff = old.staff;
         next.staffKey = old.staffKey;
       }
-      if (old.hasOrder) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
+      if (old.hasOrder && old.orderCode) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
       await kvMerge('quotes', { [data.id]: { ...old, ...next } });
     } else if (kind === 'margin') {
       const all = await kvGet('margins');
@@ -3088,12 +3088,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Sếp cho giá: bình luận CUỐI CÙNG là của sếp, kèm hình (bảng giá đỏ) hoặc câu "cho em giá / duyệt giá"
   const BOSS_PRICE_RE = /(cho|gửi|duyệt|chốt)\s*(em|chị|anh|e|c|a)?\s*giá|giá\s*(như|trong)\s*(hình|ảnh|file)/iu;
   const IMG_RE = /\.(png|jpe?g|webp|heic|gif)$/i;
+  // Lấy bình luận cho giá MỚI NHẤT của sếp; trong CÙNG LUỒNG đó sau đó chưa ai (NVKD) trả lời → vẫn coi là chờ phản hồi giá
+  // (luồng khác có bình luận mới hơn cũng không tính là đã phản hồi giá)
   function bossPriceInfo(c) {
-    const last = lastComment(c);
-    if (!last || norm(last.staff?.name) !== norm(meName)) return null;
-    // Đính kèm là hình (hoặc không rõ đuôi) – bỏ qua file tài liệu pdf / excel / word
-    const img = !!last.file && (IMG_RE.test(last.file) || !/\.(pdf|xlsx?|docx?|zip|rar|ai|cdr)$/i.test(last.file));
-    return img || BOSS_PRICE_RE.test(last.text || '') ? { ...last, img } : null;
+    const isImg = (t) => !!t.file && (IMG_RE.test(t.file) || !/\.(pdf|xlsx?|docx?|zip|rar|ai|cdr)$/i.test(t.file));
+    let best = null;
+    for (const root of c?.threads || []) {
+      const all = [];
+      const walk = (t) => {
+        all.push(t);
+        (t.children || []).forEach(walk);
+      };
+      walk(root);
+      for (const t of all) {
+        if (norm(t.staff?.name) !== norm(meName)) continue;
+        const img = isImg(t);
+        if (!img && !BOSS_PRICE_RE.test(t.text || '')) continue;
+        const replied = all.some((x) => x.createdAt > t.createdAt && norm(x.staff?.name) !== norm(meName));
+        const later = all.some((x) => x.createdAt > t.createdAt); // sếp đã viết thêm trong luồng → câu hỏi khác lo
+        if (!replied && !later && (!best || t.createdAt > best.createdAt)) best = { ...t, img };
+      }
+    }
+    return best;
   }
   const BOSS_PRICE_ASK = [
     'Giá anh gửi rồi, {p} báo khách chưa? Khách phản hồi giá cao hay thấp thế nào {p}?',
