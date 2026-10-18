@@ -54,9 +54,10 @@
 
   // Tình trạng báo giá theo CRM
   // NVKD không theo dõi: báo giá của họ không vào danh sách hỏi lại, không thu thập ngầm, không tự gợi ý
-  const EXCLUDED_STAFF = ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi'];
+  const EXCLUDED_STAFF = ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'];
   const norm = (n) => (n || '').normalize('NFC').trim().toLowerCase();
-  const isExcluded = (name) => EXCLUDED_STAFF.some((x) => norm(x) === norm(name));
+  // Khớp đúng tên, hoặc tên tài khoản kết thúc bằng tên đó (vd. tài khoản "… Đại Dương")
+  const isExcluded = (name) => !!name && EXCLUDED_STAFF.some((x) => norm(x) === norm(name) || norm(name).endsWith(` ${norm(x)}`));
 
   const STATUS = {
     DRAFF: 'Bản thảo',
@@ -2804,6 +2805,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = m.reduce((a, b) => a + b, 0);
       if (!total) continue;
       const ci = info[cid] || {};
+      if (isExcluded(ci.staff)) continue; // khách của NVKD không theo dõi
       // Xu hướng: trung bình 3 tháng gần nhất (không tính tháng này) so với trung bình 2 tháng đầu
       const last3 = m[2] + m[3] + m[4];
       const first2 = m[0] + m[1];
