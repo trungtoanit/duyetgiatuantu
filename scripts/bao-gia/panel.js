@@ -2892,7 +2892,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const m = [0, 0, 0, 0, 0, 0];
       for (const o of od?.orders || []) {
         const i = o.at ? idx(o.at) : -1;
-        if (i >= 0) m[i] += Number(o.total) || 0;
+        if (i >= 0) m[i] += Number(o.totalVat ?? o.total) || 0; // doanh thu sau VAT (nếu đơn có), không thì tiền hàng
       }
       const total = m.reduce((a, b) => a + b, 0);
       if (!total) continue;
