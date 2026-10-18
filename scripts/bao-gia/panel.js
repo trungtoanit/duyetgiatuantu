@@ -1647,37 +1647,38 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; margin: 4px 12px 14px; }
     .bweek { display: flex; flex-direction: column; gap: 12px; }
     .bw-title { font-weight: 900; color: #4338ca; font-size: 14px; }
-    /* Bảng vàng tháng: nền tối sang trọng, viền & chữ vàng kim, cúp lấp lánh */
-    .mcard { position: relative; overflow: hidden; border-radius: 18px; padding: 16px 18px; color: #fef3c7;
-      background: radial-gradient(120% 140% at 0% 0%, #3b2a0a 0%, #111827 45%, #0b1020 100%); border: 1px solid #b8860b;
-      box-shadow: 0 10px 30px rgba(15,23,42,.35), inset 0 0 0 1px rgba(251,191,36,.25); }
+    /* Bảng vàng tháng: nền sáng màu ngà, viền & chữ vàng kim, cúp lấp lánh */
+    .mcard { position: relative; overflow: hidden; border-radius: 18px; padding: 16px 18px; color: #78350f;
+      background: linear-gradient(135deg, #fffdf5 0%, #fef3c7 55%, #fde68a 100%); border: 1.5px solid #f59e0b;
+      box-shadow: 0 10px 28px rgba(245,158,11,.22), inset 0 0 0 4px rgba(255,255,255,.6); }
     .mcard::before { content: ''; position: absolute; inset: 0; pointer-events: none;
-      background: linear-gradient(115deg, transparent 35%, rgba(255,215,0,.12) 50%, transparent 65%); background-size: 250% 100%; animation: wkShine 4s ease-in-out infinite; }
-    .mc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-    .mc-trophy { font-size: 40px; filter: drop-shadow(0 0 10px rgba(251,191,36,.7)); animation: mcTrophy 2.4s ease-in-out infinite; }
+      background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.7) 50%, transparent 65%); background-size: 250% 100%; animation: wkShine 4s ease-in-out infinite; }
+    .mcard::after { content: ''; position: absolute; right: -40px; top: -40px; width: 160px; height: 160px; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle, rgba(251,191,36,.35), transparent 70%); }
+    .mc-head { position: relative; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .mc-trophy { font-size: 40px; filter: drop-shadow(0 4px 10px rgba(217,119,6,.45)); animation: mcTrophy 2.4s ease-in-out infinite; }
     @keyframes mcTrophy { 0%, 100% { transform: rotate(-6deg) scale(1); } 50% { transform: rotate(6deg) scale(1.12); } }
     .mc-title { font-size: 20px; font-weight: 900; letter-spacing: .02em;
-      background: linear-gradient(90deg, #fde68a, #f59e0b, #fff7d6, #f59e0b); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+      background: linear-gradient(90deg, #92400e, #d97706, #b45309, #d97706); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
       animation: wkGrad 3s linear infinite; }
-    .mc-sub { font-size: 12px; color: #d6c48f; }
+    .mc-sub { font-size: 12px; color: #a16207; }
     .mc-row { position: relative; display: grid; grid-template-columns: 34px auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px;
-      border-radius: 12px; margin-top: 6px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(251,191,36,.12); }
+      border-radius: 12px; margin-top: 6px; cursor: pointer; background: rgba(255,255,255,.75); border: 1px solid #fde68a; }
     .wk.anim .mc-row { animation: wkIn .55s ease both; }
-    .mc-row:hover { background: rgba(251,191,36,.1); }
-    .mc-rank { font-size: 18px; font-weight: 900; text-align: center; color: #d6c48f; }
-    .mc-name { font-weight: 800; color: #fef3c7; overflow: hidden; }
-    .mc-bar { display: block; height: 4px; margin-top: 4px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
-    .mc-bar i { display: block; height: 100%; width: var(--w); border-radius: 99px; background: linear-gradient(90deg, #b8860b, #fde68a); }
-    .mc-amt { text-align: right; font-weight: 900; color: #fde68a; font-variant-numeric: tabular-nums; }
-    .mc-amt small { display: block; font-size: 10px; font-weight: 600; color: #b9a978; }
-    .mc-row.mc1 { padding: 12px 12px; background: linear-gradient(90deg, rgba(251,191,36,.28), rgba(251,191,36,.06)); border-color: #fbbf24;
-      box-shadow: 0 0 18px rgba(251,191,36,.35); }
+    .mc-row:hover { background: #fff; border-color: #f59e0b; }
+    .mc-rank { font-size: 18px; font-weight: 900; text-align: center; color: #b45309; }
+    .mc-name { font-weight: 800; color: #451a03; overflow: hidden; }
+    .mc-bar { display: block; height: 5px; margin-top: 4px; border-radius: 99px; background: #fef3c7; overflow: hidden; }
+    .mc-bar i { display: block; height: 100%; width: var(--w); border-radius: 99px; background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .mc-amt { text-align: right; font-weight: 900; color: #b45309; font-variant-numeric: tabular-nums; }
+    .mc-amt small { display: block; font-size: 10px; font-weight: 600; color: #a16207; }
+    .mc-row.mc1 { padding: 12px; background: linear-gradient(90deg, #fff, #fffbeb); border: 2px solid #f59e0b; box-shadow: 0 6px 18px rgba(245,158,11,.3); }
     .mc-row.mc1 .mc-rank { font-size: 26px; animation: wkCrown 1.6s ease-in-out infinite; }
-    .mc-row.mc1 .mc-name { font-size: 16px; } .mc-row.mc1 .mc-amt { font-size: 20px; }
-    .mc-row.mc1 .ava { border: 2px solid #fbbf24; box-shadow: 0 0 12px rgba(251,191,36,.8); }
-    .mc-champ { margin-left: 8px; font-size: 10px; font-weight: 900; color: #1f2937; border-radius: 999px; padding: 1px 8px; vertical-align: 2px;
-      background: linear-gradient(90deg, #fde68a, #f59e0b, #fde68a); background-size: 200% 100%; animation: wkGrad 2s linear infinite; }
-    .mc-row.mc2 { border-color: rgba(203,213,225,.4); } .mc-row.mc3 { border-color: rgba(251,146,60,.35); }
+    .mc-row.mc1 .mc-name { font-size: 16px; } .mc-row.mc1 .mc-amt { font-size: 21px; color: #92400e; }
+    .mc-row.mc1 .ava { border: 2px solid #f59e0b; box-shadow: 0 0 0 3px rgba(251,191,36,.35), 0 4px 12px rgba(245,158,11,.5); }
+    .mc-champ { margin-left: 8px; font-size: 10px; font-weight: 900; color: #fff; border-radius: 999px; padding: 1px 8px; vertical-align: 2px;
+      background: linear-gradient(90deg, #d97706, #f59e0b, #d97706); background-size: 200% 100%; animation: wkGrad 2s linear infinite; }
+    .mc-row.mc2 { border-color: #cbd5e1; } .mc-row.mc3 { border-color: #fdba74; }
     .mc-row.me { outline: 2px solid #818cf8; }
     .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; }
     .pd { position: relative; width: 130px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
