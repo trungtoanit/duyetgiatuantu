@@ -181,6 +181,7 @@
       score += n;
       if (why) reasons.push(why);
     };
+    if (bossOkInfo(q, c)) add(40, 'sếp cho lấy đơn');
     if (promiseInfo(q, c)) add(35, 'hứa lên đơn');
     if (targetPriceInfo(c)) add(30, 'khách cho giá');
     if (q.isReprint) add(25, 'tái bản');
@@ -2093,6 +2094,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .smp { margin-left: 6px; display: inline-block; background: #fdf4ff; color: #a21caf; border: 1px solid #f5d0fe; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .smp.ok { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+    .bok { margin-left: 6px; display: inline-block; background: #dcfce7; color: #166534; border: 1px solid #86efac; border-radius: 999px; padding: 0 9px;
+      font-size: 12px; font-weight: 800; vertical-align: 1px; }
+    .fchip.green { --c: #16a34a; --bg: #dcfce7; }
+    .it-main .bok { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .ctr { margin-left: 6px; display: inline-block; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .mgnbox { margin-top: 8px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
@@ -2864,6 +2869,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     (c?.threads || []).forEach(walk);
     return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
   }
+  // Sếp đã cho lấy đơn / chốt đơn trong bình luận (và chưa có đơn) → nhãn "✅ Lấy đơn"
+  const bossOkInfo = (q, c) => (!q || hasOrderFull(q, c) ? null : bossOrderInfo(c));
+  const bossOkTag = (q, c) => {
+    const t = bossOkInfo(q, c);
+    return t ? ` <span class="bok" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">✅ Lấy đơn</span>` : '';
+  };
   const contractTag = (c) => {
     const t = contractInfo(c);
     return t ? ` <span class="ctr" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">📝 Hợp đồng</span>` : '';
@@ -4448,7 +4459,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const sg = suggests[qid];
       const last = lastComment(c);
       const mode = followMode(q, c);
-      const tags = `${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
+      const tags = `${kindTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
       current = `
         <div class="side-info">
           <div class="si-name">${esc(q?.name || '')}</div>
@@ -4495,6 +4506,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       promise: ({ q, c }) => promiseInfo(q, c),
       sample: ({ c }) => sampleInfo(c),
       contract: ({ c }) => contractInfo(c),
+      bossok: ({ q, c }) => bossOkInfo(q, c),
       nocmt: ({ c }) => !c?.threads?.length,
       unread: ({ q }) => q?.isRead === false,
       feaUnread: ({ q, f }) => !!f && q?.isRead === false, // vừa khả thi (có 🎯) vừa chưa đọc
@@ -4545,6 +4557,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ['Tín hiệu khách', [
           ['tgt', 'blue', '💲', 'Khách cho giá', cnt(FILTERS.tgt)],
           ['promise', 'amber', '🤝', 'Hứa lên đơn', cnt(FILTERS.promise)],
+          ['bossok', 'green', '✅', 'Lấy đơn', cnt(FILTERS.bossok)],
           ['contract', 'sky', '📝', 'Hợp đồng', cnt(FILTERS.contract)],
           ['sample', 'pink', '✂️', 'Cắt mẫu', cnt(FILTERS.sample)],
           ['high', 'orange', '💸', 'Giá cao', cnt(FILTERS.high)],
@@ -4591,7 +4604,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-no">${i + 1}</span>
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${kindTag(q)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-main">${kindTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-cust">${custTag(q).trim()}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
@@ -5439,7 +5452,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         i + 1,
         q?.createdAt ? new Date(q.createdAt * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
         q?.code || c?.code || '',
-        htmlText(`${kindTag(q)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
+        htmlText(`${kindTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.customer?.code || '',
         q?.customer?.name || '',
         q?.name || '',
