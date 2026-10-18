@@ -2095,6 +2095,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-hot-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; background: #fff; border: 1px solid #fed7aa;
       border-radius: 12px; padding: 8px 12px; }
     .dl-hot-body { grid-column: 1 / -1; font-size: 12.5px; color: #7c2d12; }
+    .dl-big { margin: 12px; padding: 12px 14px; border-radius: 16px; border: 2px solid #818cf8; background: linear-gradient(135deg, #eef2ff, #f5f3ff); }
+    .dl-big-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 15px; color: #3730a3; }
+    .dl-bic { font-size: 22px; display: inline-block; animation: wkMedal 2s ease-in-out infinite; }
+    .dl-big-tip { margin: 6px 0 10px; font-size: 13px; color: #312e81; background: #fff; border: 1px dashed #a5b4fc; border-radius: 10px; padding: 7px 12px; }
+    .dl-big-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 8px; }
+    .dl-big-item { display: grid; gap: 4px; background: #fff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 9px 12px; }
+    .dl-amt.big { font-size: 15px; color: #3730a3; }
+    .dl-acts { display: flex; flex-wrap: wrap; gap: 5px; }
+    .dl-act { font-size: 11.5px; font-weight: 800; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 2px 10px; }
+    .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
     .dl-card.hot { border: 2px solid #fb923c; background: linear-gradient(180deg, #fff7ed, #fff 40%); }
     .dl-hotbadge { font-size: 11px; font-weight: 900; color: #fff; background: linear-gradient(90deg, #f97316, #ef4444); border-radius: 999px; padding: 1px 8px;
       white-space: nowrap; animation: ctaGlow 1.6s ease-in-out infinite; } .dl .ct-head .ct-who { flex: 1; color: #fff; } .dl .ct-title { color: #fff; }
@@ -4463,9 +4473,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 - giai đoạn hiện tại của deal, - độ "khoẻ" của deal (khả năng chốt 0–100), - còn thiếu gì để chốt,
 - 2–3 bước kế tiếp NVKD cần làm theo thứ tự (cụ thể, làm được ngay trong 1–2 ngày), - 1 câu NVKD có thể nhắn / nói với khách, - rủi ro lớn nhất (nếu có).
 Giai đoạn chọn 1 trong: "Mới báo giá", "Chờ khách phản hồi", "Đàm phán giá", "Làm mẫu / duyệt maket", "Chờ cọc / hợp đồng", "Sắp lên đơn", "Nguội – cần chào lại".
+ĐẶC ĐIỂM CỦA SẾP: sếp rất dễ tính, sẵn sàng đi gặp khách trực tiếp cùng NVKD, và khi sếp đi cùng thì có thể hỗ trợ thêm về GIÁ và CÔNG NỢ.
+→ Với deal LỚN (từ khoảng 100 triệu) hoặc deal đang vướng giá / công nợ / khách phân vân: LUÔN gợi ý NVKD làm việc trực tiếp với sếp –
+  book lịch hẹn khách để sếp tới gặp, trao đổi với sếp mức giá / thời hạn công nợ có thể hỗ trợ để kéo đơn về.
 Chỉ dựa trên dữ liệu được cung cấp, không bịa số liệu. Viết tiếng Việt tự nhiên, ngắn gọn, xưng hô với khách lịch sự (anh/chị).
 Trả về DUY NHẤT một JSON array, mỗi phần tử:
-{"code":"BGxxxxx","giai_doan":"...","suc_khoe":0-100,"con_thieu":["2–6 chữ mỗi mục"],"buoc_tiep":["bước 1","bước 2"],"cau_noi":"1 câu nhắn khách","rui_ro":"1 câu hoặc rỗng"}
+{"code":"BGxxxxx","giai_doan":"...","suc_khoe":0-100,"con_thieu":["2–6 chữ mỗi mục"],"buoc_tiep":["bước 1","bước 2"],"cau_noi":"1 câu nhắn khách","rui_ro":"1 câu hoặc rỗng",
+ "nho_sep":"1 câu cụ thể NVKD cần làm với sếp (book lịch sếp gặp khách / xin hỗ trợ giá / xin công nợ) – để rỗng nếu deal nhỏ và không vướng gì"}
 Không markdown, không giải thích ngoài JSON.`;
 
   function dealList(staff, quotes, comments) {
@@ -4515,6 +4529,7 @@ Không markdown, không giải thích ngoài JSON.`;
         steps: (Array.isArray(x.buoc_tiep) ? x.buoc_tiep : []).map(String).filter(Boolean).slice(0, 4),
         say: String(x.cau_noi || ''),
         risk: String(x.rui_ro || ''),
+        boss: String(x.nho_sep || ''),
       }));
       await kvMerge('dealAi', { [norm(staff)]: { at: Date.now(), staff, items } });
     } catch (e) {
@@ -4549,6 +4564,25 @@ Không markdown, không giải thích ngoài JSON.`;
         .map((x) => [x.id, x]),
     );
     const hotList = Object.values(hotBy).sort((a, b) => b.pct - a.pct);
+    // Deal lớn → gợi ý NVKD làm việc trực tiếp với sếp (sếp dễ tính, đi gặp khách được, hỗ trợ giá / công nợ khi đi cùng)
+    const BIG = 100e6;
+    const big = deals.filter((q) => (Number(q.amount) || 0) >= BIG).slice(0, 8);
+    const bigBox = big.length
+      ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Deal lớn – làm việc trực tiếp với sếp để kéo đơn về</b><span class="hot-count">${big.length}</span>
+          <span class="hot-sum">💰 ${moneyShortG(big.reduce((a, q) => a + (Number(q.amount) || 0), 0))}</span></div>
+        <div class="dl-big-tip">Sếp rất <b>dễ tính</b> và sẵn sàng hỗ trợ: <b>book lịch hẹn khách để sếp tới gặp trực tiếp</b> – khi sếp đi cùng có thể hỗ trợ thêm về <b>giá</b> và <b>công nợ</b>. Deal lớn đừng ngại nhờ sếp!</div>
+        <div class="dl-big-list">${big
+          .map((q) => {
+            const a = aiBy[q.id];
+            const last = lastComment(comments[q.id]);
+            return `<div class="dl-big-item"><div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
+                <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="dl-amt big">${money(q.amount)}</span></div>
+              <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))}${last ? ` · BL cuối ${ago(last.createdAt)}` : ' · chưa có bình luận'}${a?.stage ? ` · ${esc(a.stage)}` : ''}</div>
+              ${a?.boss ? `<div class="dl-boss">🤝 ${esc(a.boss)}</div>` : ''}
+              <div class="dl-acts"><span class="dl-act">📅 Book lịch hẹn – mời sếp đi gặp khách</span><span class="dl-act">💲 Trao đổi giá với sếp</span><span class="dl-act">🧾 Xin sếp hỗ trợ công nợ</span></div></div>`;
+          })
+          .join('')}</div></div>`
+      : '';
     const hotBox2 = hotList.length
       ? `<div class="dl-hot"><div class="dl-hot-h"><span class="dl-fire">🔥</span><b>Ưu tiên chốt đơn ngay</b><span class="hot-count">${hotList.length}</span>
           <span class="hot-sum">💰 ${moneyShortG(hotList.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0))}</span>
@@ -4587,6 +4621,7 @@ Không markdown, không giải thích ngoài JSON.`;
               ${a.missing.length ? `<div class="hot-miss"><b>🧩 Còn thiếu:</b>${a.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</div>` : ''}
               ${a.steps.length ? `<div class="hot-steps"><b>👉 Bước kế tiếp cho NVKD:</b>${a.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</div>` : ''}
               ${a.say ? `<div class="dl-say">💬 <i>Gợi ý nhắn khách:</i> “${esc(a.say)}”</div>` : ''}
+              ${a.boss ? `<div class="dl-boss">🤝 <b>Làm việc với sếp:</b> ${esc(a.boss)}</div>` : ''}
               ${a.risk ? `<div class="dl-risk">⚠️ ${esc(a.risk)}</div>` : ''}`
             : '<div class="muted dl-none">Chưa phân tích – bấm “🧠 Phân tích deal” ở trên.</div>'}
         </div>`;
@@ -4600,6 +4635,7 @@ Không markdown, không giải thích ngoài JSON.`;
         <button class="rp-start cta" data-act="deal-run" data-staff="${esc(staff)}" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các deal…' : `🧠 ${ai ? 'Phân tích lại' : 'Phân tích deal'}`}<span class="cta-sub">AI đọc ${Math.min(deals.length, DEAL_MAX)} báo giá lớn nhất · gợi ý bước kế tiếp</span></button></div>
       ${pick}
       ${hotBox2}
+      ${bigBox}
       <div class="dl-grid">${cards || '<div class="muted" style="padding:14px">Không có báo giá đang mở.</div>'}</div></div>`;
   }
 
