@@ -2368,8 +2368,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       font-weight: 900; cursor: pointer; transition: all .15s; }
     .hot-done:hover { border-color: #16a34a; background: #16a34a; color: #fff; transform: scale(1.08); }
     a.hot-item.hot-gone { opacity: 0; transform: translateX(30px); transition: all .25s ease; }
-    a.hot-item { display: grid; grid-template-columns: 34px 26px minmax(0, 1fr) 170px; gap: 10px; align-items: center; text-decoration: none; color: inherit;
-      background: #fff; border: 1px solid #ffedd5; border-radius: 10px; padding: 8px 10px; }
+    a.hot-item { display: grid; grid-template-columns: 26px 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-decoration: none; color: inherit;
+      background: #fff; border: 1px solid #ffedd5; border-radius: 8px; padding: 4px 10px; }
+    .hot-list { gap: 4px !important; }
+    a.hot-item .hot-done { width: 24px; height: 24px; font-size: 12px; border-width: 1.5px; }
+    .hot-main { gap: 1px !important; }
+    .hot-why { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px !important; }
+    .hot-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; }
+    .hot-mini { display: flex; gap: 4px; flex: none; }
+    .hot-mini i { font-style: normal; font-weight: 700; color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; border-radius: 999px; padding: 0 7px; font-size: 11px; white-space: nowrap; }
+    .hot-flow { color: #7c2d12; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .hot-flow em { font-style: normal; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%;
+      background: #f97316; color: #fff; font-size: 10px; font-weight: 900; margin-right: 3px; vertical-align: 1px; }
+    .hot-arr { color: #fdba74; font-weight: 900; margin: 0 6px; }
+    .hot-r1, .hot-r2 { display: flex; align-items: center; gap: 8px; justify-content: flex-end; white-space: nowrap; }
+    .hot-side .hot-pct { font-size: 14px; padding: 0 8px; }
     a.hot-item:hover { border-color: #fb923c; box-shadow: 0 2px 10px rgba(251,146,60,.18); }
     .hot-no { font-weight: 800; color: #ea580c; text-align: center; font-size: 15px; }
     .hot-main { display: grid; gap: 3px; min-width: 0; }
@@ -5558,12 +5571,11 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           <button class="hot-done" data-act="hot-done" data-id="${x.id}" title="Đánh dấu đã xử lý xong – ẩn khỏi danh sách trên mọi máy">✓</button>
           <span class="hot-no">${i + 1}</span>
           <span class="hot-main"><span class="hot-top"><b>${esc(x.code)}</b>${custTag(q)}<span class="hot-name">${esc(q.name || '')}</span></span>
-            <span class="hot-why">💡 ${esc(x.why)}</span>
-            ${x.missing?.length ? `<span class="hot-miss"><b>🧩 Còn thiếu:</b>${x.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</span>` : ''}
-            ${x.steps?.length
-              ? `<span class="hot-steps"><b>👉 Bước kế tiếp:</b>${x.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</span>`
-              : `<span class="hot-next">👉 ${esc(x.next)}</span>`}</span>
-          <span class="hot-side"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span>${(() => { const v = diffVal(q); return v != null ? `<span class="hot-dv${v < 0 ? ' neg' : ''}" title="Chênh lệch">📈 ${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>` : q.noSheet ? '<span class="hot-dv neg">😡 Chưa có giá GT</span>' : ''; })()}<span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></a>`;
+            <span class="hot-why" title="${esc(x.why)}">💡 ${esc(x.why)}</span>
+            <span class="hot-line">${x.missing?.length ? `<span class="hot-mini">${x.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</span>` : ''}${x.steps?.length
+              ? `<span class="hot-flow" title="${esc(x.steps.map((st, k) => `${k + 1}. ${st}`).join('\n'))}">👉 ${x.steps.map((st, k) => `<em>${k + 1}</em>${esc(st)}`).join('<span class="hot-arr">›</span>')}</span>`
+              : `<span class="hot-flow">👉 ${esc(x.next)}</span>`}</span></span>
+          <span class="hot-side"><span class="hot-r1"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span></span><span class="hot-r2">${(() => { const v = diffVal(q); return v != null ? `<span class="hot-dv${v < 0 ? ' neg' : ''}" title="Chênh lệch">📈 ${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>` : q.noSheet ? '<span class="hot-dv neg">😡 Chưa có giá GT</span>' : ''; })()}<span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></span></a>`;
       })
       .join('');
     const collapsed = !inTab && lsGet('dgHotCollapsed') === '1';
