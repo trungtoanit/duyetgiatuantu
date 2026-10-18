@@ -9,4 +9,5 @@ OUT="$HOME/Desktop/DuyetGia-extension.zip"
 rm -f "$OUT"
 ( cd extension && zip -qr "$OUT" . -x '.DS_Store' )
 echo "Đã tạo: $OUT"
+python3 tools/upload-zip.py "$OUT" || echo "(Không đưa được lên máy chủ – vẫn dùng file trên Desktop)"
 open -R "$OUT"

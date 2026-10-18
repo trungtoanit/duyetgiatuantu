@@ -2275,6 +2275,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sx-tl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .sx-tl div { background: #f8fafc; border-radius: 12px; padding: 8px 12px; display: grid; }
     .sx-tl span { font-size: 12px; color: #64748b; } .sx-tl b { font-size: 15px; }
     .sx-note { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #64748b; background: #f8fafc; border-radius: 12px; padding: 8px 12px; }
+    .sx-zip { margin: 0 12px 14px; }
+    .zp-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px;
+      background: linear-gradient(135deg, #eef2ff, #fdf4ff); border: 1px solid #c7d2fe; }
+    .zp-file { display: flex; align-items: center; gap: 12px; } .zp-ic { font-size: 30px; }
+    .zp-file b { display: block; font-size: 15px; } .zp-file span { font-size: 12px; color: #64748b; }
+    .zp-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; color: #334155; }
+    .zp-warn { font-size: 12px; font-weight: 700; color: #9a3412; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 6px 10px; }
     .sx-perm { margin: 0 12px 12px; } .sx-perm .st-card { border-radius: 18px; }
     .st-card.pm { grid-column: 1 / -1; }
     table.pm-t td { vertical-align: middle; } table.pm-t tr.off td { opacity: .55; }
@@ -4766,6 +4773,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // ---------- 🔥 AI chọn báo giá chốt được liền ----------
   // Lấy tối đa 40 báo giá khả thi điểm cao nhất, gửi luồng bình luận (rút gọn) cho Claude,
+  // Thẻ "Gói cài đặt extension" (chỉ quản trị): tải file zip trên máy chủ để gửi riêng cho nhân viên
+  async function zipCard() {
+    const f = (await kvGet('files'))['extension-zip'];
+    return `<div class="sx-zip"><div class="sx-card"><div class="sx-h"><span class="sx-hic violet">📦</span><div><b>Gói cài đặt extension cho nhân viên</b><span>Tải file zip rồi gửi riêng cho nhân viên (Zalo / email nội bộ)</span></div></div>
+      ${f?.b64
+        ? `<div class="zp-row"><div class="zp-file"><span class="zp-ic">🗜️</span><div><b>${esc(f.name)}</b><span>${Math.round((f.size || 0) / 1024)} KB · cập nhật ${ago(Math.floor((f.at || 0) / 1000))}${f.version ? ` · bản ${esc(f.version)}` : ''}</span></div></div>
+            <button class="rp-start cta" data-act="zip-download">⬇️ Tải file zip<span class="cta-sub">để gửi cho nhân viên</span></button></div>`
+        : '<div class="muted">Chưa có file trên máy chủ.</div>'}
+      <ol class="zp-steps"><li>Giải nén file zip vào 1 thư mục cố định (đừng xoá sau khi cài).</li>
+        <li>Mở <code>chrome://extensions</code> → bật <b>Developer mode</b> → <b>Load unpacked</b> → chọn thư mục vừa giải nén.</li>
+        <li>Bấm <b>Chi tiết</b> của extension → bật <b>Allow User Scripts</b>, rồi tải lại trang CRM.</li>
+        <li>Từ đó extension tự cập nhật, không cần cài lại.</li></ol>
+      <div class="zp-warn">🔐 File có chứa mật khẩu nhóm – chỉ gửi riêng cho nhân viên trong công ty, không đăng lên mạng.</div></div></div>`;
+  }
+
   // Thẻ Phân quyền (chỉ quản trị): bật/tắt phân quyền, mỗi người: được dùng, vai trò, các màn hình được vào
   async function permsCard(quotes) {
     const seen = await kvGet('seenUsers');
@@ -4878,6 +4900,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
               ${st.status?.error ? `<div class="err">Lỗi: ${esc(st.status.error)}</div>` : ''}` : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
         </div>
       </div>
+      ${admin ? await zipCard() : ''}
       ${admin ? `<div class="sx-perm">${await permsCard(quotes)}</div>` : ''}
       <div class="muted ct-note">🔐 Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic nhập trong popup của extension (biểu tượng trên thanh Chrome).</div></div>`;
   }
@@ -5602,6 +5625,21 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'debt-staff') {
       lsSet('dgDebtStaff', b.dataset.staff || null);
       render();
+    }
+    else if (act === 'zip-download') {
+      const f = (await kvGet('files'))['extension-zip'];
+      if (!f?.b64) return;
+      const bin = atob(f.b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = f.name || 'DuyetGia-extension.zip';
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
     }
     else if (act === 'perm-sub') {
       lsSet('dgPermTab', b.dataset.sub);
