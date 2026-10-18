@@ -4931,7 +4931,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           .join('')}</div><div class="db-leg"><span><i class="c"></i>Đã thu</span><span><i class="e"></i>Dự kiến thu</span></div>`
       : '<div class="muted">Chưa có số liệu thu theo ngày.</div>';
     // Gọn 1 dòng: tên khách + mã KH (hạn mức ngày nợ xem khi rê chuột); không hiện SĐT
-    const custCell = (r) => `<td class="db-cust" title="${esc(r.customerName || '')} · hạn mức ${r.allowDebtDay ?? '?'} ngày"><b>${esc(shortCompany(r.customerName || ''))}</b><span class="kh">${esc(r.customerCode || '')}</span></td>`;
+    const custCell = (r) => `<td class="db-cust" title="${esc(r.customerName || '')}${r.customerCode ? ` (${esc(r.customerCode)})` : ''} · hạn mức ${r.allowDebtDay ?? '?'} ngày"><b>${esc(shortCompany(r.customerName || ''))}</b></td>`;
     const whoCell = (r) => `<td><span class="ct-who">${avatarHtml(r.staffName, 18)}${esc(shortName(r.staffName || ''))}</span></td>`;
     const DB_COLS = '<colgroup><col style="width:30px"><col><col style="width:84px"><col style="width:112px"><col style="width:112px"><col style="width:84px"></colgroup>';
     const overRows = overdue
