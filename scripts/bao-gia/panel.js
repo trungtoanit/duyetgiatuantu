@@ -4960,10 +4960,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="sx-card"><div class="sx-h"><span class="sx-hic violet">👥</span><div><b>Công nợ theo NVKD</b><span>Bấm để lọc</span></div></div><div class="db-staffs">${staffRows}</div></div></div>` : ''}
       <div class="db-two">
         <div class="sx-card db-over"><div class="sx-h"><span class="sx-hic red">⏰</span><div><b>Quá hạn <span class="hot-count">${overdue.length}</span></b><span>Xếp theo số tiền quá hạn – cần thu ngay</span></div></div>
-          <div class="ct-wrap"><table class="ct">${DB_COLS}<thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Quá hạn</th><th class="num">Trễ</th></tr></thead>
+          <div class="ct-wrap"><table class="ct">${DB_COLS}<thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Quá hạn</th><th class="num">Trễ</th></tr>
+            ${overdue.length ? `<tr class="ct-sum"><td></td><td>Σ ${overdue.length} khách</td><td></td><td class="num">${money(sum(overdue, 'totalDebt'))}</td><td class="num db-red">${money(sum(overdue, 'overdueAmount'))}</td><td></td></tr>` : ''}</thead>
           <tbody>${overRows || '<tr><td colspan="6" class="muted">🎉 Không có khách quá hạn.</td></tr>'}</tbody></table></div></div>
         <div class="sx-card"><div class="sx-h"><span class="sx-hic sky">📆</span><div><b>Sắp đến hạn <span class="hot-count db-blue">${upcoming.length}</span></b><span>Xếp theo ngày đến hạn gần nhất – nhắc khách chuẩn bị</span></div></div>
-          <div class="ct-wrap"><table class="ct">${DB_COLS}<thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Chưa đến hạn</th><th class="num">Đến hạn</th></tr></thead>
+          <div class="ct-wrap"><table class="ct">${DB_COLS}<thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Chưa đến hạn</th><th class="num">Đến hạn</th></tr>
+            ${upcoming.length ? `<tr class="ct-sum"><td></td><td>Σ ${upcoming.length} khách</td><td></td><td class="num">${money(sum(upcoming, 'totalDebt'))}</td><td class="num db-green">${money(sum(upcoming, 'notDueAmount'))}</td><td></td></tr>` : ''}</thead>
           <tbody>${upRows || '<tr><td colspan="6" class="muted">Không có khoản sắp đến hạn.</td></tr>'}</tbody></table></div></div>
       </div></div>`;
   }
