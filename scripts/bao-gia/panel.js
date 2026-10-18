@@ -1644,7 +1644,41 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ov-star { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 18px; animation: wkMedal 1.6s ease-in-out infinite; }
     .ov-wk { margin-top: 8px; font-weight: 800; font-size: 13px; color: #334155; } .ov-col.now .ov-wk { color: #059669; }
     .ov-date { font-size: 11px; color: #94a3b8; }
-    .board { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(0, 1fr); gap: 16px; align-items: end; margin: 4px 12px 14px; }
+    .board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; margin: 4px 12px 14px; }
+    .bweek { display: flex; flex-direction: column; gap: 12px; }
+    .bw-title { font-weight: 900; color: #4338ca; font-size: 14px; }
+    /* Bảng vàng tháng: nền tối sang trọng, viền & chữ vàng kim, cúp lấp lánh */
+    .mcard { position: relative; overflow: hidden; border-radius: 18px; padding: 16px 18px; color: #fef3c7;
+      background: radial-gradient(120% 140% at 0% 0%, #3b2a0a 0%, #111827 45%, #0b1020 100%); border: 1px solid #b8860b;
+      box-shadow: 0 10px 30px rgba(15,23,42,.35), inset 0 0 0 1px rgba(251,191,36,.25); }
+    .mcard::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(115deg, transparent 35%, rgba(255,215,0,.12) 50%, transparent 65%); background-size: 250% 100%; animation: wkShine 4s ease-in-out infinite; }
+    .mc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .mc-trophy { font-size: 40px; filter: drop-shadow(0 0 10px rgba(251,191,36,.7)); animation: mcTrophy 2.4s ease-in-out infinite; }
+    @keyframes mcTrophy { 0%, 100% { transform: rotate(-6deg) scale(1); } 50% { transform: rotate(6deg) scale(1.12); } }
+    .mc-title { font-size: 20px; font-weight: 900; letter-spacing: .02em;
+      background: linear-gradient(90deg, #fde68a, #f59e0b, #fff7d6, #f59e0b); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: wkGrad 3s linear infinite; }
+    .mc-sub { font-size: 12px; color: #d6c48f; }
+    .mc-row { position: relative; display: grid; grid-template-columns: 34px auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px;
+      border-radius: 12px; margin-top: 6px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(251,191,36,.12); }
+    .wk.anim .mc-row { animation: wkIn .55s ease both; }
+    .mc-row:hover { background: rgba(251,191,36,.1); }
+    .mc-rank { font-size: 18px; font-weight: 900; text-align: center; color: #d6c48f; }
+    .mc-name { font-weight: 800; color: #fef3c7; overflow: hidden; }
+    .mc-bar { display: block; height: 4px; margin-top: 4px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .mc-bar i { display: block; height: 100%; width: var(--w); border-radius: 99px; background: linear-gradient(90deg, #b8860b, #fde68a); }
+    .mc-amt { text-align: right; font-weight: 900; color: #fde68a; font-variant-numeric: tabular-nums; }
+    .mc-amt small { display: block; font-size: 10px; font-weight: 600; color: #b9a978; }
+    .mc-row.mc1 { padding: 12px 12px; background: linear-gradient(90deg, rgba(251,191,36,.28), rgba(251,191,36,.06)); border-color: #fbbf24;
+      box-shadow: 0 0 18px rgba(251,191,36,.35); }
+    .mc-row.mc1 .mc-rank { font-size: 26px; animation: wkCrown 1.6s ease-in-out infinite; }
+    .mc-row.mc1 .mc-name { font-size: 16px; } .mc-row.mc1 .mc-amt { font-size: 20px; }
+    .mc-row.mc1 .ava { border: 2px solid #fbbf24; box-shadow: 0 0 12px rgba(251,191,36,.8); }
+    .mc-champ { margin-left: 8px; font-size: 10px; font-weight: 900; color: #1f2937; border-radius: 999px; padding: 1px 8px; vertical-align: 2px;
+      background: linear-gradient(90deg, #fde68a, #f59e0b, #fde68a); background-size: 200% 100%; animation: wkGrad 2s linear infinite; }
+    .mc-row.mc2 { border-color: rgba(203,213,225,.4); } .mc-row.mc3 { border-color: rgba(251,146,60,.35); }
+    .mc-row.me { outline: 2px solid #818cf8; }
     .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; }
     .pd { position: relative; width: 130px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
     .wk.anim .pd { animation: pdRise .8s cubic-bezier(.2,1.3,.4,1) both; }
@@ -3250,8 +3284,39 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <span class="lb-amt">${money(r.total)}</span><span class="lb-gap">${rows[i - 1] ? `kém #${i} ${moneyShortG(rows[i - 1].total - r.total)}` : ''}</span></div>`;
       })
       .join('');
+    // Bảng vàng THÁNG (từ ngày 1 tới hôm nay) – đặt bên phải, trang trọng hơn bảng tuần
+    const mStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000;
+    const mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime() / 1000;
+    const mBy = {};
+    for (const [cid, od] of Object.entries(orders || {})) {
+      const st = info[cid]?.staff;
+      if (!st || isExcluded(st)) continue;
+      for (const o of od?.orders || []) {
+        const at = o.at > 1e11 ? o.at / 1000 : o.at;
+        if (!at || at < mStart || at >= mEnd) continue;
+        const r = (mBy[st] ||= { staff: st, total: 0, n: 0 });
+        r.total += orderAfterVat(o);
+        r.n++;
+      }
+    }
+    const mRows = Object.values(mBy).sort((a, b) => b.total - a.total);
+    const mMax = mRows[0]?.total || 1;
+    const mTotal = mRows.reduce((a, r) => a + r.total, 0);
+    const monthCard = mRows.length
+      ? `<div class="mcard"><div class="mc-head"><span class="mc-trophy">🏆</span><div><div class="mc-title">Bảng vàng tháng ${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}</div>
+          <div class="mc-sub">Từ 01/${String(now.getMonth() + 1).padStart(2, '0')} tới hôm nay · ${moneyShortG(mTotal)} · ${mRows.reduce((a, r) => a + r.n, 0)} đơn</div></div></div>
+        ${mRows
+          .map(
+            (r, i) => `<div class="mc-row mc${Math.min(i + 1, 4)}${norm(r.staff) === norm(meName) ? ' me' : ''}" data-act="week-open" data-staff="${esc(r.staff)}" title="Xem tổng quan ${esc(r.staff)}" style="animation-delay:${300 + i * 90}ms">
+          <span class="mc-rank">${i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</span>${avatarHtml(r.staff, i === 0 ? 40 : 28)}
+          <span class="mc-name">${esc(i === 0 ? r.staff : shortName(r.staff))}${i === 0 ? '<span class="mc-champ">Quán quân tháng</span>' : ''}
+            <span class="mc-bar"><i style="--w:${Math.max(3, Math.round((r.total / mMax) * 100))}%"></i></span></span>
+          <span class="mc-amt">${moneyShortG(r.total)}<small>${r.n} đơn</small></span></div>`,
+          )
+          .join('')}</div>`
+      : '';
     const board = admin && rows.length
-      ? `<div class="board"><div class="podium">${podium}</div>${others ? `<div class="lbs">${others}</div>` : ''}</div>`
+      ? `<div class="board"><div class="bweek"><div class="bw-title">📅 Tuần này</div><div class="podium">${podium}</div>${others ? `<div class="lbs">${others}</div>` : ''}</div>${monthCard}</div>`
       : '';
     const body = rows
       .map((r, i) => {
