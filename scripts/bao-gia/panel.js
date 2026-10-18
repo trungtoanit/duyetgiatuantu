@@ -2228,6 +2228,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .debt .db-days, .debt .db-due { font-size: 11px; padding: 0 8px; }
     .sx-h b .hot-count { color: #fff; font-size: 12px; margin-left: 4px; }
     .db-hbtns { display: flex; gap: 8px; align-items: center; }
+    /* NVKD chỉ xem công nợ của mình → ẩn cột NVKD */
+    .debt.mine table.ct col:nth-child(3) { width: 0 !important; } .debt.mine table.ct th:nth-child(3), .debt.mine table.ct td:nth-child(3) { display: none; }
     /* ===== Tab Cài đặt ===== */
     .sx .ct-head { align-items: center; }
     .sx-live { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 5px 14px; }
@@ -4944,7 +4946,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .sort((a, b) => b.over - a.over || b.total - a.total)
       .map((x) => `<button class="db-staff${staffSel === x.name ? ' on' : ''}" ${perm.admin ? `data-act="debt-staff" data-staff="${esc(x.name)}"` : 'disabled'}>${avatarHtml(x.name, 22)}<span><b>${esc(shortName(x.name))}</b><small>${x.n} khách · nợ ${moneyShortG(x.total)}</small></span>${x.over ? `<em>quá hạn ${moneyShortG(x.over)}</em>` : '<em class="ok">✓ không quá hạn</em>'}</button>`)
       .join('');
-    return `<div class="ctab wk debt">
+    return `<div class="ctab wk debt${perm.admin ? '' : ' mine'}">
       <div class="ct-head"><div><div class="ct-title">💰 Báo cáo tổng quan công nợ${staffSel ? ` · ${esc(staffSel)}` : ''}</div>
         <div class="ct-sub">${custs.length} khách đang nợ · cập nhật ${ago(Math.floor(updated / 1000))} từ trang Công nợ của CRM</div></div>
         <span class="db-hbtns">${perm.admin && staffSel ? '<button class="sx-btn" data-act="debt-staff" data-staff="">✕ Xem tất cả NVKD</button>' : ''}
