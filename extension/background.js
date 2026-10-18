@@ -458,6 +458,22 @@ const services = {
     const { sha, bundle } = await chrome.storage.local.get(['sha', 'bundle']);
     return { sha, version: bundle?.version || '' };
   },
+  // Màn hình Cài đặt (tab cuối của bảng trên CRM): trạng thái extension + đồng bộ
+  'status.get': async () => {
+    const local = await chrome.storage.local.get(['sha', 'bundle', 'status', 'syncStatus']);
+    return {
+      sha: local.sha,
+      version: local.bundle?.version || '',
+      status: local.status || {},
+      syncStatus: local.syncStatus || {},
+      syncEnabled: !!(await remoteCfg()),
+      spend: await getSpend(),
+    };
+  },
+  'sync.all': async () => {
+    await syncAllNow();
+    return true;
+  },
 };
 
 chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {

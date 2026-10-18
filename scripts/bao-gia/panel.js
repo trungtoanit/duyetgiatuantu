@@ -2107,6 +2107,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-act { font-size: 11.5px; font-weight: 800; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 2px 10px; }
     .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
     .dl-listwrap { margin: 12px; }
+    .bigtab.set { margin-left: auto; }
+    .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; margin: 14px 12px; align-items: start; }
+    .st-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px; background: #fff; display: grid; gap: 10px; }
+    .st-card h4 { margin: 0; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #64748b; }
+    .st-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .st-stat { background: #f8fafc; border-radius: 10px; padding: 8px 12px; } .st-stat span { display: block; font-size: 12px; color: #64748b; } .st-stat b { font-size: 22px; }
+    .st-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; font-size: 13px; } .st-row span { color: #64748b; }
+    .st-row b.good, .st-card b.good { color: #047857; } .st-row b.bad { color: #b91c1c; }
+    .st-bar { height: 6px; border-radius: 99px; background: #e2e8f0; overflow: hidden; } .st-bar i { display: block; height: 100%; background: linear-gradient(90deg, #10b981, #059669); }
+    .st-box { display: flex; align-items: center; gap: 10px; background: #f8fafc; border-radius: 10px; padding: 8px 10px; font-size: 13px; } .st-box span { flex: 1; }
+    .st-sw { display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 13px; } .st-sw > span { flex: 1; }
+    .st-tg { position: relative; flex: none; width: 42px; height: 24px; border-radius: 99px; border: 0; background: #cbd5e1; cursor: pointer; transition: background .2s; }
+    .st-tg i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
+    .st-tg.on { background: linear-gradient(135deg, #2563eb, #7c3aed); } .st-tg.on i { transform: translateX(18px); }
     /* Tab Phân tích deal đã lọc theo 1 NVKD → ẩn cột NVKD (cột thứ 7) */
     .dl-list a.item, .dl-list .item-head { grid-template-columns: 34px 84px 74px minmax(0, .45fr) 130px minmax(0, 1.75fr) 74px 136px 120px 52px; }
     .dl-list a.item > :nth-child(7), .dl-list .item-head > :nth-child(7) { display: none; }
@@ -4408,7 +4422,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
-        const tab = ['cust', 'week', 'hot', 'deal'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        const tab = ['cust', 'week', 'hot', 'deal', 'set'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
         const hotN = (hotData?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !hotDone[x.id]).length;
@@ -4419,8 +4433,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab hot${tab === 'hot' ? ' on' : ''}${hotN ? ' has' : ''}" data-act="tab" data-tab="hot">🔥 Gợi ý chốt đơn <b>${hotN}</b></button>
           <button class="bigtab${tab === 'deal' ? ' on' : ''}" data-act="tab" data-tab="deal">🧠 Phân tích deal</button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
-          <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
+          <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button>
+          <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
         if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
+        if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
           renderCtx.reports = await kvGet('reports');
@@ -4485,6 +4501,64 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // ---------- 🔥 AI chọn báo giá chốt được liền ----------
   // Lấy tối đa 40 báo giá khả thi điểm cao nhất, gửi luồng bình luận (rút gọn) cho Claude,
+  // ---------- Tab "⚙️ Cài đặt": các thông số của extension (giống popup) ngay trên bảng ----------
+  async function settingsTab(quotes, me) {
+    const admin = isAdminUser(me);
+    const [st, settingsRaw, cs, fc, collected] = await Promise.all([
+      call({ type: 'status.get' }).catch(() => null),
+      kvGet('settings'),
+      kvGet('collectStatus'),
+      kvGet('fullCollect'),
+      kvGet('collected'),
+    ]);
+    const settings = { auto: true, autoOpen: false, ...settingsRaw };
+    const agoMs = (ms) => (ms ? ago(Math.floor(ms / 1000)) : '–');
+    const usd = (n) => `$${(n || 0).toFixed(2)}`;
+    const sw = (key, on, title, sub) =>
+      `<label class="st-sw"><span><b>${title}</b><br><span class="muted">${sub}</span></span><button class="st-tg${on ? ' on' : ''}" data-act="set-toggle" data-key="${key}"><i></i></button></label>`;
+    const nQuotes = Object.keys(quotes).length;
+    const nRead = Object.keys(collected || {}).length;
+    let cTxt = `Đã thu thập ${nRead} báo giá`;
+    if (cs?.running && Date.now() - cs.at < 120000)
+      cTxt = /^danh sách|đơn hàng Misa/.test(cs.current || '') ? `Đang đọc ${esc(cs.current)}…` : `Đang đọc ${esc(cs.current || '')} (${cs.done}/${cs.total})…`;
+    else if (cs?.lastRun) cTxt += ` · lần cuối ${agoMs(cs.lastRun)}: ${cs.done} báo giá`;
+    const fTxt = fc?.on
+      ? `Đang thu thập toàn bộ: ${fc.listDone ? `đã đọc danh sách (${nQuotes} báo giá)` : 'đang đọc các trang danh sách…'}${cs?.full && cs.remaining != null ? ` · còn ${cs.remaining} báo giá chưa đọc bình luận` : ''}`
+      : fc?.doneAt
+        ? `Đã thu thập toàn bộ xong lúc ${new Date(fc.doneAt).toLocaleString('vi-VN')} (${nQuotes} báo giá)`
+        : 'Đọc tất cả báo giá + bình luận và đẩy lên máy chủ (chạy liên tục tới khi xong)';
+    const sp = st?.spend;
+    const pct = sp?.remaining != null && sp?.balance ? Math.max(0, Math.min(100, (sp.remaining / sp.balance) * 100)) : 0;
+    const ss = st?.syncStatus || {};
+    const scan = (await kvGet('scanLock')).main;
+    return `<div class="ctab wk stt">
+      <div class="ct-head"><div><div class="ct-title">⚙️ Cài đặt & trạng thái</div><div class="ct-sub">Các thông số của extension Duyệt giá Tuấn Tú</div></div></div>
+      <div class="st-grid">
+        ${admin ? `<div class="st-card"><h4>💳 Chi phí Claude</h4>
+          ${sp ? `<div class="st-two"><div class="st-stat"><span>Hôm nay</span><b>${usd(sp.today)}</b></div><div class="st-stat"><span>Tháng này</span><b>${usd(sp.month)}</b></div></div>
+          <div class="st-row"><span>Số dư Anthropic còn lại (ước tính)</span><b class="${sp.remaining != null && sp.remaining < 5 ? 'bad' : 'good'}">${sp.remaining != null ? usd(sp.remaining) : 'chưa nhập'}</b></div>
+          <div class="st-bar"><i style="width:${pct}%"></i></div>` : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>` : ''}
+        <div class="st-card"><h4>🔄 Tính năng trên CRM</h4>
+          ${sw('auto', settings.auto, 'Thu thập ngầm & tự phân tích', 'Tự đọc bình luận các báo giá (không đánh dấu đã đọc) và soạn gợi ý – tự chạy liên tục khi mở CRM')}
+          <div class="st-box"><span>${cTxt}</span><button class="act" data-act="set-collect-now">Chạy ngay</button></div>
+          <div class="st-box"><span>${fTxt}</span><button class="act" data-act="set-full">${fc?.on ? '⏹ Dừng' : '📦 Thu thập toàn bộ'}</button></div>
+          ${sw('autoOpen', settings.autoOpen, 'Tự mở bảng khi vào báo giá', 'Vào trang báo giá là bảng đánh giá tự bung ra')}
+          <div class="st-row"><span>Máy đang quét ngầm</span><b>${scan?.machine ? `${esc(scan.who || 'máy khác')} · ${agoMs(scan.beat)}` : '–'}</b></div></div>
+        <div class="st-card"><h4>☁️ Đồng bộ giữa các máy</h4>
+          ${st ? `<div class="st-row"><span>Trạng thái</span><b class="${st.syncEnabled ? 'good' : 'bad'}">${st.syncEnabled ? '🟢 Tự đồng bộ ngầm' : 'Chưa bật'}</b></div>
+          <div class="st-row"><span>Kéo về</span><b>${agoMs(ss.lastPull)}</b></div><div class="st-row"><span>Đẩy lên</span><b>${agoMs(ss.lastPush)}</b></div>
+          ${ss.error ? `<div class="err">Lỗi đồng bộ: ${esc(ss.error)}</div>` : ''}
+          <div class="st-box"><span class="muted">Không cần bấm – dữ liệu tự đồng bộ. Chỉ dùng khi muốn đẩy lại toàn bộ ngay.</span><button class="act" data-act="set-sync" ${state.busy.has('syncAll') ? 'disabled' : ''}>${state.busy.has('syncAll') ? 'Đang đồng bộ…' : '↻ Đồng bộ lại'}</button></div>`
+          : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
+        <div class="st-card"><h4>📦 Phiên bản script</h4>
+          ${st ? `<div class="st-row"><span>Phiên bản</span><b>${esc(st.version)}</b></div><div class="st-row"><span>Commit</span><code>${esc((st.sha || '').slice(0, 7))}</code></div>
+          <div class="st-row"><span>Kiểm tra lần cuối</span><b>${agoMs(st.status?.lastCheck)}</b></div>
+          <div class="st-row"><span>Tự cập nhật</span><b class="good">~10 giây/lần</b></div>${st.status?.error ? `<div class="err">Lỗi: ${esc(st.status.error)}</div>` : ''}`
+          : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
+      </div>
+      <div class="muted ct-note">Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic vẫn nhập trong popup của extension (biểu tượng trên thanh Chrome).</div></div>`;
+  }
+
   // ---------- Tab "Phân tích deal": AI đọc từng báo giá đang mở của 1 NVKD, gợi ý bước kế tiếp cho NVKD ----------
   // Lưu kv 'dealAi' (đồng bộ): khoá = tên NVKD (chuẩn hoá) → { at, items: [{ id, code, stage, health, missing, steps, say, risk }] }
   const DEAL_MAX = 25;
@@ -5026,6 +5100,31 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'report-print') {
       printReport(state.report?.staff || meName);
+    }
+    else if (act === 'set-toggle') {
+      const cur = { auto: true, autoOpen: false, ...(await kvGet('settings')) };
+      cur[b.dataset.key] = !cur[b.dataset.key];
+      await call({ type: 'kv.set', key: 'settings', value: cur });
+      render();
+    }
+    else if (act === 'set-collect-now') {
+      await call({ type: 'kv.set', key: 'collectNow', value: Date.now() });
+      b.textContent = 'Đã yêu cầu…';
+    }
+    else if (act === 'set-full') {
+      const cur = (await kvGet('fullCollect')) || {};
+      await call({ type: 'kv.set', key: 'fullCollect', value: cur.on ? { ...cur, on: false } : { on: true, startedAt: Date.now() } });
+      render();
+    }
+    else if (act === 'set-sync') {
+      setBusy('syncAll', true);
+      try {
+        await call({ type: 'sync.all' });
+      } catch (err) {
+        state.error = err.message;
+      } finally {
+        setBusy('syncAll', false);
+      }
     }
     else if (act === 'deal-staff') {
       lsSet('dgDealStaff', b.dataset.staff);
