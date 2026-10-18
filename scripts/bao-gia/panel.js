@@ -2102,6 +2102,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-big-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 8px; }
     .dl-big-item { display: grid; gap: 4px; background: #fff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 9px 12px; }
     .dl-amt.big { font-size: 15px; color: #3730a3; }
+    .dl-cta { font-size: 13px; font-weight: 700; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 6px 10px; line-height: 1.45; }
     .dl-acts { display: flex; flex-wrap: wrap; gap: 5px; }
     .dl-act { font-size: 11.5px; font-weight: 800; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 2px 10px; }
     .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
@@ -4587,13 +4588,13 @@ Không markdown, không giải thích ngoài JSON.`;
     const hotList = Object.values(hotBy).sort((a, b) => b.pct - a.pct);
     // Deal lớn → gợi ý NVKD làm việc trực tiếp với sếp (sếp dễ tính, đi gặp khách được, hỗ trợ giá / công nợ khi đi cùng)
     const BIG = 100e6;
-    // Lời kêu gọi hành động tự nhiên (đổi câu theo từng deal, không nói thẳng "đặc tính của sếp")
+    // 1 câu kêu gọi hành động rõ ràng cho mỗi deal lớn (đổi câu theo deal, không nói thẳng "đặc tính của sếp")
     const CTA = [
-      ['📅 Hẹn khách 1 buổi gặp trực tiếp – rủ sếp đi cùng', '💲 Chốt phương án giá cùng sếp trước khi gặp', '🧾 Đề xuất thời hạn công nợ để khách yên tâm lên đơn'],
-      ['☕ Mời khách cà phê, có sếp cùng ngồi bàn', '💬 Báo sếp mức giá khách mong muốn để có phương án', '🤝 Gặp trực tiếp để chốt luôn số lượng & ngày giao'],
-      ['📅 Book lịch thăm xưởng khách cùng sếp tuần này', '💲 Xin sếp duyệt giá tốt cho đơn số lượng lớn', '🧾 Trao đổi với sếp điều kiện thanh toán linh hoạt'],
+      (k) => `Hẹn ${k} một buổi gặp trực tiếp trong tuần này và rủ sếp đi cùng để chốt luôn giá và điều kiện thanh toán.`,
+      (k) => `Báo sếp mức giá ${k} mong muốn, rồi book lịch cùng sếp gặp khách để kéo đơn về.`,
+      (k) => `Đặt lịch thăm xưởng ${k} cùng sếp, trao đổi trực tiếp giá và công nợ để khách yên tâm lên đơn.`,
     ];
-    const bigCta = (q) => CTA[Math.abs(Number(q.id) || 0) % CTA.length].map((t) => `<span class="dl-act">${t}</span>`).join('');
+    const bigCta = (q) => CTA[Math.abs(Number(q.id) || 0) % CTA.length](shortCompany(q.customer?.name || '') || 'khách');
     const big = deals.filter((q) => (Number(q.amount) || 0) >= BIG).slice(0, 8);
     const bigBox = big.length
       ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Deal lớn – cùng sếp kéo đơn về</b><span class="hot-count">${big.length}</span>
@@ -4605,8 +4606,7 @@ Không markdown, không giải thích ngoài JSON.`;
             return `<div class="dl-big-item"><div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
                 <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="dl-amt big">${money(q.amount)}</span></div>
               <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))}${last ? ` · BL cuối ${ago(last.createdAt)}` : ' · chưa có bình luận'}${a?.stage ? ` · ${esc(a.stage)}` : ''}</div>
-              ${a?.boss ? `<div class="dl-boss">🤝 ${esc(a.boss)}</div>` : ''}
-              <div class="dl-acts">${bigCta(q)}</div></div>`;
+              <div class="dl-cta">👉 ${esc(a?.boss || bigCta(q))}</div></div>`;
           })
           .join('')}</div></div>`
       : '';
