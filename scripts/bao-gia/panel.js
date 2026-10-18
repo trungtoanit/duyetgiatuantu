@@ -2822,7 +2822,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const CO_WORDS = ['chi nhánh', 'công ty', 'cty', 'tnhh', 'cổ phần', 'cp', 'mtv', 'một thành viên', 'sản xuất', 'sx', 'thương mại', 'tm',
     'dịch vụ', 'dv', 'xuất nhập khẩu', 'xnk', 'đầu tư', 'và', '&', '-', ','];
   const shortCompany = (name) => {
-    let t = String(name || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    // Bỏ chữ "CHI NHÁNH" ở bất kỳ đâu trong tên (vd. "ABC - CHI NHÁNH BÌNH DƯƠNG" → "ABC - BÌNH DƯƠNG")
+    let t = String(name || '').normalize('NFC').replace(/chi nhánh/giu, ' ').replace(/\s+/g, ' ').replace(/\s*-\s*-\s*/g, ' - ').trim().replace(/^[-,\s]+|[-,\s]+$/g, '');
     for (let changed = true; changed; ) {
       changed = false;
       for (const w of CO_WORDS) {
