@@ -1,5 +1,5 @@
 {
-  "version": "1.2.104",
+  "version": "1.2.105",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -33,7 +33,9 @@
     "dealAi",
     "notifRead",
     "notifs",
+    "perms",
     "reports",
-    "scanLock"
+    "scanLock",
+    "seenUsers"
   ]
 }
