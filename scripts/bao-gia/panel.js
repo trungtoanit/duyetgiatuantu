@@ -3637,6 +3637,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
   // perms = { enforced: bool, users: { <tên chuẩn hoá>: { name, enabled, role: 'admin'|'sale', tabs: [...] } } }
   const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['set', '⚙️ Cài đặt']];
+  // Ngoài các tab: quyền xem thẻ báo giá bên phải (lợi nhuận, câu hỏi gợi ý, đánh giá NVKD, bàn giao)
+  const PERM_ITEMS = [...TABS, ['side', '📌 Thẻ báo giá (bên phải)']];
   const SALE_TABS = ['hot', 'deal', 'week']; // mặc định cho NVKD khi mới cấp quyền
   let PERMS = {};
   let MY_ACCESS = true;
@@ -3648,10 +3650,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function userPerm(me) {
     const name = me?.name || meName;
     const u = PERMS.users?.[norm(name)];
-    if (builtinAdmin(me) || u?.role === 'admin') return { access: true, admin: true, tabs: TABS.map((t) => t[0]) };
-    if (!PERMS.enforced) return { access: true, admin: false, tabs: TABS.map((t) => t[0]) }; // chưa bật phân quyền → như cũ
-    if (!u?.enabled) return { access: false, admin: false, tabs: [] };
-    return { access: true, admin: false, tabs: (u.tabs?.length ? u.tabs : SALE_TABS).filter((t) => TABS.some((x) => x[0] === t)) };
+    const all = PERM_ITEMS.map((t) => t[0]);
+    if (builtinAdmin(me) || u?.role === 'admin') return { access: true, admin: true, tabs: all, side: true };
+    if (!PERMS.enforced) return { access: true, admin: false, tabs: all, side: true }; // chưa bật phân quyền → như cũ
+    if (!u?.enabled) return { access: false, admin: false, tabs: [], side: false };
+    const tabs = (u.tabs?.length ? u.tabs : SALE_TABS).filter((t) => PERM_ITEMS.some((x) => x[0] === t));
+    return { access: true, admin: false, tabs, side: tabs.includes('side') };
   }
 
   const isAdminUser = (me) =>
@@ -4489,7 +4493,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         </div>`;
     }
 
-    renderSide(quotes[qid], qid, current, handoverBox(handovers, quotes), handovers.length);
+    if (perm.side) renderSide(quotes[qid], qid, current, handoverBox(handovers, quotes), handovers.length);
+    else renderSide(null, null); // không có quyền xem thẻ báo giá → ẩn thẻ
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
     if (editing?.contains('handover-edit') || editing?.contains('rp-text')) return; // đang sửa – không vẽ lại
@@ -4700,7 +4705,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
-        const allowed = perm.tabs;
+        const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t));
         let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
@@ -4826,12 +4831,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const fixedAdmin = ADMIN_NAMES.some((x) => norm(x) === k);
         const role = fixedAdmin ? 'admin' : u.role || 'sale';
         const enabled = fixedAdmin || role === 'admin' || !!u.enabled;
-        const tabs = role === 'admin' ? TABS.map((t) => t[0]) : u.tabs?.length ? u.tabs : SALE_TABS;
+        const tabs = role === 'admin' ? PERM_ITEMS.map((t) => t[0]) : u.tabs?.length ? u.tabs : SALE_TABS;
         const seenAt = seen?.[k]?.at;
         return `<tr class="${enabled ? '' : 'off'}"><td><span class="ct-who">${avatarHtml(n, 22)}<b>${esc(n)}</b></span><div class="muted pm-seen">${seenAt ? `mở extension ${ago(Math.floor(seenAt / 1000))}` : 'chưa mở extension'}</div></td>
           <td>${fixedAdmin ? '<span class="pm-fixed">Quản trị (mặc định)</span>' : `<button class="pm-role ${role}" data-act="perm-role" data-key="${esc(k)}" data-name="${esc(n)}">${role === 'admin' ? '👑 Quản trị' : '💼 NVKD'}</button>`}</td>
           <td>${fixedAdmin || role === 'admin' ? '<span class="pm-fixed">Luôn được dùng</span>' : `<button class="st-tg${enabled ? ' on' : ''}" data-act="perm-enable" data-key="${esc(k)}" data-name="${esc(n)}"><i></i></button>`}</td>
-          <td class="pm-tabs">${TABS.map(([t, label]) => `<button class="pm-tab${tabs.includes(t) ? ' on' : ''}" ${role === 'admin' ? 'disabled' : `data-act="perm-tab" data-key="${esc(k)}" data-name="${esc(n)}" data-tab="${t}"`}>${label}</button>`).join('')}</td></tr>`;
+          <td class="pm-tabs">${PERM_ITEMS.map(([t, label]) => `<button class="pm-tab${tabs.includes(t) ? ' on' : ''}" ${role === 'admin' ? 'disabled' : `data-act="perm-tab" data-key="${esc(k)}" data-name="${esc(n)}" data-tab="${t}"`}>${label}</button>`).join('')}</td></tr>`;
       })
       .join('');
     return `<div class="st-card pm"><h4>👥 Phân quyền sử dụng extension</h4>
@@ -5331,6 +5336,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   // Tự phân tích mỗi sáng: từ 7h (giờ VN), nếu kết quả mới nhất có trước 7h hôm nay thì chạy 1 lần.
   // Kết quả đồng bộ giữa các máy nên máy nào mở CRM trước sẽ chạy; khoá ngắn để 2 tab không chạy cùng lúc.
   const HOT_MORNING_HOUR = 7;
+  const HOT_MIN = 5;
   function morningStart() {
     const vn = new Date(Date.now() + 7 * 3600e3); // giờ VN dạng UTC
     const start = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate(), HOT_MORNING_HOUR) - 7 * 3600e3;
@@ -5340,7 +5346,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const start = morningStart();
     if (!start || state.busy.has('hot') || !(await getSettings()).auto) return;
     const hot = (await kvGet('aiHot')).latest;
-    if (hot?.at >= start) return;
+    // Còn dưới 5 deal chưa xử lý → tự phân tích lại (tối đa 30 phút/lần, chỉ máy đang quét chạy)
+    let low = false;
+    if (hot?.at >= start) {
+      const [quotes, comments, done] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('aiHotDone')]);
+      const left = (hot.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], comments[x.id]) && !done[x.id]).length;
+      low = left < HOT_MIN && Date.now() - hot.at > 30 * 60e3 && !(await otherMachineScanning());
+      if (!low) return;
+    }
     const lock = await kvGet('hotLock');
     if (lock?.at && Date.now() - lock.at < 10 * 60e3 && lock.tab !== TAB_ID) return;
     await call({ type: 'kv.set', key: 'hotLock', value: { tab: TAB_ID, at: Date.now() } });
@@ -5349,7 +5362,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   }
   if (IS_TOP) {
     setTimeout(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 45000); // đợi dữ liệu tải xong
-    setInterval(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 10 * 60e3);
+    setInterval(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 5 * 60e3);
   }
 
   function hotBox(hot, quotes, done = {}, inTab = false) {
@@ -5625,7 +5638,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         if (act === 'perm-tab') {
           const set = new Set(u.tabs?.length ? u.tabs : SALE_TABS);
           set.has(b.dataset.tab) ? set.delete(b.dataset.tab) : set.add(b.dataset.tab);
-          u.tabs = TABS.map((t) => t[0]).filter((t) => set.has(t));
+          u.tabs = PERM_ITEMS.map((t) => t[0]).filter((t) => set.has(t));
         }
         users[k] = { ...u, at: Date.now(), by: meName };
         await kvMerge('perms', { users });
