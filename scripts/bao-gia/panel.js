@@ -1593,6 +1593,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-bg { background: rgba(255,255,255,.2); border-radius: 999px; padding: 0 8px; }
     .wk-row { cursor: pointer; }
     .pd, .lb { cursor: pointer; }
+    .sc-head { gap: 16px; }
+    .sc-back { font: inherit; font-size: 13px; font-weight: 800; color: #fff; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.5);
+      border-radius: 10px; padding: 7px 12px; cursor: pointer; }
+    .sc-back:hover { background: rgba(255,255,255,.3); }
+    .sc-head .ct-who { flex: 1; gap: 12px; } .sc-head .ct-who .ava { border: 2px solid #fff; }
+    .sc-medal { font-size: 34px; font-weight: 900; animation: wkMedal 1.8s ease-in-out infinite; }
+    .wk.anim.sc .ct-head { animation: wkIn .4s ease both; }
+    .sc .ov { margin-top: 14px; } .sc .ov-barwrap { width: 46%; }
+    .sc-wk { font-size: 11px; font-weight: 800; color: #4f46e5; background: #eef2ff; border-radius: 999px; padding: 1px 8px; }
     .pd:hover .pd-step { filter: brightness(1.08); } .lb:hover { border-color: #a5b4fc; }
     .ov-hint { margin: 0 12px 10px; padding: 10px 14px; border: 1px dashed #c7d2fe; border-radius: 12px; color: #4f46e5; font-size: 13px; background: #f8faff; }
     .ov { margin: 0 12px 14px; padding: 14px 16px; border: 1px solid #c7d2fe; border-radius: 14px; background: linear-gradient(180deg, #f8faff, #fff); }
@@ -3078,6 +3087,48 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="ov-chart"><svg class="ov-line" viewBox="0 0 400 ${H + 10}" preserveAspectRatio="none"><polyline points="${pts}" /></svg>${cols}</div></div>`;
   }
 
+  // Màn hình riêng của 1 NVKD (quản trị bấm từ bảng xếp hạng): hạng tuần này, 4 cột mốc tuần, danh sách đơn 4 tuần
+  function staffScreen(staff, info, orders, now, dd, allRows) {
+    const rank = allRows.findIndex((r) => norm(r.staff) === norm(staff));
+    const thisMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const from = thisMon.getTime() / 1000 - 21 * 86400;
+    const to = thisMon.getTime() / 1000 + 7 * 86400;
+    const list = [];
+    for (const [cid, od] of Object.entries(orders || {})) {
+      if (norm(info[cid]?.staff) !== norm(staff)) continue;
+      for (const o of od?.orders || []) {
+        const at = o.at > 1e11 ? o.at / 1000 : o.at;
+        if (at && at >= from && at < to) list.push({ ...o, at, cid, cust: info[cid]?.name || `Khách #${cid}`, v: orderAfterVat(o) });
+      }
+    }
+    list.sort((a, b) => b.at - a.at);
+    const wkLabel = (at) => {
+      const k = Math.floor((thisMon.getTime() / 1000 + 7 * 86400 - at) / (7 * 86400));
+      return k === 0 ? 'Tuần này' : `${k} tuần trước`;
+    };
+    const DAYN = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const rowsHtml = list
+      .map((o) => {
+        const d = new Date(o.at * 1000);
+        return `<tr><td><span class="sc-wk">${wkLabel(o.at)}</span></td><td>${DAYN[d.getDay()]} ${dd(d)}</td>
+          <td><a href="/khach-hang/view/${o.cid}?t=order" target="_blank" rel="noopener">${esc(o.code || '')}</a></td>
+          <td title="${esc(o.cust)}">${esc(shortCompany(o.cust))}</td><td>${esc(o.quote || '')}</td><td>${esc(o.status || '')}</td><td class="num">${money(o.v)}</td></tr>`;
+      })
+      .join('');
+    const anim = state.weekAnimKey !== `sc:${staff}`; // hiệu ứng chỉ khi vừa mở màn hình
+    state.weekAnimKey = `sc:${staff}`;
+    return `<div class="ctab wk sc${anim ? ' anim' : ''}">
+      <div class="ct-head sc-head"><button class="sc-back" data-act="week-open" data-staff="${esc(staff)}" title="Quay lại bảng xếp hạng">← Bảng xếp hạng</button>
+        <span class="ct-who">${avatarHtml(staff, 44)}<span><div class="ct-title">${esc(staff)}</div>
+        <div class="ct-sub">${rank >= 0 ? `Hạng ${rank + 1}/${allRows.length} tuần này · ${money(allRows[rank].total)} · ${allRows[rank].n} đơn` : 'Chưa có doanh số tuần này'}</div></span></span>
+        <span class="sc-medal">${rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank >= 0 ? `#${rank + 1}` : '🏁'}</span></div>
+      ${staffOverview(staff, info, orders, now, dd)}
+      <div class="ct-wrap"><table class="ct"><thead><tr><th>Tuần</th><th>Ngày</th><th>Mã đơn</th><th>Khách hàng</th><th>Báo giá</th><th>Trạng thái</th><th class="num">Doanh thu (sau VAT)</th></tr>
+        <tr class="ct-sum"><td colspan="6">Σ ${list.length} đơn trong 4 tuần</td><td class="num">${moneyShortG(list.reduce((a, o) => a + o.v, 0))}</td></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="7" class="muted">Chưa có đơn hàng nào trong 4 tuần gần nhất.</td></tr>'}</tbody></table></div>
+    </div>`;
+  }
+
   function weekTab(quotes, orders, me) {
     const now = new Date();
     const admin = isAdminUser(me);
@@ -3114,6 +3165,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
     }
     const allRows = Object.values(by).map((r) => ({ ...r, total: r.d.reduce((a, b) => a + b, 0) })).sort((a, b) => b.total - a.total);
+    // Quản trị bấm vào 1 NVKD → màn hình riêng của NVKD đó
+    if (admin && state.weekOpen) return staffScreen(state.weekOpen, info, orders, now, dd, allRows);
     // NVKD (không phải quản trị) chỉ thấy dòng của mình
     const rows = admin ? allRows : allRows.filter((r) => norm(r.staff) === norm(meName));
     const sum = [0, 0, 0, 0, 0, 0];
@@ -3194,8 +3247,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${meBox}
       ${board}
       ${(() => {
-        const who = admin ? state.weekOpen : meName;
-        return who ? staffOverview(who, info, orders, now, dd) : admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để xem tổng quan 4 tuần gần nhất</div>' : '';
+        return admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để mở màn hình riêng: tổng quan 4 tuần gần nhất và từng đơn hàng</div>' : staffOverview(meName, info, orders, now, dd);
       })()}
       <div class="ct-wrap"><table class="ct">
         <thead><tr><th>Hạng</th><th>NVKD</th>${days.map((d, k) => `<th class="num${d.getTime() === today ? ' wk-today' : ''}">${DAY[k]} ${dd(d)}</th>`).join('')}<th class="num">Tổng tuần</th><th class="num">Số đơn</th></tr>
