@@ -1586,6 +1586,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .pc.good { color: #047857; } .pc.bad { color: #b91c1c; }
     .pc.wait { color: #94a3b8; font-weight: 600; }
     .pc.warn { color: #b45309; font-size: 10px; }
+    .pc.dl { width: 104px; padding: 2px 6px; text-align: right; white-space: nowrap; }
     .it-fea { text-align: right; font-weight: 800; color: #1d4ed8; }
     .it-fea .fea { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 800; }
     .item-main { flex: 1; min-width: 0; }
@@ -3373,27 +3374,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   const htmlText = (h) => String(h || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 
-  const pctCell = (q) => {
+  const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
+  // Cột "Chênh lệch": Flexo = tổng BG − tổng PO giấy tấm; chỉ Offset = ước tính BG × đang bán %
+  const diffCell = (q) => {
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return '';
     const { flexo, offset } = marginParts(q);
-    // 2 ô cố định: Flexo (trái) · Offset (phải) – không có loại đó thì để ô trống cho thẳng cột
-    const fmt = (v) => `${Math.round(v)}%`;
-    const fx = !kinds.includes('flexo')
-      ? '<span class="pc"></span>'
-      : flexo
-        ? flexo.invalid
-          ? `<span class="pc f warn" title="Tổng PO giấy tấm vượt giá trị báo giá ${trM(-flexo.diff)}">PO&gt;BG</span>`
-          : `<span class="pc f ${pctCls(flexo.rest)}" title="Flexo: còn ${flexo.rest}% sau giấy tấm">${fmt(flexo.rest)}</span>`
-        : '<span class="pc f wait" title="Flexo: đang chờ tính">…</span>';
-    const of = !kinds.includes('offset')
-      ? '<span class="pc"></span>'
-      : offset != null
-        ? `<span class="pc o ${pctCls(offset)}" title="Offset: đang bán ${offset}%">${fmt(offset)}</span>`
-        : '<span class="pc o wait" title="Offset: đang chờ tính">…</span>';
-    return fx + of;
+    if (kinds.includes('flexo')) {
+      if (!flexo) return '<span class="pc dl wait" title="Flexo: đang chờ tính">…</span>';
+      return `<span class="pc dl f ${flexo.diff < 0 ? 'bad' : 'good'}" title="Flexo: BG ${money(flexo.base)} − giấy tấm ${money(flexo.best.total)}${flexo.rest != null ? ` · còn ${flexo.rest}%` : ' · PO > BG'}">${flexo.diff < 0 ? '−' : ''}${trM(Math.abs(flexo.diff))}</span>`;
+    }
+    if (offset == null || !q.amount) return '<span class="pc dl wait" title="Offset: đang chờ tính">…</span>';
+    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: ước tính = BG ${money(q.amount)} × đang bán ${offset}%">≈${trM((q.amount * offset) / 100)}</span>`;
   };
-  const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
 
   const lsGet = (k) => {
     try {
@@ -4632,7 +4625,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
       <span class="it-amt">${noPrice(q) ? noPriceTag(q) : q?.amount ? money(q.amount) : ''}</span>
-      <span class="it-pct">${pctCell(q)}</span>
+      <span class="it-pct">${diffCell(q)}</span>
       <span class="it-fea"${f ? ` title="${esc(f.reasons.join(', '))}"` : ''}>${f ? `<b class="fea" style="${feaStyle(f.score)}">🎯${f.score}</b>` : ''}</span></a>`;
     };
     // Dòng tiêu đề cột (dính trên đầu khi cuộn) + tổng tiền ngay trên cột Số tiền
@@ -4656,7 +4649,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const sumTip = `Tổng ${rows.length} báo giá đang hiện: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc dl" title="Flexo: BG − giấy tấm · Offset: ≈ BG × đang bán %">Chênh lệch</span></span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
     // Bảng giống tab Báo giá nhưng không áp bộ lọc / tìm kiếm của tab đó; 'after' chèn thêm dòng phụ dưới mỗi báo giá
@@ -4664,7 +4657,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!rows.length) return '<span class="muted">Không có báo giá đang mở.</span>';
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc dl" title="Flexo: BG − giấy tấm · Offset: ≈ BG × đang bán %">Chênh lệch</span></span><span class="it-fea">Điểm</span></div>` +
         rows.map((x, i) => itemHtml(x, i) + after(x)).join('');
     };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
