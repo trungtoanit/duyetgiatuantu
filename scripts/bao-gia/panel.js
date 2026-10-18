@@ -3907,7 +3907,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
     const out = {};
     for (const [cid, od] of Object.entries(orders || {})) {
-      const list = (od?.orders || []).filter((o) => owner.get(o.id) === cid);
+      // Mỗi đơn 1 lần: đúng khách sở hữu, và không lặp trong cùng khách (đơn đã có + đơn gộp từ trang Misa)
+      const seen = new Set();
+      const list = (od?.orders || []).filter((o) => owner.get(o.id) === cid && !seen.has(o.id) && seen.add(o.id));
       if (list.length || crm(cid)) out[cid] = { ...od, orders: list };
     }
     return out;
