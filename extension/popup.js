@@ -44,7 +44,8 @@ function render(data) {
   const ss = data.syncStatus || {};
   $('syncInfo').textContent = !data.syncEnabled
     ? 'Chưa bật – nhập Supabase URL, key và mật khẩu nhóm trong Cài đặt'
-    : `Đang bật · kéo về ${ago(ss.lastPull)} · đẩy lên ${ago(ss.lastPush)}${ss.pushed ? ` · đã đẩy: ${Object.entries(ss.pushed).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`;
+    : `🟢 Tự đồng bộ ngầm · kéo về ${ago(ss.lastPull)} · đẩy lên ${ago(ss.lastPush)}`;
+  $('syncInfo').title = ss.pushed ? `Đã đẩy: ${Object.entries(ss.pushed).map(([k, v]) => `${k} ${v}`).join(', ')}` : '';
   $('syncAll').disabled = !data.syncEnabled;
   $('syncErr').textContent = ss.error ? `Lỗi đồng bộ: ${ss.error}` : '';
 
@@ -94,9 +95,9 @@ $('reload').onclick = async () => {
 
 $('syncAll').onclick = async () => {
   $('syncAll').disabled = true;
-  $('syncAll').textContent = 'Đang đồng bộ…';
+  $('syncAll').textContent = '…';
   render(await chrome.runtime.sendMessage({ type: 'syncAll' }));
-  $('syncAll').textContent = 'Đồng bộ ngay';
+  $('syncAll').textContent = '↻';
 };
 
 $('saveBalance').onclick = async () => {

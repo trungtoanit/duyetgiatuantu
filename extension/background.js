@@ -172,8 +172,17 @@ chrome.runtime.onStartup.addListener(() => {
   pullRemote();
 });
 
+// Đồng bộ ngầm toàn bộ (đẩy hết dữ liệu máy này lên + kéo lại) 1 lần / ngày – không cần bấm "Đồng bộ ngay"
+async function dailyFullSync() {
+  const { lastFullSync } = await chrome.storage.local.get('lastFullSync');
+  if (Date.now() - (lastFullSync || 0) < 24 * 3600e3 || !(await remoteCfg())) return;
+  await chrome.storage.local.set({ lastFullSync: Date.now() });
+  await syncAllNow().catch((e) => setSyncStatus({ error: String(e.message || e) }));
+}
+
 chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === ALARM) {
+    dailyFullSync();
     syncThrottled();
     setTimeout(syncThrottled, CHECK_MS);
     setTimeout(syncThrottled, 2 * CHECK_MS);
