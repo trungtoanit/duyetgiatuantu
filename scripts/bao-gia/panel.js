@@ -1824,7 +1824,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -2959,7 +2959,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // Khách ẩn khỏi tab Khách hàng: danh sách cố định + khách bấm "Ẩn" (kv 'custHidden', đồng bộ giữa các máy)
-  const HIDDEN_CUSTOMERS = ['CÔNG TY TNHH SẢN XUẤT HẢI ÂU'];
+  const HIDDEN_CUSTOMERS = ['CÔNG TY TNHH SẢN XUẤT HẢI ÂU', 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG', 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TƯỜNG LONG'];
   const isHiddenCust = (r, hidden) => !!hidden?.[r.cid] || HIDDEN_CUSTOMERS.some((n) => normName(n) === normName(r.name));
 
   function custTab({ months, rows: allRows }) {
@@ -3334,7 +3334,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${await (async () => {
         // 2 tab lớn: Báo giá | Khách hàng 6 tháng (nhớ qua F5: dgTab)
         const tab = lsGet('dgTab') === 'cust' ? 'cust' : 'quotes';
-        renderCtx.custHidden = Object.fromEntries(Object.entries(await kvGet('custHidden')).filter(([, v]) => v));
+        renderCtx.custHidden = Object.fromEntries(Object.entries(await kvGet('custHidden')).filter(([, v]) => v && !v.off));
         const cust = custRows(quotes, renderCtx.orders);
         const bar = `<div class="bigtabs">
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
@@ -3700,7 +3700,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'cust-hide') {
       const cur = (await kvGet('custHidden'))[b.dataset.cid];
-      await kvMerge('custHidden', { [b.dataset.cid]: cur ? null : { name: b.dataset.name, at: Date.now(), by: meName } });
+      // Không ghi null (máy chủ không nhận) → đánh dấu off khi hiện lại
+      await kvMerge('custHidden', { [b.dataset.cid]: cur && !cur.off ? { ...cur, off: true, at: Date.now() } : { name: b.dataset.name, at: Date.now(), by: meName } });
       render();
     }
     else if (act === 'cust-showhidden') {
