@@ -214,6 +214,44 @@
     if (list.length) emit('notifs', list);
   }
 
+  // Rút gọn 1 đơn hàng Misa (dùng chung cho trang khách hàng và trang danh sách đơn hàng)
+  const mapOrder = (o) => {
+        const lines = (o.misaOrderDetails || []).map((x) => {
+          const op = x.opportunityProduct || {};
+          const price = x.price || op.price || 0;
+          return {
+            product: x.productionCode || x.productId || '',
+            name: x.description || op.name || '',
+            qty: x.quantity || 0,
+            delivered: x.deliveredQuantity || 0,
+            price,
+            total: x.totalPrice || (price && x.quantity ? price * x.quantity : op.totalPrice || 0),
+          };
+        });
+        // Các trường tiền của đơn (để tìm đúng "tổng sau VAT"): mọi số ở cấp đơn có tên chứa total/amount/vat/tax/pay/money
+        const amounts = {};
+        for (const [k, v] of Object.entries(o)) if (typeof v === 'number' && /total|amount|vat|tax|pay|money|price/i.test(k)) amounts[k] = v;
+        const l0 = (o.misaOrderDetails || [])[0] || {};
+        for (const [k, v] of Object.entries(l0)) if (typeof v === 'number' && /vat|tax/i.test(k)) amounts[`line.${k}`] = v;
+        const lineVat = (o.misaOrderDetails || []).reduce((a, x) => a + (Number(x.vatAmount ?? x.taxAmount ?? x.amountVat ?? 0) || 0), 0);
+        const preVat = lines.reduce((a, l) => a + (l.total || 0), 0);
+        // Tổng sau VAT: trường tổng thanh toán của đơn nếu có, không thì tiền hàng + VAT từng dòng
+        const totalVat =
+          o.totalPayment ?? o.totalAmountWithVat ?? o.totalWithVat ?? o.totalAfterVat ?? (lineVat ? preVat + lineVat : undefined);
+        return {
+          id: o.id,
+          code: o.code,
+          amounts,
+          totalVat: typeof totalVat === 'number' ? totalVat : undefined,
+          at: o.orderedAt || o.createdAt,
+          status: o.status,
+          deliveryDate: (o.deliveryDate || '').slice(0, 10),
+          quote: o.opportunity?.code || '',
+          total: lines.reduce((a, l) => a + (l.total || 0), 0),
+          lines,
+        };
+      };
+
   function handle(url, text) {
     if (!API.test(url)) return;
     let d;
@@ -275,43 +313,22 @@
     // Lịch sử mua hàng của khách (trang khách hàng → tab đơn hàng)
     if (/\/misaOrder\?/.test(url) && /[?&]customerId=\d+/.test(url) && Array.isArray(d.misaOrders)) {
       const customerId = Number(url.match(/[?&]customerId=(\d+)/)[1]);
-      const orders = d.misaOrders.map((o) => {
-        const lines = (o.misaOrderDetails || []).map((x) => {
-          const op = x.opportunityProduct || {};
-          const price = x.price || op.price || 0;
-          return {
-            product: x.productionCode || x.productId || '',
-            name: x.description || op.name || '',
-            qty: x.quantity || 0,
-            delivered: x.deliveredQuantity || 0,
-            price,
-            total: x.totalPrice || (price && x.quantity ? price * x.quantity : op.totalPrice || 0),
-          };
-        });
-        // Các trường tiền của đơn (để tìm đúng "tổng sau VAT"): mọi số ở cấp đơn có tên chứa total/amount/vat/tax/pay/money
-        const amounts = {};
-        for (const [k, v] of Object.entries(o)) if (typeof v === 'number' && /total|amount|vat|tax|pay|money|price/i.test(k)) amounts[k] = v;
-        const l0 = (o.misaOrderDetails || [])[0] || {};
-        for (const [k, v] of Object.entries(l0)) if (typeof v === 'number' && /vat|tax/i.test(k)) amounts[`line.${k}`] = v;
-        const lineVat = (o.misaOrderDetails || []).reduce((a, x) => a + (Number(x.vatAmount ?? x.taxAmount ?? x.amountVat ?? 0) || 0), 0);
-        const preVat = lines.reduce((a, l) => a + (l.total || 0), 0);
-        // Tổng sau VAT: trường tổng thanh toán của đơn nếu có, không thì tiền hàng + VAT từng dòng
-        const totalVat =
-          o.totalPayment ?? o.totalAmountWithVat ?? o.totalWithVat ?? o.totalAfterVat ?? (lineVat ? preVat + lineVat : undefined);
-        return {
-          id: o.id,
-          code: o.code,
-          amounts,
-          totalVat: typeof totalVat === 'number' ? totalVat : undefined,
-          at: o.orderedAt || o.createdAt,
-          status: o.status,
-          deliveryDate: (o.deliveryDate || '').slice(0, 10),
-          quote: o.opportunity?.code || '',
-          total: lines.reduce((a, l) => a + (l.total || 0), 0),
-          lines,
-        };
-      });
+      const orders = d.misaOrders.map(mapOrder);
       emit('orders', { customerId, total: d.total ?? orders.length, orders });
+      return;
+    }
+    // Trang Đơn hàng Misa (/misa-order/list): đơn của mọi khách → gom theo khách, kèm tên khách và NVKD phụ trách
+    if (/\/misaOrder\?/.test(url) && Array.isArray(d.misaOrders)) {
+      const byCust = {};
+      for (const o of d.misaOrders) {
+        const c = o.customer || o.opportunity?.customer || {};
+        const cid = c.id ?? o.customerId ?? o.opportunity?.customerId;
+        if (!cid) continue;
+        const sale = c.staff || c.sale || o.staff || o.opportunity?.staff;
+        (byCust[cid] ||= { customerId: cid, customer: { name: c.name, code: c.code, staff: sale?.name || undefined }, orders: [] }).orders.push(mapOrder(o));
+      }
+      const list = Object.values(byCust);
+      if (list.length) emit('ordersAll', list);
       return;
     }
     // Bình luận: ERP lưu dưới dạng fileAttach (bình luận gốc + children là trả lời)

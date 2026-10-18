@@ -306,13 +306,31 @@
       cur.products[data.spec || 'sản phẩm'] = { pct: data.pct, price: data.price, qty: data.qty, reprint: data.reprint, at: data.at };
       cur.at = data.at;
       await kvMerge('margins', { [data.code]: cur });
+    } else if (kind === 'ordersAll') {
+      // Trang Đơn hàng Misa: gộp đơn vào lịch sử từng khách (không đổi tổng số đơn / thời điểm đọc trang khách)
+      const cur = await kvGet('orders');
+      const patch = {};
+      for (const g of data) {
+        const old = cur[g.customerId] || { customerId: g.customerId, orders: [], at: 0 };
+        const byId = new Map((old.orders || []).map((o) => [o.id, o]));
+        let changed = false;
+        for (const o of g.orders) {
+          const prev = byId.get(o.id);
+          if (!prev || prev.total !== o.total || prev.status !== o.status) changed = true;
+          byId.set(o.id, { ...prev, ...o });
+        }
+        const customer = { ...(old.customer || {}), ...Object.fromEntries(Object.entries(g.customer || {}).filter(([, v]) => v)) };
+        if (!changed && JSON.stringify(customer) === JSON.stringify(old.customer || {})) continue;
+        patch[g.customerId] = { ...old, customer, orders: [...byId.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 600) };
+      }
+      if (Object.keys(patch).length) await kvMerge('orders', patch);
     } else if (kind === 'orders') {
       // Gộp theo mã đơn với các trang đã đọc trước (trang 2, 3… của lịch sử mua hàng), mới nhất trước
       const old = (await kvGet('orders'))[data.customerId];
       const byId = new Map((old?.orders || []).map((o) => [o.id, o]));
       for (const o of data.orders || []) byId.set(o.id, o);
       const all = [...byId.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 600);
-      await kvMerge('orders', { [data.customerId]: { ...data, orders: all, at: Math.floor(Date.now() / 1000) } });
+      await kvMerge('orders', { [data.customerId]: { ...old, ...data, orders: all, at: Math.floor(Date.now() / 1000) } });
     } else if (kind === 'notifs') {
       // Thông báo là của từng tài khoản CRM → khoá theo người đang đăng nhập
       const me = await kvGet('me');
@@ -971,6 +989,56 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
+  // Đọc trang Đơn hàng Misa (/misa-order/list) trong khung ẩn: trang 1, 2, 3… tới khi gặp đơn cũ hơn ~6 tháng (hoặc hết trang)
+  async function collectMisaOrders(maxPages = 40) {
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = '/misa-order/list';
+    document.documentElement.append(f);
+    const loaded = (page) => {
+      try {
+        return f.contentWindow.performance
+          .getEntriesByType('resource')
+          .some((e) => /\/misaOrder\?/.test(e.name) && !/customerId=/.test(e.name) && (page === 1 || new RegExp(`[?&]page=${page}\\b`).test(e.name)));
+      } catch {
+        return false;
+      }
+    };
+    const waitFor = async (cond, ms) => {
+      const t = Date.now();
+      while (Date.now() - t < ms) {
+        if (cond()) return true;
+        await sleep(300);
+      }
+      return false;
+    };
+    try {
+      collect.current = 'đơn hàng Misa trang 1';
+      progress();
+      if (!(await waitFor(() => loaded(1), 25000))) return;
+      await sleep(1500);
+      const sixMonths = Date.now() / 1000 - 190 * 86400;
+      for (let page = 2; page <= maxPages; page++) {
+        // Các trang sau là đơn cũ hơn; đã qua mốc 6 tháng thì dừng
+        const rows = [...(f.contentDocument?.querySelectorAll('.ant-table-row') || [])];
+        const lastTxt = rows.at(-1)?.textContent || '';
+        const dm = lastTxt.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (dm && new Date(+dm[3], +dm[2] - 1, +dm[1]).getTime() / 1000 < sixMonths) break;
+        collect.current = `đơn hàng Misa trang ${page}`;
+        progress();
+        const li = await waitFor(() => f.contentDocument?.querySelector(`.ant-pagination-item-${page}`), 5000);
+        if (!li) break;
+        f.contentDocument.querySelector(`.ant-pagination-item-${page}`).click();
+        if (!(await waitFor(() => loaded(page), 20000))) break;
+        await sleep(1500);
+      }
+    } finally {
+      f.remove();
+    }
+  }
+
   // Báo giá Offset: trong khung ẩn, bấm số lượng từng sản phẩm → mở "Tính giá offset" → Ctrl+Shift+G.
   // hook.js trong khung đọc bảng chiết giá (iframe#printWindow) và gửi "Đang bán (X%)" về để lưu. Lệnh in bị chặn.
   async function readOffsetMargins(f) {
@@ -1157,6 +1225,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!full && Date.now() - lastListRun > 30 * 60000) {
         lastListRun = Date.now();
         await collectListPages();
+        // Đơn hàng Misa: 5 trang mới nhất mỗi 30 phút; đọc sâu tới 6 tháng 1 lần / ngày
+        const deep = Date.now() - Number(lsGet('dgMisaDeep') || 0) > 24 * 3600e3;
+        await collectMisaOrders(deep ? 40 : 5).catch(() => {});
+        if (deep) lsSet('dgMisaDeep', String(Date.now()));
       }
       else if (!fc.listDone) {
         await collectListPages(999);
@@ -3410,6 +3482,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cur = info[c.id];
       if (!cur || (q.createdAt || 0) > cur.at) info[c.id] = { name: c.name, staff: q.staff?.name, at: q.createdAt || 0 };
     }
+    // Khách chưa có báo giá trong dữ liệu → lấy tên / NVKD phụ trách từ trang Đơn hàng Misa
+    for (const [cid, od] of Object.entries(orders || {})) if (!info[cid]?.staff && od?.customer?.staff) info[cid] = { ...od.customer, at: 0 };
     const by = {};
     for (const [cid, od] of Object.entries(orders || {})) {
       for (const o of od?.orders || []) {
@@ -3578,6 +3652,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cur = info[c.id];
       if (!cur || (q.createdAt || 0) > cur.at) info[c.id] = { name: c.name, code: c.code, staff: q.staff?.name, at: q.createdAt || 0 };
     }
+    // Khách chưa có báo giá trong dữ liệu → lấy tên / NVKD phụ trách từ trang Đơn hàng Misa
+    for (const [cid, od] of Object.entries(orders || {})) if (!info[cid]?.staff && od?.customer?.staff) info[cid] = { ...od.customer, at: 0 };
     const rows = [];
     for (const [cid, od] of Object.entries(orders || {})) {
       const m = [0, 0, 0, 0, 0, 0];
