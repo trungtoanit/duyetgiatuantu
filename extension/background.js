@@ -474,6 +474,37 @@ const services = {
     await syncAllNow();
     return true;
   },
+  // ---- Dịch vụ dùng chung: để tính năng mới chỉ cần sửa script trên GitHub (tự cập nhật), KHÔNG phải cài lại extension ----
+  // Gọi HTTP bất kỳ qua background (không bị CORS của trang); trả về status + nội dung chữ
+  http: async ({ url, method = 'GET', headers = {}, body }) => {
+    const res = await fetch(url, { method, headers, body });
+    return { status: res.status, ok: res.ok, text: await res.text() };
+  },
+  // Đọc / ghi chrome.storage.local theo khoá bất kỳ (trừ cấu hình bí mật)
+  'store.get': async ({ keys }) => {
+    const out = await chrome.storage.local.get(keys);
+    delete out.teamConfig;
+    return out;
+  },
+  'store.set': async ({ values }) => {
+    const v = { ...(values || {}) };
+    delete v.teamConfig;
+    await chrome.storage.local.set(v);
+    return true;
+  },
+  // Cấu hình hiện tại (không kèm khoá bí mật) + đẩy / kéo dữ liệu đồng bộ theo loại bất kỳ
+  'config.get': async () => {
+    const { anthropicKey, token, supabaseKey, teamSecret, ...safe } = await getConfig();
+    return { ...safe, hasAnthropicKey: !!anthropicKey, hasSupabase: !!(supabaseKey && teamSecret) };
+  },
+  'remote.push': async ({ ns, patch }) => {
+    await pushRemote(ns, patch);
+    return true;
+  },
+  'remote.pull': async () => {
+    await pullRemote();
+    return true;
+  },
 };
 
 chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {
