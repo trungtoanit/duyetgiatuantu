@@ -4380,7 +4380,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
           <button class="bigtab hot${tab === 'hot' ? ' on' : ''}${hotN ? ' has' : ''}" data-act="tab" data-tab="hot">🔥 Gợi ý chốt đơn <b>${hotN}</b></button>
           <button class="bigtab${tab === 'deal' ? ' on' : ''}" data-act="tab" data-tab="deal">🧠 Phân tích deal</button>
-          <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
+          <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
         if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
