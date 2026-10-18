@@ -2966,8 +2966,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       for (const o of od?.orders || []) {
         const at = o.at > 1e11 ? o.at / 1000 : o.at;
         if (!at || at < start || at >= end) continue;
-        const staff = info[cid]?.staff || 'Chưa rõ NVKD';
-        if (isExcluded(staff)) continue;
+        const staff = info[cid]?.staff;
+        if (!staff || isExcluded(staff)) continue; // khách chưa biết NVKD phụ trách → không tính
         const v = orderAfterVat(o);
         const r = (by[staff] ||= { staff, d: [0, 0, 0, 0, 0, 0], n: 0, list: [] });
         const i = Math.floor((at - start) / 86400);
