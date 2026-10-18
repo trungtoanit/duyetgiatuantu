@@ -1588,6 +1588,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .pc.good { color: #047857; } .pc.bad { color: #b91c1c; }
     .pc.wait { color: #94a3b8; font-weight: 600; }
     .pc.warn { color: #b45309; font-size: 10px; }
+    .item-head .pc.dl.sum { color: #6d28d9; background: #ede9fe; font-size: 13px; text-transform: none; letter-spacing: 0; }
     .pc.dl { width: 104px; padding: 2px 6px; text-align: right; white-space: nowrap; }
     .it-fea { text-align: right; font-weight: 800; color: #1d4ed8; }
     .it-fea .fea { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 800; }
@@ -3394,6 +3395,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
   // Cột "Chênh lệch": Flexo = tổng BG − tổng PO giấy tấm; chỉ Offset = ước tính BG × đang bán %
+  // Số chênh lệch dạng số (để cộng tổng): Flexo = BG − giấy tấm; Offset = Σ giá × SL × đang bán %
+  const diffVal = (q) => {
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+    if (!kinds.length) return null;
+    const { flexo, offset } = marginParts(q);
+    if (kinds.includes('flexo')) return flexo ? flexo.diff : null;
+    return offset == null ? null : offsetDiff(q)?.diff ?? null;
+  };
+  // Ô tổng chênh lệch trên tiêu đề bảng (theo bộ lọc đang hiện)
+  const diffHead = (rows) => {
+    const vals = rows.map(({ q }) => diffVal(q)).filter((v) => v != null);
+    const sum = vals.reduce((a, v) => a + v, 0);
+    const txt = Math.abs(sum) >= 1e9 ? `${(sum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(sum);
+    return `<span class="it-pct"><span class="pc dl sum" title="Tổng chênh lệch của ${vals.length}/${rows.length} báo giá đã tính được: ${money(Math.round(sum))}&#10;Flexo: BG − giấy tấm · Offset: Σ giá × SL × đang bán %">Σ ${vals.length ? txt : '–'}</span></span>`;
+  };
   const diffCell = (q) => {
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return '';
@@ -4672,7 +4688,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       const sumTip = `Tổng ${rows.length} báo giá đang hiện: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc dl" title="Flexo: BG − giấy tấm · Offset: ≈ BG × đang bán %">Chênh lệch</span></span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span>${diffHead(rows)}<span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
     // Bảng giống tab Báo giá nhưng không áp bộ lọc / tìm kiếm của tab đó; 'after' chèn thêm dòng phụ dưới mỗi báo giá
@@ -4680,7 +4696,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!rows.length) return '<span class="muted">Không có báo giá đang mở.</span>';
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
-        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc dl" title="Flexo: BG − giấy tấm · Offset: ≈ BG × đang bán %">Chênh lệch</span></span><span class="it-fea">Điểm</span></div>` +
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span>${diffHead(rows)}<span class="it-fea">Điểm</span></div>` +
         rows.map((x, i) => itemHtml(x, i) + after(x)).join('');
     };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
