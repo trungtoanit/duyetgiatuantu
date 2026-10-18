@@ -2098,7 +2098,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-big { margin: 12px; padding: 12px 14px; border-radius: 16px; border: 2px solid #818cf8; background: linear-gradient(135deg, #eef2ff, #f5f3ff); }
     .dl-big-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 15px; color: #3730a3; }
     .dl-bic { font-size: 22px; display: inline-block; animation: wkMedal 2s ease-in-out infinite; }
-    .dl-big-tip { margin: 6px 0 10px; font-size: 13px; color: #312e81; background: #fff; border: 1px dashed #a5b4fc; border-radius: 10px; padding: 7px 12px; }
+    .dl-big-tip-unused { margin: 6px 0 10px; font-size: 13px; color: #312e81; background: #fff; border: 1px dashed #a5b4fc; border-radius: 10px; padding: 7px 12px; }
     .dl-big-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 8px; }
     .dl-big-item { display: grid; gap: 4px; background: #fff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 9px 12px; }
     .dl-amt.big { font-size: 15px; color: #3730a3; }
@@ -4473,9 +4473,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 - giai đoạn hiện tại của deal, - độ "khoẻ" của deal (khả năng chốt 0–100), - còn thiếu gì để chốt,
 - 2–3 bước kế tiếp NVKD cần làm theo thứ tự (cụ thể, làm được ngay trong 1–2 ngày), - 1 câu NVKD có thể nhắn / nói với khách, - rủi ro lớn nhất (nếu có).
 Giai đoạn chọn 1 trong: "Mới báo giá", "Chờ khách phản hồi", "Đàm phán giá", "Làm mẫu / duyệt maket", "Chờ cọc / hợp đồng", "Sắp lên đơn", "Nguội – cần chào lại".
-ĐẶC ĐIỂM CỦA SẾP: sếp rất dễ tính, sẵn sàng đi gặp khách trực tiếp cùng NVKD, và khi sếp đi cùng thì có thể hỗ trợ thêm về GIÁ và CÔNG NỢ.
-→ Với deal LỚN (từ khoảng 100 triệu) hoặc deal đang vướng giá / công nợ / khách phân vân: LUÔN gợi ý NVKD làm việc trực tiếp với sếp –
-  book lịch hẹn khách để sếp tới gặp, trao đổi với sếp mức giá / thời hạn công nợ có thể hỗ trợ để kéo đơn về.
+THÔNG TIN NỘI BỘ (chỉ để bạn nắm, KHÔNG được nhắc lại nguyên văn hay mô tả tính cách sếp trong câu trả lời): sếp dễ tính, sẵn sàng đi gặp khách
+trực tiếp cùng NVKD, và khi sếp đi cùng thì có thể hỗ trợ thêm về giá và công nợ.
+→ Với deal LỚN (từ khoảng 100 triệu) hoặc đang vướng giá / công nợ / khách phân vân: lồng khéo vào các bước kế tiếp những HÀNH ĐỘNG cụ thể với sếp,
+  ví dụ "Hẹn khách gặp trực tiếp thứ 5, rủ sếp đi cùng", "Báo sếp mức giá khách mong muốn để chốt phương án", "Đề xuất công nợ 30 ngày với sếp trước buổi gặp".
+  Viết như lời nhắc việc tự nhiên, không giải thích lý do vì sao sếp hỗ trợ.
 Chỉ dựa trên dữ liệu được cung cấp, không bịa số liệu. Viết tiếng Việt tự nhiên, ngắn gọn, xưng hô với khách lịch sự (anh/chị).
 Trả về DUY NHẤT một JSON array, mỗi phần tử:
 {"code":"BGxxxxx","giai_doan":"...","suc_khoe":0-100,"con_thieu":["2–6 chữ mỗi mục"],"buoc_tiep":["bước 1","bước 2"],"cau_noi":"1 câu nhắn khách","rui_ro":"1 câu hoặc rỗng",
@@ -4566,11 +4568,17 @@ Không markdown, không giải thích ngoài JSON.`;
     const hotList = Object.values(hotBy).sort((a, b) => b.pct - a.pct);
     // Deal lớn → gợi ý NVKD làm việc trực tiếp với sếp (sếp dễ tính, đi gặp khách được, hỗ trợ giá / công nợ khi đi cùng)
     const BIG = 100e6;
+    // Lời kêu gọi hành động tự nhiên (đổi câu theo từng deal, không nói thẳng "đặc tính của sếp")
+    const CTA = [
+      ['📅 Hẹn khách 1 buổi gặp trực tiếp – rủ sếp đi cùng', '💲 Chốt phương án giá cùng sếp trước khi gặp', '🧾 Đề xuất thời hạn công nợ để khách yên tâm lên đơn'],
+      ['☕ Mời khách cà phê, có sếp cùng ngồi bàn', '💬 Báo sếp mức giá khách mong muốn để có phương án', '🤝 Gặp trực tiếp để chốt luôn số lượng & ngày giao'],
+      ['📅 Book lịch thăm xưởng khách cùng sếp tuần này', '💲 Xin sếp duyệt giá tốt cho đơn số lượng lớn', '🧾 Trao đổi với sếp điều kiện thanh toán linh hoạt'],
+    ];
+    const bigCta = (q) => CTA[Math.abs(Number(q.id) || 0) % CTA.length].map((t) => `<span class="dl-act">${t}</span>`).join('');
     const big = deals.filter((q) => (Number(q.amount) || 0) >= BIG).slice(0, 8);
     const bigBox = big.length
-      ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Deal lớn – làm việc trực tiếp với sếp để kéo đơn về</b><span class="hot-count">${big.length}</span>
+      ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Deal lớn – cùng sếp kéo đơn về</b><span class="hot-count">${big.length}</span>
           <span class="hot-sum">💰 ${moneyShortG(big.reduce((a, q) => a + (Number(q.amount) || 0), 0))}</span></div>
-        <div class="dl-big-tip">Sếp rất <b>dễ tính</b> và sẵn sàng hỗ trợ: <b>book lịch hẹn khách để sếp tới gặp trực tiếp</b> – khi sếp đi cùng có thể hỗ trợ thêm về <b>giá</b> và <b>công nợ</b>. Deal lớn đừng ngại nhờ sếp!</div>
         <div class="dl-big-list">${big
           .map((q) => {
             const a = aiBy[q.id];
@@ -4579,7 +4587,7 @@ Không markdown, không giải thích ngoài JSON.`;
                 <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="dl-amt big">${money(q.amount)}</span></div>
               <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))}${last ? ` · BL cuối ${ago(last.createdAt)}` : ' · chưa có bình luận'}${a?.stage ? ` · ${esc(a.stage)}` : ''}</div>
               ${a?.boss ? `<div class="dl-boss">🤝 ${esc(a.boss)}</div>` : ''}
-              <div class="dl-acts"><span class="dl-act">📅 Book lịch hẹn – mời sếp đi gặp khách</span><span class="dl-act">💲 Trao đổi giá với sếp</span><span class="dl-act">🧾 Xin sếp hỗ trợ công nợ</span></div></div>`;
+              <div class="dl-acts">${bigCta(q)}</div></div>`;
           })
           .join('')}</div></div>`
       : '';
