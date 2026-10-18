@@ -4817,6 +4817,7 @@ trực tiếp cùng NVKD, và khi sếp đi cùng thì có thể hỗ trợ thê
 → Với deal LỚN (từ khoảng 100 triệu) hoặc đang vướng giá / công nợ / khách phân vân: lồng khéo vào các bước kế tiếp những HÀNH ĐỘNG cụ thể với sếp,
   ví dụ "Hẹn khách gặp trực tiếp thứ 5, rủ sếp đi cùng", "Báo sếp mức giá khách mong muốn để chốt phương án", "Đề xuất công nợ 30 ngày với sếp trước buổi gặp".
   Viết như lời nhắc việc tự nhiên, không giải thích lý do vì sao sếp hỗ trợ.
+→ KHÁCH CŨ (đã lên đơn tổng hơn 50 triệu): KHÔNG gợi ý đi thăm xưởng / hẹn gặp khách cùng sếp nữa; chỉ gợi ý phối hợp với sếp về giá, điều kiện thanh toán để chốt nhanh.
 Chỉ dựa trên dữ liệu được cung cấp, không bịa số liệu. Viết tiếng Việt tự nhiên, ngắn gọn, xưng hô với khách lịch sự (anh/chị).
 Trả về DUY NHẤT một JSON array, mỗi phần tử:
 {"code":"BGxxxxx","giai_doan":"...","suc_khoe":0-100,"con_thieu":["2–6 chữ mỗi mục"],"buoc_tiep":["bước 1","bước 2"],"cau_noi":"1 câu nhắn khách","rui_ro":"1 câu hoặc rỗng",
@@ -4843,7 +4844,7 @@ Không markdown, không giải thích ngoài JSON.`;
         const os = orderSummary(orders?.[q.customer?.id]);
         return [
           `### ${q.code} – "${q.name || ''}"`,
-          `Khách: ${q.customer?.name || '?'} | Số tiền: ${noPrice(q) ? 'CHƯA CÓ GIÁ' : money(q.amount)} | Tình trạng CRM: ${statusLabel(q.quoteStatus)} | Tạo: ${fmtTime(q.createdAt)}${q.isReprint ? ' | Tái bản' : ''}${os ? ` | Khách đã mua ${os.count} đơn (12 tháng: ${os.year})` : ' | Khách mới'}`,
+          `Khách: ${q.customer?.name || '?'} | Số tiền: ${noPrice(q) ? 'CHƯA CÓ GIÁ' : money(q.amount)} | Tình trạng CRM: ${statusLabel(q.quoteStatus)} | Tạo: ${fmtTime(q.createdAt)}${q.isReprint ? ' | Tái bản' : ''}${os ? ` | Khách đã mua ${os.count} đơn, tổng ${money(os.total)} (12 tháng: ${os.year} đơn)${os.total > 50e6 ? ' | KHÁCH CŨ' : ''}` : ' | Khách mới'}`,
           'Bình luận gần nhất:',
           compactThread(q, c),
         ].join('\n');
@@ -4913,7 +4914,19 @@ Không markdown, không giải thích ngoài JSON.`;
       (k) => `Báo sếp mức giá ${k} mong muốn, rồi book lịch cùng sếp gặp khách để kéo đơn về.`,
       (k) => `Đặt lịch thăm xưởng ${k} cùng sếp, trao đổi trực tiếp giá và công nợ để khách yên tâm lên đơn.`,
     ];
-    const bigCta = (q) => CTA[Math.abs(Number(q.id) || 0) % CTA.length](shortCompany(q.customer?.name || '') || 'khách');
+    // Khách cũ đã lên đơn tổng hơn 50 triệu → không rủ sếp đi thăm xưởng / gặp khách nữa, chỉ phối hợp giá & điều kiện để chốt nhanh
+    const OLD_CTA = [
+      (k) => `${k} là khách quen – báo sếp mức giá khách mong muốn để có phương án tốt nhất, chốt nhanh đơn này.`,
+      (k) => `Gọi ${k} xác nhận số lượng và ngày giao, cần hỗ trợ giá hoặc điều kiện thanh toán thì báo sếp duyệt ngay.`,
+      (k) => `Khách quen ${k}: chốt lại giá cũ / giá ưu đãi với sếp rồi nhắn khách lên đơn luôn trong tuần.`,
+    ];
+    const boughtTotal = (q) => {
+      const od = renderCtx.orders?.[q.customer?.id];
+      return (od?.orders || []).reduce((a, o) => a + orderAfterVat(o), 0);
+    };
+    const isOldBig = (q) => boughtTotal(q) > 50e6;
+    const bigCta = (q) =>
+      (isOldBig(q) ? OLD_CTA : CTA)[Math.abs(Number(q.id) || 0) % CTA.length](shortCompany(q.customer?.name || '') || 'khách');
     const big = deals.filter((q) => (Number(q.amount) || 0) >= BIG).slice(0, 8);
     const bigBox = big.length
       ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Deal lớn – cùng sếp kéo đơn về</b><span class="hot-count">${big.length}</span>
@@ -4925,7 +4938,7 @@ Không markdown, không giải thích ngoài JSON.`;
             return `<div class="dl-big-item"><div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
                 <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="dl-amt big">${money(q.amount)}</span></div>
               <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))}${last ? ` · BL cuối ${ago(last.createdAt)}` : ' · chưa có bình luận'}${a?.stage ? ` · ${esc(a.stage)}` : ''}</div>
-              <div class="dl-cta">👉 ${esc(a?.boss || bigCta(q))}</div></div>`;
+              <div class="dl-cta">👉 ${esc((!isOldBig(q) && a?.boss) || bigCta(q))}</div></div>`;
           })
           .join('')}</div></div>`
       : '';
