@@ -2221,6 +2221,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .db-due.soon { color: #fff; background: #f97316; }
     .db-blue { background: #0284c7 !important; }
     .debt table.ct td { vertical-align: middle; }
+    .db-hbtns { display: flex; gap: 8px; align-items: center; }
     /* ===== Tab Cài đặt ===== */
     .sx .ct-head { align-items: center; }
     .sx-live { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 5px 14px; }
@@ -4937,7 +4938,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<div class="ctab wk debt">
       <div class="ct-head"><div><div class="ct-title">💰 Báo cáo tổng quan công nợ${staffSel ? ` · ${esc(staffSel)}` : ''}</div>
         <div class="ct-sub">${custs.length} khách đang nợ · cập nhật ${ago(Math.floor(updated / 1000))} từ trang Công nợ của CRM</div></div>
-        ${perm.admin && staffSel ? '<button class="sx-btn" data-act="debt-staff" data-staff="">✕ Xem tất cả NVKD</button>' : ''}</div>
+        <span class="db-hbtns">${perm.admin && staffSel ? '<button class="sx-btn" data-act="debt-staff" data-staff="">✕ Xem tất cả NVKD</button>' : ''}
+          <button class="rp-start" data-act="debt-print">🖨 In công nợ</button></span></div>
       <div class="sx-tiles">
         ${tile('t-read', '💼', 'Tổng công nợ', moneyShortG(totalDebt), `${custs.length} khách hàng`)}
         ${tile('t-red', '⏰', 'Quá hạn', moneyShortG(overAmt), `${overdue.length} khách · lâu nhất ${Math.max(0, ...overdue.map((r) => r.maxDaysOverdue || 0))} ngày`)}
@@ -4955,6 +4957,54 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Chưa đến hạn</th><th class="num">Đến hạn</th></tr></thead>
           <tbody>${upRows || '<tr><td colspan="6" class="muted">Không có khoản sắp đến hạn.</td></tr>'}</tbody></table></div></div>
       </div></div>`;
+  }
+
+  // In công nợ: mỗi khách có tổng công nợ + quá hạn, nhóm theo từng NVKD (theo bộ lọc NVKD đang chọn; NVKD chỉ in của mình)
+  function printDebts(db, perm) {
+    db = db || {};
+    const staffSel = perm.admin ? lsGet('dgDebtStaff') || '' : meName;
+    const all = new Map();
+    for (const t of ['overdue', 'upcoming']) (db[`list:${t}`]?.ids || []).forEach((id) => db[`cust:${id}`] && all.set(id, db[`cust:${id}`]));
+    const custs = [...all.values()].filter((r) => !staffSel || norm(r.staffName) === norm(staffSel));
+    if (!custs.length) {
+      state.error = 'Chưa có dữ liệu công nợ để in.';
+      return render();
+    }
+    const groups = {};
+    custs.forEach((r) => (groups[r.staffName || 'Chưa rõ NVKD'] ||= []).push(r));
+    const n = (v) => (Number(v) || 0).toLocaleString('vi-VN');
+    const sum = (arr, k) => arr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+    const sections = Object.entries(groups)
+      .sort((a, b) => sum(b[1], 'overdueAmount') - sum(a[1], 'overdueAmount') || sum(b[1], 'totalDebt') - sum(a[1], 'totalDebt'))
+      .map(([staff, rows]) => {
+        rows.sort((a, b) => (b.overdueAmount || 0) - (a.overdueAmount || 0) || (b.totalDebt || 0) - (a.totalDebt || 0));
+        const body = rows
+          .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.customerCode || '')}</td><td>${esc(r.customerName || '')}</td><td>${esc(r.phone || '')}</td>
+            <td class="n">${n(r.totalDebt)}</td><td class="n ${r.overdueAmount ? 'od' : ''}">${r.overdueAmount ? n(r.overdueAmount) : '–'}</td>
+            <td class="c">${r.maxDaysOverdue ? `${r.maxDaysOverdue} ngày` : ''}</td><td class="n">${r.notDueAmount ? n(r.notDueAmount) : '–'}</td>
+            <td class="c">${r.minDaysUntilDue != null && r.notDueAmount ? `còn ${r.minDaysUntilDue} ngày` : ''}</td><td class="c">${r.allowDebtDay ?? ''}</td></tr>`)
+          .join('');
+        return `<h2>${esc(staff)} <small>${rows.length} khách · tổng nợ ${n(sum(rows, 'totalDebt'))}đ · quá hạn ${n(sum(rows, 'overdueAmount'))}đ</small></h2>
+          <table><thead><tr><th>#</th><th>Mã KH</th><th>Khách hàng</th><th>SĐT</th><th>Tổng công nợ</th><th>Quá hạn</th><th>Trễ</th><th>Chưa đến hạn</th><th>Đến hạn</th><th>Hạn mức (ngày)</th></tr></thead>
+          <tbody>${body}</tbody><tfoot><tr><td colspan="4">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tfoot></table>`;
+      })
+      .join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const now = new Date();
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Công nợ khách hàng${staffSel ? ` – ${esc(staffSel)}` : ''}</title><style>
+      body{font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;margin:20px} h1{font-size:18px;margin:0} .s{color:#555;margin:4px 0 12px}
+      h2{font-size:14px;margin:18px 0 6px;padding:6px 8px;background:#eef2ff;border-left:4px solid #4f46e5} h2 small{font-weight:500;color:#444;margin-left:6px}
+      table{width:100%;border-collapse:collapse;margin-bottom:6px} th,td{border:1px solid #ccc;padding:4px 6px} th{background:#f1f5f9;text-align:left;white-space:nowrap}
+      .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums} .c{text-align:center;white-space:nowrap} .od{color:#b91c1c;font-weight:700}
+      tfoot td{font-weight:800;background:#f8fafc} .tot{margin-top:14px;font-size:14px;font-weight:800} h2{break-after:avoid} tr{break-inside:avoid}
+      @media print{body{margin:8mm}}</style></head><body>
+      <h1>Báo cáo công nợ khách hàng${staffSel ? ` – ${esc(staffSel)}` : ''}</h1>
+      <div class="s">${custs.length} khách đang nợ · in lúc ${now.toLocaleString('vi-VN')} · nguồn: trang Công nợ CRM</div>
+      ${sections}
+      <div class="tot">TỔNG CỘNG: công nợ ${n(sum(custs, 'totalDebt'))}đ · quá hạn ${n(sum(custs, 'overdueAmount'))}đ · chưa đến hạn ${n(sum(custs, 'notDueAmount'))}đ</div>
+      <script>setTimeout(()=>print(),300)<\/script></body></html>`);
+    w.document.close();
   }
 
   // ---------- Tab "Phân tích deal": AI đọc từng báo giá đang mở của 1 NVKD, gợi ý bước kế tiếp cho NVKD ----------
@@ -5531,6 +5581,9 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         await kvMerge('perms', { users });
       }
       render();
+    }
+    else if (act === 'debt-print') {
+      printDebts(await kvGet('debt2'), userPerm(await kvGet('me')));
     }
     else if (act === 'debt-staff') {
       lsSet('dgDebtStaff', b.dataset.staff || null);
