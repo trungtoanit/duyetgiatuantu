@@ -1671,6 +1671,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-hide:hover { color: #dc2626; border-color: #fecaca; }
     .ct-bg { background: rgba(255,255,255,.2); border-radius: 999px; padding: 0 8px; }
     .wk-row { cursor: pointer; }
+    /* Bố cục gọn cho vừa 1 màn hình (không phải cuộn) – chỉ tab Báo cáo tuần, không áp cho màn hình riêng NVKD */
+    .wk:not(.sc) .ct-head { padding: 8px 16px; } .wk:not(.sc) .ct-title { font-size: 16px; }
+    .wk:not(.sc) .board { margin: 6px 12px 8px; gap: 14px; }
+    .wk:not(.sc) .bweek { gap: 6px; } .wk:not(.sc) .bw-title { font-size: 12px; }
+    .wk:not(.sc) .pd { width: 112px; } .wk:not(.sc) .pd .ava { width: 34px !important; height: 34px !important; }
+    .wk:not(.sc) .pd1 .ava { width: 44px !important; height: 44px !important; }
+    .wk:not(.sc) .pd-crown { font-size: 18px; margin-bottom: -4px; }
+    .wk:not(.sc) .pd-name { font-size: 12px; margin-top: 2px; } .wk:not(.sc) .pd-amt { font-size: 15px; } .wk:not(.sc) .pd1 .pd-amt { font-size: 18px; }
+    .wk:not(.sc) .pd-sub { font-size: 10px; } .wk:not(.sc) .pd-step { margin-top: 3px; padding-top: 4px; font-size: 18px; }
+    .wk:not(.sc) .pd1 .pd-step { height: 54px; } .wk:not(.sc) .pd2 .pd-step { height: 40px; } .wk:not(.sc) .pd3 .pd-step { height: 30px; }
+    .wk:not(.sc) .lbs { gap: 4px; } .wk:not(.sc) .lb { padding: 4px 10px; font-size: 12px; } .wk:not(.sc) .lb-rank { font-size: 13px; }
+    .wk:not(.sc) .mcard { padding: 10px 14px; } .wk:not(.sc) .mc-head { margin-bottom: 4px; gap: 8px; }
+    .wk:not(.sc) .mc-trophy { font-size: 28px; } .wk:not(.sc) .mc-title { font-size: 16px; } .wk:not(.sc) .mc-sub { font-size: 11px; }
+    .wk:not(.sc) .mc-row { padding: 4px 8px; margin-top: 4px; gap: 8px; } .wk:not(.sc) .mc-row .ava { width: 22px !important; height: 22px !important; }
+    .wk:not(.sc) .mc-row.mc1 { padding: 6px 8px; } .wk:not(.sc) .mc-row.mc1 .ava { width: 30px !important; height: 30px !important; }
+    .wk:not(.sc) .mc-row.mc1 .mc-amt { font-size: 17px; } .wk:not(.sc) .mc-row.mc1 .mc-rank { font-size: 20px; } .wk:not(.sc) .mc-rank { font-size: 14px; }
+    .wk:not(.sc) .mc-amt { font-size: 13px; } .wk:not(.sc) .mc-amt small { display: inline; margin-left: 4px; }
+    .wk:not(.sc) .wk-me, .wk:not(.sc) .cheer { margin: 8px 12px 0; padding: 8px 14px; } .wk:not(.sc) .wk-me-rank, .wk:not(.sc) .ch-ic { font-size: 26px; }
+    .wk:not(.sc) table.ct td { padding: 4px 8px; } .wk:not(.sc) table.ct th { padding: 6px 8px; }
+    .wk:not(.sc) .wk-row .ava { width: 20px !important; height: 20px !important; } .wk:not(.sc) .wk-bar { margin-top: 3px; height: 4px; }
+    .wk:not(.sc) .wk-row.top1 b { font-size: 14px; } .wk:not(.sc) .wk-medal { font-size: 15px; } .wk:not(.sc) .wk-row.top1 .wk-medal { font-size: 20px; }
+    .wk:not(.sc) .rp-cell { grid-template-columns: auto minmax(60px, 1fr); align-items: center; gap: 2px 8px; }
+    .wk:not(.sc) .rp-cell .rps { grid-row: span 2; font-size: 11px; padding: 1px 8px; } .wk:not(.sc) .rp-pbar { height: 6px; } .wk:not(.sc) .rp-pn { font-size: 10px; }
+    .wk:not(.sc) .ct-note { padding: 4px 12px; font-size: 11px; }
     /* Cột "Báo cáo tuần": nổi bật nhất bảng – nhãn trạng thái, thanh tiến độ chạy, chấm đỏ nhấp nháy khi đang làm */
     th.wk-rp-h { color: #ea580c; font-size: 12px; background: #fff7ed; }
     td.wk-rp { min-width: 190px; background: linear-gradient(90deg, #fff7ed, #fffbeb); border-left: 2px solid #fed7aa; border-right: 2px solid #fed7aa; }
@@ -3724,7 +3748,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     state.weekAnimKey = String(off);
     return `<div class="ctab wk${anim ? ' anim' : ''}">
       <div class="ct-head"><div><div class="ct-title">📅 Báo cáo tuần</div>
-        <div class="ct-sub">Thứ 2 ${dd(days[0])} → Thứ 7 ${dd(days[5])}/${days[5].getFullYear()} · ${rows.reduce((a, r) => a + r.n, 0)} đơn · tổng ${moneyShortG(grand)} (sau VAT)</div></div>
+        <div class="ct-sub">Thứ 2 ${dd(days[0])} → Thứ 7 ${dd(days[5])}/${days[5].getFullYear()} · ${rows.reduce((a, r) => a + r.n, 0)} đơn · tổng ${moneyShortG(grand)} (sau VAT)${admin ? ' · 👆 bấm 1 NVKD để xem riêng' : ''}</div></div>
         <div class="ct-tools">${[...Array(-minOff + 1)]
           .map((_, k) => {
             const o = minOff + k;
@@ -3737,7 +3761,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${admin ? '' : `${cheerHtml(meName, allRows)}<div class="rp-startrow"><button class="rp-start cta" data-act="report-start" data-staff="${esc(meName)}">📝 Bắt đầu làm báo cáo tuần<span class="cta-sub">Duyệt từng khách & viết báo cáo</span></button></div>`}
       ${board}
       ${(() => {
-        return admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để mở màn hình riêng: tổng quan 4 tuần gần nhất và từng đơn hàng</div>' : staffOverview(meName, info, orders, now, dd);
+        return admin ? '' : staffOverview(meName, info, orders, now, dd);
       })()}
       <div class="ct-wrap"><table class="ct">
         <thead><tr><th>Hạng</th><th>NVKD</th><th class="wk-rp-h">📝 Báo cáo tuần</th>${days.map((d, k) => `<th class="num${d.getTime() === today ? ' wk-today' : ''}">${DAY[k]} ${dd(d)}</th>`).join('')}<th class="num">Tổng tuần</th><th class="num">Số đơn</th></tr>
