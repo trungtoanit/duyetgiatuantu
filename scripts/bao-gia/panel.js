@@ -2396,6 +2396,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .mt-diff { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
     .mt-diff span { display: block; font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; opacity: .8; }
     .mt-diff b { display: block; font-size: 22px; font-weight: 800; line-height: 1.15; }
+    .mt-diff.off { background: #f5f3ff; border-color: #ddd6fe; color: #5b21b6; }
     .mt-diff.neg { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
     .side-actions { display: grid !important; grid-template-columns: 1fr auto; gap: 8px; }
     .side-actions .act { justify-content: center; }
@@ -3272,6 +3273,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       offs: Object.entries(m.products || {}),
     };
   }
+  // Chênh lệch Offset (tiền lời trên NVL): Σ giá 1 thùng × SL × đang bán % theo từng sản phẩm;
+  // không đọc được giá/SL thì ước tính = tổng BG × đang bán % thấp nhất
+  const numOf = (t) => Number(String(t || '').replace(/[^\d]/g, '')) || 0;
+  function offsetDiff(q) {
+    const prods = Object.values(renderCtx.margins?.[q?.code]?.products || {});
+    if (!prods.length) return null;
+    const rows = prods.map((x) => ({ pct: x.pct, val: numOf(x.price) * numOf(x.qty) }));
+    if (rows.every((r) => r.val > 0)) return { diff: rows.reduce((a, r) => a + (r.val * r.pct) / 100, 0), exact: true, rows };
+    return q?.amount ? { diff: (q.amount * Math.min(...prods.map((x) => x.pct))) / 100, exact: false, rows } : null;
+  }
   // Dòng % ở cột phải danh sách: 🟦 Flexo X% · 🟪 Offset Y%
   const pctLine = (q) => {
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
@@ -3391,8 +3402,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!flexo) return '<span class="pc dl wait" title="Flexo: đang chờ tính">…</span>';
       return `<span class="pc dl f ${flexo.diff < 0 ? 'bad' : 'good'}" title="Flexo: BG ${money(flexo.base)} − giấy tấm ${money(flexo.best.total)}${flexo.rest != null ? ` · còn ${flexo.rest}%` : ' · PO > BG'}">${flexo.diff < 0 ? '−' : ''}${trM(Math.abs(flexo.diff))}</span>`;
     }
-    if (offset == null || !q.amount) return '<span class="pc dl wait" title="Offset: đang chờ tính">…</span>';
-    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: ước tính = BG ${money(q.amount)} × đang bán ${offset}%">≈${trM((q.amount * offset) / 100)}</span>`;
+    const od = offset == null ? null : offsetDiff(q);
+    if (!od) return '<span class="pc dl wait" title="Offset: đang chờ tính">…</span>';
+    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: ${od.exact ? 'Σ giá 1 thùng × SL × đang bán %' : `ước tính = BG ${money(q.amount)} × đang bán ${offset}%`}">${od.exact ? '' : '≈'}${trM(od.diff)}</span>`;
   };
 
   const lsGet = (k) => {
@@ -3528,7 +3540,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
       ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>` : '') : ''}
-      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? 'đang bán' : '') : ''}
+      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-diff off"><span>Chênh lệch (BG − NVL)${od.exact ? '' : ' · ước tính'}</span><b>${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
       ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
@@ -3554,7 +3566,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (kinds.includes('flexo')) segs.push(`🟦 Flexo ${parts.flexo ? (parts.flexo.invalid ? '<span class="warnx">⚠️ PO > giá trị BG</span>' : `<b class="${pctCls(parts.flexo.rest)}">${parts.flexo.rest}%</b>`) : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     if (kinds.includes('offset')) segs.push(`🟪 Offset ${parts.offset != null ? `<b class="${pctCls(parts.offset)}">${parts.offset}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
-    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('');
+    const od = offs.length ? offsetDiff(q) : null;
+    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('') +
+      (od ? `<tr><td><b>Chênh lệch Offset (BG − NVL)</b></td><td></td><td><b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b></td><td class="num">${od.exact ? '' : 'ước tính'}</td></tr>` : '');
     const fxRows = fx
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
         `<tr><td><b>Tổng giấy tấm</b></td><td></td><td><b>${money(fx.best.total)}</b></td><td class="num"><b>${fx.cost}%</b></td></tr>` +
