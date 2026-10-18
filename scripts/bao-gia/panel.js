@@ -1437,6 +1437,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .grip:hover::after, .grip.on::after { background: #6366f1; height: 96px; }
     .hbtns { display: flex; align-items: center; gap: 4px; }
     .x.fs { font-size: 16px; }
+    .x.fs.urge { color: #fff; background: #f97316; border-radius: 8px; width: 30px; height: 28px; animation: ctaGlow 1.4s ease-in-out infinite; }
+    .fulltip { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; padding: 5px 6px 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      color: #9a3412; background: linear-gradient(90deg, #fff7ed, #ffedd5); border: 1.5px solid #fdba74; animation: ftIn .5s ease both, ftNudge 2.4s ease-in-out 1s infinite; }
+    .ft-ic { font-size: 15px; color: #ea580c; display: inline-block; animation: ftZoom 1.2s ease-in-out infinite; }
+    .ft-ok { font: inherit; font-size: 12px; font-weight: 900; color: #fff; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer;
+      background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 3px 10px rgba(234,88,12,.35); }
+    .ft-ok:hover { filter: brightness(1.08); }
+    @keyframes ftIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+    @keyframes ftNudge { 0%, 85%, 100% { transform: translateX(0); } 90% { transform: translateX(-4px); } 95% { transform: translateX(3px); } }
+    @keyframes ftZoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
     h2 { font-size: 15px; margin: 0 0 4px; }
     h3 { font-size: 13px; margin: 14px 0 6px; }
     .muted { color: #656d76; font-size: 12px; }
@@ -3280,7 +3290,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       console.warn('[DG]', e);
       if (isOpen()) {
         root.querySelector('.panel').innerHTML = `
-          <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
+          <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns">${fullTip()}<button class="x fs${needFull() ? ' urge' : ''}" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
           <div class="err">${esc(e.message || e)}</div>`;
       }
     }
@@ -3991,6 +4001,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return out;
   }
 
+  // Tab Báo cáo tuần mà bảng chưa toàn màn hình → luôn nhắc bung to (bấm "Đồng ý" là bật toàn màn hình ngay)
+  const needFull = () => lsGet('dgTab') === 'week' && lsGet('dgPanelFull') !== '1';
+  const fullTip = () =>
+    needFull()
+      ? `<span class="fulltip"><span class="ft-ic">⛶</span>Báo cáo hiển thị đầy đủ nhất ở chế độ toàn màn hình<button class="ft-ok" data-act="full">Đồng ý – mở toàn màn hình</button></span>`
+      : '';
+
   async function renderInner() {
     meName = myName(await kvGet('me'));
     const [quotes, comments, evals, suggests, collected, settings] = await Promise.all([
@@ -4297,7 +4314,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         return notifBox(ns, quotes, me);
       })()}</div>`;
     root.querySelector('.panel').innerHTML = `
-      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
+      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns">${fullTip()}<button class="x fs${needFull() ? ' urge' : ''}" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
