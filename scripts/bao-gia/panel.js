@@ -1461,6 +1461,48 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
     .fchip.staff { --c: #0f766e; --bg: #ccfbf1; padding-left: 4px; }
     .fchip.staff .ava { width: 16px !important; height: 16px !important; font-size: 8px; }
+    .bigtabs { display: flex; gap: 6px; margin: 14px 0 4px; border-bottom: 2px solid #e2e8f0; }
+    .bigtab { font: inherit; font-size: 15px; font-weight: 800; color: #64748b; background: none; border: 0; border-bottom: 3px solid transparent;
+      margin-bottom: -2px; padding: 8px 16px; cursor: pointer; border-radius: 8px 8px 0 0; }
+    .bigtab b { font-size: 12px; background: #e2e8f0; color: #475569; border-radius: 999px; padding: 1px 8px; margin-left: 4px; }
+    .bigtab:hover { color: #1e293b; background: #f8fafc; }
+    .bigtab.on { color: #4338ca; border-bottom-color: #6366f1; }
+    .bigtab.on b { background: #6366f1; color: #fff; }
+    .ctab { margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
+    .ct-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; color: #fff;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed); }
+    .ct-title { font-size: 18px; font-weight: 800; } .ct-sub { font-size: 13px; opacity: .85; margin-top: 2px; }
+    .ct-tools { display: flex; align-items: center; gap: 8px; }
+    .ct-tools .search { background: rgba(255,255,255,.95); }
+    .ct-btn { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,.6); background: transparent; color: #fff;
+      border-radius: 10px; padding: 6px 12px; }
+    .ct-btn b { background: rgba(255,255,255,.25); border-radius: 999px; padding: 0 7px; margin-left: 4px; }
+    .ct-btn.on { background: #fbbf24; border-color: #fbbf24; color: #1f2937; }
+    .ctab .fbar { margin: 8px 12px; }
+    .ct-wrap { overflow: auto; }
+    table.ct { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.ct th { position: sticky; top: 0; background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+      text-align: left; padding: 10px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+    table.ct td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+    table.ct tr:hover td { background: #f8faff; }
+    table.ct .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+    .ct-sum td { background: #eef2ff; font-weight: 800; color: #3730a3; }
+    .ct-no { color: #94a3b8; width: 34px; }
+    .ct-name a { color: #1d4ed8; font-weight: 800; text-decoration: none; text-transform: uppercase; }
+    .ct-name a:hover { text-decoration: underline; }
+    .ct-name .kh { margin-left: 6px; font-size: 10px; }
+    .ct-name { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+    .ct-chg { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 800; }
+    .ct-chg.up { color: #16a34a; } .ct-chg.down { color: #dc2626; }
+    td.ct-cur .ct-chg { display: block; margin-left: 0; }
+    td.ct-cur.up { color: #16a34a; } td.ct-cur.down { color: #dc2626; } td.ct-cur.zero { color: #dc2626; }
+    .ct-none { font-size: 11px; font-weight: 700; color: #dc2626; }
+    .ct-dash { color: #cbd5e1; }
+    .ct-grp { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; background: #64748b; color: #fff; }
+    .ct-grp.hot { background: #ef4444; }
+    .ct-who { display: flex; align-items: center; gap: 6px; color: #334155; }
+    .ct-total { color: #047857; }
+    .ct-note { padding: 8px 14px; font-size: 12px; }
     .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
       color: #fff; border-radius: 999px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px;
       animation: dgClearPulse 1.8s ease-out infinite; transition: background .2s, transform .15s; }
@@ -1716,7 +1758,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -2698,6 +2740,101 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
+  // ---------- Tab "Khách hàng 6 tháng": doanh số theo tháng từ lịch sử mua hàng đã thu thập (kv 'orders') ----------
+  function custRows(quotes, orders) {
+    const now = new Date();
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({ y: d.getFullYear(), m: d.getMonth(), label: `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` });
+    }
+    const idx = (sec) => {
+      const d = new Date((sec > 1e11 ? sec : sec * 1000));
+      return months.findIndex((x) => x.y === d.getFullYear() && x.m === d.getMonth());
+    };
+    // Tên / mã / NVKD phụ trách của khách lấy từ báo giá gần nhất
+    const info = {};
+    for (const q of Object.values(quotes)) {
+      const c = q?.customer;
+      if (!c?.id) continue;
+      const cur = info[c.id];
+      if (!cur || (q.createdAt || 0) > cur.at) info[c.id] = { name: c.name, code: c.code, staff: q.staff?.name, at: q.createdAt || 0 };
+    }
+    const rows = [];
+    for (const [cid, od] of Object.entries(orders || {})) {
+      const m = [0, 0, 0, 0, 0, 0];
+      for (const o of od?.orders || []) {
+        const i = o.at ? idx(o.at) : -1;
+        if (i >= 0) m[i] += Number(o.total) || 0;
+      }
+      const total = m.reduce((a, b) => a + b, 0);
+      if (!total) continue;
+      const ci = info[cid] || {};
+      // Xu hướng: trung bình 3 tháng gần nhất (không tính tháng này) so với trung bình 2 tháng đầu
+      const last3 = m[2] + m[3] + m[4];
+      const first2 = m[0] + m[1];
+      rows.push({
+        cid, name: ci.name || `Khách #${cid}`, code: ci.code || '', staff: ci.staff || '', m, total,
+        active: m.filter(Boolean).length,
+        trend: first2 ? Math.round(((last3 / 3 - first2 / 2) / (first2 / 2)) * 100) : null,
+      });
+    }
+    rows.sort((a, b) => b.total - a.total);
+    return { months, rows };
+  }
+
+  function custTab({ months, rows }) {
+    const fold = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+    const needle = fold(state.search).trim();
+    const staffSel = lsGet('dgStaff') || '';
+    const noCur = lsGet('dgCustNoCur') === '1';
+    const list = rows.filter(
+      (r) => (!needle || fold(`${r.name} ${r.code}`).includes(needle)) && (!staffSel || r.staff === staffSel) && (!noCur || !r.m[5]),
+    );
+    const sum = [0, 0, 0, 0, 0, 0];
+    list.forEach((r) => r.m.forEach((v, i) => (sum[i] += v)));
+    const pct = (a, b) => (b ? Math.round(((a - b) / b) * 100) : null);
+    const arrow = (p) => (p == null ? '' : `<span class="ct-chg ${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '↑' : '↓'}${Math.abs(p).toLocaleString('vi-VN')}%</span>`);
+    const noCurN = rows.filter((r) => !r.m[5] && (!staffSel || r.staff === staffSel)).length;
+    const staffs = {};
+    rows.forEach((r) => r.staff && (staffs[r.staff] = (staffs[r.staff] || 0) + 1));
+    const staffChips = Object.entries(staffs)
+      .sort((a, b) => b[1] - a[1])
+      .map(([n, k]) => `<button class="fchip staff${staffSel === n ? ' on' : ''}" data-act="staff" data-staff="${esc(n)}" title="${esc(n)}">${avatarHtml(n, 16)}${esc(shortName(n))}<b>${k}</b></button>`)
+      .join('');
+    const body = list
+      .map((r, i) => {
+        const cells = r.m
+          .map((v, k) => {
+            if (k < 5) return `<td class="num">${v ? money(v) : '<span class="ct-dash">—</span>'}</td>`;
+            const p = pct(v, r.m[4]);
+            return `<td class="num ct-cur ${v ? (p != null && p < 0 ? 'down' : 'up') : 'zero'}">${v ? money(v) : '<span class="ct-none">chưa lên đơn</span>'}${arrow(r.m[4] ? (v ? p : -100) : null)}</td>`;
+          })
+          .join('');
+        return `<tr><td class="ct-no">${i + 1}</td>
+          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(r.name)}</a>${r.code ? `<span class="kh">${esc(r.code)}</span>` : ''}${arrow(r.trend)}</td>
+          <td><span class="ct-grp ${r.active >= 4 ? 'hot' : ''}">${r.active >= 4 ? 'Ưu tiên' : 'Thường'}</span></td>
+          <td class="ct-who" title="${esc(r.staff)}">${r.staff ? `${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}` : ''}</td>
+          ${cells}<td class="num ct-total">${money(r.total)}</td></tr>`;
+      })
+      .join('');
+    return `<div class="ctab">
+      <div class="ct-head"><div><div class="ct-title">👥 Danh sách khách hàng</div><div class="ct-sub">Khoảng thời gian: ${months[0].label} → ${months[5].label} · ${list.length} khách · tổng ${moneyShortG(sum.reduce((a, b) => a + b, 0))}</div></div>
+        <div class="ct-tools"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên / mã khách…" value="${esc(state.search || '')}"></label>
+          <button class="ct-btn${noCur ? ' on' : ''}" data-act="cust-nocur" title="Khách đã mua trong 6 tháng nhưng tháng này chưa có đơn">Chưa lên đơn tháng này <b>${noCurN}</b></button></div></div>
+      ${staffChips ? `<div class="fbar"><div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>${staffSel ? '<button class="fclear" data-act="filter-clear">✕ Bỏ lọc</button>' : ''}</div>` : ''}
+      <div class="ct-wrap"><table class="ct">
+        <thead><tr><th>STT</th><th>Tên khách hàng</th><th>Nhóm</th><th>NVKD</th>${months.map((x, i) => `<th class="num${i === 5 ? ' ct-cur' : ''}">${x.label}</th>`).join('')}<th class="num">Tổng 6 tháng</th></tr>
+          <tr class="ct-sum"><td></td><td>Σ ${list.length} khách</td><td></td><td></td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(sum.reduce((a, b) => a + b, 0))}</td></tr></thead>
+        <tbody>${body || '<tr><td colspan="11" class="muted">Chưa có dữ liệu mua hàng – extension tự đọc lịch sử mua hàng khi mở báo giá / thu thập ngầm.</td></tr>'}</tbody></table></div>
+      <div class="muted ct-note">Số liệu từ lịch sử mua hàng extension đã thu thập (${rows.length} khách có đơn trong 6 tháng). Tháng ${months[5].label}: so với tháng trước; cạnh tên: trung bình 3 tháng gần nhất so với 2 tháng đầu.</div>
+    </div>`;
+  }
+  const moneyShortG = (n) => {
+    const f = (v) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return n >= 1e9 ? `${f(n / 1e9)} tỷ` : n >= 1e6 ? `${f(n / 1e6)} tr` : money(n);
+  };
+
   // Tên gọn: 3 chữ → chữ cuối (Phan Văn Thịnh → Thịnh); 4 chữ trở lên → 2 chữ cuối (Lê Thị Đông Anh → Đông Anh)
   const shortName = (n) => {
     const w = (n || '').trim().split(/\s+/).filter(Boolean);
@@ -3001,9 +3138,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         return notifBox(ns, quotes, me);
       })()}</div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
-      ${hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone'))}
-      ${overdueBox}
-      ${learnedBox(await kvGet('learned'))}
+      ${await (async () => {
+        // 2 tab lớn: Báo giá | Khách hàng 6 tháng (nhớ qua F5: dgTab)
+        const tab = lsGet('dgTab') === 'cust' ? 'cust' : 'quotes';
+        const cust = custRows(quotes, renderCtx.orders);
+        const bar = `<div class="bigtabs">
+          <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
+          <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.length}</b></button></div>`;
+        return tab === 'cust'
+          ? bar + custTab(cust)
+          : bar + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
+      })()}
     `;
     if (searchFocused) {
       const el = root.querySelector('input.dg-search');
@@ -3348,6 +3493,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'close') {
       setPanelOpen(false);
+      render();
+    }
+    else if (act === 'tab') {
+      lsSet('dgTab', b.dataset.tab);
+      render();
+    }
+    else if (act === 'cust-nocur') {
+      lsSet('dgCustNoCur', lsGet('dgCustNoCur') === '1' ? null : '1');
       render();
     }
     else if (act === 'hot-toggle') {
