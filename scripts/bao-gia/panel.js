@@ -2105,6 +2105,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-acts { display: flex; flex-wrap: wrap; gap: 5px; }
     .dl-act { font-size: 11.5px; font-weight: 800; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 2px 10px; }
     .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
+    .dl-listwrap { margin: 12px; }
+    .dl-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 6px 44px; padding: 5px 10px; font-size: 12px; color: #334155;
+      background: #f8faff; border-left: 3px solid #a5b4fc; border-radius: 6px; }
+    .dl-sub .hot-miss { margin: 0; } .dl-sub .hot-miss i { font-size: 11px; padding: 0 7px; }
+    .dl-hmini { font-weight: 900; border-radius: 999px; padding: 0 8px; } .dl-hmini.good { color: #166534; background: #dcfce7; }
+    .dl-hmini.mid { color: #92400e; background: #fef3c7; } .dl-hmini.bad { color: #991b1b; background: #fee2e2; }
+    .dl-step1 { color: #7c2d12; font-weight: 700; } .dl-boss1 { color: #3730a3; font-weight: 700; }
+    .dl-say1 { color: #1e3a8a; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dl-card.hot { border: 2px solid #fb923c; background: linear-gradient(180deg, #fff7ed, #fff 40%); }
     .dl-hotbadge { font-size: 11px; font-weight: 900; color: #fff; background: linear-gradient(90deg, #f97316, #ef4444); border-radius: 999px; padding: 1px 8px;
       white-space: nowrap; animation: ctaGlow 1.6s ease-in-out infinite; } .dl .ct-head .ct-who { flex: 1; color: #fff; } .dl .ct-title { color: #fff; }
@@ -4333,6 +4341,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
         rows.map(itemHtml).join('');
     };
+    // Bảng giống tab Báo giá nhưng không áp bộ lọc / tìm kiếm của tab đó; 'after' chèn thêm dòng phụ dưới mỗi báo giá
+    renderCtx.plainRows = (rows, after = () => '') => {
+      if (!rows.length) return '<span class="muted">Không có báo giá đang mở.</span>';
+      const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
+      return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
+        <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span><span class="it-pct"><span class="pc">Flexo</span><span class="pc">Offset</span></span><span class="it-fea">Điểm</span></div>` +
+        rows.map((x, i) => itemHtml(x, i) + after(x)).join('');
+    };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
     const feasibleIds = new Set(feasible.map(({ q }) => q.id));
     const merged = [...feasible, ...unreadAll.filter(({ q }) => !feasibleIds.has(q.id)).map((x) => ({ ...x, f: null }))].sort(sortByErp);
@@ -4613,28 +4629,24 @@ Không markdown, không giải thích ngoài JSON.`;
       : '';
     const stageCls = (st) => (/sắp lên đơn|cọc|hợp đồng/i.test(st) ? 'hot' : /mẫu|maket|đàm phán/i.test(st) ? 'warm' : /nguội/i.test(st) ? 'cold' : 'new');
     const hCls = (h) => (h >= 70 ? 'good' : h >= 40 ? 'mid' : 'bad');
-    const cards = deals
-      .map((q) => ({ q, a: aiBy[q.id] }))
-      .sort((x, y) => !!hotBy[y.q.id] - !!hotBy[x.q.id] || (y.a?.health ?? -1) - (x.a?.health ?? -1) || (Number(y.q.amount) || 0) - (Number(x.q.amount) || 0))
-      .map(({ q, a }, i) => {
-        const last = lastComment(comments[q.id]);
-        return `<div class="dl-card${hotBy[q.id] ? ' hot' : ''}" style="animation-delay:${Math.min(i, 12) * 50}ms">
-          <div class="dl-top">${hotBy[q.id] ? '<span class="dl-hotbadge">🔥 Ưu tiên chốt</span>' : ''}<a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
-            <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span>
-            ${a ? `<span class="dl-stage ${stageCls(a.stage)}">${esc(a.stage)}</span>` : ''}
-            <span class="dl-amt">${noPrice(q) ? '<span class="noprice">⚠️ Chưa cho giá</span>' : money(q.amount)}</span></div>
-          <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))} · tạo ${ago(q.createdAt)}${last ? ` · BL cuối ${ago(last.createdAt)} (${esc(shortName(last.staff?.name || ''))})` : ' · chưa có bình luận'}</div>
-          ${a
-            ? `<div class="dl-health"><span>Sức khoẻ deal</span><div class="dl-hbar ${hCls(a.health)}"><i style="--w:${a.health}%"></i></div><b class="${hCls(a.health)}">${a.health}%</b></div>
-              ${a.missing.length ? `<div class="hot-miss"><b>🧩 Còn thiếu:</b>${a.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</div>` : ''}
-              ${a.steps.length ? `<div class="hot-steps"><b>👉 Bước kế tiếp cho NVKD:</b>${a.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</div>` : ''}
-              ${a.say ? `<div class="dl-say">💬 <i>Gợi ý nhắn khách:</i> “${esc(a.say)}”</div>` : ''}
-              ${a.boss ? `<div class="dl-boss">🤝 <b>Làm việc với sếp:</b> ${esc(a.boss)}</div>` : ''}
-              ${a.risk ? `<div class="dl-risk">⚠️ ${esc(a.risk)}</div>` : ''}`
-            : '<div class="muted dl-none">Chưa phân tích – bấm “🧠 Phân tích deal” ở trên.</div>'}
-        </div>`;
+    // Danh sách giống tab Báo giá; deal đã phân tích có thêm 1 dòng phụ (giai đoạn, sức khoẻ, còn thiếu, bước tiếp, làm việc với sếp)
+    const rowsData = deals
+      .map((q) => {
+        const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
+        return { q, c, last: lastComment(c), f: feasibility(q, c, renderCtx.orders), a: aiBy[q.id] };
       })
-      .join('');
+      .sort((x, y) => !!hotBy[y.q.id] - !!hotBy[x.q.id] || (y.a?.health ?? -1) - (x.a?.health ?? -1) || (Number(y.q.amount) || 0) - (Number(x.q.amount) || 0));
+    const sub = ({ q, a }) => {
+      const tag = hotBy[q.id] ? '<span class="dl-hotbadge">🔥 Ưu tiên chốt</span>' : '';
+      if (!a) return tag ? `<div class="dl-sub">${tag}</div>` : '';
+      return `<div class="dl-sub">${tag}<span class="dl-stage ${stageCls(a.stage)}">${esc(a.stage)}</span>
+        <span class="dl-hmini ${hCls(a.health)}" title="Sức khoẻ deal">❤ ${a.health}%</span>
+        ${a.missing.length ? `<span class="hot-miss">${a.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</span>` : ''}
+        ${a.steps.length ? `<span class="dl-step1">👉 ${esc(a.steps[0])}${a.steps.length > 1 ? ` <span class="muted">(+${a.steps.length - 1} bước)</span>` : ''}</span>` : ''}
+        ${a.boss ? `<span class="dl-boss1">🤝 ${esc(a.boss)}</span>` : ''}
+        ${a.say ? `<span class="dl-say1" title="${esc(a.say)}">💬 “${esc(a.say)}”</span>` : ''}</div>`;
+    };
+    const cards = `<div class="box unread dl-list">${renderCtx.plainRows(rowsData, sub)}</div>`;
     const dlAnim = state.dealAnimKey !== `${staff}:${ai?.at || 0}`; // hiệu ứng chỉ khi đổi NVKD / có kết quả mới
     state.dealAnimKey = `${staff}:${ai?.at || 0}`;
     return `<div class="ctab wk dl${dlAnim ? ' anim' : ''}">
@@ -4644,7 +4656,7 @@ Không markdown, không giải thích ngoài JSON.`;
       ${pick}
       ${hotBox2}
       ${bigBox}
-      <div class="dl-grid">${cards || '<div class="muted" style="padding:14px">Không có báo giá đang mở.</div>'}</div></div>`;
+      <div class="dl-listwrap">${cards}</div></div>`;
   }
 
   // Claude trả về tối đa 10 báo giá có thể chốt NGAY + lý do + việc cần làm. Lưu kv 'aiHot' (đồng bộ).
