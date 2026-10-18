@@ -5363,7 +5363,7 @@ Không markdown, không giải thích ngoài JSON.`;
   }
 
   // Claude trả về tối đa 10 báo giá có thể chốt NGAY + lý do + việc cần làm. Lưu kv 'aiHot' (đồng bộ).
-  const HOT = { candidates: 40, show: 10 };
+  const HOT = { candidates: 80, show: 30 };
   const HOT_SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú (bao bì giấy carton). Quản lý có quá nhiều báo giá, cần biết báo giá nào CHỐT ĐƯỢC NGAY để tập trung.
 Đọc từng báo giá (thông tin + luồng bình luận nội bộ giữa NVKD và quản lý) và chọn tối đa ${HOT.show} báo giá có khả năng chốt đơn cao nhất TRONG VÀI NGÀY TỚI.
 Tín hiệu chốt mạnh: khách đã ok giá / đồng ý / hứa lên đơn / hẹn ngày đặt; khách cho giá mục tiêu và mình đã đáp ứng; chỉ còn vướng thủ tục (cọc, hợp đồng, duyệt mẫu, maket); khách quen, tái bản; mới trao đổi gần đây.
@@ -5416,7 +5416,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         type: 'claude',
         system: HOT_SYSTEM,
         prompt: `Thời điểm hiện tại: ${fmtTime(Date.now() / 1000)}\n\n${blocks.join('\n\n')}`,
-        maxTokens: 10000,
+        maxTokens: 24000,
       });
       let items = [];
       try {
@@ -5434,7 +5434,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         missing: (Array.isArray(x.con_thieu) ? x.con_thieu : []).map(String).filter(Boolean).slice(0, 6),
         steps: (Array.isArray(x.buoc_tiep) ? x.buoc_tiep : []).map(String).filter(Boolean).slice(0, 4),
       }));
-      await kvMerge('aiHot', { latest: { at: Date.now(), items, from: cands.length } });
+      await kvMerge('aiHot', { latest: { at: Date.now(), items, from: cands.length, show: HOT.show } });
       state.hotOpen = true;
     } catch (e) {
       state.error = e.message;
@@ -5461,7 +5461,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     if (hot?.at >= start) {
       const [quotes, comments, done] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('aiHotDone')]);
       const left = (hot.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], comments[x.id]) && !done[x.id]).length;
-      low = left < HOT_MIN && Date.now() - hot.at > 30 * 60e3 && !(await otherMachineScanning());
+      // Kết quả cũ phân tích với số deal khác (vd. 10 → 30) cũng chạy lại
+      low = (left < HOT_MIN || hot.show !== HOT.show) && Date.now() - hot.at > 30 * 60e3 && !(await otherMachineScanning());
       if (!low) return;
     }
     const lock = await kvGet('hotLock');
