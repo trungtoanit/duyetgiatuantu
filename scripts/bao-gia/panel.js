@@ -310,8 +310,14 @@
       // Trang Đơn hàng Misa: gộp đơn vào lịch sử từng khách (không đổi tổng số đơn / thời điểm đọc trang khách)
       const cur = await kvGet('orders');
       const patch = {};
+      // Đơn đã có trong lịch sử của khách CRM (mã số) → dùng đúng khách đó, không tạo khách trùng
+      const ownerOf = new Map();
+      for (const [cid, od] of Object.entries(cur)) if (/^\d+$/.test(cid)) for (const o of od?.orders || []) ownerOf.set(o.id, cid);
       for (const g of data) {
-        const old = cur[g.customerId] || { customerId: g.customerId, orders: [], at: 0 };
+        const known = g.orders.map((o) => ownerOf.get(o.id)).find(Boolean);
+        if (known) g.customerId = known;
+        else if (!/^\d+$/.test(String(g.customerId))) g.customerId = `misa:${g.customerId}`;
+        const old = patch[g.customerId] || cur[g.customerId] || { customerId: g.customerId, orders: [], at: 0 };
         const byId = new Map((old.orders || []).map((o) => [o.id, o]));
         let changed = false;
         for (const o of g.orders) {
@@ -3827,6 +3833,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return w.length >= 4 ? w.slice(-2).join(' ') : w.length === 3 ? w[2] : w.join(' ');
   };
 
+  // Mỗi đơn chỉ thuộc 1 khách: trang Đơn hàng Misa có thể ghi khách theo mã khác (vd. "TUANTU-THINH") → bỏ bản trùng,
+  // ưu tiên khách có mã số của CRM (đọc từ trang khách hàng)
+  function dedupOrders(orders) {
+    const owner = new Map();
+    const crm = (k) => /^\d+$/.test(String(k));
+    for (const [cid, od] of Object.entries(orders || {}))
+      for (const o of od?.orders || []) {
+        const cur = owner.get(o.id);
+        if (cur === undefined || (!crm(cur) && crm(cid))) owner.set(o.id, cid);
+      }
+    const out = {};
+    for (const [cid, od] of Object.entries(orders || {})) {
+      const list = (od?.orders || []).filter((o) => owner.get(o.id) === cid);
+      if (list.length || crm(cid)) out[cid] = { ...od, orders: list };
+    }
+    return out;
+  }
+
   async function renderInner() {
     meName = myName(await kvGet('me'));
     const [quotes, comments, evals, suggests, collected, settings] = await Promise.all([
@@ -3892,7 +3916,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     // Thẻ cố định bên phải trang báo giá: báo giá đang mở (câu hỏi gợi ý, % Flexo/Offset, mua hàng, đánh giá)
     avatars = avatarIndex(quotes);
-    renderCtx = { comments, quotes, collected, orders: await kvGet('orders'), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    renderCtx = { comments, quotes, collected, orders: dedupOrders(await kvGet('orders')), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
     const btn = (act, key, label, busyLabel, attrs = '') =>
       `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
