@@ -1777,6 +1777,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rp-chip.no { background: #fee2e2; color: #991b1b; border-color: #f87171; }
     .rp-chip.cur { box-shadow: 0 0 0 3px rgba(99,102,241,.45); transform: scale(1.05); }
     .rp-st { border-radius: 999px; padding: 1px 8px; font-size: 11px; } .rp-st.won { background: #dcfce7; color: #166534; } .rp-st.open { background: #fef3c7; color: #92400e; }
+    .rp-morebtn { font: inherit; font-size: 12px; font-weight: 800; color: #4f46e5; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 999px;
+      padding: 3px 12px; margin: 6px 0 2px; cursor: pointer; }
+    .rp-morebtn:hover { background: #e0e7ff; }
     .rp-q.won b { color: #166534; } .rp-more { font-size: 12px; padding: 4px 0; }
     .rp-text { width: 100%; border: 1.5px solid #c7d2fe; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
     .rp-text:focus { outline: 3px solid rgba(99,102,241,.2); border-color: #6366f1; }
@@ -3447,15 +3450,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const spark = g.m
       .map((v, k) => `<div class="rp-mcol"><div class="rp-mbar" style="height:${Math.max(3, Math.round((v / maxM) * 70))}px" title="${money(v)}"></div><div class="rp-mv">${v ? moneyShortG(v) : '—'}</div><div class="rp-ml">${months[k].label.slice(0, 2)}</div></div>`)
       .join('');
-    const pend = g.pending
-      .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+    // Báo giá tồn đọng: hiện 4 cái lớn nhất, còn lại bấm "Xem thêm"
+    const PEND_SHOW = 4;
+    const pendOpen = String(state.rpPendOpen) === String(g.cid);
+    const pendSorted = g.pending.sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    const pend = (pendOpen ? pendSorted : pendSorted.slice(0, PEND_SHOW))
       .map((q) => {
         const last = lastComment(renderCtx.comments?.[q.id]);
         return `<div class="rp-q"><a href="/bao-gia/update/${q.id}" target="_blank" rel="noopener"><b>${esc(q.code)}</b></a> ${esc(q.name || '')}
           <span class="rp-qa">${noPrice(q) ? '⚠️ Chưa cho giá' : money(q.amount || 0)}</span>
           ${last ? `<div class="rp-ql">💬 ${esc(last.staff?.name || '')}: ${esc((last.text || '').slice(0, 160))} <span class="muted">· ${ago(last.createdAt)}</span></div>` : '<div class="rp-ql muted">Chưa có bình luận</div>'}</div>`;
       })
-      .join('');
+      .join('') +
+      (pendSorted.length > PEND_SHOW
+        ? `<button class="rp-morebtn" data-act="rp-pend-more" data-cid="${g.cid}">${pendOpen ? '▲ Thu gọn' : `▼ Xem thêm ${pendSorted.length - PEND_SHOW} báo giá (${moneyShortG(pendSorted.slice(PEND_SHOW).reduce((a, q) => a + (Number(q.amount) || 0), 0))})`}</button>`
+        : '');
     return `<div class="ctab wk rp">${head}
       ${chips}
       <div class="rp-card${cardAnim ? ' anim' : ''}">
@@ -4723,6 +4732,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       state.error = null;
       state.report = { ...state.report, idx: (state.rpList || []).length };
       lsSet('dgReport', JSON.stringify(state.report));
+      render();
+    }
+    else if (act === 'rp-pend-more') {
+      state.rpPendOpen = String(state.rpPendOpen) === b.dataset.cid ? null : b.dataset.cid;
       render();
     }
     else if (act === 'report-exit') {
