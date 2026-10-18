@@ -1,5 +1,5 @@
 {
-  "version": "1.2.93",
+  "version": "1.2.94",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -30,6 +30,7 @@
     "aiHot",
     "aiHotDone",
     "custHidden",
+    "dealAi",
     "notifRead",
     "notifs",
     "reports",

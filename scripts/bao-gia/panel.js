@@ -2065,6 +2065,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       50% { border-color: #fb923c; box-shadow: 0 0 18px 0 rgba(251,146,60,.35); } }
     @media (prefers-reduced-motion: reduce) { .hotbox.collapsed.has-data, .hotbox.collapsed.has-data * { animation: none !important; } }
     .hot-sum { margin-left: 8px; font-size: 14px; font-weight: 900; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 999px; padding: 1px 10px; }
+    .dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 12px; margin: 12px; }
+    .dl-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px 14px; background: #fff; display: grid; gap: 6px; animation: wkIn .4s ease both; }
+    .dl-card:hover { border-color: #c7d2fe; box-shadow: 0 4px 14px rgba(79,70,229,.08); }
+    .dl-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .dl-code { font-weight: 900; color: #1d4ed8; text-decoration: none; } .dl-code:hover { text-decoration: underline; }
+    .dl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #334155; font-weight: 600; }
+    .dl-amt { font-weight: 900; color: #047857; white-space: nowrap; }
+    .dl-meta { font-size: 12px; color: #64748b; }
+    .dl-stage { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+    .dl-stage.hot { background: #dcfce7; color: #166534; } .dl-stage.warm { background: #fef3c7; color: #92400e; }
+    .dl-stage.cold { background: #f1f5f9; color: #64748b; } .dl-stage.new { background: #e0e7ff; color: #3730a3; }
+    .dl-health { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12px; color: #64748b; }
+    .dl-hbar { height: 7px; border-radius: 99px; background: #f1f5f9; overflow: hidden; }
+    .dl-hbar i { display: block; height: 100%; width: var(--w); border-radius: 99px; animation: wkBar .9s cubic-bezier(.2,.8,.2,1) both; }
+    .dl-hbar.good i { background: linear-gradient(90deg, #22c55e, #16a34a); } .dl-hbar.mid i { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+    .dl-hbar.bad i { background: linear-gradient(90deg, #f87171, #dc2626); }
+    .dl-health b.good { color: #16a34a; } .dl-health b.mid { color: #d97706; } .dl-health b.bad { color: #dc2626; }
+    .dl-say { font-size: 12.5px; color: #1e3a8a; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 6px; padding: 6px 10px; }
+    .dl-risk { font-size: 12px; color: #9a3412; }
+    .dl-none { font-size: 12px; }
+    .dl .ct-head { gap: 12px; } .dl .ct-head .ct-who { flex: 1; color: #fff; } .dl .ct-title { color: #fff; }
     .hot-miss { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; }
     .hot-miss b { color: #b91c1c; font-weight: 800; margin-right: 2px; }
     .hot-miss i { font-style: normal; font-weight: 700; color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; border-radius: 999px; padding: 1px 9px; }
@@ -2237,7 +2258,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgReport', 'dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgDealStaff', 'dgReport', 'dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -4338,7 +4359,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
-        const tab = ['cust', 'week', 'hot'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        const tab = ['cust', 'week', 'hot', 'deal'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
         const hotN = (hotData?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !hotDone[x.id]).length;
@@ -4347,9 +4368,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const bar = `<div class="bigtabs">
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
           <button class="bigtab hot${tab === 'hot' ? ' on' : ''}${hotN ? ' has' : ''}" data-act="tab" data-tab="hot">🔥 Gợi ý chốt đơn <b>${hotN}</b></button>
+          <button class="bigtab${tab === 'deal' ? ' on' : ''}" data-act="tab" data-tab="deal">🧠 Phân tích deal</button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
         if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
+        if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'));
         if (tab === 'week') {
           renderCtx.reports = await kvGet('reports');
           return bar + weekTab(quotes, renderCtx.orders, await kvGet('me'));
@@ -4407,6 +4430,129 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // ---------- 🔥 AI chọn báo giá chốt được liền ----------
   // Lấy tối đa 40 báo giá khả thi điểm cao nhất, gửi luồng bình luận (rút gọn) cho Claude,
+  // ---------- Tab "Phân tích deal": AI đọc từng báo giá đang mở của 1 NVKD, gợi ý bước kế tiếp cho NVKD ----------
+  // Lưu kv 'dealAi' (đồng bộ): khoá = tên NVKD (chuẩn hoá) → { at, items: [{ id, code, stage, health, missing, steps, say, risk }] }
+  const DEAL_MAX = 25;
+  const DEAL_SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú (bao bì giấy carton, in flexo / offset), đang KÈM CẶP 1 nhân viên kinh doanh (NVKD).
+Đọc từng báo giá đang mở của NVKD (thông tin + luồng bình luận nội bộ giữa NVKD và quản lý) và với MỖI báo giá đưa ra:
+- giai đoạn hiện tại của deal, - độ "khoẻ" của deal (khả năng chốt 0–100), - còn thiếu gì để chốt,
+- 2–3 bước kế tiếp NVKD cần làm theo thứ tự (cụ thể, làm được ngay trong 1–2 ngày), - 1 câu NVKD có thể nhắn / nói với khách, - rủi ro lớn nhất (nếu có).
+Giai đoạn chọn 1 trong: "Mới báo giá", "Chờ khách phản hồi", "Đàm phán giá", "Làm mẫu / duyệt maket", "Chờ cọc / hợp đồng", "Sắp lên đơn", "Nguội – cần chào lại".
+Chỉ dựa trên dữ liệu được cung cấp, không bịa số liệu. Viết tiếng Việt tự nhiên, ngắn gọn, xưng hô với khách lịch sự (anh/chị).
+Trả về DUY NHẤT một JSON array, mỗi phần tử:
+{"code":"BGxxxxx","giai_doan":"...","suc_khoe":0-100,"con_thieu":["2–6 chữ mỗi mục"],"buoc_tiep":["bước 1","bước 2"],"cau_noi":"1 câu nhắn khách","rui_ro":"1 câu hoặc rỗng"}
+Không markdown, không giải thích ngoài JSON.`;
+
+  function dealList(staff, quotes, comments) {
+    return Object.values(quotes)
+      .filter((q) => q?.id && norm(q.staff?.name) === norm(staff) && q.quoteStatus && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, comments[q.id]))
+      .filter((q) => q.createdAt && hoursSince(q.createdAt) <= 90 * 24)
+      .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+  }
+
+  async function analyzeDeals(staff) {
+    const key = `deal:${norm(staff)}`;
+    if (state.busy.has(key)) return;
+    setBusy(key, true);
+    try {
+      const [quotes, comments, orders] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('orders')]);
+      const deals = dealList(staff, quotes, comments).slice(0, DEAL_MAX);
+      if (!deals.length) throw new Error(`${staff} chưa có báo giá nào đang mở trong 90 ngày.`);
+      const blocks = deals.map((q) => {
+        const c = comments[q.id];
+        const os = orderSummary(orders?.[q.customer?.id]);
+        return [
+          `### ${q.code} – "${q.name || ''}"`,
+          `Khách: ${q.customer?.name || '?'} | Số tiền: ${noPrice(q) ? 'CHƯA CÓ GIÁ' : money(q.amount)} | Tình trạng CRM: ${statusLabel(q.quoteStatus)} | Tạo: ${fmtTime(q.createdAt)}${q.isReprint ? ' | Tái bản' : ''}${os ? ` | Khách đã mua ${os.count} đơn (12 tháng: ${os.year})` : ' | Khách mới'}`,
+          'Bình luận gần nhất:',
+          compactThread(q, c),
+        ].join('\n');
+      });
+      const out = await call({
+        type: 'claude',
+        system: DEAL_SYSTEM,
+        prompt: `NVKD: ${staff}\nThời điểm hiện tại: ${fmtTime(Date.now() / 1000)}\n\n${blocks.join('\n\n')}`,
+        maxTokens: 12000,
+      });
+      let items = [];
+      try {
+        items = JSON.parse(out.slice(out.indexOf('['), out.lastIndexOf(']') + 1));
+      } catch {
+        throw new Error('Claude trả về không đúng định dạng – bấm phân tích lại.');
+      }
+      const byCode = Object.fromEntries(deals.map((q) => [q.code, q]));
+      items = items.filter((x) => x && byCode[x.code]).map((x) => ({
+        id: byCode[x.code].id,
+        code: x.code,
+        stage: String(x.giai_doan || ''),
+        health: Math.max(0, Math.min(100, Number(x.suc_khoe) || 0)),
+        missing: (Array.isArray(x.con_thieu) ? x.con_thieu : []).map(String).filter(Boolean).slice(0, 6),
+        steps: (Array.isArray(x.buoc_tiep) ? x.buoc_tiep : []).map(String).filter(Boolean).slice(0, 4),
+        say: String(x.cau_noi || ''),
+        risk: String(x.rui_ro || ''),
+      }));
+      await kvMerge('dealAi', { [norm(staff)]: { at: Date.now(), staff, items } });
+    } catch (e) {
+      state.error = e.message;
+    } finally {
+      setBusy(key, false);
+    }
+  }
+
+  function dealTab(quotes, me, dealAi) {
+    const admin = isAdminUser(me);
+    const comments = renderCtx.comments || {};
+    // Danh sách NVKD có deal đang mở (quản trị chọn; NVKD chỉ xem của mình)
+    const counts = {};
+    for (const q of Object.values(quotes)) {
+      const st = q?.staff?.name;
+      if (!st || isExcluded(st) || !q.quoteStatus || CLOSED.has(q.quoteStatus) || hasOrderFull(q, comments[q.id]) || !q.createdAt || hoursSince(q.createdAt) > 90 * 24) continue;
+      counts[st] = (counts[st] || 0) + 1;
+    }
+    const staffs = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+    let staff = admin ? lsGet('dgDealStaff') || staffs[0] : meName;
+    if (admin && !counts[staff]) staff = staffs[0];
+    if (!staff) return '<div class="muted" style="margin:16px">Chưa có báo giá đang mở nào.</div>';
+    const deals = dealList(staff, quotes, comments);
+    const ai = (dealAi || {})[norm(staff)];
+    const aiBy = Object.fromEntries((ai?.items || []).map((x) => [x.id, x]));
+    const busy = state.busy.has(`deal:${norm(staff)}`);
+    const pick = admin
+      ? `<div class="fbar"><div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffs
+          .map((n) => `<button class="fchip staff${n === staff ? ' on' : ''}" data-act="deal-staff" data-staff="${esc(n)}">${avatarHtml(n, 16)}${esc(shortName(n))}<b>${counts[n]}</b></button>`)
+          .join('')}</div></div></div>`
+      : '';
+    const stageCls = (st) => (/sắp lên đơn|cọc|hợp đồng/i.test(st) ? 'hot' : /mẫu|maket|đàm phán/i.test(st) ? 'warm' : /nguội/i.test(st) ? 'cold' : 'new');
+    const hCls = (h) => (h >= 70 ? 'good' : h >= 40 ? 'mid' : 'bad');
+    const cards = deals
+      .map((q) => ({ q, a: aiBy[q.id] }))
+      .sort((x, y) => (y.a?.health ?? -1) - (x.a?.health ?? -1) || (Number(y.q.amount) || 0) - (Number(x.q.amount) || 0))
+      .map(({ q, a }, i) => {
+        const last = lastComment(comments[q.id]);
+        return `<div class="dl-card" style="animation-delay:${Math.min(i, 12) * 50}ms">
+          <div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
+            <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span>
+            ${a ? `<span class="dl-stage ${stageCls(a.stage)}">${esc(a.stage)}</span>` : ''}
+            <span class="dl-amt">${noPrice(q) ? '<span class="noprice">⚠️ Chưa cho giá</span>' : money(q.amount)}</span></div>
+          <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))} · tạo ${ago(q.createdAt)}${last ? ` · BL cuối ${ago(last.createdAt)} (${esc(shortName(last.staff?.name || ''))})` : ' · chưa có bình luận'}</div>
+          ${a
+            ? `<div class="dl-health"><span>Sức khoẻ deal</span><div class="dl-hbar ${hCls(a.health)}"><i style="--w:${a.health}%"></i></div><b class="${hCls(a.health)}">${a.health}%</b></div>
+              ${a.missing.length ? `<div class="hot-miss"><b>🧩 Còn thiếu:</b>${a.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</div>` : ''}
+              ${a.steps.length ? `<div class="hot-steps"><b>👉 Bước kế tiếp cho NVKD:</b>${a.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</div>` : ''}
+              ${a.say ? `<div class="dl-say">💬 <i>Gợi ý nhắn khách:</i> “${esc(a.say)}”</div>` : ''}
+              ${a.risk ? `<div class="dl-risk">⚠️ ${esc(a.risk)}</div>` : ''}`
+            : '<div class="muted dl-none">Chưa phân tích – bấm “🧠 Phân tích deal” ở trên.</div>'}
+        </div>`;
+      })
+      .join('');
+    return `<div class="ctab wk dl">
+      <div class="ct-head"><span class="ct-who">${avatarHtml(staff, 36)}<span><div class="ct-title">🧠 Phân tích deal · ${esc(staff)}</div>
+        <div class="ct-sub">${deals.length} báo giá đang mở (90 ngày) · ${moneyShortG(deals.reduce((a, q) => a + (Number(q.amount) || 0), 0))}${ai ? ` · AI phân tích lúc ${new Date(ai.at).toLocaleString('vi-VN')}` : ' · chưa phân tích'}</div></span></span>
+        <button class="rp-start cta" data-act="deal-run" data-staff="${esc(staff)}" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các deal…' : `🧠 ${ai ? 'Phân tích lại' : 'Phân tích deal'}`}<span class="cta-sub">AI đọc ${Math.min(deals.length, DEAL_MAX)} báo giá lớn nhất · gợi ý bước kế tiếp</span></button></div>
+      ${pick}
+      <div class="dl-grid">${cards || '<div class="muted" style="padding:14px">Không có báo giá đang mở.</div>'}</div></div>`;
+  }
+
   // Claude trả về tối đa 10 báo giá có thể chốt NGAY + lý do + việc cần làm. Lưu kv 'aiHot' (đồng bộ).
   const HOT = { candidates: 40, show: 10 };
   const HOT_SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú (bao bì giấy carton). Quản lý có quá nhiều báo giá, cần biết báo giá nào CHỐT ĐƯỢC NGAY để tập trung.
@@ -4770,6 +4916,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'report-print') {
       printReport(state.report?.staff || meName);
+    }
+    else if (act === 'deal-staff') {
+      lsSet('dgDealStaff', b.dataset.staff);
+      render();
+    }
+    else if (act === 'deal-run') {
+      analyzeDeals(b.dataset.staff).then(render);
+      render();
     }
     else if (act === 'week-set') {
       state.weekOff = Number(b.dataset.off) || 0;
