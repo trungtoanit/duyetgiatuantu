@@ -5527,14 +5527,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const q = quotes[x.id];
       const who = staffOf(q, renderCtx.comments?.[x.id]) || 'Chưa rõ NVKD';
       if (!byStaff.has(who)) byStaff.set(who, []);
-      byStaff.get(who).push({ code: q.code, cust: q.customer?.code ? ` (${q.customer.code})` : '', rest: ` ${(q.name || '').replace(/\s+/g, ' ').trim()} = ${q.amount ? money(q.amount) : 'chưa cho giá'}` });
+      byStaff.get(who).push({ code: q.code, cust: q.customer?.code || '', rest: ` ${(q.name || '').replace(/\s+/g, ' ').trim()} = ${q.amount ? money(q.amount) : 'chưa cho giá'}` });
     }
     const head = 'Các bạn xem lại các deal này và kéo đơn về';
     const groups = [...byStaff];
-    state.hotCopy = items.length ? [head, ...groups.map(([who, ls]) => `\n${who}\n${ls.map((l) => `. ${l.code}${l.cust}${l.rest}`).join('\n')}`)].join('\n') : '';
+    state.hotCopy = items.length ? [head, ...groups.map(([who, ls]) => `\n${who}\n${ls.map((l) => `. ${l.code}${l.cust ? ` (${l.cust})` : ''}${l.rest}`).join('\n')}`)].join('\n') : '';
     // Bản có định dạng (dán vào Telegram / Zalo / email): số báo giá in đậm
     state.hotCopyHtml = items.length
-      ? `<div>${esc(head)}</div>${groups.map(([who, ls]) => `<div><br></div><div><b>${esc(who)}</b></div>${ls.map((l) => `<div>. <b>${esc(l.code)}</b>${esc(l.cust)}${esc(l.rest)}</div>`).join('')}`).join('')}`
+      ? `<div>${esc(head)}</div>${groups.map(([who, ls]) => `<div><br></div><div><b>${esc(who)}</b></div>${ls.map((l) => `<div>. <b>${esc(l.code)}</b>${l.cust ? ` (<b>${esc(l.cust)}</b>)` : ''}${esc(l.rest)}</div>`).join('')}`).join('')}`
       : '';
     const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button>` : '';
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
