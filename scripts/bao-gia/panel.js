@@ -2980,6 +2980,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       "{d} chưa có thông tin mới, báo cáo lại nhé {p}. ",
       "{d} chưa nghe phản hồi, {p} báo cáo lại giúp anh. "
   ];
+  // Sếp bảo lấy / chốt đơn mà chưa lên đơn
+  const BOSS_ORDER_RE = /(lấy|chốt|lên|làm)\s*(cái\s*)?đơn\s*(này|đi|luôn|nha|nhé|em)|(nhập|đồng ý|ok)\s*(giá\s*)?(lấy|chốt)\s*đơn/iu;
+  function bossOrderInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      if (norm(t.staff?.name) === norm(meName) && BOSS_ORDER_RE.test(t.text || '') && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit;
+  }
+  const BOSS_ORDER_ASK = [
+    'Sao khách chưa lên đơn vậy {p}, vướng gì báo anh nhé.',
+    'Đơn này anh chốt rồi, sao khách chưa lên đơn {p}?',
+    '{P} ơi, đơn này chốt rồi mà sao chưa thấy lên đơn, khách vướng gì vậy?',
+    'Khách chưa lên đơn hả {p}, lý do gì vậy?',
+  ];
+
   // Chào lại: các cách nói của cùng 1 câu "Báo cáo lại khách hàng này"
   const REPORT_BACK = [
     'Báo cáo lại khách hàng này nhé {p}.',
@@ -3039,6 +3057,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
     if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {
       return { icon: '📭', why: 'Chưa có bình luận nào', text: `Báo giá này chưa có thông tin gì, tình hình khách sao rồi ${p}?` };
+    }
+    // Sếp đã bảo "lấy đơn này / chốt đơn này / lên đơn đi" mà quá 12 giờ vẫn chưa có đơn → hỏi sao khách chưa lên đơn
+    const bo = bossOrderInfo(c);
+    if (bo && hoursSince(bo.createdAt) >= FOLLOW_UP_HOURS) {
+      const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
+      return {
+        icon: '📦',
+        why: `Sếp đã chốt lấy đơn ${humanDuration(hoursSince(bo.createdAt))} trước mà chưa lên đơn`,
+        text: selfFix(fillP(pickFor(BOSS_ORDER_ASK, q.id, salt), p), p),
+      };
     }
     // Khách hứa lên đơn mà quá 1 ngày vẫn chưa lên
     const pr = promiseInfo(q, c);
