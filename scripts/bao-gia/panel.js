@@ -291,7 +291,12 @@
       cur.at = data.at;
       await kvMerge('margins', { [data.code]: cur });
     } else if (kind === 'orders') {
-      await kvMerge('orders', { [data.customerId]: { ...data, at: Math.floor(Date.now() / 1000) } });
+      // Gộp theo mã đơn với các trang đã đọc trước (trang 2, 3… của lịch sử mua hàng), mới nhất trước
+      const old = (await kvGet('orders'))[data.customerId];
+      const byId = new Map((old?.orders || []).map((o) => [o.id, o]));
+      for (const o of data.orders || []) byId.set(o.id, o);
+      const all = [...byId.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 600);
+      await kvMerge('orders', { [data.customerId]: { ...data, orders: all, at: Math.floor(Date.now() / 1000) } });
     } else if (kind === 'notifs') {
       // Thông báo là của từng tài khoản CRM → khoá theo người đang đăng nhập
       const me = await kvGet('me');
@@ -840,6 +845,32 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .slice(0, full ? COLLECT.fullPerRun : COLLECT.perRun);
   }
 
+  // Trang khách hàng → tab đơn hàng chỉ tải 50 đơn/trang: bấm sang trang 2, 3… tới khi đủ 6 tháng (hoặc hết đơn)
+  async function readMoreOrders(f, cid) {
+    const sixMonths = Date.now() / 1000 - 190 * 86400;
+    for (let page = 2; page <= 12; page++) {
+      const od = (await kvGet('orders'))[cid];
+      const list = od?.orders || [];
+      const oldest = list.length ? Math.min(...list.map((o) => (o.at > 1e11 ? o.at / 1000 : o.at) || Infinity)) : 0;
+      if (!od || list.length >= (od.total || 0) || oldest < sixMonths) return;
+      const doc = f.contentDocument;
+      const li = doc?.querySelector(`.ant-pagination-item-${page}`);
+      if (!li) return;
+      li.click();
+      const t0 = Date.now();
+      let ok = false;
+      while (Date.now() - t0 < 15000) {
+        await sleep(400);
+        try {
+          ok = f.contentWindow.performance.getEntriesByType('resource').some((e) => /\/misaOrder\?/.test(e.name) && new RegExp(`[?&]page=${page}\\b`).test(e.name));
+        } catch {}
+        if (ok) break;
+      }
+      if (!ok) return;
+      await sleep(1500); // chờ panel.js trong khung lưu xong
+    }
+  }
+
   async function loadInFrame(id, url = `/co-hoi/update/${id}`, readyRe = /\/fileAttach\?/, onReady = null) {
     const f = document.createElement('iframe');
     f.name = 'dg-collector';
@@ -1112,10 +1143,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const cid = q.customer?.id;
         if (cid) {
           const od = (await kvGet('orders'))[cid];
-          if (!od || hoursSince(od.at) > 24) {
+          // Thiếu đơn (mới đọc trang 1 trong khi khách có nhiều đơn trong 6 tháng) → đọc lại để lấy thêm trang
+          const oldestAt = Math.min(...(od?.orders || []).map((o) => (o.at > 1e11 ? o.at / 1000 : o.at) || Infinity));
+          const partial = od && (od.total || 0) > (od.orders?.length || 0) && oldestAt > Date.now() / 1000 - 190 * 86400 && hoursSince(od.at) > 1;
+          if (!od || hoursSince(od.at) > 24 || partial) {
             collect.current = `${q.code} · lịch sử mua hàng`;
             progress();
-            await loadInFrame(null, `/khach-hang/view/${cid}?t=order`, /\/misaOrder\?.*customerId=/);
+            await loadInFrame(null, `/khach-hang/view/${cid}?t=order`, /\/misaOrder\?.*customerId=/, (f) => readMoreOrders(f, cid));
           }
         }
         await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
@@ -2361,7 +2395,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ordersTried[cid] = Date.now();
     ordersFetching.add(cid);
     try {
-      await loadInFrame(null, `/khach-hang/view/${cid}?t=order`, /\/misaOrder\?.*customerId=/);
+      await loadInFrame(null, `/khach-hang/view/${cid}?t=order`, /\/misaOrder\?.*customerId=/, (f) => readMoreOrders(f, cid));
     } finally {
       ordersFetching.delete(cid);
       render();
