@@ -2111,6 +2111,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .st-card.pm { grid-column: 1 / -1; }
     table.pm-t td { vertical-align: middle; } table.pm-t tr.off td { opacity: .55; }
     .pm-seen { font-size: 11px; margin-top: 2px; }
+    .pm-subtabs { display: flex; gap: 6px; border-bottom: 2px solid #e2e8f0; }
+    .pm-sub { font: inherit; font-size: 13px; font-weight: 800; color: #64748b; background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -2px;
+      padding: 6px 12px; cursor: pointer; }
+    .pm-sub b { font-size: 11px; background: #e2e8f0; color: #475569; border-radius: 999px; padding: 0 7px; margin-left: 4px; }
+    .pm-sub.on { color: #166534; border-bottom-color: #22c55e; } .pm-sub.on b { background: #22c55e; color: #fff; }
+    .pm-sub.off.on { color: #b45309; border-bottom-color: #f59e0b; } .pm-sub.off.on b { background: #f59e0b; }
     .pm-role { font: inherit; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 12px; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; }
     .pm-role.admin { color: #92400e; background: #fef3c7; border-color: #fcd34d; } .pm-role.sale { color: #1e40af; background: #eff6ff; border-color: #bfdbfe; }
     .pm-fixed { font-size: 12px; font-weight: 700; color: #64748b; }
@@ -4571,8 +4577,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     Object.values(quotes).forEach((q) => add(q?.staff?.name));
     Object.values(PERMS.users || {}).forEach((u) => add(u?.name));
     ADMIN_NAMES.forEach(add);
-    const rows = [...names.values()]
-      .sort((a, b) => a.localeCompare(b, 'vi'))
+    const people = [...names.values()].sort((a, b) => a.localeCompare(b, 'vi'));
+    const isOn = (n) => {
+      const k = norm(n);
+      const u = PERMS.users?.[k] || {};
+      return ADMIN_NAMES.some((x) => norm(x) === k) || u.role === 'admin' || !!u.enabled;
+    };
+    const onList = people.filter(isOn);
+    const offList = people.filter((n) => !isOn(n));
+    const sub = lsGet('dgPermTab') === 'off' ? 'off' : 'on';
+    const rows = (sub === 'on' ? onList : offList)
       .map((n) => {
         const k = norm(n);
         const u = PERMS.users?.[k] || {};
@@ -4590,7 +4604,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<div class="st-card pm"><h4>👥 Phân quyền sử dụng extension</h4>
       <label class="st-sw"><span><b>Bật phân quyền</b><br><span class="muted">${PERMS.enforced ? 'Đang bật: chỉ người được cấp mới dùng được, và chỉ vào các màn hình được chọn.' : 'Đang tắt: mọi người dùng CRM đều dùng được extension với đầy đủ màn hình.'}</span></span>
         <button class="st-tg${PERMS.enforced ? ' on' : ''}" data-act="perm-enforce"><i></i></button></label>
-      <div class="ct-wrap"><table class="ct pm-t"><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Được dùng</th><th>Màn hình được vào</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="pm-subtabs"><button class="pm-sub${sub === 'on' ? ' on' : ''}" data-act="perm-sub" data-sub="on">✅ Đã phân quyền <b>${onList.length}</b></button>
+        <button class="pm-sub off${sub === 'off' ? ' on' : ''}" data-act="perm-sub" data-sub="off">⏳ Chưa được phân quyền <b>${offList.length}</b></button></div>
+      <div class="ct-wrap"><table class="ct pm-t"><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Được dùng</th><th>Màn hình được vào</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="4" class="muted">${sub === 'on' ? 'Chưa cấp quyền cho ai.' : 'Mọi người đều đã được phân quyền.'}</td></tr>`}</tbody></table></div>
       <div class="muted">Danh sách gồm mọi NVKD trong dữ liệu báo giá và những người đã mở extension. Quyền đồng bộ giữa các máy, có hiệu lực ngay.</div></div>`;
   }
 
@@ -5213,6 +5230,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         users[k] = { ...u, at: Date.now(), by: meName };
         await kvMerge('perms', { users });
       }
+      render();
+    }
+    else if (act === 'perm-sub') {
+      lsSet('dgPermTab', b.dataset.sub);
       render();
     }
     else if (act === 'set-toggle') {
