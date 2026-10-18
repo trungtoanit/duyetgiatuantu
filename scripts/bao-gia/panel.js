@@ -4975,20 +4975,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const n = (v) => (Number(v) || 0).toLocaleString('vi-VN');
     const sum = (arr, k) => arr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
     // Cùng 1 bộ độ rộng cột cho mọi bảng → các cột thẳng hàng giữa các NVKD
-    const DEBT_COLS = '<colgroup>' + [3, 9, 27, 9, 10, 10, 6, 10, 8, 8].map((w) => `<col style="width:${w}%">`).join('') + '</colgroup>';
+    const DEBT_COLS = '<colgroup>' + [3, 10, 35, 10, 10, 6, 10, 8, 8].map((w) => `<col style="width:${w}%">`).join('') + '</colgroup>';
     const sections = Object.entries(groups)
       .sort((a, b) => sum(b[1], 'overdueAmount') - sum(a[1], 'overdueAmount') || sum(b[1], 'totalDebt') - sum(a[1], 'totalDebt'))
       .map(([staff, rows]) => {
         rows.sort((a, b) => (b.overdueAmount || 0) - (a.overdueAmount || 0) || (b.totalDebt || 0) - (a.totalDebt || 0));
         const body = rows
-          .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.customerCode || '')}</td><td>${esc(r.customerName || '')}</td><td>${esc(r.phone || '')}</td>
+          .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.customerCode || '')}</td><td>${esc(r.customerName || '')}</td>
             <td class="n">${n(r.totalDebt)}</td><td class="n ${r.overdueAmount ? 'od' : ''}">${r.overdueAmount ? n(r.overdueAmount) : '–'}</td>
             <td class="c">${r.maxDaysOverdue ? `${r.maxDaysOverdue} ngày` : ''}</td><td class="n">${r.notDueAmount ? n(r.notDueAmount) : '–'}</td>
             <td class="c">${r.minDaysUntilDue != null && r.notDueAmount ? `còn ${r.minDaysUntilDue} ngày` : ''}</td><td class="c">${r.allowDebtDay ?? ''}</td></tr>`)
           .join('');
         return `<h2>${esc(staff)} <small>${rows.length} khách · tổng nợ ${n(sum(rows, 'totalDebt'))}đ · quá hạn ${n(sum(rows, 'overdueAmount'))}đ</small></h2>
-          <table>${DEBT_COLS}<thead><tr><th>#</th><th>Mã KH</th><th>Khách hàng</th><th>SĐT</th><th>Tổng công nợ</th><th>Quá hạn</th><th>Trễ</th><th>Chưa đến hạn</th><th>Đến hạn</th><th>Hạn mức (ngày)</th></tr></thead>
-          <tbody>${body}</tbody><tfoot><tr><td colspan="4">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tfoot></table>`;
+          <table>${DEBT_COLS}<thead><tr><th>#</th><th>Mã KH</th><th>Khách hàng</th><th>Tổng công nợ</th><th>Quá hạn</th><th>Trễ</th><th>Chưa đến hạn</th><th>Đến hạn</th><th>Hạn mức (ngày)</th></tr></thead>
+          <tbody>${body}</tbody><tfoot><tr><td colspan="3">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tfoot></table>`;
       })
       .join('');
     const w = window.open('', '_blank');
