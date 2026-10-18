@@ -1537,11 +1537,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-grp.hot { background: #ef4444; }
     .ct-who { display: inline-flex; align-items: center; gap: 6px; color: #334155; vertical-align: middle; }
     .ct-total { color: #047857; }
-    .ct-act { width: 34px; text-align: center; }
-    .ct-re { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #c7d2fe; background: #fff; color: #4f46e5; cursor: pointer;
-      font-size: 14px; font-weight: 800; }
-    .ct-re:hover { background: #4f46e5; color: #fff; transform: rotate(90deg); transition: transform .2s; }
     .ct-btn:disabled { opacity: .8; cursor: wait; }
+    .ct-bg { background: rgba(255,255,255,.2); border-radius: 999px; padding: 0 8px; }
     .ct-note { padding: 8px 14px; font-size: 12px; }
     .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
       color: #fff; border-radius: 999px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px;
@@ -2396,7 +2393,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Mở báo giá mà chưa có / cũ lịch sử mua hàng → tự đọc trang khách hàng trong khung ẩn
   const ordersFetching = new Set();
   const ordersTried = {}; // cid → lần thử gần nhất (tránh tải lại liên tục khi không lấy được)
-  // Nút "↻" từng khách / "Thu thập lại tất cả" ở tab Khách hàng: đọc lại lịch sử mua hàng (đủ các trang trong 6 tháng)
+  // Tab Khách hàng: hàng đợi đọc ngầm lại lịch sử mua hàng (đủ các trang trong 6 tháng)
   const custRefetch = { queue: [], total: 0, done: 0, current: null, running: false };
   async function refetchCustomers(cids) {
     for (const c of cids) if (!custRefetch.queue.includes(c) && custRefetch.current !== c) custRefetch.queue.push(c);
@@ -2875,7 +2872,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return t || name;
   };
 
+  // Mở tab Khách hàng → tự đọc ngầm lại đơn hàng của khách đã cũ (> 12 giờ) hoặc còn thiếu trang, mỗi khách tối đa 1 lần / phiên
+  const custAutoQueued = new Set();
+  function autoRefreshCustomers(rows) {
+    const od = renderCtx.orders || {};
+    const now = Date.now() / 1000;
+    const need = rows
+      .map((r) => r.cid)
+      .filter((cid) => {
+        if (custAutoQueued.has(String(cid))) return false;
+        const o = od[cid];
+        if (!o) return true;
+        const oldest = Math.min(...(o.orders || []).map((x) => (x.at > 1e11 ? x.at / 1000 : x.at) || Infinity));
+        const partial = (o.total || 0) > (o.orders?.length || 0) && oldest > now - 190 * 86400;
+        return partial || now - (o.at || 0) > 12 * 3600;
+      });
+    if (!need.length) return;
+    need.forEach((c) => custAutoQueued.add(String(c)));
+    setTimeout(() => refetchCustomers(need), 0);
+  }
+
   function custTab({ months, rows }) {
+    if (IS_TOP) autoRefreshCustomers(rows);
     const fold = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
     const needle = fold(state.search).trim();
     const staffSel = lsGet('dgStaff') || '';
@@ -2907,25 +2925,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}</td>
           <td><span class="ct-grp ${r.active >= 4 ? 'hot' : ''}">${r.active >= 4 ? 'Ưu tiên' : 'Thường'}</span></td>
           <td title="${esc(r.staff)}">${r.staff ? `<span class="ct-who">${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}</span>` : ''}</td>
-          ${cells}<td class="num ct-total">${money(r.total)}</td>
-          <td class="ct-act">${String(custRefetch.current) === String(r.cid)
-            ? '<span class="spinner"></span>'
-            : custRefetch.queue.map(String).includes(String(r.cid))
-              ? '<span class="muted" title="Đang chờ">⏳</span>'
-              : `<button class="ct-re" data-act="cust-refetch" data-cid="${r.cid}" title="Thu thập lại đơn hàng của khách này">↻</button>`}</td></tr>`;
+          ${cells}<td class="num ct-total">${money(r.total)}</td></tr>`;
       })
       .join('');
     return `<div class="ctab">
-      <div class="ct-head"><div><div class="ct-title">👥 Danh sách khách hàng</div><div class="ct-sub">Khoảng thời gian: ${months[0].label} → ${months[5].label} · ${list.length} khách · tổng ${moneyShortG(sum.reduce((a, b) => a + b, 0))}</div></div>
+      <div class="ct-head"><div><div class="ct-title">👥 Danh sách khách hàng</div><div class="ct-sub">Khoảng thời gian: ${months[0].label} → ${months[5].label} · ${list.length} khách · tổng ${moneyShortG(sum.reduce((a, b) => a + b, 0))}${custRefetch.running ? ` · <span class="ct-bg">đang tự cập nhật đơn hàng ${custRefetch.done}/${custRefetch.total}</span>` : ''}</div></div>
         <div class="ct-tools"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên / mã khách…" value="${esc(state.search || '')}"></label>
-          <button class="ct-btn" data-act="cust-refetch-all" data-cids="${list.map((r) => r.cid).join(',')}" ${custRefetch.running ? 'disabled' : ''}
-            title="Đọc lại lịch sử mua hàng của tất cả khách đang hiện">${custRefetch.running ? `<span class="spinner light"></span> Đang thu thập ${custRefetch.done}/${custRefetch.total}` : '↻ Thu thập lại đơn hàng'}</button>
           <button class="ct-btn${noCur ? ' on' : ''}" data-act="cust-nocur" title="Khách đã mua trong 6 tháng nhưng tháng này chưa có đơn">Chưa lên đơn tháng này <b>${noCurN}</b></button></div></div>
       ${staffChips ? `<div class="fbar"><div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>${staffSel ? '<button class="fclear" data-act="filter-clear">✕ Bỏ lọc</button>' : ''}</div>` : ''}
       <div class="ct-wrap"><table class="ct">
-        <thead><tr><th>STT</th><th>Tên khách hàng</th><th>Nhóm</th><th>NVKD</th>${months.map((x, i) => `<th class="num${i === 5 ? ' ct-cur' : ''}">${x.label}</th>`).join('')}<th class="num">Tổng 6 tháng</th><th></th></tr>
-          <tr class="ct-sum"><td></td><td>Σ ${list.length} khách</td><td></td><td></td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(sum.reduce((a, b) => a + b, 0))}</td><td></td></tr></thead>
-        <tbody>${body || '<tr><td colspan="12" class="muted">Chưa có dữ liệu mua hàng – extension tự đọc lịch sử mua hàng khi mở báo giá / thu thập ngầm.</td></tr>'}</tbody></table></div>
+        <thead><tr><th>STT</th><th>Tên khách hàng</th><th>Nhóm</th><th>NVKD</th>${months.map((x, i) => `<th class="num${i === 5 ? ' ct-cur' : ''}">${x.label}</th>`).join('')}<th class="num">Tổng 6 tháng</th></tr>
+          <tr class="ct-sum"><td></td><td>Σ ${list.length} khách</td><td></td><td></td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(sum.reduce((a, b) => a + b, 0))}</td></tr></thead>
+        <tbody>${body || '<tr><td colspan="11" class="muted">Chưa có dữ liệu mua hàng – extension tự đọc lịch sử mua hàng khi mở báo giá / thu thập ngầm.</td></tr>'}</tbody></table></div>
       <div class="muted ct-note">Số liệu từ lịch sử mua hàng extension đã thu thập (${rows.length} khách có đơn trong 6 tháng). Tháng ${months[5].label}: so với tháng trước; cạnh tên: trung bình 3 tháng gần nhất so với 2 tháng đầu.</div>
     </div>`;
   }
@@ -3604,12 +3615,6 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'tab') {
       lsSet('dgTab', b.dataset.tab);
       render();
-    }
-    else if (act === 'cust-refetch') {
-      refetchCustomers([b.dataset.cid]);
-    }
-    else if (act === 'cust-refetch-all') {
-      refetchCustomers((b.dataset.cids || '').split(',').filter(Boolean));
     }
     else if (act === 'cust-nocur') {
       lsSet('dgCustNoCur', lsGet('dgCustNoCur') === '1' ? null : '1');
