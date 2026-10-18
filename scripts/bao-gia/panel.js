@@ -2106,6 +2106,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-act { font-size: 11.5px; font-weight: 800; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 2px 10px; }
     .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
     .dl-listwrap { margin: 12px; }
+    /* Tab Phân tích deal đã lọc theo 1 NVKD → ẩn cột NVKD (cột thứ 7) */
+    .dl-list a.item, .dl-list .item-head { grid-template-columns: 34px 84px 74px minmax(0, .45fr) 130px minmax(0, 1.75fr) 74px 136px 120px 52px; }
+    .dl-list a.item > :nth-child(7), .dl-list .item-head > :nth-child(7) { display: none; }
     .dl-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 6px 44px; padding: 5px 10px; font-size: 12px; color: #334155;
       background: #f8faff; border-left: 3px solid #a5b4fc; border-radius: 6px; }
     .dl-sub .hot-miss { margin: 0; } .dl-sub .hot-miss i { font-size: 11px; padding: 0 7px; }
