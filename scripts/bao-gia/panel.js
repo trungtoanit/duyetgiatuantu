@@ -4877,7 +4877,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- Tab "💰 Công nợ": tổng quan công nợ từ trang /cong-no (quá hạn, sắp đến hạn, đã thu 30 ngày) ----------
   function debtTab(db, perm) {
     db = db || {};
-    const list = (t) => (db[`list:${t}`]?.ids || []).map((id) => db[`cust:${id}`]).filter(Boolean);
+    // Bỏ khách của NVKD không theo dõi (Đại Dương, Nguyễn Thăng Khôi, Trần Đình Hùng…)
+    const list = (t) => (db[`list:${t}`]?.ids || []).map((id) => db[`cust:${id}`]).filter((r) => r && !isExcluded(r.staffName));
     let overdue = list('overdue');
     let upcoming = list('upcoming');
     // NVKD (không phải quản trị) chỉ xem công nợ khách của mình; quản trị lọc theo NVKD
@@ -4965,7 +4966,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const staffSel = perm.admin ? lsGet('dgDebtStaff') || '' : meName;
     const all = new Map();
     for (const t of ['overdue', 'upcoming']) (db[`list:${t}`]?.ids || []).forEach((id) => db[`cust:${id}`] && all.set(id, db[`cust:${id}`]));
-    const custs = [...all.values()].filter((r) => !staffSel || norm(r.staffName) === norm(staffSel));
+    const custs = [...all.values()].filter((r) => !isExcluded(r.staffName) && (!staffSel || norm(r.staffName) === norm(staffSel)));
     if (!custs.length) {
       state.error = 'Chưa có dữ liệu công nợ để in.';
       return render();
