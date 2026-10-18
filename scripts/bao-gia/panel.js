@@ -2085,7 +2085,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-say { font-size: 12.5px; color: #1e3a8a; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 6px; padding: 6px 10px; }
     .dl-risk { font-size: 12px; color: #9a3412; }
     .dl-none { font-size: 12px; }
-    .dl .ct-head { gap: 12px; } .dl .ct-head .ct-who { flex: 1; color: #fff; } .dl .ct-title { color: #fff; }
+    .dl .ct-head { gap: 12px; flex-wrap: wrap; } .dl .ct-head .rp-start.cta { flex: none; }
+    .dl-hot { margin: 12px; padding: 12px 14px; border-radius: 16px; border: 2px solid #fb923c; background: linear-gradient(135deg, #fff7ed, #ffedd5);
+      box-shadow: 0 6px 20px rgba(249,115,22,.18); animation: dghotglow 2.4s ease-in-out infinite; }
+    .dl-hot-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 15px; color: #9a3412; margin-bottom: 8px; }
+    .dl-fire { font-size: 24px; display: inline-block; animation: dgflame 1.1s ease-in-out infinite; transform-origin: 50% 90%; }
+    .dl-hot-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 8px; }
+    .dl-hot-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; background: #fff; border: 1px solid #fed7aa;
+      border-radius: 12px; padding: 8px 12px; }
+    .dl-hot-body { grid-column: 1 / -1; font-size: 12.5px; color: #7c2d12; }
+    .dl-card.hot { border: 2px solid #fb923c; background: linear-gradient(180deg, #fff7ed, #fff 40%); }
+    .dl-hotbadge { font-size: 11px; font-weight: 900; color: #fff; background: linear-gradient(90deg, #f97316, #ef4444); border-radius: 999px; padding: 1px 8px;
+      white-space: nowrap; animation: ctaGlow 1.6s ease-in-out infinite; } .dl .ct-head .ct-who { flex: 1; color: #fff; } .dl .ct-title { color: #fff; }
     .hot-miss { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; }
     .hot-miss b { color: #b91c1c; font-weight: 800; margin-right: 2px; }
     .hot-miss i { font-style: normal; font-weight: 700; color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; border-radius: 999px; padding: 1px 9px; }
@@ -4372,7 +4383,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
         if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
-        if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'));
+        if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
           renderCtx.reports = await kvGet('reports');
           return bar + weekTab(quotes, renderCtx.orders, await kvGet('me'));
@@ -4499,7 +4510,7 @@ Không markdown, không giải thích ngoài JSON.`;
     }
   }
 
-  function dealTab(quotes, me, dealAi) {
+  function dealTab(quotes, me, dealAi, hotData = null, hotDone = {}) {
     const admin = isAdminUser(me);
     const comments = renderCtx.comments || {};
     // Danh sách NVKD có deal đang mở (quản trị chọn; NVKD chỉ xem của mình)
@@ -4517,6 +4528,28 @@ Không markdown, không giải thích ngoài JSON.`;
     const ai = (dealAi || {})[norm(staff)];
     const aiBy = Object.fromEntries((ai?.items || []).map((x) => [x.id, x]));
     const busy = state.busy.has(`deal:${norm(staff)}`);
+    // Deal của NVKD này đang nằm trong "🔥 Gợi ý chốt đơn" → đưa lên đầu để ưu tiên chốt
+    const hotBy = Object.fromEntries(
+      (hotData?.items || [])
+        .filter((x) => quotes[x.id] && norm(quotes[x.id].staff?.name) === norm(staff) && !hotDone[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], comments[x.id]))
+        .map((x) => [x.id, x]),
+    );
+    const hotList = Object.values(hotBy).sort((a, b) => b.pct - a.pct);
+    const hotBox2 = hotList.length
+      ? `<div class="dl-hot"><div class="dl-hot-h"><span class="dl-fire">🔥</span><b>Ưu tiên chốt đơn ngay</b><span class="hot-count">${hotList.length}</span>
+          <span class="hot-sum">💰 ${moneyShortG(hotList.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0))}</span>
+          <span class="muted">– AI chọn từ tab Gợi ý chốt đơn, tập trung chốt các deal này trước</span></div>
+        <div class="dl-hot-list">${hotList
+          .map((x) => {
+            const q = quotes[x.id];
+            return `<div class="dl-hot-item"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
+              <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="hot-pct ${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</span>
+              <span class="dl-amt">${q.amount ? money(q.amount) : ''}</span>
+              <div class="dl-hot-body">💡 ${esc(x.why)}${x.missing?.length ? `<div class="hot-miss"><b>🧩 Còn thiếu:</b>${x.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</div>` : ''}
+                ${x.steps?.length ? `<div class="hot-steps">${x.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</div>` : `<div class="hot-next">👉 ${esc(x.next)}</div>`}</div></div>`;
+          })
+          .join('')}</div></div>`
+      : '';
     const pick = admin
       ? `<div class="fbar"><div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffs
           .map((n) => `<button class="fchip staff${n === staff ? ' on' : ''}" data-act="deal-staff" data-staff="${esc(n)}">${avatarHtml(n, 16)}${esc(shortName(n))}<b>${counts[n]}</b></button>`)
@@ -4526,11 +4559,11 @@ Không markdown, không giải thích ngoài JSON.`;
     const hCls = (h) => (h >= 70 ? 'good' : h >= 40 ? 'mid' : 'bad');
     const cards = deals
       .map((q) => ({ q, a: aiBy[q.id] }))
-      .sort((x, y) => (y.a?.health ?? -1) - (x.a?.health ?? -1) || (Number(y.q.amount) || 0) - (Number(x.q.amount) || 0))
+      .sort((x, y) => !!hotBy[y.q.id] - !!hotBy[x.q.id] || (y.a?.health ?? -1) - (x.a?.health ?? -1) || (Number(y.q.amount) || 0) - (Number(x.q.amount) || 0))
       .map(({ q, a }, i) => {
         const last = lastComment(comments[q.id]);
-        return `<div class="dl-card" style="animation-delay:${Math.min(i, 12) * 50}ms">
-          <div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
+        return `<div class="dl-card${hotBy[q.id] ? ' hot' : ''}" style="animation-delay:${Math.min(i, 12) * 50}ms">
+          <div class="dl-top">${hotBy[q.id] ? '<span class="dl-hotbadge">🔥 Ưu tiên chốt</span>' : ''}<a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
             <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span>
             ${a ? `<span class="dl-stage ${stageCls(a.stage)}">${esc(a.stage)}</span>` : ''}
             <span class="dl-amt">${noPrice(q) ? '<span class="noprice">⚠️ Chưa cho giá</span>' : money(q.amount)}</span></div>
@@ -4550,6 +4583,7 @@ Không markdown, không giải thích ngoài JSON.`;
         <div class="ct-sub">${deals.length} báo giá đang mở (90 ngày) · ${moneyShortG(deals.reduce((a, q) => a + (Number(q.amount) || 0), 0))}${ai ? ` · AI phân tích lúc ${new Date(ai.at).toLocaleString('vi-VN')}` : ' · chưa phân tích'}</div></span></span>
         <button class="rp-start cta" data-act="deal-run" data-staff="${esc(staff)}" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các deal…' : `🧠 ${ai ? 'Phân tích lại' : 'Phân tích deal'}`}<span class="cta-sub">AI đọc ${Math.min(deals.length, DEAL_MAX)} báo giá lớn nhất · gợi ý bước kế tiếp</span></button></div>
       ${pick}
+      ${hotBox2}
       <div class="dl-grid">${cards || '<div class="muted" style="padding:14px">Không có báo giá đang mở.</div>'}</div></div>`;
   }
 
