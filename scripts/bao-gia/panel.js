@@ -269,6 +269,11 @@
     .catch(() => {});
 
   async function save({ kind, data }) {
+    if (kind === 'debtUrl') {
+      const k = String(data.url).replace(/^https?:\/\/[^/]+/, '').replace(/[?#].*$/, '').slice(0, 150) || 'x';
+      await kvMerge('debtMeta', { [`url:${k}`]: { url: data.url, keys: data.keys, at: Date.now() } });
+      return;
+    }
     if (kind === 'debtRows') {
       // Công nợ: lưu từng bản ghi (khoá = id, không có thì nguồn + vị trí) và thông tin nguồn (API, tổng số)
       const src = data.url.replace(/[?&](page|limit|offset)=\d+/g, '');

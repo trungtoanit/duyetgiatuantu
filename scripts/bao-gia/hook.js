@@ -293,12 +293,24 @@
     emit('debtRows', { url: path, page: location.pathname + location.search, total: d?.total ?? d?.count ?? undefined, rows: arr.slice(0, 500).map(slimAny) });
   }
 
-  function handle(url, text) {
-    if (/^\/cong-no\b/.test(location.pathname) && API.test(url)) {
+  // Trang Công nợ: bắt MỌI phản hồi JSON (không chỉ API :8080/v1/admin) + ghi lại danh sách API để chẩn đoán
+  function debtAny(url, body) {
+    if (!/^\/cong-no\b/.test(location.pathname) || /\.(js|css|png|jpe?g|svg|woff2?)(\?|$)/i.test(url || '')) return;
+    let json = body;
+    if (typeof body === 'string') {
       try {
-        handleDebt(url, JSON.parse(text));
-      } catch {}
+        json = JSON.parse(body);
+      } catch {
+        return;
+      }
     }
+    if (!json || typeof json !== 'object') return;
+    emit('debtUrl', { url: String(url).slice(0, 300), keys: Object.keys(json.data ?? json).slice(0, 20) });
+    handleDebt(url, json);
+  }
+
+  function handle(url, text) {
+    if (/^\/cong-no\b/.test(location.pathname)) debtAny(url, text);
     if (!API.test(url)) return;
     let d;
     try {
@@ -462,6 +474,8 @@
         }
         if (this.status === 200 && (this.responseType === '' || this.responseType === 'text')) {
           handle(this.responseURL || this.__dgUrl, this.responseText);
+        } else if (this.status === 200 && this.responseType === 'json' && /^\/cong-no\b/.test(location.pathname)) {
+          debtAny(this.responseURL || this.__dgUrl, this.response);
         }
       } catch (e) {
         console.warn('[DG hook]', e);
@@ -492,6 +506,7 @@
       if (res.ok && API.test(url) && init?.headers) lastHeaders = Object.fromEntries(new Headers(init.headers));
       if (res.ok) learnReadTpl(init?.method || input?.method || 'GET', url, init?.body);
       if (API.test(url) && res.ok) res.clone().text().then((t) => handle(url, t)).catch(() => {});
+      else if (res.ok && /^\/cong-no\b/.test(location.pathname)) res.clone().text().then((t) => debtAny(url, t)).catch(() => {});
     } catch {}
     return res;
   };
