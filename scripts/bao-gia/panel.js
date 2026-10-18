@@ -2108,6 +2108,52 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
     .dl-listwrap { margin: 12px; }
     .bigtab.set { margin-left: auto; }
+    /* ===== Tab Cài đặt ===== */
+    .sx .ct-head { align-items: center; }
+    .sx-live { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 5px 14px; }
+    .sx-live i { width: 9px; height: 9px; border-radius: 50%; background: #4ade80; animation: sxPing 1.8s infinite; }
+    .sx-live.err i { background: #f87171; }
+    @keyframes sxPing { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,.7); } 70% { box-shadow: 0 0 0 8px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
+    .sx-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 14px 12px 4px; }
+    .sx-tile { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; color: #fff; position: relative; overflow: hidden;
+      box-shadow: 0 8px 20px rgba(15,23,42,.10); }
+    .sx-tile::after { content: ''; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255,255,255,.12); }
+    .sx-tile.t-day { background: linear-gradient(135deg, #6366f1, #8b5cf6); } .sx-tile.t-bal { background: linear-gradient(135deg, #059669, #10b981); }
+    .sx-tile.t-read { background: linear-gradient(135deg, #0ea5e9, #2563eb); } .sx-tile.t-sync { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+    .sx-tile.t-ver { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+    .sx-ic { font-size: 26px; width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; flex: none; }
+    .sx-tv { display: grid; min-width: 0; } .sx-tv span { font-size: 12px; opacity: .9; } .sx-tv b { font-size: 22px; font-weight: 900; line-height: 1.2; }
+    .sx-tv b em { font-style: normal; font-size: 14px; opacity: .8; } .sx-tv small { font-size: 11px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sx-tv b.bad { color: #fecaca; }
+    .sx-ring { --p: 0; flex: none; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      background: conic-gradient(#fff calc(var(--p) * 1%), rgba(255,255,255,.25) 0); }
+    .sx-ring span { width: 38px; height: 38px; border-radius: 50%; background: #059669; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; }
+    .sx-cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; margin: 12px; align-items: start; }
+    .sx-stack { display: grid; gap: 14px; }
+    .sx-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 16px 18px; display: grid; gap: 12px; box-shadow: 0 4px 14px rgba(15,23,42,.04); }
+    .sx-h { display: flex; align-items: center; gap: 12px; } .sx-h b { display: block; font-size: 15px; color: #0f172a; } .sx-h span { font-size: 12px; color: #64748b; }
+    .sx-hic { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 19px; flex: none; }
+    .sx-hic.violet { background: #ede9fe; } .sx-hic.sky { background: #e0f2fe; } .sx-hic.green { background: #dcfce7; }
+    .sx-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: #f8fafc; }
+    .sx-ric { font-size: 20px; } .sx-rt { flex: 1; display: grid; } .sx-rt b { font-size: 14px; } .sx-rt span { font-size: 12px; color: #64748b; }
+    .sx-job { border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 12px; display: grid; gap: 7px; font-size: 13px; }
+    .sx-job.run { border-color: #a5b4fc; background: linear-gradient(180deg, #eef2ff, #fff); } .sx-job.full { border-color: #fdba74; background: linear-gradient(180deg, #fff7ed, #fff); }
+    .sx-jt { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .sx-jt > span { flex: 1; }
+    .sx-bar { height: 8px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
+    .sx-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #6366f1, #22c55e, #6366f1); background-size: 200% 100%; animation: wkGrad 2s linear infinite; transition: width .5s; }
+    .sx-bt { font-size: 11px; color: #64748b; font-weight: 700; }
+    .sx-btn { font: inherit; font-size: 12px; font-weight: 800; border-radius: 10px; padding: 6px 12px; cursor: pointer; border: 1px solid #c7d2fe; background: #fff; color: #4338ca; white-space: nowrap; }
+    .sx-btn:hover { background: #eef2ff; } .sx-btn.go { color: #fff; border: 0; background: linear-gradient(135deg, #f97316, #ea580c); }
+    .sx-btn.stop { color: #b91c1c; border-color: #fecaca; background: #fff5f5; }
+    .sx-kv { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px; font-size: 13px; border-bottom: 1px dashed #eef2f7; }
+    .sx-kv:last-child { border-bottom: 0; } .sx-kv span { color: #64748b; } .sx-kv b.good { color: #047857; }
+    .sx-ver { background: linear-gradient(135deg, #f59e0b, #ea580c); color: #fff; border-radius: 999px; padding: 1px 10px; font-size: 12px; }
+    .sx-sync { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+    .sx-dot { width: 12px; height: 12px; border-radius: 50%; background: #cbd5e1; } .sx-dot.on { background: #22c55e; animation: sxPing 1.8s infinite; }
+    .sx-tl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .sx-tl div { background: #f8fafc; border-radius: 12px; padding: 8px 12px; display: grid; }
+    .sx-tl span { font-size: 12px; color: #64748b; } .sx-tl b { font-size: 15px; }
+    .sx-note { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #64748b; background: #f8fafc; border-radius: 12px; padding: 8px 12px; }
+    .sx-perm { margin: 0 12px 12px; } .sx-perm .st-card { border-radius: 18px; }
     .st-card.pm { grid-column: 1 / -1; }
     table.pm-t td { vertical-align: middle; } table.pm-t tr.off td { opacity: .55; }
     .pm-seen { font-size: 11px; margin-top: 2px; }
@@ -4641,33 +4687,47 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const pct = sp?.remaining != null && sp?.balance ? Math.max(0, Math.min(100, (sp.remaining / sp.balance) * 100)) : 0;
     const ss = st?.syncStatus || {};
     const scan = (await kvGet('scanLock')).main;
-    return `<div class="ctab wk stt">
-      <div class="ct-head"><div><div class="ct-title">⚙️ Cài đặt & trạng thái</div><div class="ct-sub">Các thông số của extension Duyệt giá Tuấn Tú</div></div></div>
-      <div class="st-grid">
-        ${admin ? `<div class="st-card"><h4>💳 Chi phí Claude</h4>
-          ${sp ? `<div class="st-two"><div class="st-stat"><span>Hôm nay</span><b>${usd(sp.today)}</b></div><div class="st-stat"><span>Tháng này</span><b>${usd(sp.month)}</b></div></div>
-          <div class="st-row"><span>Số dư Anthropic còn lại (ước tính)</span><b class="${sp.remaining != null && sp.remaining < 5 ? 'bad' : 'good'}">${sp.remaining != null ? usd(sp.remaining) : 'chưa nhập'}</b></div>
-          <div class="st-bar"><i style="width:${pct}%"></i></div>` : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>` : ''}
-        <div class="st-card"><h4>🔄 Tính năng trên CRM</h4>
-          ${sw('auto', settings.auto, 'Thu thập ngầm & tự phân tích', 'Tự đọc bình luận các báo giá (không đánh dấu đã đọc) và soạn gợi ý – tự chạy liên tục khi mở CRM')}
-          <div class="st-box"><span>${cTxt}</span><button class="act" data-act="set-collect-now">Chạy ngay</button></div>
-          <div class="st-box"><span>${fTxt}</span><button class="act" data-act="set-full">${fc?.on ? '⏹ Dừng' : '📦 Thu thập toàn bộ'}</button></div>
-          ${sw('autoOpen', settings.autoOpen, 'Tự mở bảng khi vào báo giá', 'Vào trang báo giá là bảng đánh giá tự bung ra')}
-          <div class="st-row"><span>Máy đang quét ngầm</span><b>${scan?.machine ? `${esc(scan.who || 'máy khác')} · ${agoMs(scan.beat)}` : '–'}</b></div></div>
-        <div class="st-card"><h4>☁️ Đồng bộ giữa các máy</h4>
-          ${st ? `<div class="st-row"><span>Trạng thái</span><b class="${st.syncEnabled ? 'good' : 'bad'}">${st.syncEnabled ? '🟢 Tự đồng bộ ngầm' : 'Chưa bật'}</b></div>
-          <div class="st-row"><span>Kéo về</span><b>${agoMs(ss.lastPull)}</b></div><div class="st-row"><span>Đẩy lên</span><b>${agoMs(ss.lastPush)}</b></div>
-          ${ss.error ? `<div class="err">Lỗi đồng bộ: ${esc(ss.error)}</div>` : ''}
-          <div class="st-box"><span class="muted">Không cần bấm – dữ liệu tự đồng bộ. Chỉ dùng khi muốn đẩy lại toàn bộ ngay.</span><button class="act" data-act="set-sync" ${state.busy.has('syncAll') ? 'disabled' : ''}>${state.busy.has('syncAll') ? 'Đang đồng bộ…' : '↻ Đồng bộ lại'}</button></div>`
-          : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
-        <div class="st-card"><h4>📦 Phiên bản script</h4>
-          ${st ? `<div class="st-row"><span>Phiên bản</span><b>${esc(st.version)}</b></div><div class="st-row"><span>Commit</span><code>${esc((st.sha || '').slice(0, 7))}</code></div>
-          <div class="st-row"><span>Kiểm tra lần cuối</span><b>${agoMs(st.status?.lastCheck)}</b></div>
-          <div class="st-row"><span>Tự cập nhật</span><b class="good">~10 giây/lần</b></div>${st.status?.error ? `<div class="err">Lỗi: ${esc(st.status.error)}</div>` : ''}`
-          : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
+    const collectPct = nQuotes ? Math.round((nRead / nQuotes) * 100) : 0;
+    const running = cs?.running && Date.now() - cs.at < 120000;
+    const runPct = running && cs.total ? Math.round((cs.done / cs.total) * 100) : 0;
+    const tile = (cls, ic, label, val, sub = '') =>
+      `<div class="sx-tile ${cls}"><div class="sx-ic">${ic}</div><div class="sx-tv"><span>${label}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>`;
+    const swRow = (key, on, ic, title, sub) =>
+      `<div class="sx-row"><div class="sx-ric">${ic}</div><div class="sx-rt"><b>${title}</b><span>${sub}</span></div><button class="st-tg${on ? ' on' : ''}" data-act="set-toggle" data-key="${key}"><i></i></button></div>`;
+    const kv = (label, val, cls = '') => `<div class="sx-kv"><span>${label}</span><b class="${cls}">${val}</b></div>`;
+    return `<div class="ctab wk stt sx">
+      <div class="ct-head"><div><div class="ct-title">⚙️ Cài đặt & trạng thái</div><div class="ct-sub">Duyệt giá Tuấn Tú · phiên bản ${esc(st?.version || '?')}</div></div>
+        <span class="sx-live${st?.status?.error ? ' err' : ''}"><i></i>${st?.status?.error ? 'Có lỗi' : 'Đang chạy'}</span></div>
+      <div class="sx-tiles">
+        ${admin && sp ? tile('t-day', '💳', 'Chi phí Claude hôm nay', usd(sp.today), `tháng này ${usd(sp.month)}`) : ''}
+        ${admin && sp ? `<div class="sx-tile t-bal"><div class="sx-ring" style="--p:${pct}"><span>${Math.round(pct)}%</span></div><div class="sx-tv"><span>Số dư Anthropic còn lại</span><b class="${sp.remaining != null && sp.remaining < 5 ? 'bad' : ''}">${sp.remaining != null ? usd(sp.remaining) : 'chưa nhập'}</b><small>ước tính</small></div></div>` : ''}
+        ${tile('t-read', '📚', 'Báo giá đã đọc', `${nRead.toLocaleString('vi-VN')}<em>/${nQuotes.toLocaleString('vi-VN')}</em>`, `${collectPct}% dữ liệu`)}
+        ${tile('t-sync', '☁️', 'Đồng bộ', st?.syncEnabled ? 'Tự động' : 'Chưa bật', st ? `kéo về ${agoMs(ss.lastPull)}` : '')}
+        ${tile('t-ver', '📦', 'Phiên bản script', esc(st?.version || '?'), st ? `commit ${esc((st.sha || '').slice(0, 7))} · tự cập nhật ~10 giây` : '')}
       </div>
-      ${admin ? await permsCard(quotes) : ''}
-      <div class="muted ct-note">Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic vẫn nhập trong popup của extension (biểu tượng trên thanh Chrome).</div></div>`;
+      <div class="sx-cols">
+        <div class="sx-card"><div class="sx-h"><span class="sx-hic violet">🔄</span><div><b>Tính năng trên CRM</b><span>Thu thập dữ liệu & tiện ích hiển thị</span></div></div>
+          ${swRow('auto', settings.auto, '🛰️', 'Thu thập ngầm & tự phân tích', 'Tự đọc bình luận báo giá (không đánh dấu đã đọc), soạn gợi ý – chạy liên tục khi mở CRM')}
+          <div class="sx-job${running ? ' run' : ''}"><div class="sx-jt"><span>${running ? '<span class="spinner"></span>' : '✅'} ${cTxt}</span><button class="sx-btn" data-act="set-collect-now">▶ Chạy ngay</button></div>
+            ${running ? `<div class="sx-bar"><i style="width:${runPct}%"></i></div>` : ''}</div>
+          <div class="sx-job${fc?.on ? ' run full' : ''}"><div class="sx-jt"><span>📦 ${fTxt}</span><button class="sx-btn ${fc?.on ? 'stop' : 'go'}" data-act="set-full">${fc?.on ? '⏹ Dừng' : '📦 Thu thập toàn bộ'}</button></div>
+            <div class="sx-bar"><i style="width:${collectPct}%"></i></div><div class="sx-bt">${nRead.toLocaleString('vi-VN')} / ${nQuotes.toLocaleString('vi-VN')} báo giá · ${collectPct}%</div></div>
+          ${swRow('autoOpen', settings.autoOpen, '🪟', 'Tự mở bảng khi vào báo giá', 'Vào trang báo giá là bảng đánh giá tự bung ra')}
+          ${kv('🖥️ Máy đang quét ngầm', scan?.machine ? `${esc(scan.who || 'máy khác')} · ${agoMs(scan.beat)}` : '–')}</div>
+        <div class="sx-stack">
+          <div class="sx-card"><div class="sx-h"><span class="sx-hic sky">☁️</span><div><b>Đồng bộ giữa các máy</b><span>Supabase · tự chạy ngầm</span></div></div>
+            ${st ? `<div class="sx-sync"><div class="sx-dot ${st.syncEnabled ? 'on' : ''}"></div><b>${st.syncEnabled ? 'Đang tự đồng bộ ngầm' : 'Chưa bật đồng bộ'}</b></div>
+              <div class="sx-tl"><div><span>⬇️ Kéo về</span><b>${agoMs(ss.lastPull)}</b></div><div><span>⬆️ Đẩy lên</span><b>${agoMs(ss.lastPush)}</b></div></div>
+              ${ss.error ? `<div class="err">Lỗi đồng bộ: ${esc(ss.error)}</div>` : ''}
+              <div class="sx-note">Không cần bấm – dữ liệu tự đồng bộ. Chỉ dùng khi muốn đẩy lại toàn bộ.<button class="sx-btn" data-act="set-sync" ${state.busy.has('syncAll') ? 'disabled' : ''}>${state.busy.has('syncAll') ? 'Đang đồng bộ…' : '↻ Đồng bộ lại'}</button></div>`
+              : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
+          <div class="sx-card"><div class="sx-h"><span class="sx-hic green">📦</span><div><b>Phiên bản script</b><span>Tải từ GitHub, tự cập nhật</span></div></div>
+            ${st ? `${kv('Phiên bản', `<span class="sx-ver">${esc(st.version)}</span>`)}${kv('Commit', `<code>${esc((st.sha || '').slice(0, 7))}</code>`)}${kv('Kiểm tra lần cuối', agoMs(st.status?.lastCheck))}${kv('Tự cập nhật', '~10 giây/lần', 'good')}
+              ${st.status?.error ? `<div class="err">Lỗi: ${esc(st.status.error)}</div>` : ''}` : '<div class="muted">Cần cài bản extension mới để xem.</div>'}</div>
+        </div>
+      </div>
+      ${admin ? `<div class="sx-perm">${await permsCard(quotes)}</div>` : ''}
+      <div class="muted ct-note">🔐 Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic nhập trong popup của extension (biểu tượng trên thanh Chrome).</div></div>`;
   }
 
   // ---------- Tab "Phân tích deal": AI đọc từng báo giá đang mở của 1 NVKD, gợi ý bước kế tiếp cho NVKD ----------
