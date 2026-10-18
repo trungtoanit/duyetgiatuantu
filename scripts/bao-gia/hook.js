@@ -227,7 +227,12 @@
     // Người đang đăng nhập (để gợi ý bình luận xưng hô cho đúng)
     if (/\/auth\/profile\b/.test(url)) {
       const name = d.name || d.staff?.name;
-      if (name) emit('me', { id: d.id, name });
+      // Kèm thông tin quyền để phân biệt quản trị / NVKD (báo cáo tuần: NVKD chỉ xem của mình)
+      const roleOf = (r) => (typeof r === 'string' ? r : r?.name || r?.code || r?.title || '');
+      const role = [roleOf(d.role), d.roleName, ...(Array.isArray(d.roles) ? d.roles.map(roleOf) : []), roleOf(d.position), roleOf(d.staff?.role)]
+        .filter(Boolean)
+        .join(', ');
+      if (name) emit('me', { id: d.id, name, username: d.username || d.userName || d.account || '', role, isAdmin: d.isAdmin ?? d.admin ?? undefined });
       return;
     }
     // Thông báo (chuông): tìm các câu "X đã bàn giao khách hàng Y cho nhân viên Z" ở bất kỳ đâu trong dữ liệu

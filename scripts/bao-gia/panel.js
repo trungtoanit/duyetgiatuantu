@@ -1592,6 +1592,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-hide:hover { color: #dc2626; border-color: #fecaca; }
     .ct-bg { background: rgba(255,255,255,.2); border-radius: 999px; padding: 0 8px; }
     .wk-row { cursor: pointer; }
+    .pd, .lb { cursor: pointer; }
+    .pd:hover .pd-step { filter: brightness(1.08); } .lb:hover { border-color: #a5b4fc; }
+    .ov-hint { margin: 0 12px 10px; padding: 10px 14px; border: 1px dashed #c7d2fe; border-radius: 12px; color: #4f46e5; font-size: 13px; background: #f8faff; }
+    .ov { margin: 0 12px 14px; padding: 14px 16px; border: 1px solid #c7d2fe; border-radius: 14px; background: linear-gradient(180deg, #f8faff, #fff); }
+    .ov-head { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+    .ov-head b { font-size: 15px; }
+    .ov-kpi { font-size: 12px; color: #64748b; } .ov-kpi b { display: block; font-size: 15px; color: #0f172a; }
+    .ov-chart { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    .ov-line { position: absolute; left: 0; right: 0; top: 34px; width: 100%; height: 160px; pointer-events: none; overflow: visible; }
+    .ov-line polyline { fill: none; stroke: #f59e0b; stroke-width: 2.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+    .ov-col { display: flex; flex-direction: column; align-items: center; }
+    .wk.anim .ov-col { animation: wkIn .5s ease both; }
+    .ov-val { font-weight: 900; font-size: 15px; color: #047857; height: 34px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+    .ov-val .ct-chg { margin: 0; }
+    .ov-barwrap { display: flex; align-items: flex-end; width: 56%; }
+    .ov-bar { position: relative; width: 100%; height: var(--h); border-radius: 10px 10px 4px 4px; background: linear-gradient(180deg, #818cf8, #4f46e5);
+      transform-origin: bottom; }
+    .wk.anim .ov-bar { animation: ovUp .9s cubic-bezier(.2,.9,.3,1.2) both; }
+    @keyframes ovUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    .ov-col.now .ov-bar { background: linear-gradient(180deg, #34d399, #059669); }
+    .ov-col.best .ov-bar { background: linear-gradient(180deg, #fcd34d, #f59e0b); box-shadow: 0 6px 16px rgba(245,158,11,.4); }
+    .ov-star { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 18px; animation: wkMedal 1.6s ease-in-out infinite; }
+    .ov-wk { margin-top: 8px; font-weight: 800; font-size: 13px; color: #334155; } .ov-col.now .ov-wk { color: #059669; }
+    .ov-date { font-size: 11px; color: #94a3b8; }
     .board { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(0, 1fr); gap: 16px; align-items: end; margin: 4px 12px 14px; }
     .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; }
     .pd { position: relative; width: 130px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -2999,8 +3023,64 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // ---------- Tab "Báo cáo tuần": doanh số (sau VAT) theo NVKD từ thứ 2 đến thứ 7 ----------
   // Đơn hàng lấy từ lịch sử mua hàng đã thu thập (kv 'orders'); NVKD = người phụ trách khách (cột Sale của ERP).
-  function weekTab(quotes, orders) {
+  // Quản trị xem báo cáo của tất cả; NVKD chỉ xem của chính mình
+  const ADMIN_NAMES = ['Nguyễn Trung Toán'];
+  const isAdminUser = (me) =>
+    me?.isAdmin === true ||
+    me?.username === 'admin' ||
+    /admin|quản trị|giám đốc|director|ceo|quản lý/i.test(me?.role || '') ||
+    ADMIN_NAMES.some((n) => norm(n) === norm(me?.name || meName));
+
+  // Doanh số (sau VAT) của 1 NVKD trong khoảng [start, end) – dùng cho tổng quan 4 tuần
+  function staffSales(staff, info, orders, start, end) {
+    let total = 0;
+    let n = 0;
+    for (const [cid, od] of Object.entries(orders || {})) {
+      if (norm(info[cid]?.staff) !== norm(staff)) continue;
+      for (const o of od?.orders || []) {
+        const at = o.at > 1e11 ? o.at / 1000 : o.at;
+        if (!at || at < start || at >= end) continue;
+        total += orderAfterVat(o);
+        n++;
+      }
+    }
+    return { total, n };
+  }
+
+  // Tổng quan 4 tuần gần nhất của 1 NVKD: mỗi tuần 1 cột mốc doanh thu (T2 → T7), nối bằng đường xu hướng
+  function staffOverview(staff, info, orders, now, dd) {
+    const thisMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const weeks = [3, 2, 1, 0].map((k) => {
+      const m = new Date(thisMon.getFullYear(), thisMon.getMonth(), thisMon.getDate() - k * 7);
+      const sat = new Date(m.getFullYear(), m.getMonth(), m.getDate() + 5);
+      return { m, sat, k, ...staffSales(staff, info, orders, m.getTime() / 1000, m.getTime() / 1000 + 6 * 86400) };
+    });
+    const max = Math.max(...weeks.map((w) => w.total), 1);
+    const best = weeks.reduce((a, w) => (w.total > a.total ? w : a), weeks[0]);
+    const avg = weeks.reduce((a, w) => a + w.total, 0) / 4;
+    const H = 150;
+    const pts = weeks.map((w, i) => `${i * 100 + 50},${H - Math.round((w.total / max) * (H - 20)) + 4}`).join(' ');
+    const cols = weeks
+      .map((w, i) => {
+        const prev = weeks[i - 1];
+        const chg = prev && prev.total ? Math.round(((w.total - prev.total) / prev.total) * 100) : null;
+        const h = Math.max(4, Math.round((w.total / max) * (H - 20)));
+        return `<div class="ov-col${w.k === 0 ? ' now' : ''}${w === best && w.total ? ' best' : ''}" style="animation-delay:${i * 120}ms">
+          <div class="ov-val">${w.total ? moneyShortG(w.total) : '—'}${chg != null ? `<span class="ct-chg ${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '↑' : '↓'}${Math.abs(chg)}%</span>` : ''}</div>
+          <div class="ov-barwrap" style="height:${H}px"><div class="ov-bar" style="--h:${h}px; animation-delay:${200 + i * 120}ms">${w === best && w.total ? '<span class="ov-star">⭐</span>' : ''}</div></div>
+          <div class="ov-wk">${w.k === 0 ? 'Tuần này' : `${w.k} tuần trước`}</div><div class="ov-date">${dd(w.m)}–${dd(w.sat)} · ${w.n} đơn</div></div>`;
+      })
+      .join('');
+    return `<div class="ov"><div class="ov-head"><span class="ct-who">${avatarHtml(staff, 34)}<b>${esc(staff)}</b></span>
+        <span class="ov-kpi">Tổng 4 tuần <b>${moneyShortG(weeks.reduce((a, w) => a + w.total, 0))}</b></span>
+        <span class="ov-kpi">Trung bình/tuần <b>${moneyShortG(avg)}</b></span>
+        <span class="ov-kpi">Tuần tốt nhất <b>${best.total ? `${dd(best.m)} · ${moneyShortG(best.total)}` : '—'}</b></span></div>
+      <div class="ov-chart"><svg class="ov-line" viewBox="0 0 400 ${H + 10}" preserveAspectRatio="none"><polyline points="${pts}" /></svg>${cols}</div></div>`;
+  }
+
+  function weekTab(quotes, orders, me) {
     const now = new Date();
+    const admin = isAdminUser(me);
     // Chỉ các tuần thuộc tháng này: từ tuần chứa ngày 1 tới tuần hiện tại
     const monOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
     const firstMon = monOf(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -3033,7 +3113,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         r.list.push({ ...o, at, cust: info[cid]?.name || `Khách #${cid}`, cid, v });
       }
     }
-    const rows = Object.values(by).map((r) => ({ ...r, total: r.d.reduce((a, b) => a + b, 0) })).sort((a, b) => b.total - a.total);
+    const allRows = Object.values(by).map((r) => ({ ...r, total: r.d.reduce((a, b) => a + b, 0) })).sort((a, b) => b.total - a.total);
+    // NVKD (không phải quản trị) chỉ thấy dòng của mình
+    const rows = admin ? allRows : allRows.filter((r) => norm(r.staff) === norm(meName));
     const sum = [0, 0, 0, 0, 0, 0];
     rows.forEach((r) => r.d.forEach((v, i) => (sum[i] += v)));
     const grand = sum.reduce((a, b) => a + b, 0);
@@ -3042,19 +3124,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Hạng của người đang đăng nhập (so tên tài khoản CRM với NVKD)
     const max = rows[0]?.total || 1;
     const meIdx = rows.findIndex((r) => norm(r.staff) === norm(meName));
+    const meRank = allRows.findIndex((r) => norm(r.staff) === norm(meName));
     const medal = (i) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`);
     const meBox =
-      meIdx >= 0
-        ? `<div class="wk-me"><div class="wk-me-rank">${medal(meIdx)}</div><div><div class="wk-me-t">${esc(shortName(meName))} đang đứng <b>hạng ${meIdx + 1}/${rows.length}</b> tuần này</div>
-            <div class="wk-me-s">Doanh số ${money(rows[meIdx].total)} · ${rows[meIdx].n} đơn${meIdx > 0 ? ` · cần thêm <b>${money(rows[meIdx - 1].total - rows[meIdx].total + 1)}</b> để vượt ${esc(shortName(rows[meIdx - 1].staff))}` : ' · đang dẫn đầu 🎉'}</div></div></div>`
-        : `<div class="wk-me none"><div class="wk-me-rank">🏁</div><div><div class="wk-me-t">${esc(shortName(meName) || 'Bạn')} chưa có doanh số trong tuần này</div>
-            <div class="wk-me-s">${rows.length ? `Hạng 1 hiện tại: ${esc(shortName(rows[0].staff))} – ${money(rows[0].total)}` : 'Chưa có đơn hàng nào trong tuần'}</div></div></div>`;
+      meRank >= 0
+        ? `<div class="wk-me"><div class="wk-me-rank">${medal(meRank)}</div><div><div class="wk-me-t">${esc(shortName(meName))} đang đứng <b>hạng ${meRank + 1}/${allRows.length}</b> tuần này</div>
+            <div class="wk-me-s">Doanh số ${money(allRows[meRank].total)} · ${allRows[meRank].n} đơn${meRank > 0 ? ` · cần thêm <b>${money(allRows[meRank - 1].total - allRows[meRank].total + 1)}</b> để lên hạng ${meRank}${admin ? ` (vượt ${esc(shortName(allRows[meRank - 1].staff))})` : ''}` : ' · đang dẫn đầu 🎉'}</div></div></div>`
+        : admin
+          ? ''
+          : `<div class="wk-me none"><div class="wk-me-rank">🏁</div><div><div class="wk-me-t">${esc(shortName(meName) || 'Bạn')} chưa có doanh số trong tuần này</div>
+            <div class="wk-me-s">Cố gắng chốt đơn đầu tiên của tuần nhé!</div></div></div>`;
     // Bảng xếp hạng: bục 3 người đầu (2 – 1 – 3) + các hạng còn lại, kèm doanh thu tuần
     const podium = [1, 0, 2]
       .filter((i) => rows[i])
       .map((i) => {
         const r = rows[i];
-        return `<div class="pd pd${i + 1}${i === meIdx ? ' me' : ''}" style="animation-delay:${[200, 0, 400][[1, 0, 2].indexOf(i)]}ms">
+        return `<div class="pd pd${i + 1}${i === meIdx ? ' me' : ''}" data-act="week-open" data-staff="${esc(r.staff)}" title="Xem tổng quan 4 tuần" style="animation-delay:${[200, 0, 400][[1, 0, 2].indexOf(i)]}ms">
           ${i === 0 ? '<div class="pd-crown">👑</div>' : ''}${avatarHtml(r.staff, i === 0 ? 56 : 44)}
           <div class="pd-name" title="${esc(r.staff)}">${esc(shortName(r.staff))}${i === meIdx ? ' <span class="wk-you">Bạn</span>' : ''}</div>
           <div class="pd-amt">${moneyShortG(r.total)}</div><div class="pd-sub">${r.n} đơn</div>
@@ -3066,12 +3151,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .map((r, k) => {
         const i = k + 3;
         const last = i === rows.length - 1;
-        return `<div class="lb${i === meIdx ? ' me' : ''}${last ? ' last' : ''}" style="animation-delay:${600 + k * 80}ms"><span class="lb-rank">#${i + 1}</span>${avatarHtml(r.staff, 22)}
+        return `<div class="lb${i === meIdx ? ' me' : ''}${last ? ' last' : ''}" data-act="week-open" data-staff="${esc(r.staff)}" title="Xem tổng quan 4 tuần" style="animation-delay:${600 + k * 80}ms"><span class="lb-rank">#${i + 1}</span>${avatarHtml(r.staff, 22)}
           <span class="lb-name" title="${esc(r.staff)}">${esc(shortName(r.staff))}${i === meIdx ? ' <span class="wk-you">Bạn</span>' : ''}${last ? ' <span class="wk-cheer">💪 Cố lên!</span>' : ''}</span>
           <span class="lb-amt">${money(r.total)}</span><span class="lb-gap">${rows[i - 1] ? `kém #${i} ${moneyShortG(rows[i - 1].total - r.total)}` : ''}</span></div>`;
       })
       .join('');
-    const board = rows.length
+    const board = admin && rows.length
       ? `<div class="board"><div class="podium">${podium}</div>${others ? `<div class="lbs">${others}</div>` : ''}</div>`
       : '';
     const body = rows
@@ -3108,6 +3193,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           .join('')}</div></div>
       ${meBox}
       ${board}
+      ${(() => {
+        const who = admin ? state.weekOpen : meName;
+        return who ? staffOverview(who, info, orders, now, dd) : admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để xem tổng quan 4 tuần gần nhất</div>' : '';
+      })()}
       <div class="ct-wrap"><table class="ct">
         <thead><tr><th>Hạng</th><th>NVKD</th>${days.map((d, k) => `<th class="num${d.getTime() === today ? ' wk-today' : ''}">${DAY[k]} ${dd(d)}</th>`).join('')}<th class="num">Tổng tuần</th><th class="num">Số đơn</th></tr>
           <tr class="ct-sum"><td></td><td>Σ ${rows.length} NVKD</td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(grand)}</td><td class="num">${rows.reduce((a, r) => a + r.n, 0)}</td></tr></thead>
@@ -3597,7 +3686,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
-        if (tab === 'week') return bar + weekTab(quotes, renderCtx.orders);
+        if (tab === 'week') return bar + weekTab(quotes, renderCtx.orders, await kvGet('me'));
         return tab === 'cust'
           ? bar + custTab(cust)
           : bar + headHtml + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
@@ -3964,6 +4053,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'week-open') {
       state.weekOpen = state.weekOpen === b.dataset.staff ? null : b.dataset.staff;
+      state.weekAnimKey = null; // chạy hiệu ứng cột mốc 4 tuần
       render();
     }
     else if (act === 'cust-hide') {
