@@ -5530,6 +5530,43 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   }
   setInterval(() => scanMisaOrder().catch(() => {}), 1500);
 
+  // ---------- Thanh kéo "% Deal" trên trang báo giá: nhắc đơn hàng đang yếu, chỉ kéo tối đa 20–25% ----------
+  const DEAL_PCT_MAX = 25;
+  function dealSliderHint() {
+    if (!IS_TOP || !currentQuoteId()) return;
+    const lbl = [...document.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^%\s*Deal$/i.test(e.textContent.trim()));
+    const row = lbl?.closest('.ant-row, .ant-form-item') || lbl?.parentElement;
+    const slider = row?.querySelector('.ant-slider') || lbl?.parentElement?.parentElement?.querySelector('.ant-slider');
+    if (!slider) return;
+    const v = Number(slider.querySelector('.ant-slider-handle')?.getAttribute('aria-valuenow'));
+    let box = document.getElementById('dg-deal-hint');
+    if (!box || !row.contains(box)) {
+      box?.remove();
+      box = document.createElement('div');
+      box.id = 'dg-deal-hint';
+      (row || slider.parentElement).append(box);
+    }
+    const over = Number.isFinite(v) && v > DEAL_PCT_MAX;
+    const html = over
+      ? `⛔ <b>Đang kéo ${v}%</b> – đơn hàng đang yếu, chỉ kéo tối đa <b>20–${DEAL_PCT_MAX}%</b>. Kéo lại về ≤ ${DEAL_PCT_MAX}% nhé.`
+      : `⚠️ Đơn hàng đang yếu – chỉ kéo <b>% Deal</b> tối đa <b>20–${DEAL_PCT_MAX}%</b>${Number.isFinite(v) ? ` (đang ${v}%)` : ''}.`;
+    if (box.innerHTML !== html) box.innerHTML = html;
+    box.style.cssText = `margin:6px 0 4px;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600;width:max-content;max-width:100%;${over
+      ? 'background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;animation:dgDealShake .5s ease-in-out 2'
+      : 'background:#fff7ed;color:#9a3412;border:1px solid #fed7aa'}`;
+    if (!document.getElementById('dg-deal-css')) {
+      const st = document.createElement('style');
+      st.id = 'dg-deal-css';
+      st.textContent = '@keyframes dgDealShake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}';
+      document.head.append(st);
+    }
+  }
+  setInterval(() => {
+    try {
+      dealSliderHint();
+    } catch {}
+  }, 500);
+
   function hotBox(hot, quotes, done = {}, inTab = false) {
     const busy = state.busy.has('hot');
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
