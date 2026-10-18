@@ -288,8 +288,7 @@
         const preVat = lines.reduce((a, l) => a + (l.total || 0), 0);
         // Tổng sau VAT: trường tổng thanh toán của đơn nếu có, không thì tiền hàng + VAT từng dòng
         const totalVat =
-          o.totalPayment ?? o.totalAmountWithVat ?? o.totalWithVat ?? o.totalAfterVat ?? o.paymentAmount ?? o.totalMoney ?? o.totalAmount ??
-          (lineVat ? preVat + lineVat : undefined);
+          o.totalPayment ?? o.totalAmountWithVat ?? o.totalWithVat ?? o.totalAfterVat ?? (lineVat ? preVat + lineVat : undefined);
         return {
           id: o.id,
           code: o.code,

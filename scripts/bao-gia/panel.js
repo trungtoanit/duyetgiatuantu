@@ -2206,9 +2206,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function orderSummary(od) {
     if (!od?.orders) return null;
     const list = [...od.orders].sort((a, b) => b.at - a.at);
-    const total = list.reduce((a, o) => a + (o.total || 0), 0);
+    const total = list.reduce((a, o) => a + orderAfterVat(o), 0); // sau VAT
     const year = list.filter((o) => hoursSince(o.at) <= 365 * 24);
-    return { count: od.total ?? list.length, total, year: year.length, yearTotal: year.reduce((a, o) => a + (o.total || 0), 0), last: list[0], list };
+    return { count: od.total ?? list.length, total, year: year.length, yearTotal: year.reduce((a, o) => a + orderAfterVat(o), 0), last: list[0], list };
   }
   function ordersText(od) {
     const s = orderSummary(od);
@@ -2868,6 +2868,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // ---------- Tab "Khách hàng 6 tháng": doanh số theo tháng từ lịch sử mua hàng đã thu thập (kv 'orders') ----------
+  // Doanh thu sau VAT: dùng tổng sau VAT của đơn nếu ERP có; không thì tiền hàng × (1 + VAT 8%)
+  // (đối chiếu DH0012095: 33.752.800 × 1,08 = 36.453.024 – đúng cột "Thành tiền" trên ERP)
+  const VAT_RATE = 0.08;
+  const orderAfterVat = (o) => Number(o.totalVat) || Math.round((Number(o.total) || 0) * (1 + VAT_RATE));
+
   function custRows(quotes, orders) {
     const now = new Date();
     const months = [];
@@ -2892,7 +2897,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const m = [0, 0, 0, 0, 0, 0];
       for (const o of od?.orders || []) {
         const i = o.at ? idx(o.at) : -1;
-        if (i >= 0) m[i] += Number(o.totalVat ?? o.total) || 0; // doanh thu sau VAT (nếu đơn có), không thì tiền hàng
+        if (i >= 0) m[i] += orderAfterVat(o);
       }
       const total = m.reduce((a, b) => a + b, 0);
       if (!total) continue;
