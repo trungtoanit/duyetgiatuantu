@@ -314,6 +314,8 @@
         }
         // Giữ dấu "chưa có giá giấy tấm" (đọc từ trang chi tiết, danh sách không có)
         if (old?.noSheetAt) Object.assign(next, { noSheet: old.noSheet, noSheetN: old.noSheetN, noSheetAt: old.noSheetAt });
+        // Đã lên đơn (thấy ở trang chi tiết) thì giữ – danh sách có thể không có trường mã đơn Misa
+        if (old?.hasOrder) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
         patch[q.id] = next;
       }
       await kvMerge('quotes', patch);
@@ -326,6 +328,7 @@
         next.staff = old.staff;
         next.staffKey = old.staffKey;
       }
+      if (old.hasOrder) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
       await kvMerge('quotes', { [data.id]: { ...old, ...next } });
     } else if (kind === 'margin') {
       const all = await kvGet('margins');
@@ -5487,6 +5490,24 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     await kvMerge('quotes', { [qid]: { ...old, noSheet: zero > 0, noSheetN: zero, noSheetAt: Math.floor(Date.now() / 1000) } });
   }
   setInterval(() => scanSheetPrice().catch(() => {}), 1500);
+
+  // Trang chi tiết có dòng "Mã đơn hàng Misa: 12526 | … - DH0012113" → báo giá đã lên đơn (ẩn khỏi danh sách)
+  let orderSaved = '';
+  async function scanMisaOrder() {
+    const qid = currentQuoteId();
+    if (!qid || orderSaved === String(qid)) return;
+    const lbl = [...document.querySelectorAll('span, div, b, strong, label')].find((e) => /^Mã đơn hàng Misa:?$/i.test(e.textContent.trim()));
+    if (!lbl) return;
+    const line = (lbl.parentElement?.textContent || '').replace(/\s+/g, ' ');
+    const code = line.match(/DH\d{4,}/)?.[0] || line.match(/Misa:?\s*(\d{3,})/i)?.[1];
+    if (!code) return;
+    orderSaved = String(qid);
+    const old = (await kvGet('quotes'))[qid];
+    if (!old || (old.hasOrder && old.orderCode === code)) return;
+    await kvMerge('quotes', { [qid]: { ...old, hasOrder: true, orderCode: code, orderSeenAt: Math.floor(Date.now() / 1000) } });
+    if (IS_TOP) render();
+  }
+  setInterval(() => scanMisaOrder().catch(() => {}), 1500);
 
   function hotBox(hot, quotes, done = {}, inTab = false) {
     const busy = state.busy.has('hot');

@@ -142,7 +142,7 @@
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
     // Đã lên đơn hàng Misa (tình trạng báo giá có thể vẫn để Bản thảo)
-    hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length),
+    hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length || o.misaOrderId || Object.entries(o).some(([k, v]) => /misa.*order|order.*misa/i.test(k) && (Array.isArray(v) ? v.length : !!v))),
     // Đơn tái bản: sản phẩm đã có mã SP (republishType = REPUBLISH)
     isReprint: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => p.republishType === 'REPUBLISH') : undefined,
     offset: Array.isArray(o.opportunityProducts) ? o.opportunityProducts.some((p) => /OFFSET/i.test(p.productType || '')) : undefined,
