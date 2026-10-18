@@ -1845,6 +1845,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Hiệu ứng chờ khi mở báo giá từ bảng
   // Thẻ "Đang mở báo giá": số báo giá to nhất, tên cơ hội, khách hàng, NVKD + hiệu ứng
   function showLoading(code, q) {
+    if (/^\/login\b/.test(location.pathname)) return;
     let el = root.querySelector('.loading');
     if (!el) {
       el = document.createElement('div');
@@ -3319,7 +3320,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const arrived = () => location.pathname === href && (!code || document.title.includes(code));
       const started = Date.now();
       const timer = setInterval(() => {
-        if (arrived()) {
+        if (arrived() || /^\/login\b/.test(location.pathname)) {
+          // Tới nơi, hoặc bị đẩy về trang đăng nhập (hết phiên) → tắt thẻ chờ, không tải lại
           clearInterval(timer);
           hideLoading();
         } else if (Date.now() - started > 3500) {
@@ -3472,6 +3474,33 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       maybeAutoOpen();
     }
   }, 1000);
+
+  // ---------- Trang đăng nhập ----------
+  // Bị đăng xuất → CRM chuyển về /login: ẩn thẻ "Đang mở báo giá" và tự bấm "Đăng nhập" khi Chrome đã điền sẵn tài khoản.
+  // Chỉ bấm khi cả 2 ô đã có giá trị; tối đa 1 lần / 2 phút để không bấm lặp (vd. sai mật khẩu → khoá tài khoản).
+  const isLogin = () => /^\/login\b/.test(location.pathname);
+  function autoLogin() {
+    if (!IS_TOP || !isLogin()) return;
+    hideLoading();
+    try {
+      sessionStorage.removeItem('dgNav');
+    } catch {}
+    let last = 0;
+    try {
+      last = Number(sessionStorage.getItem('dgAutoLogin') || 0);
+    } catch {}
+    if (Date.now() - last < 120000) return;
+    const btn = [...document.querySelectorAll('button')].find((b) => /đăng nhập/i.test(b.textContent || '') && !b.disabled);
+    const user = document.querySelector('input:not([type=password]):not([type=hidden]):not([type=checkbox])');
+    const pass = document.querySelector('input[type=password]');
+    if (!btn || !user?.value || !pass?.value) return;
+    if (document.querySelector('.ant-form-item-explain-error, .ant-message-error, .ant-notification-notice-error')) return; // đang báo lỗi → để người dùng xử lý
+    try {
+      sessionStorage.setItem('dgAutoLogin', String(Date.now()));
+    } catch {}
+    btn.click();
+  }
+  if (IS_TOP) setInterval(autoLogin, 700);
 
   // Trong iframe thu thập ngầm chỉ ghi dữ liệu, không hiện giao diện
   if (IS_TOP) {
