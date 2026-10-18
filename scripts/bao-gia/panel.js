@@ -1592,6 +1592,35 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-hide:hover { color: #dc2626; border-color: #fecaca; }
     .ct-bg { background: rgba(255,255,255,.2); border-radius: 999px; padding: 0 8px; }
     .wk-row { cursor: pointer; }
+    .board { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(0, 1fr); gap: 16px; align-items: end; margin: 4px 12px 14px; }
+    .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; }
+    .pd { position: relative; width: 130px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .wk.anim .pd { animation: pdRise .8s cubic-bezier(.2,1.3,.4,1) both; }
+    @keyframes pdRise { from { opacity: 0; transform: translateY(40px) scale(.9); } to { opacity: 1; transform: none; } }
+    .pd .ava { box-shadow: 0 4px 12px rgba(15,23,42,.18); border: 3px solid #fff; }
+    .pd1 .ava { border-color: #fbbf24; box-shadow: 0 0 0 4px rgba(251,191,36,.35), 0 6px 18px rgba(245,158,11,.45); }
+    .pd-crown { font-size: 26px; animation: wkCrown 1.4s ease-in-out infinite; margin-bottom: -6px; }
+    .pd-name { font-weight: 800; font-size: 14px; color: #0f172a; margin-top: 4px; max-width: 128px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pd-amt { font-weight: 900; font-size: 18px; color: #047857; font-variant-numeric: tabular-nums; }
+    .pd1 .pd-amt { font-size: 22px; color: #b45309; }
+    .pd-sub { font-size: 11px; color: #64748b; }
+    .pd-step { width: 100%; margin-top: 6px; border-radius: 12px 12px 4px 4px; display: flex; align-items: flex-start; justify-content: center;
+      padding-top: 8px; font-size: 26px; color: #fff; }
+    .pd1 .pd-step { height: 92px; background: linear-gradient(180deg, #fbbf24, #f59e0b); box-shadow: 0 8px 20px rgba(245,158,11,.35); }
+    .pd2 .pd-step { height: 66px; background: linear-gradient(180deg, #e2e8f0, #94a3b8); }
+    .pd3 .pd-step { height: 48px; background: linear-gradient(180deg, #fed7aa, #c2410c); }
+    .pd1 .pd-step span { animation: wkMedal 1.6s ease-in-out infinite; display: inline-block; }
+    .pd.me .pd-name { color: #4f46e5; }
+    .lbs { display: grid; gap: 6px; }
+    .lb { display: grid; grid-template-columns: 40px 24px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 12px;
+      border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+    .wk.anim .lb { animation: wkIn .5s ease both; }
+    .lb.me { border-color: #a5b4fc; background: #eef2ff; }
+    .lb.last { border-color: #fdba74; background: #fff7ed; }
+    .lb-rank { font-weight: 900; color: #94a3b8; font-size: 16px; }
+    .lb-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-amt { font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
+    .lb-gap { font-size: 11px; color: #94a3b8; white-space: nowrap; }
     .wk.anim .wk-row { animation: wkIn .5s cubic-bezier(.2,.8,.2,1) both; }
     @keyframes wkIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     .wk-rank { font-size: 18px; font-weight: 900; color: #94a3b8; width: 46px; text-align: center; }
@@ -1601,8 +1630,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .wk-row.top1 td { position: relative; }
     .wk-row.top1 b { font-size: 16px; color: #92400e; }
     .wk-row.top1 { box-shadow: inset 4px 0 0 #f59e0b; }
-    .wk-row.top1 td:nth-child(2)::after { content: ''; position: absolute; inset: 0; pointer-events: none;
-      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%); background-size: 250% 100%;
+    .wk-row.top1 td:nth-child(2) { background: linear-gradient(110deg, #fffbeb 30%, #fef3c7 50%, #fffbeb 70%); background-size: 250% 100%;
       animation: wkShine 2.8s ease-in-out infinite; }
     @keyframes wkShine { 0% { background-position: 150% 0; } 60%, 100% { background-position: -100% 0; } }
     .wk-crown { display: inline-block; margin-right: -4px; font-size: 18px; transform-origin: 50% 100%; animation: wkCrown 1.4s ease-in-out infinite; }
@@ -3021,6 +3049,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
             <div class="wk-me-s">Doanh số ${money(rows[meIdx].total)} · ${rows[meIdx].n} đơn${meIdx > 0 ? ` · cần thêm <b>${money(rows[meIdx - 1].total - rows[meIdx].total + 1)}</b> để vượt ${esc(shortName(rows[meIdx - 1].staff))}` : ' · đang dẫn đầu 🎉'}</div></div></div>`
         : `<div class="wk-me none"><div class="wk-me-rank">🏁</div><div><div class="wk-me-t">${esc(shortName(meName) || 'Bạn')} chưa có doanh số trong tuần này</div>
             <div class="wk-me-s">${rows.length ? `Hạng 1 hiện tại: ${esc(shortName(rows[0].staff))} – ${money(rows[0].total)}` : 'Chưa có đơn hàng nào trong tuần'}</div></div></div>`;
+    // Bảng xếp hạng: bục 3 người đầu (2 – 1 – 3) + các hạng còn lại, kèm doanh thu tuần
+    const podium = [1, 0, 2]
+      .filter((i) => rows[i])
+      .map((i) => {
+        const r = rows[i];
+        return `<div class="pd pd${i + 1}${i === meIdx ? ' me' : ''}" style="animation-delay:${[200, 0, 400][[1, 0, 2].indexOf(i)]}ms">
+          ${i === 0 ? '<div class="pd-crown">👑</div>' : ''}${avatarHtml(r.staff, i === 0 ? 56 : 44)}
+          <div class="pd-name" title="${esc(r.staff)}">${esc(shortName(r.staff))}${i === meIdx ? ' <span class="wk-you">Bạn</span>' : ''}</div>
+          <div class="pd-amt">${moneyShortG(r.total)}</div><div class="pd-sub">${r.n} đơn</div>
+          <div class="pd-step"><span>${medal(i)}</span></div></div>`;
+      })
+      .join('');
+    const others = rows
+      .slice(3)
+      .map((r, k) => {
+        const i = k + 3;
+        const last = i === rows.length - 1;
+        return `<div class="lb${i === meIdx ? ' me' : ''}${last ? ' last' : ''}" style="animation-delay:${600 + k * 80}ms"><span class="lb-rank">#${i + 1}</span>${avatarHtml(r.staff, 22)}
+          <span class="lb-name" title="${esc(r.staff)}">${esc(shortName(r.staff))}${i === meIdx ? ' <span class="wk-you">Bạn</span>' : ''}${last ? ' <span class="wk-cheer">💪 Cố lên!</span>' : ''}</span>
+          <span class="lb-amt">${money(r.total)}</span><span class="lb-gap">${rows[i - 1] ? `kém #${i} ${moneyShortG(rows[i - 1].total - r.total)}` : ''}</span></div>`;
+      })
+      .join('');
+    const board = rows.length
+      ? `<div class="board"><div class="podium">${podium}</div>${others ? `<div class="lbs">${others}</div>` : ''}</div>`
+      : '';
     const body = rows
       .map((r, i) => {
         const open = state.weekOpen === r.staff;
@@ -3054,6 +3107,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('')}</div></div>
       ${meBox}
+      ${board}
       <div class="ct-wrap"><table class="ct">
         <thead><tr><th>Hạng</th><th>NVKD</th>${days.map((d, k) => `<th class="num${d.getTime() === today ? ' wk-today' : ''}">${DAY[k]} ${dd(d)}</th>`).join('')}<th class="num">Tổng tuần</th><th class="num">Số đơn</th></tr>
           <tr class="ct-sum"><td></td><td>Σ ${rows.length} NVKD</td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(grand)}</td><td class="num">${rows.reduce((a, r) => a + r.n, 0)}</td></tr></thead>
