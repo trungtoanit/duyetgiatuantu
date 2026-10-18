@@ -1698,6 +1698,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rp-mv { font-size: 10px; font-weight: 700; color: #047857; margin-top: 3px; white-space: nowrap; } .rp-ml { font-size: 10px; color: #94a3b8; }
     .rp-q { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; } .rp-q a { color: #1d4ed8; text-decoration: none; }
     .rp-qa { float: right; font-weight: 800; color: #047857; } .rp-ql { font-size: 12px; color: #475569; margin-top: 2px; }
+    .rp-start.locked { background: #cbd5e1; box-shadow: none; color: #475569; }
     .rp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 12px 0; max-height: 120px; overflow: auto; }
     .rp-chip { font: inherit; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; cursor: pointer; border: 1.5px solid; max-width: 220px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3313,6 +3314,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const total = list.length;
     const idx = Math.max(0, Math.min(state.report.idx || 0, total));
     const doneN = list.filter((g) => rep.items?.[g.cid]?.comment?.trim()).length;
+    state.rpList = list.map((g) => String(g.cid)); // để nút Hoàn tất kiểm tra đủ 100%
+    state.rpKey = key;
+    // Chỉ vào màn hình tổng kết khi đã báo cáo đủ 100% khách
+    if ((state.report.idx || 0) >= total && doneN < total) state.report.idx = Math.max(0, list.findIndex((g) => !rep.items?.[g.cid]?.comment?.trim()));
     const head = `<div class="ct-head sc-head"><button class="sc-back" data-act="report-exit" title="Thoát, phần đã viết vẫn được lưu">← Thoát</button>
       <span class="ct-who">${avatarHtml(staff, 40)}<span><div class="ct-title">📝 Báo cáo tuần · ${esc(staff)}</div>
       <div class="ct-sub">Tuần ${key.split('|')[1].split('-').reverse().slice(0, 2).join('/')} · đã viết ${doneN}/${total} khách</div></span></span></div>
@@ -3384,7 +3389,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <textarea class="rp-text" data-key="${esc(key)}" data-cid="${g.cid}" rows="4" placeholder="Tình hình khách, kế hoạch tuần tới, khó khăn cần hỗ trợ…">${esc(rep.items?.[g.cid]?.comment || '')}</textarea>
         <div class="rp-nav"><button class="act" data-act="report-goto" data-i="${idx - 1}" ${idx === 0 ? 'disabled' : ''}>← Trước</button>
           <span class="muted">Tự lưu khi gõ · đồng bộ các máy</span>
-          <button class="rp-start" data-act="report-goto" data-i="${idx + 1}">${idx + 1 >= total ? '✓ Hoàn tất' : 'Next →'}</button></div>
+          ${idx + 1 >= total
+            ? `<button class="rp-start${doneN + (rep.items?.[g.cid]?.comment?.trim() ? 0 : 1) < total ? ' locked' : ''}" data-act="report-finish" title="Chỉ hoàn tất khi đã viết báo cáo cho 100% khách">✓ Hoàn tất (${doneN}/${total})</button>`
+            : `<button class="rp-start" data-act="report-goto" data-i="${idx + 1}">Next →</button>`}</div>
       </div></div>`;
   }
   function printReport(staff) {
@@ -4548,6 +4555,31 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       lsSet('dgReport', JSON.stringify(state.report));
       await render();
       root.querySelector('.panel')?.scrollTo?.({ top: 0 });
+    }
+    else if (act === 'report-finish') {
+      // Lưu ngay ô đang gõ, rồi kiểm tra đủ 100% khách đã có bình luận báo cáo
+      const ta = root.querySelector('textarea.rp-text');
+      const all = await kvGet('reports');
+      const cur = all[state.rpKey] || { items: {} };
+      if (ta) cur.items = { ...(cur.items || {}), [ta.dataset.cid]: { comment: ta.value, at: Date.now(), by: meName } };
+      const missing = (state.rpList || []).filter((cid) => !cur.items?.[cid]?.comment?.trim());
+      if (missing.length) {
+        await kvMerge('reports', { [state.rpKey]: cur });
+        state.report = { ...state.report, idx: (state.rpList || []).indexOf(missing[0]) };
+        lsSet('dgReport', JSON.stringify(state.report));
+        state.error = `Còn ${missing.length} khách chưa có bình luận báo cáo (nút đỏ) – phải báo cáo đủ 100% mới hoàn tất được.`;
+        await render();
+        setTimeout(() => {
+          state.error = null;
+        }, 8000);
+        return;
+      }
+      cur.doneAt = Date.now();
+      await kvMerge('reports', { [state.rpKey]: cur });
+      state.error = null;
+      state.report = { ...state.report, idx: (state.rpList || []).length };
+      lsSet('dgReport', JSON.stringify(state.report));
+      render();
     }
     else if (act === 'report-exit') {
       state.report = null;
