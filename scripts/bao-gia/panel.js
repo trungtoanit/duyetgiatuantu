@@ -2214,7 +2214,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .db-staff b { display: block; font-size: 13px; } .db-staff small { font-size: 11px; color: #64748b; }
     .db-staff em { font-style: normal; font-size: 12px; font-weight: 800; color: #b91c1c; background: #fee2e2; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
     .db-staff em.ok { color: #166534; background: #dcfce7; }
-    .db-sub { font-size: 11px; } .db-red { color: #b91c1c !important; }
+    .db-sub { font-size: 11px; } .db-red { color: #b91c1c !important; } .db-green { color: #166534 !important; }
     .db-days { font-size: 12px; font-weight: 900; border-radius: 999px; padding: 1px 9px; color: #fff; white-space: nowrap; }
     .db-days.red { background: #dc2626; animation: rpUrge 1.4s ease-in-out infinite; } .db-days.orange { background: #f97316; } .db-days.amber { background: #f59e0b; }
     .db-due { font-size: 12px; font-weight: 800; color: #0369a1; background: #e0f2fe; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
@@ -4929,7 +4929,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <td class="num"><span class="db-days ${dayCls(r.maxDaysOverdue || 0)}">${r.maxDaysOverdue || 0} ngày</span></td></tr>`)
       .join('');
     const upRows = upcoming
-      .map((r, i) => `<tr><td class="ct-no">${i + 1}</td>${custCell(r)}${whoCell(r)}<td class="num">${money(r.totalDebt)}</td><td class="num">${money(r.notDueAmount)}</td>
+      .map((r, i) => `<tr><td class="ct-no">${i + 1}</td>${custCell(r)}${whoCell(r)}<td class="num">${money(r.totalDebt)}</td><td class="num db-green">${money(r.notDueAmount)}</td>
         <td class="num"><span class="db-due ${(r.minDaysUntilDue ?? 99) <= 7 ? 'soon' : ''}">còn ${r.minDaysUntilDue ?? '?'} ngày</span></td></tr>`)
       .join('');
     const staffRows = Object.values(staffs)
@@ -4984,12 +4984,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const body = rows
           .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.customerCode || '')}</td><td>${esc(r.customerName || '')}</td>
             <td class="n">${n(r.totalDebt)}</td><td class="n ${r.overdueAmount ? 'od' : ''}">${r.overdueAmount ? n(r.overdueAmount) : '–'}</td>
-            <td class="c">${r.maxDaysOverdue ? `${r.maxDaysOverdue} ngày` : ''}</td><td class="n">${r.notDueAmount ? n(r.notDueAmount) : '–'}</td>
+            <td class="c">${r.maxDaysOverdue ? `${r.maxDaysOverdue} ngày` : ''}</td><td class="n nd">${r.notDueAmount ? n(r.notDueAmount) : '–'}</td>
             <td class="c">${r.minDaysUntilDue != null && r.notDueAmount ? `còn ${r.minDaysUntilDue} ngày` : ''}</td><td class="c">${r.allowDebtDay ?? ''}</td></tr>`)
           .join('');
         return `<h2>${esc(staff)} <small>${rows.length} khách · tổng nợ ${n(sum(rows, 'totalDebt'))}đ · quá hạn ${n(sum(rows, 'overdueAmount'))}đ</small></h2>
           <table>${DEBT_COLS}<thead><tr><th>#</th><th>Mã KH</th><th>Khách hàng</th><th>Tổng công nợ</th><th>Quá hạn</th><th>Trễ</th><th>Chưa đến hạn</th><th>Đến hạn</th><th>Hạn mức (ngày)</th></tr></thead>
-          <tbody>${body}</tbody><tfoot><tr><td colspan="3">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tfoot></table>`;
+          <tbody>${body}</tbody><tfoot><tr><td colspan="3">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n nd">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tfoot></table>`;
       })
       .join('');
     const w = window.open('', '_blank');
@@ -4999,7 +4999,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       body{font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;margin:20px} h1{font-size:18px;margin:0} .s{color:#555;margin:4px 0 12px}
       h2{font-size:14px;margin:18px 0 6px;padding:6px 8px;background:#eef2ff;border-left:4px solid #4f46e5} h2 small{font-weight:500;color:#444;margin-left:6px}
       table{width:100%;border-collapse:collapse;margin-bottom:6px;table-layout:fixed} td{overflow-wrap:anywhere} th,td{border:1px solid #ccc;padding:4px 6px} th{background:#f1f5f9;text-align:left;white-space:nowrap}
-      .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums} .c{text-align:center;white-space:nowrap} .od{color:#b91c1c;font-weight:700}
+      .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums} .c{text-align:center;white-space:nowrap} .od{color:#b91c1c;font-weight:700} .nd{color:#166534;font-weight:700}
       tfoot td{font-weight:800;background:#f8fafc} .tot{margin-top:14px;font-size:14px;font-weight:800} h2{break-after:avoid} tr{break-inside:avoid}
       @media print{body{margin:8mm}}</style></head><body>
       <h1>Báo cáo công nợ khách hàng${staffSel ? ` – ${esc(staffSel)}` : ''}</h1>
