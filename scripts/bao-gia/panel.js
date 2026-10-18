@@ -1701,7 +1701,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 12px 0; max-height: 120px; overflow: auto; }
     .rp-chip { font: inherit; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; cursor: pointer; border: 1.5px solid; max-width: 220px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rp-chip.ok { background: #dcfce7; color: #166534; border-color: #4ade80; }
+    .rp-chip.ok { background: #f1f5f9; color: #94a3b8; border-color: #cbd5e1; text-decoration: line-through; text-decoration-color: rgba(148,163,184,.6); }
     .rp-chip.no { background: #fee2e2; color: #991b1b; border-color: #f87171; }
     .rp-chip.cur { box-shadow: 0 0 0 3px rgba(99,102,241,.45); transform: scale(1.05); }
     .rp-st { border-radius: 999px; padding: 1px 8px; font-size: 11px; } .rp-st.won { background: #dcfce7; color: #166534; } .rp-st.open { background: #fef3c7; color: #92400e; }
@@ -3333,7 +3333,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th class="num">Tháng ${months[5].label}</th><th class="num">Xu hướng</th><th class="num">Tồn đọng</th><th>Bình luận báo cáo</th><th></th></tr></thead>
         <tbody>${rowsHtml || '<tr><td colspan="7" class="muted">Không có khách hàng nào.</td></tr>'}</tbody></table></div></div>`;
     }
-    // Danh sách nút từng khách: xanh lá = đã có bình luận báo cáo, đỏ = chưa; ✓ đã chốt (có đơn 6 tháng) / ⏳ chưa chốt
+    // Danh sách nút từng khách: xám tro = đã có bình luận báo cáo, đỏ = chưa; ✓ đã chốt (có đơn 6 tháng) / ⏳ chưa chốt
     const chips = `<div class="rp-chips">${list
       .map((x, i) => {
         const done = !!rep.items?.[x.cid]?.comment?.trim();
