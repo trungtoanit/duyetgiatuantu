@@ -1698,6 +1698,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .rp-mv { font-size: 10px; font-weight: 700; color: #047857; margin-top: 3px; white-space: nowrap; } .rp-ml { font-size: 10px; color: #94a3b8; }
     .rp-q { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; } .rp-q a { color: #1d4ed8; text-decoration: none; }
     .rp-qa { float: right; font-weight: 800; color: #047857; } .rp-ql { font-size: 12px; color: #475569; margin-top: 2px; }
+    /* Nút "Bắt đầu làm báo cáo": nút nổi bật nhất – to, viền trắng, nền cam chuyển động, ánh sáng quét, quầng sáng nhịp */
+    .rp-start.cta { position: relative; overflow: hidden; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px;
+      font-size: 18px; font-weight: 900; padding: 12px 26px 10px; border-radius: 16px; border: 3px solid #fff; letter-spacing: .01em;
+      background: linear-gradient(120deg, #f97316, #f59e0b, #ef4444, #f97316); background-size: 300% 100%;
+      animation: ctaGrad 4s ease infinite, ctaGlow 1.8s ease-in-out infinite; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .rp-start.cta::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); background-size: 250% 100%; animation: wkShine 2.4s ease-in-out infinite; }
+    .rp-start.cta:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.08); }
+    .cta-sub { font-size: 11px; font-weight: 700; opacity: .95; text-shadow: none; }
+    @keyframes ctaGrad { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    @keyframes ctaGlow { 0%, 100% { box-shadow: 0 6px 20px rgba(234,88,12,.45), 0 0 0 0 rgba(251,146,60,.6); } 50% { box-shadow: 0 8px 28px rgba(234,88,12,.6), 0 0 0 10px rgba(251,146,60,0); } }
+    @media (prefers-reduced-motion: reduce) { .rp-start.cta, .rp-start.cta::after { animation: none; } }
     .rp-start.locked { background: #cbd5e1; box-shadow: none; color: #475569; }
     .rp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 12px 0; max-height: 120px; overflow: auto; }
     .rp-chip { font: inherit; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; cursor: pointer; border: 1.5px solid; max-width: 220px;
@@ -3302,6 +3314,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const g = (byCid[q.customer.id] ||= { cid: q.customer.id, name: q.customer.name, m: [0, 0, 0, 0, 0, 0], trend: null, total: 0, pending: [] });
       g.pending.push(q);
     }
+    // Thêm mọi khách NVKD phụ trách có báo giá trong 6 tháng (kể cả đã chốt / thất bại, chưa có đơn)
+    for (const q of Object.values(quotes)) {
+      if (!q?.customer?.id || !mine(q.staff?.name) || !q.createdAt || hoursSince(q.createdAt) > 183 * 24) continue;
+      byCid[q.customer.id] ||= { cid: q.customer.id, name: q.customer.name, m: [0, 0, 0, 0, 0, 0], trend: null, total: 0, pending: [] };
+    }
     const list = Object.values(byCid).filter((g) => !isHiddenCust(g, renderCtx.custHidden));
     list.forEach((g) => (g.pendingAmount = g.pending.reduce((a, q) => a + (Number(q.amount) || 0), 0)));
     list.sort((a, b) => b.pendingAmount + b.total - (a.pendingAmount + a.total));
@@ -3467,7 +3484,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const down = trendRows.filter((r) => r.trend < 0).sort((a, b) => a.trend - b.trend).slice(0, 8);
     const up = trendRows.filter((r) => r.trend > 0).sort((a, b) => b.trend - a.trend).slice(0, 8);
     const custLink = (cid, name) =>
-      cid ? `<a class="sc-link" href="/khach-hang/view/${cid}?t=order" target="_blank" rel="noopener" title="${esc(name)}">${esc(shortCompany(name))}</a>` : esc(shortCompany(name));
+      cid && /^\d+$/.test(String(cid)) ? `<a class="sc-link" href="/khach-hang/view/${cid}?t=order" target="_blank" rel="noopener" title="${esc(name)}">${esc(shortCompany(name))}</a>` : esc(shortCompany(name));
     const kpi = (icon, label, val, sub = '', cls = '') => `<div class="sc-kpi ${cls}"><div class="sc-ki">${icon}</div><div><div class="sc-kl">${label}</div><div class="sc-kv">${val}</div>${sub ? `<div class="sc-ks">${sub}</div>` : ''}</div></div>`;
     const trendList = (list, cls) =>
       list.length
@@ -3485,7 +3502,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="ct-head sc-head"><button class="sc-back" data-act="week-open" data-staff="${esc(staff)}" title="Quay lại bảng xếp hạng">← Bảng xếp hạng</button>
         <span class="ct-who">${avatarHtml(staff, 44)}<span><div class="ct-title">${esc(staff)}</div>
         <div class="ct-sub">${rank >= 0 ? `Hạng ${rank + 1}/${allRows.length} tuần này · ${money(allRows[rank].total)} · ${allRows[rank].n} đơn` : 'Chưa có doanh số tuần này'}</div></span></span>
-        <button class="rp-start" data-act="report-start" data-staff="${esc(staff)}">📝 Bắt đầu làm báo cáo</button>
+        <button class="rp-start cta" data-act="report-start" data-staff="${esc(staff)}">📝 Bắt đầu làm báo cáo<span class="cta-sub">Duyệt từng khách & viết báo cáo tuần</span></button>
         <span class="sc-medal">${rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank >= 0 ? `#${rank + 1}` : '🏁'}</span></div>
       ${cheerHtml(staff, allRows)}
       <div class="sc-kpis">
@@ -3666,7 +3683,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('')}</div></div>
       ${meBox}
-      ${admin ? '' : `${cheerHtml(meName, allRows)}<div class="rp-startrow"><button class="rp-start big" data-act="report-start" data-staff="${esc(meName)}">📝 Bắt đầu làm báo cáo tuần</button></div>`}
+      ${admin ? '' : `${cheerHtml(meName, allRows)}<div class="rp-startrow"><button class="rp-start cta" data-act="report-start" data-staff="${esc(meName)}">📝 Bắt đầu làm báo cáo tuần<span class="cta-sub">Duyệt từng khách & viết báo cáo</span></button></div>`}
       ${board}
       ${(() => {
         return admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để mở màn hình riêng: tổng quan 4 tuần gần nhất và từng đơn hàng</div>' : staffOverview(meName, info, orders, now, dd);
@@ -3702,7 +3719,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     for (const [cid, od] of Object.entries(orders || {})) if (!info[cid]?.staff && od?.customer?.staff) info[cid] = { ...od.customer, at: 0 };
     const rows = [];
     for (const [cid, od] of Object.entries(orders || {})) {
-      if (!/^\d+$/.test(cid)) continue; // nhóm đơn từ trang Misa chưa khớp được khách CRM → không phải 1 khách cụ thể
+      // Khách chỉ có trên Misa (chưa khớp mã khách CRM): vẫn tính, tên = mã khách
       const m = [0, 0, 0, 0, 0, 0];
       for (const o of od?.orders || []) {
         const i = o.at ? idx(o.at) : -1;
@@ -3710,7 +3727,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       const total = m.reduce((a, b) => a + b, 0);
       if (!total) continue;
-      const ci = info[cid] || {};
+      const ci = info[cid] || (od?.customer ? { name: od.customer.name || cid.replace(/^misa:/, ''), code: od.customer.code, staff: od.customer.staff } : {});
       if (isExcluded(ci.staff)) continue; // khách của NVKD không theo dõi
       // Xu hướng: trung bình 3 tháng gần nhất (không tính tháng này) so với trung bình 2 tháng đầu
       const last3 = m[2] + m[3] + m[4];
@@ -3810,7 +3827,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('');
         return `<tr><td class="ct-no">${i + 1}</td>
-          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}${
+          <td class="ct-name"><a href="${/^\d+$/.test(r.cid) ? `/khach-hang/view/${r.cid}?t=order` : '/misa-order/list'}" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}${
             HIDDEN_CUSTOMERS.some((n) => normName(n) === normName(r.name))
               ? ''
               : `<button class="ct-hide" data-act="cust-hide" data-cid="${r.cid}" data-name="${esc(r.name)}" title="${showHidden ? 'Hiện lại khách này' : 'Ẩn khách này khỏi danh sách (mọi máy)'}">${showHidden ? '↩ Hiện lại' : '✕ Ẩn'}</button>`}</td>
@@ -3848,9 +3865,35 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Mỗi đơn chỉ thuộc 1 khách: trang Đơn hàng Misa có thể ghi khách theo mã khác (vd. "TUANTU-THINH") → bỏ bản trùng,
   // ưu tiên khách có mã số của CRM (đọc từ trang khách hàng)
-  function dedupOrders(orders) {
-    const owner = new Map();
+  function dedupOrders(orders, quotes = {}) {
     const crm = (k) => /^\d+$/.test(String(k));
+    // Nhóm đơn từ trang Misa được ghi theo MÃ KHÁCH (vd. "CHÁNH PHẨM") → gộp vào khách CRM có cùng mã; không có thì theo mã báo giá
+    const codeToCid = {};
+    const bgToCid = {};
+    for (const q of Object.values(quotes || {})) {
+      const c = q?.customer;
+      if (!c?.id) continue;
+      if (c.code) codeToCid[norm(c.code)] = String(c.id);
+      if (q.code) bgToCid[q.code] = String(c.id);
+    }
+    const merged = {};
+    for (const [cid, od] of Object.entries(orders || {})) merged[cid] = { ...od, orders: [...(od?.orders || [])] };
+    for (const [cid, od] of Object.entries(orders || {})) {
+      if (crm(cid)) continue;
+      const code = cid.replace(/^misa:/, '');
+      const keep = [];
+      for (const o of od?.orders || []) {
+        const target = codeToCid[norm(code)] || bgToCid[o.quote];
+        if (target) {
+          const t = (merged[target] ||= { customerId: Number(target), orders: [], at: 0 });
+          t.orders.push(o);
+          if (!t.customer?.staff && od.customer?.staff) t.customer = { ...(t.customer || {}), ...od.customer };
+        } else keep.push(o);
+      }
+      merged[cid] = { ...merged[cid], orders: keep, customer: { name: code, code, ...(od?.customer || {}) } };
+    }
+    orders = merged;
+    const owner = new Map();
     for (const [cid, od] of Object.entries(orders || {}))
       for (const o of od?.orders || []) {
         const cur = owner.get(o.id);
@@ -3929,7 +3972,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     // Thẻ cố định bên phải trang báo giá: báo giá đang mở (câu hỏi gợi ý, % Flexo/Offset, mua hàng, đánh giá)
     avatars = avatarIndex(quotes);
-    renderCtx = { comments, quotes, collected, orders: dedupOrders(await kvGet('orders')), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    renderCtx = { comments, quotes, collected, orders: dedupOrders(await kvGet('orders'), quotes), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
     const btn = (act, key, label, busyLabel, attrs = '') =>
       `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
