@@ -1496,7 +1496,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
     .fchip.staff { --c: #0f766e; --bg: #ccfbf1; padding-left: 4px; }
     .fchip.staff .ava { width: 16px !important; height: 16px !important; font-size: 8px; }
-    .bigtabs { display: flex; gap: 6px; margin: 14px 0 4px; border-bottom: 2px solid #e2e8f0; }
+    .bigtabs { display: flex; gap: 6px; margin: 6px 0 12px; border-bottom: 2px solid #e2e8f0; }
     .bigtab { font: inherit; font-size: 15px; font-weight: 800; color: #64748b; background: none; border: 0; border-bottom: 3px solid transparent;
       margin-bottom: -2px; padding: 8px 16px; cursor: pointer; border-radius: 8px 8px 0 0; }
     .bigtab b { font-size: 12px; background: #e2e8f0; color: #475569; border-radius: 999px; padding: 1px 8px; margin-left: 4px; }
@@ -3220,8 +3220,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
 
     const searchFocused = root.activeElement?.classList?.contains('dg-search');
-    root.querySelector('.panel').innerHTML = `
-      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
+    // Phần tổng quan + Bình luận mới nhất thuộc tab Báo giá
+    const headHtml = `
       <div class="headrow"><div class="muted headinfo">Dựa trên ${all.length} báo giá: ${all.filter((x) => comments[x.id]?.threads?.length).length} có bình luận, <b>${all.filter((x) => collected[x.id] && !comments[x.id]?.threads?.length).length} chưa có bình luận</b> (đã mở xem), ${all.filter((x) => !collected[x.id] && !comments[x.id]?.threads?.length).length} chưa đọc tới.
       ${(() => {
         const done = all.filter((x) => collected[x.id] || comments[x.id]?.threads?.length).length;
@@ -3235,7 +3235,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         for (const k of Object.keys(marks)) if (ns[k] && ns[k].read === false) ns[k] = { ...ns[k], read: true, readLocal: true };
         syncPendingReads(ns, me?.id ?? meName);
         return notifBox(ns, quotes, me);
-      })()}</div>
+      })()}</div>`;
+    root.querySelector('.panel').innerHTML = `
+      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x fs" data-act="full" title="${lsGet('dgPanelFull') === '1' ? 'Thu nhỏ lại' : 'Toàn màn hình'}">${lsGet('dgPanelFull') === '1' ? '🗗' : '⛶'}</button><button class="x" data-act="close">×</button></span></div>
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 2 tab lớn: Báo giá | Khách hàng 6 tháng (nhớ qua F5: dgTab)
@@ -3246,7 +3248,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.length}</b></button></div>`;
         return tab === 'cust'
           ? bar + custTab(cust)
-          : bar + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
+          : bar + headHtml + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
       })()}
     `;
     if (searchFocused) {
