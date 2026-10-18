@@ -1589,6 +1589,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .pc.wait { color: #94a3b8; font-weight: 600; }
     .pc.warn { color: #b45309; font-size: 10px; }
     .item-head .pc.dl.sum { color: #6d28d9; background: #ede9fe; font-size: 13px; text-transform: none; letter-spacing: 0; }
+    .pc.dl.angry { color: #b91c1c; background: #fee2e2; border-left-color: #ef4444; font-size: 11px; animation: dgAngry 1.6s ease-in-out infinite; }
+    @keyframes dgAngry { 0%, 100% { transform: none; } 10%, 30% { transform: rotate(-3deg); } 20%, 40% { transform: rotate(3deg); } 50% { transform: none; } }
     .pc.dl { width: 104px; padding: 2px 6px; text-align: right; white-space: nowrap; }
     .it-fea { text-align: right; font-weight: 800; color: #1d4ed8; }
     .it-fea .fea { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 800; }
@@ -2900,7 +2902,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return t ? ` <span class="bok" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">✅ Lấy đơn</span>` : '';
   };
   // Có sản phẩm giá giấy tấm 0đ/m2 → chưa có giá giấy tấm (Flexo chưa chính xác)
-  const noSheetTag = (q) => (q?.noSheet ? ` <span class="nosheet" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – cần cập nhật giá giấy tấm">🧻 Chưa có giá giấy tấm</span>` : '');
+  const noSheetTag = (q) => (q?.noSheet ? ` <span class="nosheet" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – cần cập nhật giá giấy tấm">😡 Chưa có giá giấy tấm</span>` : '');
   const contractTag = (c) => {
     const t = contractInfo(c);
     return t ? ` <span class="ctr" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">📝 Hợp đồng</span>` : '';
@@ -3400,6 +3402,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return null;
     const { flexo, offset } = marginParts(q);
+    if (q?.noSheet) return null;
     if (kinds.includes('flexo')) return flexo ? flexo.diff : null;
     return offset == null ? null : offsetDiff(q)?.diff ?? null;
   };
@@ -3414,6 +3417,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return '';
     const { flexo, offset } = marginParts(q);
+    // Có dòng giấy tấm 0đ/m2 → chưa tính được chênh lệch: báo động ngay trên hàng
+    if (q?.noSheet) return `<span class="pc dl angry" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – chưa có giá giấy tấm">😡 Chưa có giá GT</span>`;
     if (kinds.includes('flexo')) {
       if (!flexo) return '<span class="pc dl wait" title="Flexo: đang chờ tính">…</span>';
       return `<span class="pc dl f ${flexo.diff < 0 ? 'bad' : 'good'}" title="Flexo: BG ${money(flexo.base)} − giấy tấm ${money(flexo.best.total)}${flexo.rest != null ? ` · còn ${flexo.rest}%` : ' · PO > BG'}">${flexo.diff < 0 ? '−' : ''}${trM(Math.abs(flexo.diff))}</span>`;
@@ -4619,7 +4624,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ]],
         ['Lợi nhuận & loại', [
           ['lowm', 'red', '📈', 'Bán dưới 30%', cnt(FILTERS.lowm)],
-          ['nosheet', 'red', '🧻', 'Chưa có giá giấy tấm', cnt(FILTERS.nosheet)],
+          ['nosheet', 'red', '😡', 'Chưa có giá giấy tấm', cnt(FILTERS.nosheet)],
           ['flexo', 'blue', '🟦', 'Flexo', kinds.flexo],
           ['offset', 'violet', '🟪', 'Offset', kinds.offset],
           ['both', 'violet', '🟦🟪', 'Flexo + Offset', kinds.both],
