@@ -2017,7 +2017,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -3205,6 +3205,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   function weekTab(quotes, orders, me) {
+    // Màn hình đang xem (tuần đã chọn, NVKD đang mở) giữ qua F5
+    if (state.weekOff === undefined) state.weekOff = Number(lsGet('dgWeekOff')) || 0;
+    if (state.weekOpen === undefined) state.weekOpen = lsGet('dgWeekOpen') || null;
     const now = new Date();
     const admin = isAdminUser(me);
     // Chỉ các tuần thuộc tháng này: từ tuần chứa ngày 1 tới tuần hiện tại
@@ -4207,10 +4210,12 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'week-set') {
       state.weekOff = Number(b.dataset.off) || 0;
+      lsSet('dgWeekOff', String(state.weekOff));
       render();
     }
     else if (act === 'week-open') {
       state.weekOpen = state.weekOpen === b.dataset.staff ? null : b.dataset.staff;
+      lsSet('dgWeekOpen', state.weekOpen);
       state.weekAnimKey = null; // chạy hiệu ứng cột mốc 4 tuần
       render();
     }
