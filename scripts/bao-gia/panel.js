@@ -1092,10 +1092,35 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     await kvMerge('margins', { [q.code]: cur });
   }
 
+  // ---------- Chỉ 1 MÁY quét (khoá chung đồng bộ qua máy chủ: kv 'scanLock') ----------
+  // Máy đang quét ghi nhịp tim mỗi ~1 phút; máy khác thấy nhịp tim < 3 phút thì không quét.
+  // Máy quét tắt / ngừng quá 3 phút → máy khác tự nhận việc.
+  let MACHINE_ID = null;
+  const machineId = async () => {
+    if (MACHINE_ID) return MACHINE_ID;
+    const m = await kvGet('machine').catch(() => ({}));
+    MACHINE_ID = m.id || Math.random().toString(36).slice(2) + Date.now().toString(36);
+    if (!m.id) await call({ type: 'kv.set', key: 'machine', value: { id: MACHINE_ID } }).catch(() => {});
+    return MACHINE_ID;
+  };
+  const SCAN_STALE = 180000;
+  async function otherMachineScanning() {
+    const l = (await kvGet('scanLock').catch(() => ({}))).main;
+    return !!(l?.machine && l.machine !== (await machineId()) && Date.now() - l.beat < SCAN_STALE);
+  }
+  let scanBeatAt = 0;
+  async function scanBeat(force = false) {
+    if (!force && Date.now() - scanBeatAt < 60000) return;
+    scanBeatAt = Date.now();
+    await kvMerge('scanLock', { main: { machine: await machineId(), beat: Date.now(), who: meName } }).catch(() => {});
+  }
+
   async function takeLock() {
+    if (await otherMachineScanning()) return false; // máy khác đang quét
     const lock = await kvGet('collectLock');
     if (lock?.tab && lock.tab !== TAB_ID && Date.now() - lock.at < 90000) return false; // tab khác đang chạy
     await call({ type: 'kv.set', key: 'collectLock', value: { tab: TAB_ID, at: Date.now() } });
+    scanBeat(true);
     return true;
   }
 
@@ -2395,27 +2420,64 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const ordersTried = {}; // cid → lần thử gần nhất (tránh tải lại liên tục khi không lấy được)
   // Tab Khách hàng: hàng đợi đọc ngầm lại lịch sử mua hàng (đủ các trang trong 6 tháng)
   const custRefetch = { queue: [], total: 0, done: 0, current: null, running: false };
+  // Tiến trình lưu trong localStorage (dgCustRun) → F5 chạy tiếp đúng chỗ, giữ số x/y; chỉ 1 tab chạy (nhịp tim 30 giây)
+  const RUN_KEY = 'dgCustRun';
+  const loadRun = () => {
+    try {
+      return JSON.parse(lsGet(RUN_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  };
+  const saveRun = () =>
+    lsSet(RUN_KEY, custRefetch.running || custRefetch.queue.length
+      ? JSON.stringify({ queue: [custRefetch.current, ...custRefetch.queue].filter((x) => x != null), done: custRefetch.done, total: custRefetch.total, tab: TAB_ID, beat: Date.now() })
+      : null);
   async function refetchCustomers(cids) {
-    for (const c of cids) if (!custRefetch.queue.includes(c) && custRefetch.current !== c) custRefetch.queue.push(c);
+    if (!custRefetch.running && (await otherMachineScanning())) return; // máy khác đang quét
+    const run = loadRun();
+    // Tab khác đang chạy → để tab đó làm, ở đây chỉ hiện tiến trình
+    if (run && run.tab !== TAB_ID && Date.now() - run.beat < 30000) return;
+    // Lần chạy dở (F5 / đóng tab) trong 6 giờ → tiếp tục, giữ số đã xong
+    if (!custRefetch.running && run?.queue?.length && Date.now() - run.beat < 6 * 3600e3) {
+      custRefetch.queue = run.queue.map(String);
+      custRefetch.done = run.done || 0;
+    }
+    for (const c of cids.map(String)) if (!custRefetch.queue.includes(c) && String(custRefetch.current) !== c) custRefetch.queue.push(c);
     custRefetch.total = custRefetch.done + custRefetch.queue.length + (custRefetch.current ? 1 : 0);
+    saveRun();
     if (custRefetch.running) return render();
     custRefetch.running = true;
+    const beat = setInterval(saveRun, 10000);
     try {
       while (custRefetch.queue.length) {
         custRefetch.current = custRefetch.queue.shift();
+        saveRun();
         render();
         while (ordersFetching.size) await sleep(500); // chờ lượt đọc khác xong
         await fetchOrdersNow(custRefetch.current, true).catch(() => {});
         custRefetch.done++;
+        saveRun();
         await sleep(800);
       }
     } finally {
+      clearInterval(beat);
       custRefetch.running = false;
       custRefetch.current = null;
       custRefetch.done = custRefetch.total = 0;
+      saveRun();
       render();
     }
   }
+  // Tải trang mà còn lượt chạy dở → tự chạy tiếp (không cần mở tab Khách hàng)
+  if (IS_TOP)
+    setInterval(() => {
+      if (custRefetch.running) return;
+      const run = loadRun();
+      if (run?.queue?.length && Date.now() - run.beat < 6 * 3600e3 && (run.tab === TAB_ID || Date.now() - run.beat > 30000)) refetchCustomers([]);
+    }, 15000);
+  // Đang quét (thu thập ngầm / cập nhật nhanh / đơn hàng khách) → giữ nhịp tim khoá chung
+  if (IS_TOP) setInterval(() => (collect.running || custRefetch.running) && scanBeat(), 20000);
 
   async function fetchOrdersNow(cid, force = false) {
     if (ordersFetching.has(cid) || ordersFetching.size || (!force && Date.now() - (ordersTried[cid] || 0) < 10 * 60 * 1000)) return;
@@ -2925,18 +2987,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}</td>
           <td><span class="ct-grp ${r.active >= 4 ? 'hot' : ''}">${r.active >= 4 ? 'Ưu tiên' : 'Thường'}</span></td>
           <td title="${esc(r.staff)}">${r.staff ? `<span class="ct-who">${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}</span>` : ''}</td>
-          ${cells}<td class="num ct-total">${money(r.total)}</td></tr>`;
+          ${cells}</tr>`;
       })
       .join('');
     return `<div class="ctab">
-      <div class="ct-head"><div><div class="ct-title">👥 Danh sách khách hàng</div><div class="ct-sub">Khoảng thời gian: ${months[0].label} → ${months[5].label} · ${list.length} khách · tổng ${moneyShortG(sum.reduce((a, b) => a + b, 0))}${custRefetch.running ? ` · <span class="ct-bg">đang tự cập nhật đơn hàng ${custRefetch.done}/${custRefetch.total}</span>` : ''}</div></div>
+      <div class="ct-head"><div><div class="ct-title">👥 Danh sách khách hàng</div><div class="ct-sub">Khoảng thời gian: ${months[0].label} → ${months[5].label} · ${list.length} khách · tổng ${moneyShortG(sum.reduce((a, b) => a + b, 0))}${(() => {
+        const run = custRefetch.running ? custRefetch : loadRun();
+        return run?.total ? ` · <span class="ct-bg">đang tự cập nhật đơn hàng ${run.done}/${run.total}</span>` : '';
+      })()}</div></div>
         <div class="ct-tools"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên / mã khách…" value="${esc(state.search || '')}"></label>
           <button class="ct-btn${noCur ? ' on' : ''}" data-act="cust-nocur" title="Khách đã mua trong 6 tháng nhưng tháng này chưa có đơn">Chưa lên đơn tháng này <b>${noCurN}</b></button></div></div>
       ${staffChips ? `<div class="fbar"><div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>${staffSel ? '<button class="fclear" data-act="filter-clear">✕ Bỏ lọc</button>' : ''}</div>` : ''}
       <div class="ct-wrap"><table class="ct">
-        <thead><tr><th>STT</th><th>Tên khách hàng</th><th>Nhóm</th><th>NVKD</th>${months.map((x, i) => `<th class="num${i === 5 ? ' ct-cur' : ''}">${x.label}</th>`).join('')}<th class="num">Tổng 6 tháng</th></tr>
-          <tr class="ct-sum"><td></td><td>Σ ${list.length} khách</td><td></td><td></td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}<td class="num">${moneyShortG(sum.reduce((a, b) => a + b, 0))}</td></tr></thead>
-        <tbody>${body || '<tr><td colspan="11" class="muted">Chưa có dữ liệu mua hàng – extension tự đọc lịch sử mua hàng khi mở báo giá / thu thập ngầm.</td></tr>'}</tbody></table></div>
+        <thead><tr><th>STT</th><th>Tên khách hàng</th><th>Nhóm</th><th>NVKD</th>${months.map((x, i) => `<th class="num${i === 5 ? ' ct-cur' : ''}">${x.label}</th>`).join('')}</tr>
+          <tr class="ct-sum"><td></td><td>Σ ${list.length} khách</td><td></td><td></td>${sum.map((v) => `<td class="num">${v ? moneyShortG(v) : '—'}</td>`).join('')}</tr></thead>
+        <tbody>${body || '<tr><td colspan="10" class="muted">Chưa có dữ liệu mua hàng – extension tự đọc lịch sử mua hàng khi mở báo giá / thu thập ngầm.</td></tr>'}</tbody></table></div>
       <div class="muted ct-note">Số liệu từ lịch sử mua hàng extension đã thu thập (${rows.length} khách có đơn trong 6 tháng). Tháng ${months[5].label}: so với tháng trước; cạnh tên: trung bình 3 tháng gần nhất so với 2 tháng đầu.</div>
     </div>`;
   }
