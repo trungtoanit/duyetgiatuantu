@@ -1,5 +1,5 @@
 {
-  "version": "1.2.107",
+  "version": "1.2.108",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -31,6 +31,8 @@
     "aiHotDone",
     "custHidden",
     "dealAi",
+    "debtMeta",
+    "debts",
     "notifRead",
     "notifs",
     "perms",

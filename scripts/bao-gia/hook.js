@@ -252,7 +252,53 @@
         };
       };
 
+  // Trang Công nợ (/cong-no): chưa rõ cấu trúc → lấy mảng bản ghi lớn nhất trong dữ liệu trả về, rút gọn từng bản ghi
+  const slimAny = (o) => {
+    const out = {};
+    for (const [k, v] of Object.entries(o || {})) {
+      if (v == null) continue;
+      if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+      else if (typeof v === 'string') out[k] = v.length > 200 ? v.slice(0, 200) : v;
+      else if (typeof v === 'object' && !Array.isArray(v)) {
+        const sub = {};
+        for (const kk of ['id', 'code', 'name', 'fullName', 'shortName', 'phone']) if (v[kk] != null) sub[kk] = v[kk];
+        for (const kk of ['staff', 'sale', 'user', 'customer']) if (v[kk]?.name) sub[kk] = v[kk].name;
+        if (Object.keys(sub).length) out[k] = sub;
+      } else if (Array.isArray(v)) out[`${k}#`] = v.length;
+    }
+    return out;
+  };
+  const biggestArray = (d) => {
+    let best = null;
+    const walk = (o, depth) => {
+      if (!o || typeof o !== 'object' || depth > 3) return;
+      if (Array.isArray(o)) {
+        if (o.length && typeof o[0] === 'object' && (!best || o.length > best.length)) best = o;
+        return;
+      }
+      Object.values(o).forEach((v) => walk(v, depth + 1));
+    };
+    walk(d, 0);
+    return best;
+  };
+  function handleDebt(url, json) {
+    const d = json?.data ?? json;
+    const arr = biggestArray(d);
+    if (!arr) return;
+    let path = url;
+    try {
+      const u = new URL(url, location.href);
+      path = u.pathname + u.search;
+    } catch {}
+    emit('debtRows', { url: path, page: location.pathname + location.search, total: d?.total ?? d?.count ?? undefined, rows: arr.slice(0, 500).map(slimAny) });
+  }
+
   function handle(url, text) {
+    if (/^\/cong-no\b/.test(location.pathname) && API.test(url)) {
+      try {
+        handleDebt(url, JSON.parse(text));
+      } catch {}
+    }
     if (!API.test(url)) return;
     let d;
     try {

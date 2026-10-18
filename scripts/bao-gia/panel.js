@@ -269,6 +269,18 @@
     .catch(() => {});
 
   async function save({ kind, data }) {
+    if (kind === 'debtRows') {
+      // Công nợ: lưu từng bản ghi (khoá = id, không có thì nguồn + vị trí) và thông tin nguồn (API, tổng số)
+      const src = data.url.replace(/[?&](page|limit|offset)=\d+/g, '');
+      const patch = {};
+      data.rows.forEach((r, i) => {
+        const id = r.id ?? r.code ?? `${src}#${i}`;
+        patch[String(id).slice(0, 120)] = { ...r, _src: src, _page: data.page, _at: Date.now() };
+      });
+      if (Object.keys(patch).length) await kvMerge('debts', patch);
+      await kvMerge('debtMeta', { [src.slice(0, 150)]: { url: data.url, page: data.page, total: data.total, n: data.rows.length, at: Date.now(), keys: Object.keys(data.rows[0] || {}) } });
+      return;
+    }
     if (kind === 'auth') {
       loggedOut = !data.ok || /^\/login\b/.test(location.pathname);
       await call({ type: 'kv.set', key: 'auth', value: data }).catch(() => {});
@@ -1046,6 +1058,62 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
+  // Đọc trang Công nợ trong khung ẩn: tab tổng quan, "Quá hạn", "Sắp đến hạn" – mỗi tab đọc hết các trang
+  async function collectDebts() {
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = '/cong-no?t=overview';
+    document.documentElement.append(f);
+    const nApi = () => {
+      try {
+        return f.contentWindow.performance.getEntriesByType('resource').filter((e) => /:8080\/v1\/admin\//.test(e.name)).length;
+      } catch {
+        return 0;
+      }
+    };
+    const settle = async (ms = 15000) => {
+      const t = Date.now();
+      let last = nApi();
+      let still = Date.now();
+      while (Date.now() - t < ms) {
+        await sleep(400);
+        const n = nApi();
+        if (n !== last) {
+          last = n;
+          still = Date.now();
+        } else if (Date.now() - still > 1800 && n > 0) return true;
+      }
+      return false;
+    };
+    const readPages = async () => {
+      for (let page = 2; page <= 60; page++) {
+        const li = f.contentDocument?.querySelector(`.ant-pagination-item-${page}`);
+        if (!li) break;
+        li.click();
+        await settle(12000);
+      }
+    };
+    try {
+      collect.current = 'công nợ';
+      progress();
+      await settle(25000);
+      await readPages();
+      for (const label of ['Quá hạn', 'Sắp đến hạn']) {
+        const el = [...(f.contentDocument?.querySelectorAll('.ant-tabs-tab, [role=tab], button, a') || [])].find((x) => new RegExp(label, 'i').test(x.textContent || ''));
+        if (!el) continue;
+        collect.current = `công nợ – ${label}`;
+        progress();
+        el.click();
+        await settle(15000);
+        await readPages();
+      }
+    } finally {
+      f.remove();
+    }
+  }
+
   // Báo giá Offset: trong khung ẩn, bấm số lượng từng sản phẩm → mở "Tính giá offset" → Ctrl+Shift+G.
   // hook.js trong khung đọc bảng chiết giá (iframe#printWindow) và gửi "Đang bán (X%)" về để lưu. Lệnh in bị chặn.
   async function readOffsetMargins(f) {
@@ -1235,6 +1303,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         // Đơn hàng Misa: 5 trang mới nhất mỗi 30 phút; đọc sâu tới 6 tháng 1 lần / ngày
         const deep = Date.now() - Number(lsGet('dgMisaDeep') || 0) > 24 * 3600e3;
         await collectMisaOrders(deep ? 40 : 5).catch(() => {});
+        await collectDebts().catch(() => {});
         if (deep) lsSet('dgMisaDeep', String(Date.now()));
       }
       else if (!fc.listDone) {
@@ -1347,6 +1416,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     quickLast = Date.now();
     try {
       await collectListPages(QUICK.pages);
+      // Công nợ: đọc lại tối đa 30 phút / lần
+      if (Date.now() - Number(lsGet('dgDebtAt') || 0) > 30 * 60e3) {
+        lsSet('dgDebtAt', String(Date.now()));
+        await collectDebts().catch(() => {});
+      }
       const [quotes, comments, collected, orders] = await Promise.all(['quotes', 'comments', 'collected', 'orders'].map((k) => kvGet(k)));
       const now = Date.now() / 1000;
       const stale = feasibleList(quotes, comments, orders)
