@@ -1936,7 +1936,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="lcode">${esc(code || 'Báo giá')}</div>
         ${q?.name ? `<div class="lname">${esc(q.name)}</div>` : ''}
         ${q?.customer?.name || q?.customer?.code
-          ? `<div class="lcust"><span class="licon">🏢</span><div class="lcust-body"><div class="lcust-label">Khách hàng${custTag(q)}</div><div class="lcust-name">${esc(q.customer.name || q.customer.code)}</div></div></div>`
+          ? `<div class="lcust"><span class="licon">🏢</span><div class="lcust-body"><div class="lcust-label">Khách hàng${custTag(q)}</div><div class="lcust-name" title="${esc(q.customer.name || '')}">${esc(shortCompany(q.customer.name) || q.customer.code)}</div></div></div>`
           : ''}
         ${staff ? `<div class="lstaff">${avatarHtml(staff, 22)}<span>${esc(staff)}</span>${q?.quoteStatus ? `<span class="lstatus">${esc(statusLabel(q.quoteStatus))}</span>` : ''}</div>` : ''}
       </div>`;
@@ -3395,7 +3395,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const here = q && currentQuoteId() === q.id;
       const busy = state.busy.has(`handover:${h.key}`);
       const skip = `<button class="ho-skip" data-act="handover-skip" data-key="${key}" title="Không gửi, ẩn bàn giao này trên mọi máy">Bỏ qua</button>`;
-      const head = `<div class="ho-cust" title="${esc(h.customer)}">${esc(h.customer)}</div>
+      const head = `<div class="ho-cust" title="${esc(h.customer)}">${esc(shortCompany(h.customer))}</div>
         <div class="ho-flow"><span class="ho-from">${esc(from || '?')}</span><span class="ho-arrow">→</span><span class="ho-to">${esc(h.to)}</span></div>
         <div class="ho-meta">${esc(h.by)} bàn giao${h.at ? ` · ${fmtTime(h.at)}` : ''}${q ? ` · báo giá gần nhất <b>${esc(q.code)}</b>` : ''}</div>`;
       if (!q) return `<div class="ho-card">${head}<div class="ho-meta warnx">Chưa thấy báo giá nào của khách này – mở trang Báo giá để extension ghi nhận.</div><div class="ho-btns">${skip}</div></div>`;
