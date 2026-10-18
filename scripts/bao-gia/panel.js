@@ -258,7 +258,22 @@
     chain = chain.then(() => save(msg)).catch((err) => console.warn('[DG]', err));
   });
 
+  // Phiên đăng nhập của người dùng hiện tại (hook.js báo theo mã trả về của API). Đăng xuất → ẩn dữ liệu, dừng quét.
+  let loggedOut = /^\/login\b/.test(location.pathname);
+  kvGet('auth')
+    .then((a) => {
+      if (a?.ok === false && Date.now() - a.at < 12 * 3600e3) loggedOut = true;
+      if (a?.ok === true && !/^\/login\b/.test(location.pathname)) loggedOut = false;
+      render();
+    })
+    .catch(() => {});
+
   async function save({ kind, data }) {
+    if (kind === 'auth') {
+      loggedOut = !data.ok || /^\/login\b/.test(location.pathname);
+      await call({ type: 'kv.set', key: 'auth', value: data }).catch(() => {});
+      return render();
+    }
     if (kind === 'me') {
       await call({ type: 'kv.set', key: 'me', value: data });
     } else if (kind === 'quotes') {
@@ -1116,6 +1131,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   async function takeLock() {
+    if (loggedOut) return false; // đang đăng xuất → không quét
     if (await otherMachineScanning()) return false; // máy khác đang quét
     const lock = await kvGet('collectLock');
     if (lock?.tab && lock.tab !== TAB_ID && Date.now() - lock.at < 90000) return false; // tab khác đang chạy
@@ -1521,6 +1537,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .fchip.green { --c: #15803d; --bg: #dcfce7; } .fchip.orange { --c: #c2410c; --bg: #ffedd5; } .fchip.teal { --c: #0f766e; --bg: #ccfbf1; } .fchip.violet { --c: #7e22ce; --bg: #f3e8ff; }
     .fchip.staff { --c: #0f766e; --bg: #ccfbf1; padding-left: 4px; }
     .fchip.staff .ava { width: 16px !important; height: 16px !important; font-size: 8px; }
+    .loginreq { margin: 30px auto; max-width: 460px; text-align: center; padding: 30px 24px; border: 1px solid #e2e8f0; border-radius: 16px;
+      background: linear-gradient(180deg, #f8fafc, #fff); }
+    .lr-icon { font-size: 42px; } .lr-title { font-size: 18px; font-weight: 800; margin-top: 8px; color: #0f172a; }
+    .lr-sub { margin-top: 6px; color: #64748b; font-size: 13px; }
+    .lr-btn { display: inline-block; margin-top: 16px; padding: 9px 22px; border-radius: 10px; color: #fff; font-weight: 800; text-decoration: none;
+      background: linear-gradient(135deg, #2563eb, #7c3aed); }
     .bigtabs { display: flex; gap: 6px; margin: 6px 0 12px; border-bottom: 2px solid #e2e8f0; }
     .bigtab { font: inherit; font-size: 15px; font-weight: 800; color: #64748b; background: none; border: 0; border-bottom: 3px solid transparent;
       margin-bottom: -2px; padding: 8px 16px; cursor: pointer; border-radius: 8px 8px 0 0; }
@@ -2438,6 +2460,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ? JSON.stringify({ queue: [custRefetch.current, ...custRefetch.queue].filter((x) => x != null), done: custRefetch.done, total: custRefetch.total, tab: TAB_ID, beat: Date.now() })
       : null);
   async function refetchCustomers(cids) {
+    if (loggedOut) return;
     if (!custRefetch.running && (await otherMachineScanning())) return; // máy khác đang quét
     const run = loadRun();
     // Tab khác đang chạy → để tab đó làm, ở đây chỉ hiện tiến trình
@@ -2851,8 +2874,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const scoreCls = (s) => (s == null ? '' : s >= 8 ? 'good' : s >= 6 ? 'mid' : 'bad');
   const scoreHtml = (ev) => (ev?.score != null ? `<span class="score ${scoreCls(ev.score)}">${ev.score}/10</span>` : '');
 
+  // Hết phiên đăng nhập: không hiện dữ liệu, chỉ hiện yêu cầu đăng nhập
+  function renderLoggedOut() {
+    const side = root.querySelector('.side');
+    if (side) side.hidden = true;
+    const fab = root.querySelector('.fab');
+    if (fab) {
+      fab.innerHTML = '🔒 Cần đăng nhập';
+      fab.classList.remove('alert');
+    }
+    root.querySelector('.panel').innerHTML = `
+      <div class="row"><h2>Đánh giá nhân viên kinh doanh</h2><span class="hbtns"><button class="x" data-act="close">×</button></span></div>
+      <div class="loginreq"><div class="lr-icon">🔒</div><div class="lr-title">Phiên đăng nhập CRM đã hết</div>
+        <div class="lr-sub">Dữ liệu chỉ hiện khi đang đăng nhập bằng tài khoản của anh/chị. Vui lòng đăng nhập lại.</div>
+        ${/^\/login\b/.test(location.pathname) ? '' : `<a class="lr-btn" href="/login?redirect=${encodeURIComponent(location.pathname)}">Đăng nhập</a>`}</div>`;
+  }
+
   async function render() {
     if (!root) return;
+    if (loggedOut && IS_TOP) return renderLoggedOut();
     try {
       await renderInner();
       fitAll(root.querySelector('.panel'));
@@ -3330,6 +3370,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const [ns, me, marks] = [await kvGet('notifs'), await kvGet('me'), await kvGet('notifRead')];
         // Dấu đã đọc đồng bộ từ máy khác
         for (const k of Object.keys(marks)) if (ns[k] && ns[k].read === false) ns[k] = { ...ns[k], read: true, readLocal: true };
+        // Báo giá của bình luận đã được mở (ở máy này hay máy khác – dữ liệu báo giá đồng bộ) sau thời điểm bình luận → coi là đã đọc
+        const byCode = {};
+        for (const q of Object.values(quotes)) if (q?.code) byCode[q.code] = q;
+        for (const [k, n] of Object.entries(ns)) {
+          if (n?.read !== false) continue;
+          const q = byCode[(n.text || '').match(/#?(BG\d+)/)?.[1]];
+          const seenAt = Math.max(q?.readAt || 0, q?.isRead === true ? q.erpRankAt || 0 : 0);
+          if (q?.isRead === true && seenAt && seenAt >= (n.at || 0)) ns[k] = { ...n, read: true };
+        }
         syncPendingReads(ns, me?.id ?? meName);
         return notifBox(ns, quotes, me);
       })()}</div>`;

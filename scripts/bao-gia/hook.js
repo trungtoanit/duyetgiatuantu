@@ -259,7 +259,11 @@
     // Chi tiết 1 báo giá – mở trang chi tiết thì ERP tự đánh dấu đã đọc
     if (/\/opportunity\/\d+\?isCheckPermission/.test(url) && d.id) {
       const q = slimQuote(d);
-      q.isRead = true;
+      // Người dùng mở trang chi tiết → CRM đánh dấu đã đọc (khung thu thập ngầm thì không: đã chặn lệnh /read)
+      if (!COLLECTOR_FRAME) {
+        q.isRead = true;
+        q.readAt = Math.floor(Date.now() / 1000);
+      } else delete q.isRead;
       emit('quote', q);
       return;
     }
@@ -382,6 +386,7 @@
     if (this.__dgBlocked) return; // không gửi
     this.addEventListener('load', () => {
       try {
+        authSignal(this.status, this.responseURL || this.__dgUrl);
         if (this.status >= 200 && this.status < 300 && API.test(this.__dgUrl)) {
           if (this.__dgH) lastHeaders = this.__dgH; // header đăng nhập hiện tại của trang
           learnReadTpl(this.__dgMethod, this.__dgUrl, body);
@@ -396,6 +401,17 @@
     return send.apply(this, arguments);
   };
 
+  // Phiên đăng nhập: API trả 401 → đã bị đăng xuất; trả 2xx → đang đăng nhập. Báo cho bảng 📊 để ẩn / hiện dữ liệu.
+  let authOk = null;
+  const authSignal = (status, url) => {
+    if (!API.test(url || '')) return;
+    const ok = status === 401 ? false : status >= 200 && status < 300 ? true : null;
+    if (ok == null || ok === authOk) return;
+    authOk = ok;
+    emit('auth', { ok, at: Date.now() });
+  };
+  if (/^\/login\b/.test(location.pathname) && !COLLECTOR_FRAME) setTimeout(() => emit('auth', { ok: false, at: Date.now() }), 0);
+
   const origFetch = window.fetch;
   window.fetch = async function (input, init) {
     const url0 = typeof input === 'string' ? input : input?.url;
@@ -403,6 +419,7 @@
     const res = await origFetch.apply(this, arguments);
     try {
       const url = typeof input === 'string' ? input : input.url;
+      authSignal(res.status, url);
       if (res.ok && API.test(url) && init?.headers) lastHeaders = Object.fromEntries(new Headers(init.headers));
       if (res.ok) learnReadTpl(init?.method || input?.method || 'GET', url, init?.body);
       if (API.test(url) && res.ok) res.clone().text().then((t) => handle(url, t)).catch(() => {});
