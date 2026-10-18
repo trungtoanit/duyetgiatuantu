@@ -1599,6 +1599,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sc-back:hover { background: rgba(255,255,255,.3); }
     .sc-head .ct-who { flex: 1; gap: 12px; color: #fff; } .sc-head .ct-who .ava { border: 2px solid #fff; }
     .sc-head .ct-title { color: #fff; } .sc-head .ct-sub { color: rgba(255,255,255,.9); }
+    .cheer { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; margin: 14px 12px 0; padding: 14px 18px;
+      border-radius: 16px; font-size: 13px; color: #334155; }
+    .cheer b { font-size: 16px; color: #0f172a; } .cheer div div { margin-top: 3px; } .cheer div div b { font-size: 13px; }
+    .ch-ic { font-size: 38px; flex: none; }
+    .cheer.top1 { background: linear-gradient(135deg, #fffbeb, #fde68a); border: 2px solid #f59e0b; box-shadow: 0 8px 24px rgba(245,158,11,.3); }
+    .cheer.top1 .ch-ic { animation: mcTrophy 2s ease-in-out infinite; }
+    .cheer.top { background: linear-gradient(135deg, #eef2ff, #e0e7ff); border: 1.5px solid #a5b4fc; }
+    .cheer.top .ch-ic { animation: wkMedal 1.6s ease-in-out infinite; }
+    .cheer.mid { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1.5px solid #86efac; }
+    .cheer.mid .ch-ic { animation: wkCheer 1.2s ease-in-out infinite; display: inline-block; }
+    .cheer.low { background: linear-gradient(135deg, #fff7ed, #ffedd5); border: 1.5px solid #fdba74; }
+    .cheer.low .ch-ic { display: inline-block; animation: wkCheer 1s ease-in-out infinite; }
+    .ch-conf { position: absolute; inset: 0; pointer-events: none; }
+    .ch-conf i { position: absolute; top: -20px; font-style: normal; font-size: 14px; animation: chFall 3.2s linear infinite; opacity: .85; }
+    @keyframes chFall { 0% { transform: translateY(0) rotate(0); opacity: 0; } 10% { opacity: .9; } 100% { transform: translateY(120px) rotate(300deg); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .ch-conf { display: none; } }
     .sc-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 14px 12px 0; }
     .sc-kpi { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; }
     .wk.anim .sc-kpi { animation: wkIn .5s ease both; }
@@ -3141,6 +3157,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="ov-chart"><svg class="ov-line" viewBox="0 0 400 ${H + 10}" preserveAspectRatio="none"><polyline points="${pts}" /></svg>${cols}</div></div>`;
   }
 
+  // Lời chúc mừng (top cao) / động viên (hạng thấp) theo hạng tuần
+  function cheerHtml(staff, allRows) {
+    const rank = allRows.findIndex((r) => norm(r.staff) === norm(staff));
+    const name = shortName(staff) || 'bạn';
+    const n = allRows.length;
+    const gapUp = rank > 0 ? allRows[rank - 1].total - allRows[rank].total + 1 : 0;
+    const confetti = (k) =>
+      `<span class="ch-conf">${[...Array(k)].map((_, i) => `<i style="left:${(i * 97) % 100}%;animation-delay:${(i % 7) * 0.25}s">${['🎉', '✨', '🎊', '⭐'][i % 4]}</i>`).join('')}</span>`;
+    if (rank < 0)
+      return `<div class="cheer low"><span class="ch-ic">🚀</span><div><b>${esc(name)} ơi, tuần này mình chưa có đơn nào!</b>
+        <div>Mỗi tuần là một cơ hội mới – chốt đơn đầu tiên là có mặt trên bảng xếp hạng ngay. Cố lên nhé! 💪</div></div></div>`;
+    if (rank === 0)
+      return `<div class="cheer top1">${confetti(14)}<span class="ch-ic">🏆</span><div><b>Chúc mừng ${esc(name)}! Đang DẪN ĐẦU tuần này 🎉</b>
+        <div>Doanh số ${money(allRows[0].total)}${allRows[1] ? ` – bỏ xa hạng 2 tới ${moneyShortG(allRows[0].total - allRows[1].total)}` : ''}. Giữ vững phong độ nhé!</div></div></div>`;
+    if (rank <= 2)
+      return `<div class="cheer top">${confetti(8)}<span class="ch-ic">${rank === 1 ? '🥈' : '🥉'}</span><div><b>Tuyệt vời ${esc(name)}! Đang đứng TOP ${rank + 1} tuần này 👏</b>
+        <div>Chỉ còn thiếu <b>${money(gapUp)}</b> nữa là vượt ${esc(shortName(allRows[rank - 1].staff))} lên hạng ${rank}. Bứt tốc thôi!</div></div></div>`;
+    if (rank === n - 1)
+      return `<div class="cheer low"><span class="ch-ic">💪</span><div><b>${esc(name)} cố lên! Tuần này mình đang ở cuối bảng</b>
+        <div>Chỉ cần thêm <b>${money(gapUp)}</b> là vượt lên hạng ${rank}. Gọi lại các báo giá đang chờ – một đơn là đổi vị trí ngay! 🔥</div></div></div>`;
+    return `<div class="cheer mid"><span class="ch-ic">🔥</span><div><b>${esc(name)} đang hạng ${rank + 1}/${n} – cố thêm chút nữa!</b>
+      <div>Thêm <b>${money(gapUp)}</b> là lên hạng ${rank}. Top 3 đang ở rất gần, tăng tốc nhé! 🚀</div></div></div>`;
+  }
+
   // Màn hình riêng của 1 NVKD (quản trị bấm từ bảng xếp hạng): hạng tuần này, 4 cột mốc tuần, danh sách đơn 4 tuần
   function staffScreen(staff, info, orders, now, dd, allRows) {
     const rank = allRows.findIndex((r) => norm(r.staff) === norm(staff));
@@ -3187,6 +3227,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <span class="ct-who">${avatarHtml(staff, 44)}<span><div class="ct-title">${esc(staff)}</div>
         <div class="ct-sub">${rank >= 0 ? `Hạng ${rank + 1}/${allRows.length} tuần này · ${money(allRows[rank].total)} · ${allRows[rank].n} đơn` : 'Chưa có doanh số tuần này'}</div></span></span>
         <span class="sc-medal">${rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank >= 0 ? `#${rank + 1}` : '🏁'}</span></div>
+      ${cheerHtml(staff, allRows)}
       <div class="sc-kpis">
         ${kpi('👥', 'Khách hàng phụ trách', custs.size, `${trendRows.length} khách có đơn trong 6 tháng`)}
         ${kpi('📝', 'Báo giá chưa chốt', open.length, `${pending.length} khách · trong 90 ngày`, 'warn')}
@@ -3354,6 +3395,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('')}</div></div>
       ${meBox}
+      ${admin ? '' : cheerHtml(meName, allRows)}
       ${board}
       ${(() => {
         return admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để mở màn hình riêng: tổng quan 4 tuần gần nhất và từng đơn hàng</div>' : staffOverview(meName, info, orders, now, dd);
