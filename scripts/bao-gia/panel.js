@@ -1594,7 +1594,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .wk.anim .wk-row { animation: wkIn .5s cubic-bezier(.2,.8,.2,1) both; }
     @keyframes wkIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     .wk-rank { font-size: 18px; font-weight: 900; color: #94a3b8; width: 46px; text-align: center; }
-    .wk-row.top1 .wk-rank { animation: wkMedal 1.8s ease-in-out infinite; display: table-cell; }
+    .wk-medal { display: inline-block; }
+    .wk-row.top1 .wk-medal { font-size: 26px; animation: wkMedal 1.6s ease-in-out infinite; filter: drop-shadow(0 2px 6px rgba(245,158,11,.6)); }
+    /* Người số 1: vương miện nhún nhảy, chữ to, dải sáng vàng quét ngang dòng, viền vàng phát sáng */
+    .wk-row.top1 td { position: relative; }
+    .wk-row.top1 b { font-size: 16px; color: #92400e; }
+    .wk-row.top1 { box-shadow: inset 4px 0 0 #f59e0b; }
+    .wk-row.top1 td:nth-child(2)::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%); background-size: 250% 100%;
+      animation: wkShine 2.8s ease-in-out infinite; }
+    @keyframes wkShine { 0% { background-position: 150% 0; } 60%, 100% { background-position: -100% 0; } }
+    .wk-crown { display: inline-block; margin-right: -4px; font-size: 18px; transform-origin: 50% 100%; animation: wkCrown 1.4s ease-in-out infinite; }
+    @keyframes wkCrown { 0%, 100% { transform: translateY(0) rotate(-12deg); } 50% { transform: translateY(-5px) rotate(8deg); } }
+    .wk-champ { margin-left: 8px; font-size: 11px; font-weight: 800; color: #fff; border-radius: 999px; padding: 2px 9px;
+      background: linear-gradient(90deg, #f59e0b, #f97316, #f59e0b); background-size: 200% 100%; animation: wkGrad 2s linear infinite; }
+    @keyframes wkGrad { to { background-position: 200% 0; } }
+    .wk.anim .wk-row.top1 { animation: wkWin .9s cubic-bezier(.2,1.4,.4,1) both; }
+    @keyframes wkWin { 0% { opacity: 0; transform: scale(.85) translateY(20px); } 60% { opacity: 1; transform: scale(1.03); } 100% { transform: none; } }
+    /* Người cuối bảng: nhãn "Cố lên" nảy nhẹ, thanh doanh số nhấp nháy cam để động viên */
+    .wk-cheer { margin-left: 8px; font-size: 11px; font-weight: 800; color: #c2410c; background: #ffedd5; border: 1px solid #fdba74;
+      border-radius: 999px; padding: 1px 9px; display: inline-block; animation: wkCheer 1.2s ease-in-out infinite; }
+    @keyframes wkCheer { 0%, 100% { transform: translateY(0) scale(1); } 30% { transform: translateY(-3px) scale(1.08); } 60% { transform: translateY(0) scale(.97); } }
+    .wk-row.last .wk-bar { background: #fff7ed; }
+    .wk-row.last .wk-bar span { background: linear-gradient(90deg, #fb923c, #f97316); animation: wkPush 1.4s ease-in-out infinite; }
+    .wk.anim .wk-row.last .wk-bar span { animation: wkBar 1s cubic-bezier(.2,.8,.2,1) forwards, wkPush 1.4s ease-in-out 1s infinite; }
+    @keyframes wkPush { 0%, 100% { filter: brightness(1); box-shadow: none; } 50% { filter: brightness(1.2); box-shadow: 0 0 8px rgba(249,115,22,.8); } }
     @keyframes wkMedal { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25) rotate(-6deg); } }
     .wk-row.top1 td { background: linear-gradient(90deg, #fffbeb, #fff 60%); }
     .wk-bar { height: 5px; margin-top: 5px; border-radius: 99px; background: #eef2ff; overflow: hidden; max-width: 260px; }
@@ -3002,8 +3026,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
                 <td title="${esc(o.cust)}">${esc(shortCompany(o.cust))}</td><td>${esc(o.quote || '')}</td><td class="num">${money(o.v)}</td></tr>`)
               .join('')}</table></td></tr>`
           : '';
-        return `<tr class="wk-row${open ? ' open' : ''}${i === meIdx ? ' me' : ''}${i < 3 ? ` top top${i + 1}` : ''}" data-act="week-open" data-staff="${esc(r.staff)}" title="Bấm để xem các đơn trong tuần" style="animation-delay:${i * 70}ms">
-          <td class="wk-rank">${medal(i)}</td><td><span class="ct-who">${avatarHtml(r.staff, 22)}<b>${esc(r.staff)}</b>${i === meIdx ? '<span class="wk-you">Bạn</span>' : ''}</span>
+        const last = rows.length > 1 && i === rows.length - 1;
+        return `<tr class="wk-row${open ? ' open' : ''}${i === meIdx ? ' me' : ''}${i < 3 ? ` top top${i + 1}` : ''}${last ? ' last' : ''}" data-act="week-open" data-staff="${esc(r.staff)}" title="Bấm để xem các đơn trong tuần" style="animation-delay:${i * 70}ms">
+          <td class="wk-rank"><span class="wk-medal">${medal(i)}</span></td><td><span class="ct-who">${i === 0 ? '<span class="wk-crown">👑</span>' : ''}${avatarHtml(r.staff, i === 0 ? 30 : 22)}<b>${esc(r.staff)}</b>${i === meIdx ? '<span class="wk-you">Bạn</span>' : ''}${i === 0 ? '<span class="wk-champ">Dẫn đầu tuần ✨</span>' : ''}${last ? '<span class="wk-cheer">💪 Cố lên!</span>' : ''}</span>
             <div class="wk-bar"><span style="--w:${Math.max(3, Math.round((r.total / max) * 100))}%; animation-delay:${200 + i * 70}ms"></span></div></td>
           ${r.d.map((v, k) => `<td class="num${days[k].getTime() === today ? ' wk-today' : ''}">${v ? money(v) : '<span class="ct-dash">—</span>'}</td>`).join('')}
           <td class="num wk-total">${money(r.total)}</td><td class="num">${r.n}</td></tr>${detail}`;
