@@ -5075,6 +5075,29 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
   }, 1000);
 
+  // ---------- Tự cập nhật script ----------
+  // Mỗi 10 giây hỏi background phiên bản hiện tại (background đồng thời kiểm tra GitHub). Có bản mới →
+  // báo trên nút nổi rồi tự tải lại trang khi an toàn (không đang gõ chữ, không đang gửi bình luận).
+  let bootSha = null;
+  let reloadAt = 0;
+  async function checkScriptVersion() {
+    const v = await call({ type: 'version.get' }).catch(() => null);
+    if (!v?.sha) return;
+    if (!bootSha) bootSha = v.sha;
+    if (v.sha === bootSha) return;
+    const ae = root?.activeElement || document.activeElement;
+    const typing = ae && /^(TEXTAREA|INPUT)$/.test(ae.tagName) && (ae.value || '').trim();
+    if (typing || state.busy.size || custRefetch?.running) return; // đợi lúc rảnh
+    if (!reloadAt) {
+      reloadAt = Date.now() + 4000;
+      const fab = root?.querySelector('.fab');
+      if (fab) fab.innerHTML = `🔄 Có bản mới ${esc(v.version || '')} – tự tải lại…`;
+      return;
+    }
+    if (Date.now() >= reloadAt) location.reload();
+  }
+  if (IS_TOP) setInterval(() => checkScriptVersion().catch(() => {}), 10000);
+
   // ---------- Trang đăng nhập ----------
   // Bị đăng xuất → CRM chuyển về /login: ẩn thẻ "Đang mở báo giá" và tự bấm "Đăng nhập" khi Chrome đã điền sẵn tài khoản.
   // Chỉ bấm khi cả 2 ô đã có giá trị; tối đa 1 lần / 2 phút để không bấm lặp (vd. sai mật khẩu → khoá tài khoản).

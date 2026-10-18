@@ -126,7 +126,9 @@ async function doSync(force) {
   try {
     const sha = await resolveSha(cfg);
     if (!force && sha === currentSha && bundle) {
-      await register(bundle); // đảm bảo script vẫn được đăng ký
+      // Cùng phiên bản: chỉ đăng ký lại nếu script bị mất (không đăng ký lại mỗi lần kiểm tra 10 giây)
+      const reg = await chrome.userScripts.getScripts().catch(() => []);
+      if (!reg.length) await register(bundle);
       await setStatus({ lastCheck: Date.now(), error: null });
       return;
     }
@@ -147,9 +149,17 @@ function sync(force = false) {
   return running;
 }
 
+// Kiểm tra bản mới ~10 giây/lần: báo thức 30 giây (mức nhỏ nhất Chrome cho phép) + kiểm tra thêm ở giây 10, 20;
+// tab CRM đang mở còn hỏi phiên bản mỗi 10 giây (dịch vụ 'version.get') nên luôn được kiểm tra đều.
+const CHECK_MS = 10000;
+let lastSyncAt = 0;
+function syncThrottled() {
+  if (Date.now() - lastSyncAt < CHECK_MS - 500) return running || Promise.resolve();
+  lastSyncAt = Date.now();
+  return sync();
+}
 async function scheduleAlarm() {
-  const cfg = await getConfig();
-  await chrome.alarms.create(ALARM, { periodInMinutes: Math.max(1, Number(cfg.intervalMinutes) || 1) });
+  await chrome.alarms.create(ALARM, { periodInMinutes: 0.5 });
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -164,7 +174,9 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === ALARM) {
-    sync();
+    syncThrottled();
+    setTimeout(syncThrottled, CHECK_MS);
+    setTimeout(syncThrottled, 2 * CHECK_MS);
     pullRemote();
   }
 });
@@ -431,6 +443,12 @@ const services = {
     }),
   claude: callClaude,
   'spend.get': getSpend,
+  // Script trên trang hỏi phiên bản hiện tại (mỗi 10 giây) → kiểm tra GitHub luôn nếu đã quá 10 giây
+  'version.get': async () => {
+    syncThrottled();
+    const { sha, bundle } = await chrome.storage.local.get(['sha', 'bundle']);
+    return { sha, version: bundle?.version || '' };
+  },
 };
 
 chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {
