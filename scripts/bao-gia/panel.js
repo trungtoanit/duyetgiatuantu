@@ -2157,6 +2157,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .hot-head h3 { margin: 0; }
     .hot-btn { white-space: nowrap; }
+    .hot-btns { display: flex; gap: 8px; align-items: center; flex: none; }
+    .hot-copy { white-space: nowrap; font-weight: 700; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
     .hot-toggle { width: 26px; height: 26px; margin-right: 6px; border-radius: 8px; border: 1px solid #fed7aa; background: #fff; color: #c2410c;
       font-size: 13px; cursor: pointer; vertical-align: middle; }
@@ -5518,6 +5520,16 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     );
     const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
     const hotSum = items.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0); // tổng tiền các báo giá đang gợi ý
+    // Tin nhắn tóm tắt gửi nhóm: gom theo NVKD (thứ tự theo deal xếp hạng cao nhất của mỗi người)
+    const byStaff = new Map();
+    for (const x of items) {
+      const q = quotes[x.id];
+      const who = staffOf(q, renderCtx.comments?.[x.id]) || 'Chưa rõ NVKD';
+      if (!byStaff.has(who)) byStaff.set(who, []);
+      byStaff.get(who).push(`. ${q.code} ${(q.name || '').replace(/\s+/g, ' ').trim()} = ${q.amount ? money(q.amount) : 'chưa cho giá'}`);
+    }
+    state.hotCopy = items.length ? ['Các bạn xem lại các deal này và kéo đơn về', ...[...byStaff].map(([who, lines]) => `\n${who}\n${lines.join('\n')}`)].join('\n') : '';
+    const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button>` : '';
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
     const rows = items
       .map((x, i) => {
@@ -5540,7 +5552,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     if (collapsed)
       return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''}${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
     return `<div class="hotbox">
-      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''} <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
+      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''} <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3><span class="hot-btns">${copyBtn}${btn}</span></div>
       ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''} · tự phân tích lại mỗi sáng từ ${HOT_MORNING_HOUR}h</div>` : `<div class="muted">Tự phân tích mỗi sáng từ ${HOT_MORNING_HOUR}h khi mở CRM, hoặc bấm nút để chạy ngay (mỗi lần 1 lượt gọi Claude).</div>`}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
@@ -5951,6 +5963,15 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'export-xlsx') exportList();
     else if (act === 'hot-run') analyzeHot();
+    else if (act === 'hot-copy') {
+      try {
+        await navigator.clipboard.writeText(state.hotCopy || '');
+        b.textContent = '✅ Đã copy';
+      } catch {
+        prompt('Copy tin nhắn:', state.hotCopy || '');
+      }
+      setTimeout(() => (b.textContent = '📋 Copy tin nhắn'), 2500);
+    }
     else if (act === 'suggest') suggestComment(id);
     else if (act === 'insert' || act === 'copy') {
       // Lấy nội dung đang hiển thị (người dùng có thể đã sửa tay)
