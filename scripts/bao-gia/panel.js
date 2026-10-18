@@ -4176,7 +4176,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const CO_WORDS = ['tổng công ty', 'chi nhánh', 'hộ kinh doanh', 'hkd', 'công ty', 'cty', 'liên doanh', 'tnhh', 'cổ phần', 'cp', 'mtv', 'một thành viên', 'sản xuất', 'sx', 'thương mại', 'tm',
     'dịch vụ', 'dv', 'xuất nhập khẩu', 'xnk', 'đầu tư', 'và', '&', '-', ','];
   // Các chữ bỏ ở BẤT KỲ vị trí nào trong tên (cụm dài đứng trước cụm ngắn)
-  const CO_ANY = new RegExp(['hộ kinh doanh', 'chi nhánh', 'trách nhiệm hữu hạn', 'sản xuất', 'phân phối', 'kinh doanh', 'bao bì giấy', 'bao bì', 'và nước giải khát', 'nước giải khát', 'và nước uống đóng chai', 'nước uống đóng chai', 'công nghiệp'].join('|'), 'giu');
+  const CO_ANY = new RegExp(['hộ kinh doanh', 'chi nhánh', 'trách nhiệm hữu hạn', 'sản xuất', 'phân phối', 'kinh doanh', 'bao bì giấy', 'bao bì', 'và nước giải khát', 'nước giải khát', 'và nước uống tinh khiết đóng chai', 'nước uống tinh khiết đóng chai', 'và nước uống đóng chai', 'nước uống đóng chai', 'nước uống tinh khiết', 'công nghiệp'].join('|'), 'giu');
   const shortCompany = (name) => {
     // Bỏ các chữ trong CO_ANY ở bất kỳ đâu trong tên (vd. "ABC - CHI NHÁNH BÌNH DƯƠNG" → "ABC - BÌNH DƯƠNG")
     let t = String(name || '').normalize('NFC').replace(CO_ANY, ' ').replace(/\s+/g, ' ').replace(/\s*-\s*-\s*/g, ' - ').trim().replace(/^[-,\s]+|[-,\s]+$/g, '');
