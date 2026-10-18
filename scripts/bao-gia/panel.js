@@ -4884,13 +4884,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- 🔥 AI chọn báo giá chốt được liền ----------
   // Lấy tối đa 40 báo giá khả thi điểm cao nhất, gửi luồng bình luận (rút gọn) cho Claude,
   // Thẻ "Gói cài đặt extension" (chỉ quản trị): tải file zip trên máy chủ để gửi riêng cho nhân viên
+  let zipRepulled = false;
   async function zipCard() {
     const f = (await kvGet('files'))['extension-zip'];
+    // Máy chưa có file (đã kéo qua mốc trước khi file được đưa lên) → lùi mốc đồng bộ 3 ngày rồi kéo lại 1 lần
+    if (!f?.b64 && !zipRepulled) {
+      zipRepulled = true;
+      (async () => {
+        const back = new Date(Date.now() - 3 * 86400e3).toISOString();
+        const { syncCursor } = await call({ type: 'store.get', keys: ['syncCursor'] });
+        if (!syncCursor || syncCursor > back) await call({ type: 'store.set', values: { syncCursor: back } });
+        await call({ type: 'remote.pull' });
+        lastPanelHtml = '';
+        render();
+      })().catch((e) => console.warn('[DG] zip pull', e));
+    }
     return `<div class="sx-zip"><div class="sx-card"><div class="sx-h"><span class="sx-hic violet">📦</span><div><b>Gói cài đặt extension cho nhân viên</b><span>Tải file zip rồi gửi riêng cho nhân viên (Zalo / email nội bộ)</span></div></div>
       ${f?.b64
         ? `<div class="zp-row"><div class="zp-file"><span class="zp-ic">🗜️</span><div><b>${esc(f.name)}</b><span>${Math.round((f.size || 0) / 1024)} KB · cập nhật ${ago(Math.floor((f.at || 0) / 1000))}${f.version ? ` · bản ${esc(f.version)}` : ''}</span></div></div>
             <button class="rp-start cta" data-act="zip-download">⬇️ Tải file zip<span class="cta-sub">để gửi cho nhân viên</span></button></div>`
-        : '<div class="muted">Chưa có file trên máy chủ.</div>'}
+        : `<div class="muted">${zipRepulled ? '<span class="spinner"></span> Đang tải file từ máy chủ…' : 'Chưa có file trên máy chủ.'}</div>`}
       <ol class="zp-steps"><li>Giải nén file zip vào 1 thư mục cố định (đừng xoá sau khi cài).</li>
         <li>Mở <code>chrome://extensions</code> → bật <b>Developer mode</b> → <b>Load unpacked</b> → chọn thư mục vừa giải nén.</li>
         <li>Bấm <b>Chi tiết</b> của extension → bật <b>Allow User Scripts</b>, rồi tải lại trang CRM.</li>
