@@ -1563,6 +1563,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ct-who { display: inline-flex; align-items: center; gap: 6px; color: #334155; vertical-align: middle; }
     .ct-total { color: #047857; }
     .ct-btn:disabled { opacity: .8; cursor: wait; }
+    .ct-hide { margin-left: 8px; font: inherit; font-size: 11px; font-weight: 700; color: #94a3b8; background: none; border: 1px solid #e2e8f0;
+      border-radius: 999px; padding: 0 8px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+    table.ct tr:hover .ct-hide { opacity: 1; }
+    .ct-hide:hover { color: #dc2626; border-color: #fecaca; }
     .ct-bg { background: rgba(255,255,255,.2); border-radius: 999px; padding: 0 8px; }
     .ct-note { padding: 8px 14px; font-size: 12px; }
     .fclear { align-self: center; margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border: 0; background: #0f172a;
@@ -2954,7 +2958,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     setTimeout(() => refetchCustomers(need), 0);
   }
 
-  function custTab({ months, rows }) {
+  // Khách ẩn khỏi tab Khách hàng: danh sách cố định + khách bấm "Ẩn" (kv 'custHidden', đồng bộ giữa các máy)
+  const HIDDEN_CUSTOMERS = ['CÔNG TY TNHH SẢN XUẤT HẢI ÂU'];
+  const isHiddenCust = (r, hidden) => !!hidden?.[r.cid] || HIDDEN_CUSTOMERS.some((n) => normName(n) === normName(r.name));
+
+  function custTab({ months, rows: allRows }) {
+    const hidden = renderCtx.custHidden || {};
+    const showHidden = lsGet('dgShowHiddenCust') === '1';
+    const hiddenRows = allRows.filter((r) => isHiddenCust(r, hidden));
+    const rows = showHidden ? hiddenRows : allRows.filter((r) => !isHiddenCust(r, hidden));
     if (IS_TOP) autoRefreshCustomers(rows);
     const fold = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
     const needle = fold(state.search).trim();
@@ -2984,7 +2996,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('');
         return `<tr><td class="ct-no">${i + 1}</td>
-          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}</td>
+          <td class="ct-name"><a href="/khach-hang/view/${r.cid}?t=order" target="_blank" rel="noopener" title="${esc(r.name)}">${esc(shortCompany(r.name))}</a>${arrow(r.trend)}${
+            HIDDEN_CUSTOMERS.some((n) => normName(n) === normName(r.name))
+              ? ''
+              : `<button class="ct-hide" data-act="cust-hide" data-cid="${r.cid}" data-name="${esc(r.name)}" title="${showHidden ? 'Hiện lại khách này' : 'Ẩn khách này khỏi danh sách (mọi máy)'}">${showHidden ? '↩ Hiện lại' : '✕ Ẩn'}</button>`}</td>
           <td><span class="ct-grp ${r.active >= 4 ? 'hot' : ''}">${r.active >= 4 ? 'Ưu tiên' : 'Thường'}</span></td>
           <td title="${esc(r.staff)}">${r.staff ? `<span class="ct-who">${avatarHtml(r.staff, 18)}${esc(shortName(r.staff))}</span>` : ''}</td>
           ${cells}</tr>`;
@@ -2996,6 +3011,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         return run?.total ? ` · <span class="ct-bg">đang tự cập nhật đơn hàng ${run.done}/${run.total}</span>` : '';
       })()}</div></div>
         <div class="ct-tools"><label class="search"><span>🔍</span><input class="dg-search" type="search" placeholder="Tìm tên / mã khách…" value="${esc(state.search || '')}"></label>
+          <button class="ct-btn${showHidden ? ' on' : ''}" data-act="cust-showhidden" title="Xem / hiện lại các khách đã ẩn">Ẩn KH <b>${hiddenRows.length}</b></button>
           <button class="ct-btn${noCur ? ' on' : ''}" data-act="cust-nocur" title="Khách đã mua trong 6 tháng nhưng tháng này chưa có đơn">Chưa lên đơn tháng này <b>${noCurN}</b></button></div></div>
       ${staffChips ? `<div class="fbar"><div class="fgroup"><span class="fname">Nhân viên</span><div class="fchips">${staffChips}</div></div>${staffSel ? '<button class="fclear" data-act="filter-clear">✕ Bỏ lọc</button>' : ''}</div>` : ''}
       <div class="ct-wrap"><table class="ct">
@@ -3318,10 +3334,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${await (async () => {
         // 2 tab lớn: Báo giá | Khách hàng 6 tháng (nhớ qua F5: dgTab)
         const tab = lsGet('dgTab') === 'cust' ? 'cust' : 'quotes';
+        renderCtx.custHidden = Object.fromEntries(Object.entries(await kvGet('custHidden')).filter(([, v]) => v));
         const cust = custRows(quotes, renderCtx.orders);
         const bar = `<div class="bigtabs">
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
-          <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.length}</b></button></div>`;
+          <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button></div>`;
         return tab === 'cust'
           ? bar + custTab(cust)
           : bar + headHtml + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
@@ -3679,6 +3696,15 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'tab') {
       lsSet('dgTab', b.dataset.tab);
+      render();
+    }
+    else if (act === 'cust-hide') {
+      const cur = (await kvGet('custHidden'))[b.dataset.cid];
+      await kvMerge('custHidden', { [b.dataset.cid]: cur ? null : { name: b.dataset.name, at: Date.now(), by: meName } });
+      render();
+    }
+    else if (act === 'cust-showhidden') {
+      lsSet('dgShowHiddenCust', lsGet('dgShowHiddenCust') === '1' ? null : '1');
       render();
     }
     else if (act === 'cust-nocur') {
