@@ -2157,6 +2157,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .hot-head h3 { margin: 0; }
     .hot-btn { white-space: nowrap; }
+    .hot-diff { margin-left: 8px; font-size: 14px; font-weight: 800; color: #6d28d9; background: #ede9fe; border: 1px solid #ddd6fe; border-radius: 999px; padding: 2px 10px; vertical-align: 1px; }
+    .hot-dv { font-size: 12px; font-weight: 800; color: #6d28d9; white-space: nowrap; } .hot-dv.neg { color: #b91c1c; }
     .hot-btns { display: flex; gap: 8px; align-items: center; flex: none; }
     .hot-copy { white-space: nowrap; font-weight: 700; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
@@ -5521,6 +5523,12 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     );
     const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
     const hotSum = items.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0); // tổng tiền các báo giá đang gợi ý
+    // Tổng chênh lệch (Flexo: BG − giấy tấm · Offset: Σ giá × SL × đang bán %) của các deal đã tính được
+    const diffs = items.map((x) => diffVal(quotes[x.id])).filter((v) => v != null);
+    const diffSum = diffs.reduce((a, v) => a + v, 0);
+    const diffTag = diffs.length
+      ? `<span class="hot-diff" title="Tổng chênh lệch của ${diffs.length}/${items.length} deal đã tính được: ${money(Math.round(diffSum))}">📈 Chênh lệch ${Math.abs(diffSum) >= 1e9 ? `${(diffSum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(diffSum)}</span>`
+      : '';
     // Tin nhắn tóm tắt gửi nhóm: gom theo NVKD (thứ tự theo deal xếp hạng cao nhất của mỗi người)
     const byStaff = new Map();
     for (const x of items) {
@@ -5551,15 +5559,15 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
             ${x.steps?.length
               ? `<span class="hot-steps"><b>👉 Bước kế tiếp:</b>${x.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</span>`
               : `<span class="hot-next">👉 ${esc(x.next)}</span>`}</span>
-          <span class="hot-side"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span><span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></a>`;
+          <span class="hot-side"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span>${(() => { const v = diffVal(q); return v != null ? `<span class="hot-dv${v < 0 ? ' neg' : ''}" title="Chênh lệch">📈 ${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>` : q.noSheet ? '<span class="hot-dv neg">😡 Chưa có giá GT</span>' : ''; })()}<span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></a>`;
       })
       .join('');
     const collapsed = !inTab && lsGet('dgHotCollapsed') === '1';
     const toggle = inTab ? '' : `<button class="hot-toggle" data-act="hot-toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button>`;
     if (collapsed)
-      return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''}${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
+      return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''}${diffTag}${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
     return `<div class="hotbox">
-      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''} <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3><span class="hot-btns">${copyBtn}${btn}</span></div>
+      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''}${diffTag} <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3><span class="hot-btns">${copyBtn}${btn}</span></div>
       ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''} · tự phân tích lại mỗi sáng từ ${HOT_MORNING_HOUR}h</div>` : `<div class="muted">Tự phân tích mỗi sáng từ ${HOT_MORNING_HOUR}h khi mở CRM, hoặc bấm nút để chạy ngay (mỗi lần 1 lượt gọi Claude).</div>`}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
