@@ -4994,7 +4994,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .map(([staff, rows]) => {
         rows.sort((a, b) => (b.overdueAmount || 0) - (a.overdueAmount || 0) || (b.totalDebt || 0) - (a.totalDebt || 0));
         const body = rows
-          .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.customerCode || '')}</td><td>${esc(r.customerName || '')}</td>
+          .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.customerCode || '')}</td><td>${esc(shortCompany(r.customerName || ''))}</td>
             <td class="n">${n(r.totalDebt)}</td><td class="n ${r.overdueAmount ? 'od' : ''}">${r.overdueAmount ? n(r.overdueAmount) : '–'}</td>
             <td class="c">${r.maxDaysOverdue ? `${r.maxDaysOverdue} ngày` : ''}</td><td class="n nd">${r.notDueAmount ? n(r.notDueAmount) : '–'}</td>
             <td class="c">${r.minDaysUntilDue != null && r.notDueAmount ? `còn ${r.minDaysUntilDue} ngày` : ''}</td><td class="c">${r.allowDebtDay ?? ''}</td></tr>`)
