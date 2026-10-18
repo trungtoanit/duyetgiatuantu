@@ -86,6 +86,29 @@
     window.dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
   });
 
+  // Trang đăng nhập: Chrome giấu mật khẩu tự điền tới khi người dùng chạm trang → lấy tài khoản đã lưu qua
+  // API đăng nhập của Chrome (Credential Management) rồi điền vào chính form này. Không lưu / gửi đi nơi khác.
+  document.addEventListener('dg:credFill', async () => {
+    if (!/^\/login\b/.test(location.pathname) || !navigator.credentials?.get || typeof PasswordCredential === 'undefined') return;
+    let cred = null;
+    try {
+      cred = await navigator.credentials.get({ password: true, mediation: 'silent' }); // tự động, không hỏi
+      if (!cred) cred = await navigator.credentials.get({ password: true, mediation: 'optional' }); // hộp chọn tài khoản – bấm 1 lần
+    } catch {}
+    if (!cred?.password) return;
+    const user = document.querySelector('input:not([type=password]):not([type=hidden]):not([type=checkbox])');
+    const pass = document.querySelector('input[type=password]');
+    if (!user || !pass) return;
+    // Ô do React quản lý → gán qua setter gốc + phát sự kiện để app nhận giá trị
+    const setVal = (el, v) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    setVal(user, cred.id);
+    setVal(pass, cred.password);
+  });
+
   const API = /:8080\/v1\/admin\//;
   const emit = (kind, data) =>
     document.dispatchEvent(new CustomEvent('dg:data', { detail: JSON.stringify({ kind, data }) }));

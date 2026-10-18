@@ -3479,6 +3479,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   // Bị đăng xuất → CRM chuyển về /login: ẩn thẻ "Đang mở báo giá" và tự bấm "Đăng nhập" khi Chrome đã điền sẵn tài khoản.
   // Chỉ bấm khi cả 2 ô đã có giá trị; tối đa 1 lần / 2 phút để không bấm lặp (vd. sai mật khẩu → khoá tài khoản).
   const isLogin = () => /^\/login\b/.test(location.pathname);
+  let credTried = false;
   function autoLogin() {
     if (!IS_TOP || !isLogin()) return;
     hideLoading();
@@ -3493,7 +3494,16 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const btn = [...document.querySelectorAll('button')].find((b) => /đăng nhập/i.test(b.textContent || '') && !b.disabled);
     const user = document.querySelector('input:not([type=password]):not([type=hidden]):not([type=checkbox])');
     const pass = document.querySelector('input[type=password]');
-    if (!btn || !user?.value || !pass?.value) return;
+    if (!btn || !user || !pass) return;
+    if (!user.value || !pass.value) {
+      // Chrome giấu mật khẩu tự điền tới khi người dùng chạm trang → lấy tài khoản đã lưu qua API đăng nhập của Chrome
+      // (Credential Management). Mật khẩu chỉ điền vào ô của chính trang này, không lưu / gửi đi đâu khác.
+      if (!credTried) {
+        credTried = true;
+        document.dispatchEvent(new CustomEvent('dg:credFill')); // hook.js (thế giới của trang) gọi API của Chrome
+      }
+      return;
+    }
     if (document.querySelector('.ant-form-item-explain-error, .ant-message-error, .ant-notification-notice-error')) return; // đang báo lỗi → để người dùng xử lý
     try {
       sessionStorage.setItem('dgAutoLogin', String(Date.now()));
