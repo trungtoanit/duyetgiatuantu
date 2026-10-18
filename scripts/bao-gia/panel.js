@@ -5146,7 +5146,7 @@ Không markdown, không giải thích ngoài JSON.`;
       (isOldBig(q) ? OLD_CTA : CTA)[Math.abs(Number(q.id) || 0) % CTA.length](shortCompany(q.customer?.name || '') || 'khách');
     const big = deals.filter((q) => (Number(q.amount) || 0) >= BIG).slice(0, 8);
     const bigBox = big.length
-      ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Deal lớn – cùng sếp kéo đơn về</b><span class="hot-count">${big.length}</span>
+      ? `<div class="dl-big"><div class="dl-big-h"><span class="dl-bic">💼</span><b>Các deal có thể làm việc trực tiếp với sếp</b><span class="hot-count">${big.length}</span>
           <span class="hot-sum">💰 ${moneyShortG(big.reduce((a, q) => a + (Number(q.amount) || 0), 0))}</span></div>
         <div class="dl-big-list">${big
           .map((q) => {
