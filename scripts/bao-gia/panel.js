@@ -1748,11 +1748,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sc-kv { font-size: 22px; font-weight: 900; color: #0f172a; } .sc-ks { font-size: 11px; color: #94a3b8; }
     .sc-kpi.warn { background: #fffbeb; border-color: #fde68a; } .sc-kpi.down { background: #fef2f2; border-color: #fecaca; } .sc-kpi.up { background: #f0fdf4; border-color: #bbf7d0; }
     .sc-kpi.down .sc-kv { color: #dc2626; } .sc-kpi.up .sc-kv { color: #16a34a; }
-    .sc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 12px 10px; }
+    .sc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 12px 10px; align-items: start; }
     .sc-box { border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 12px; background: #fff; }
     .sc-box.down { border-color: #fecaca; } .sc-box.up { border-color: #bbf7d0; }
     .sc-bh { font-weight: 800; margin-bottom: 6px; } .sc-bh b { font-size: 12px; background: #f59e0b; color: #fff; border-radius: 999px; padding: 0 8px; }
-    .sc-li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #f1f5f9; font-size: 13px; }
+    /* 3 cột thẳng hàng: tên khách | % / số BG (cố định) | số tiền (cố định, căn phải) */
+    .sc-li { display: grid; grid-template-columns: minmax(0, 1fr) 76px 96px; gap: 10px; align-items: center; padding: 7px 2px; border-bottom: 1px dashed #eef2f7; font-size: 13px; }
+    .sc-li > :nth-child(2) { justify-self: end; } .sc-li > :nth-child(3) { justify-self: end; }
+    .sc-lh { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; padding-top: 0; border-bottom: 1px solid #e2e8f0; }
+    .sc-pct { font-weight: 800; font-size: 12px; border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+    .sc-pct.down { color: #dc2626; background: #fee2e2; } .sc-pct.up { color: #16a34a; background: #dcfce7; }
     .sc-li:last-child { border-bottom: 0; }
     .sc-link { color: #1d4ed8; font-weight: 700; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sc-link:hover { text-decoration: underline; }
@@ -3488,10 +3493,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const kpi = (icon, label, val, sub = '', cls = '') => `<div class="sc-kpi ${cls}"><div class="sc-ki">${icon}</div><div><div class="sc-kl">${label}</div><div class="sc-kv">${val}</div>${sub ? `<div class="sc-ks">${sub}</div>` : ''}</div></div>`;
     const trendList = (list, cls) =>
       list.length
-        ? list.map((r) => `<div class="sc-li">${custLink(r.cid, r.name)}<span class="ct-chg ${cls}">${r.trend >= 0 ? '↑' : '↓'}${Math.abs(r.trend).toLocaleString('vi-VN')}%</span><span class="sc-amt">${moneyShortG(r.m[4] + r.m[3] + r.m[2])}<small>/3 tháng</small></span></div>`).join('')
+        ? `<div class="sc-li sc-lh"><span>Khách hàng</span><span>Xu hướng</span><span>3 tháng gần nhất</span></div>` +
+          list.map((r) => `<div class="sc-li">${custLink(r.cid, r.name)}<span class="sc-pct ${cls}">${r.trend >= 0 ? '↑' : '↓'}${Math.abs(r.trend).toLocaleString('vi-VN')}%</span><span class="sc-amt">${moneyShortG(r.m[4] + r.m[3] + r.m[2])}</span></div>`).join('')
         : '<div class="muted sc-empty">Không có</div>';
     const pendingHtml = pending.length
-      ? pending
+      ? `<div class="sc-li sc-lh"><span>Khách hàng</span><span>Số BG</span><span>Giá trị</span></div>` + pending
           .slice(0, 12)
           .map((g) => `<div class="sc-li">${custLink(g.cid, g.name)}<span class="sc-n" title="${esc(g.codes.map((q) => q.code).join(', '))}">${g.n} BG</span><span class="sc-amt">${g.amount ? moneyShortG(g.amount) : '0đ'}</span></div>`)
           .join('') + (pending.length > 12 ? `<div class="muted sc-empty">… và ${pending.length - 12} khách khác</div>` : '')
