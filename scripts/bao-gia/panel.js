@@ -5005,7 +5005,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <h1>Báo cáo công nợ khách hàng${staffSel ? ` – ${esc(staffSel)}` : ''}</h1>
       <div class="s">${custs.length} khách đang nợ · in lúc ${now.toLocaleString('vi-VN')} · nguồn: trang Công nợ CRM</div>
       ${sections}
-      <div class="tot">TỔNG CỘNG: công nợ ${n(sum(custs, 'totalDebt'))}đ · quá hạn ${n(sum(custs, 'overdueAmount'))}đ · chưa đến hạn ${n(sum(custs, 'notDueAmount'))}đ</div>
       <script>setTimeout(()=>print(),300)<\/script></body></html>`);
     w.document.close();
   }
