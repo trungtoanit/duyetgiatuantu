@@ -1599,6 +1599,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sc-back:hover { background: rgba(255,255,255,.3); }
     .sc-head .ct-who { flex: 1; gap: 12px; color: #fff; } .sc-head .ct-who .ava { border: 2px solid #fff; }
     .sc-head .ct-title { color: #fff; } .sc-head .ct-sub { color: rgba(255,255,255,.9); }
+    .rp-start { font: inherit; font-weight: 800; font-size: 13px; color: #fff; border: 0; border-radius: 10px; padding: 8px 14px; cursor: pointer;
+      background: linear-gradient(135deg, #f59e0b, #ea580c); box-shadow: 0 4px 14px rgba(234,88,12,.35); }
+    .rp-start:hover { filter: brightness(1.08); } .rp-start.big { font-size: 15px; padding: 10px 20px; }
+    .rp-startrow { margin: 12px; }
+    .rp-prog { height: 6px; background: #e0e7ff; } .rp-prog i { display: block; height: 100%; background: linear-gradient(90deg, #f59e0b, #22c55e); transition: width .4s; }
+    .rp-card { margin: 14px 12px; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; animation: wkIn .35s ease both; }
+    .rp-step { font-size: 12px; font-weight: 800; color: #6366f1; text-transform: uppercase; letter-spacing: .06em; }
+    .rp-name { font-size: 22px; font-weight: 900; margin-top: 2px; display: flex; align-items: center; gap: 10px; }
+    .rp-name .sc-link { font-size: 22px; }
+    .rp-meta { color: #475569; margin-top: 4px; }
+    .rp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 18px; margin-top: 14px; }
+    .rp-sec { font-weight: 800; margin: 12px 0 6px; color: #334155; }
+    .rp-spark { display: flex; align-items: flex-end; gap: 8px; height: 110px; }
+    .rp-mcol { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+    .rp-mbar { width: 70%; border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg, #818cf8, #4f46e5); }
+    .rp-mcol:last-child .rp-mbar { background: linear-gradient(180deg, #34d399, #059669); }
+    .rp-mv { font-size: 10px; font-weight: 700; color: #047857; margin-top: 3px; white-space: nowrap; } .rp-ml { font-size: 10px; color: #94a3b8; }
+    .rp-q { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; } .rp-q a { color: #1d4ed8; text-decoration: none; }
+    .rp-qa { float: right; font-weight: 800; color: #047857; } .rp-ql { font-size: 12px; color: #475569; margin-top: 2px; }
+    .rp-text { width: 100%; border: 1.5px solid #c7d2fe; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
+    .rp-text:focus { outline: 3px solid rgba(99,102,241,.2); border-color: #6366f1; }
+    .rp-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+    .rp-done { margin: 16px 12px; padding: 18px; text-align: center; border-radius: 16px; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1.5px solid #86efac; }
+    .rp-done-t { font-size: 20px; font-weight: 900; color: #166534; } .rp-done-b { margin-top: 10px; display: flex; gap: 10px; justify-content: center; align-items: center; }
+    .rp-cmt { white-space: pre-wrap; max-width: 520px; }
     .cheer { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; margin: 14px 12px 0; padding: 14px 18px;
       border-radius: 16px; font-size: 13px; color: #334155; }
     .cheer b { font-size: 16px; color: #0f172a; } .cheer div div { margin-top: 3px; } .cheer div div b { font-size: 13px; }
@@ -2033,7 +2058,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgReport', 'dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -2115,7 +2140,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     let saveTimer;
     root.querySelector('.side').addEventListener('click', onClick);
     let searchTimer;
+    let rpTimer;
     const onInput = (e) => {
+      const rp = e.target.closest('textarea.rp-text');
+      if (rp) {
+        clearTimeout(rpTimer);
+        rpTimer = setTimeout(async () => {
+          const key = rp.dataset.key;
+          const cur = (await kvGet('reports'))[key] || { items: {} };
+          cur.items = { ...(cur.items || {}), [rp.dataset.cid]: { comment: rp.value, at: Date.now(), by: meName } };
+          await kvMerge('reports', { [key]: cur });
+        }, 500);
+        return;
+      }
       const se = e.target.closest('input.dg-search');
       if (se) {
         state.search = se.value;
@@ -3157,6 +3194,110 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="ov-chart"><svg class="ov-line" viewBox="0 0 400 ${H + 10}" preserveAspectRatio="none"><polyline points="${pts}" /></svg>${cols}</div></div>`;
   }
 
+  // ---------- Làm báo cáo tuần: duyệt từng khách hàng của NVKD, viết bình luận, Next, xong thì In ----------
+  // Lưu kv 'reports' (đồng bộ giữa các máy): khoá "<nvkd>|<thứ 2 của tuần>" → { items: { cid: { comment, at } }, doneAt }
+  const reportKey = (staff, now) => {
+    const m = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    return `${norm(staff)}|${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-${String(m.getDate()).padStart(2, '0')}`;
+  };
+  function reportCustomers(staff, info, orders) {
+    const quotes = renderCtx.quotes || {};
+    const comments = renderCtx.comments || {};
+    const mine = (n) => norm(n) === norm(staff);
+    const { months, rows } = custRows(quotes, orders);
+    const byCid = {};
+    for (const r of rows.filter((x) => mine(x.staff))) byCid[r.cid] = { cid: r.cid, name: r.name, m: r.m, trend: r.trend, total: r.total, pending: [] };
+    for (const q of Object.values(quotes)) {
+      if (!q?.id || !mine(q.staff?.name) || !q.customer?.id || !q.quoteStatus || CLOSED.has(q.quoteStatus) || hasOrderFull(q, comments[q.id])) continue;
+      if (!q.createdAt || hoursSince(q.createdAt) > 90 * 24) continue;
+      const g = (byCid[q.customer.id] ||= { cid: q.customer.id, name: q.customer.name, m: [0, 0, 0, 0, 0, 0], trend: null, total: 0, pending: [] });
+      g.pending.push(q);
+    }
+    const list = Object.values(byCid).filter((g) => !isHiddenCust(g, renderCtx.custHidden));
+    list.forEach((g) => (g.pendingAmount = g.pending.reduce((a, q) => a + (Number(q.amount) || 0), 0)));
+    list.sort((a, b) => b.pendingAmount + b.total - (a.pendingAmount + a.total));
+    return { months, list };
+  }
+  function reportScreen(staff, info, orders, now, dd) {
+    const key = reportKey(staff, now);
+    const rep = (renderCtx.reports || {})[key] || { items: {} };
+    const { months, list } = reportCustomers(staff, info, orders);
+    const total = list.length;
+    const idx = Math.max(0, Math.min(state.report.idx || 0, total));
+    const doneN = list.filter((g) => rep.items?.[g.cid]?.comment?.trim()).length;
+    const head = `<div class="ct-head sc-head"><button class="sc-back" data-act="report-exit" title="Thoát, phần đã viết vẫn được lưu">← Thoát</button>
+      <span class="ct-who">${avatarHtml(staff, 40)}<span><div class="ct-title">📝 Báo cáo tuần · ${esc(staff)}</div>
+      <div class="ct-sub">Tuần ${key.split('|')[1].split('-').reverse().slice(0, 2).join('/')} · đã viết ${doneN}/${total} khách</div></span></span></div>
+      <div class="rp-prog"><i style="width:${total ? Math.round((Math.min(idx, total) / total) * 100) : 100}%"></i></div>`;
+    // Xong hết → màn hình tổng kết + In
+    if (idx >= total) {
+      const rowsHtml = list
+        .map((g, i) => `<tr><td>${i + 1}</td><td><b>${esc(shortCompany(g.name))}</b></td><td class="num">${g.m[5] ? money(g.m[5]) : '—'}</td>
+          <td class="num">${g.trend != null ? `<span class="ct-chg ${g.trend >= 0 ? 'up' : 'down'}">${g.trend >= 0 ? '↑' : '↓'}${Math.abs(g.trend)}%</span>` : ''}</td>
+          <td class="num">${g.pending.length ? `${g.pending.length} BG · ${moneyShortG(g.pendingAmount)}` : '—'}</td>
+          <td class="rp-cmt">${esc(rep.items?.[g.cid]?.comment || '') || '<span class="muted">(chưa viết)</span>'}</td>
+          <td><button class="act" data-act="report-goto" data-i="${i}">Sửa</button></td></tr>`)
+        .join('');
+      return `<div class="ctab wk rp">${head}
+        <div class="rp-done"><div class="rp-done-t">🎉 Đã duyệt xong ${total} khách hàng</div>
+          <div class="rp-done-b"><button class="rp-start big" data-act="report-print">🖨 In danh sách báo cáo</button>
+          <button class="act" data-act="report-goto" data-i="0">↺ Xem lại từ đầu</button></div></div>
+        <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th class="num">Tháng ${months[5].label}</th><th class="num">Xu hướng</th><th class="num">Tồn đọng</th><th>Bình luận báo cáo</th><th></th></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="7" class="muted">Không có khách hàng nào.</td></tr>'}</tbody></table></div></div>`;
+    }
+    const g = list[idx];
+    const od = (orders || {})[g.cid];
+    const lastOrder = od?.orders?.length ? [...od.orders].sort((a, b) => b.at - a.at)[0] : null;
+    const maxM = Math.max(...g.m, 1);
+    const spark = g.m
+      .map((v, k) => `<div class="rp-mcol"><div class="rp-mbar" style="height:${Math.max(3, Math.round((v / maxM) * 70))}px" title="${money(v)}"></div><div class="rp-mv">${v ? moneyShortG(v) : '—'}</div><div class="rp-ml">${months[k].label.slice(0, 2)}</div></div>`)
+      .join('');
+    const pend = g.pending
+      .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+      .map((q) => {
+        const last = lastComment(renderCtx.comments?.[q.id]);
+        return `<div class="rp-q"><a href="/bao-gia/update/${q.id}" target="_blank" rel="noopener"><b>${esc(q.code)}</b></a> ${esc(q.name || '')}
+          <span class="rp-qa">${noPrice(q) ? '⚠️ Chưa cho giá' : money(q.amount || 0)}</span>
+          ${last ? `<div class="rp-ql">💬 ${esc(last.staff?.name || '')}: ${esc((last.text || '').slice(0, 160))} <span class="muted">· ${ago(last.createdAt)}</span></div>` : '<div class="rp-ql muted">Chưa có bình luận</div>'}</div>`;
+      })
+      .join('');
+    return `<div class="ctab wk rp">${head}
+      <div class="rp-card">
+        <div class="rp-step">Khách ${idx + 1}/${total}</div>
+        <div class="rp-name"><a class="sc-link" href="/khach-hang/view/${g.cid}?t=order" target="_blank" rel="noopener" title="${esc(g.name)}">${esc(shortCompany(g.name))}</a>
+          ${g.trend != null ? `<span class="ct-chg ${g.trend >= 0 ? 'up' : 'down'}">${g.trend >= 0 ? '↑' : '↓'}${Math.abs(g.trend)}%</span>` : ''}</div>
+        <div class="rp-meta">Doanh thu 6 tháng ${moneyShortG(g.total)}${lastOrder ? ` · đơn gần nhất ${esc(lastOrder.code)} ${ago(lastOrder.at)}` : ' · chưa có đơn trong dữ liệu'}${g.pending.length ? ` · <b>${g.pending.length} báo giá tồn đọng (${moneyShortG(g.pendingAmount)})</b>` : ''}</div>
+        <div class="rp-grid"><div><div class="rp-sec">📊 Doanh thu 6 tháng (sau VAT)</div><div class="rp-spark">${spark}</div></div>
+          <div><div class="rp-sec">📝 Báo giá tồn đọng</div>${pend || '<div class="muted">Không có báo giá tồn đọng</div>'}</div></div>
+        <div class="rp-sec">✍️ Bình luận báo cáo về khách hàng này</div>
+        <textarea class="rp-text" data-key="${esc(key)}" data-cid="${g.cid}" rows="4" placeholder="Tình hình khách, kế hoạch tuần tới, khó khăn cần hỗ trợ…">${esc(rep.items?.[g.cid]?.comment || '')}</textarea>
+        <div class="rp-nav"><button class="act" data-act="report-goto" data-i="${idx - 1}" ${idx === 0 ? 'disabled' : ''}>← Trước</button>
+          <span class="muted">Tự lưu khi gõ · đồng bộ các máy</span>
+          <button class="rp-start" data-act="report-goto" data-i="${idx + 1}">${idx + 1 >= total ? '✓ Hoàn tất' : 'Next →'}</button></div>
+      </div></div>`;
+  }
+  function printReport(staff) {
+    const now = new Date();
+    const key = reportKey(staff, now);
+    const rep = (renderCtx.reports || {})[key] || { items: {} };
+    const { months, list } = reportCustomers(staff, {}, renderCtx.orders);
+    const rows = list
+      .map((g, i) => `<tr><td>${i + 1}</td><td><b>${esc(g.name)}</b></td><td class="n">${money(g.m[5])}</td><td class="n">${money(g.m[4])}</td>
+        <td class="n">${g.trend != null ? `${g.trend >= 0 ? '+' : ''}${g.trend}%` : ''}</td><td class="n">${g.pending.length ? `${g.pending.length} BG · ${money(g.pendingAmount)}` : ''}</td>
+        <td>${esc(rep.items?.[g.cid]?.comment || '')}</td></tr>`)
+      .join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Báo cáo tuần – ${esc(staff)}</title><style>
+      body{font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;margin:24px} h1{font-size:20px;margin:0} .s{color:#555;margin:4px 0 14px}
+      table{width:100%;border-collapse:collapse} th,td{border:1px solid #ccc;padding:6px 8px;vertical-align:top} th{background:#f1f5f9;text-align:left}
+      .n{text-align:right;white-space:nowrap} @media print{body{margin:10mm}}</style></head><body>
+      <h1>Báo cáo tuần – ${esc(staff)}</h1><div class="s">Tuần bắt đầu ${key.split('|')[1].split('-').reverse().join('/')} · ${list.length} khách hàng · in lúc ${now.toLocaleString('vi-VN')}</div>
+      <table><thead><tr><th>#</th><th>Khách hàng</th><th>Tháng ${months[5].label}</th><th>Tháng ${months[4].label}</th><th>Xu hướng</th><th>Báo giá tồn đọng</th><th>Bình luận báo cáo</th></tr></thead>
+      <tbody>${rows}</tbody></table><script>setTimeout(()=>print(),300)<\/script></body></html>`);
+    w.document.close();
+  }
+
   // Lời chúc mừng (top cao) / động viên (hạng thấp) theo hạng tuần
   function cheerHtml(staff, allRows) {
     const rank = allRows.findIndex((r) => norm(r.staff) === norm(staff));
@@ -3226,6 +3367,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="ct-head sc-head"><button class="sc-back" data-act="week-open" data-staff="${esc(staff)}" title="Quay lại bảng xếp hạng">← Bảng xếp hạng</button>
         <span class="ct-who">${avatarHtml(staff, 44)}<span><div class="ct-title">${esc(staff)}</div>
         <div class="ct-sub">${rank >= 0 ? `Hạng ${rank + 1}/${allRows.length} tuần này · ${money(allRows[rank].total)} · ${allRows[rank].n} đơn` : 'Chưa có doanh số tuần này'}</div></span></span>
+        <button class="rp-start" data-act="report-start" data-staff="${esc(staff)}">📝 Bắt đầu làm báo cáo</button>
         <span class="sc-medal">${rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank >= 0 ? `#${rank + 1}` : '🏁'}</span></div>
       ${cheerHtml(staff, allRows)}
       <div class="sc-kpis">
@@ -3285,6 +3427,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const allRows = Object.values(by).map((r) => ({ ...r, total: r.d.reduce((a, b) => a + b, 0) })).sort((a, b) => b.total - a.total);
     // Quản trị bấm vào 1 NVKD → màn hình riêng của NVKD đó
+    // Đang làm báo cáo (quản trị: cho NVKD đang mở; NVKD: cho chính mình)
+    if (state.report === undefined) {
+      try {
+        state.report = JSON.parse(lsGet('dgReport') || 'null');
+      } catch {
+        state.report = null;
+      }
+    }
+    if (state.report && (admin || norm(state.report.staff) === norm(meName))) return reportScreen(state.report.staff, info, orders, now, dd);
     if (admin && state.weekOpen) return staffScreen(state.weekOpen, info, orders, now, dd, allRows);
     // NVKD (không phải quản trị) chỉ thấy dòng của mình
     const rows = admin ? allRows : allRows.filter((r) => norm(r.staff) === norm(meName));
@@ -3395,7 +3546,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('')}</div></div>
       ${meBox}
-      ${admin ? '' : cheerHtml(meName, allRows)}
+      ${admin ? '' : `${cheerHtml(meName, allRows)}<div class="rp-startrow"><button class="rp-start big" data-act="report-start" data-staff="${esc(meName)}">📝 Bắt đầu làm báo cáo tuần</button></div>`}
       ${board}
       ${(() => {
         return admin ? '<div class="ov-hint">👆 Bấm vào 1 NVKD để mở màn hình riêng: tổng quan 4 tuần gần nhất và từng đơn hàng</div>' : staffOverview(meName, info, orders, now, dd);
@@ -3684,7 +3835,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     renderSide(quotes[qid], qid, current, handoverBox(handovers, quotes), handovers.length);
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
-    if (editing?.contains('handover-edit')) return; // đang sửa – không vẽ lại
+    if (editing?.contains('handover-edit') || editing?.contains('rp-text')) return; // đang sửa – không vẽ lại
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
@@ -3889,7 +4040,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
-        if (tab === 'week') return bar + weekTab(quotes, renderCtx.orders, await kvGet('me'));
+        if (tab === 'week') {
+          renderCtx.reports = await kvGet('reports');
+          return bar + weekTab(quotes, renderCtx.orders, await kvGet('me'));
+        }
         return tab === 'cust'
           ? bar + custTab(cust)
           : bar + headHtml + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
@@ -4249,6 +4403,25 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       lsSet('dgTab', b.dataset.tab);
       state.weekAnimKey = null;
       render();
+    }
+    else if (act === 'report-start') {
+      state.report = { staff: b.dataset.staff, idx: 0 };
+      lsSet('dgReport', JSON.stringify(state.report));
+      render();
+    }
+    else if (act === 'report-goto') {
+      state.report = { ...state.report, idx: Math.max(0, Number(b.dataset.i) || 0) };
+      lsSet('dgReport', JSON.stringify(state.report));
+      await render();
+      root.querySelector('.panel')?.scrollTo?.({ top: 0 });
+    }
+    else if (act === 'report-exit') {
+      state.report = null;
+      lsSet('dgReport', null);
+      render();
+    }
+    else if (act === 'report-print') {
+      printReport(state.report?.staff || meName);
     }
     else if (act === 'week-set') {
       state.weekOff = Number(b.dataset.off) || 0;
