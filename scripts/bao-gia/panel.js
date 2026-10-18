@@ -2740,9 +2740,29 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Bàn giao: cùng khách + người nhận đã gửi / bỏ qua ở bất kỳ máy nào (bản ghi có thể khác khoá) → coi là xong
     const hoAll = Object.values(await kvGet('handovers'));
     const hoDone = new Set(hoAll.filter((h) => h.sentAt || h.skippedAt).map((h) => `${normName(h.customer)}|${normName(h.to)}`));
+    // Đã có bình luận "Bàn giao khách hàng <tên khách> …" trên CRM (gửi từ máy khác hoặc gõ tay) → coi là xong và ghi lại (đồng bộ)
+    const hoTexts = [];
+    const hoWalk = (t) => {
+      if (/bàn giao khách hàng/i.test(t.text || '')) hoTexts.push({ text: normName(t.text), at: t.createdAt });
+      (t.children || []).forEach(hoWalk);
+    };
+    Object.values(comments).forEach((c) => (c.threads || []).forEach(hoWalk));
+    const hoSeen = (h) => {
+      const cust = normName(h.customer);
+      const to = normName(h.to);
+      const at = h.at ? (h.at > 1e11 ? h.at / 1000 : h.at) : 0;
+      return hoTexts.some((x) => x.text.includes(cust) && (!to || x.text.includes(to)) && (!at || !x.at || x.at >= at - 3600));
+    };
+    const autoDone = {};
     const handovers = hoAll
       .filter((h) => !h.sentAt && !h.skippedAt && !hoDone.has(`${normName(h.customer)}|${normName(h.to)}`))
+      .filter((h) => {
+        if (!hoSeen(h)) return true;
+        autoDone[h.key] = { ...h, sentAt: Date.now(), sentText: '(đã có bình luận bàn giao trên CRM)' };
+        return false;
+      })
       .sort((a, b) => (b.at || b.seenAt) - (a.at || a.seenAt));
+    if (Object.keys(autoDone).length) kvMerge('handovers', autoDone).catch(() => {});
     fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}${handovers.length ? ` <span class="fab-badge">🔁 ${handovers.length}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
