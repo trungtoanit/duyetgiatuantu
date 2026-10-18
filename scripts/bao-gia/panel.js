@@ -1597,7 +1597,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sc-back { font: inherit; font-size: 13px; font-weight: 800; color: #fff; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.5);
       border-radius: 10px; padding: 7px 12px; cursor: pointer; }
     .sc-back:hover { background: rgba(255,255,255,.3); }
-    .sc-head .ct-who { flex: 1; gap: 12px; } .sc-head .ct-who .ava { border: 2px solid #fff; }
+    .sc-head .ct-who { flex: 1; gap: 12px; color: #fff; } .sc-head .ct-who .ava { border: 2px solid #fff; }
+    .sc-head .ct-title { color: #fff; } .sc-head .ct-sub { color: rgba(255,255,255,.9); }
+    .sc-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 14px 12px 0; }
+    .sc-kpi { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; }
+    .wk.anim .sc-kpi { animation: wkIn .5s ease both; }
+    .sc-ki { font-size: 26px; } .sc-kl { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .sc-kv { font-size: 22px; font-weight: 900; color: #0f172a; } .sc-ks { font-size: 11px; color: #94a3b8; }
+    .sc-kpi.warn { background: #fffbeb; border-color: #fde68a; } .sc-kpi.down { background: #fef2f2; border-color: #fecaca; } .sc-kpi.up { background: #f0fdf4; border-color: #bbf7d0; }
+    .sc-kpi.down .sc-kv { color: #dc2626; } .sc-kpi.up .sc-kv { color: #16a34a; }
+    .sc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 12px 10px; }
+    .sc-box { border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 12px; background: #fff; }
+    .sc-box.down { border-color: #fecaca; } .sc-box.up { border-color: #bbf7d0; }
+    .sc-bh { font-weight: 800; margin-bottom: 6px; } .sc-bh b { font-size: 12px; background: #f59e0b; color: #fff; border-radius: 999px; padding: 0 8px; }
+    .sc-li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #f1f5f9; font-size: 13px; }
+    .sc-li:last-child { border-bottom: 0; }
+    .sc-link { color: #1d4ed8; font-weight: 700; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sc-link:hover { text-decoration: underline; }
+    .sc-n { font-size: 11px; font-weight: 800; color: #b45309; background: #fef3c7; border-radius: 999px; padding: 0 7px; }
+    .sc-amt { font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; text-align: right; } .sc-amt small { font-weight: 600; color: #94a3b8; }
+    .sc-empty { padding: 6px 0; font-size: 12px; }
     .sc-medal { font-size: 34px; font-weight: 900; animation: wkMedal 1.8s ease-in-out infinite; }
     .wk.anim.sc .ct-head { animation: wkIn .4s ease both; }
     .sc .ov { margin-top: 14px; } .sc .ov-barwrap { width: 46%; }
@@ -3090,31 +3109,42 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Màn hình riêng của 1 NVKD (quản trị bấm từ bảng xếp hạng): hạng tuần này, 4 cột mốc tuần, danh sách đơn 4 tuần
   function staffScreen(staff, info, orders, now, dd, allRows) {
     const rank = allRows.findIndex((r) => norm(r.staff) === norm(staff));
-    const thisMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
-    const from = thisMon.getTime() / 1000 - 21 * 86400;
-    const to = thisMon.getTime() / 1000 + 7 * 86400;
-    const list = [];
-    for (const [cid, od] of Object.entries(orders || {})) {
-      if (norm(info[cid]?.staff) !== norm(staff)) continue;
-      for (const o of od?.orders || []) {
-        const at = o.at > 1e11 ? o.at / 1000 : o.at;
-        if (at && at >= from && at < to) list.push({ ...o, at, cid, cust: info[cid]?.name || `Khách #${cid}`, v: orderAfterVat(o) });
-      }
+    const quotes = renderCtx.quotes || {};
+    const comments = renderCtx.comments || {};
+    const mine = (n) => norm(n) === norm(staff);
+    // Khách hàng NVKD đang phụ trách (theo cột Sale của ERP, lấy từ báo giá)
+    const custs = new Set(Object.entries(info).filter(([, v]) => mine(v.staff)).map(([cid]) => cid));
+    // Báo giá chưa chốt (chưa lên đơn, chưa chốt/thất bại) trong 90 ngày → tồn đọng, gom theo khách
+    const open = Object.values(quotes).filter(
+      (q) => q?.id && mine(q.staff?.name) && q.quoteStatus && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, comments[q.id]) && q.createdAt && hoursSince(q.createdAt) <= 90 * 24,
+    );
+    const byCust = {};
+    for (const q of open) {
+      const k = q.customer?.id || `q${q.id}`;
+      const g = (byCust[k] ||= { cid: q.customer?.id, name: q.customer?.name || q.name || q.code, n: 0, amount: 0, codes: [] });
+      g.n++;
+      g.amount += Number(q.amount) || 0;
+      g.codes.push(q);
     }
-    list.sort((a, b) => b.at - a.at);
-    const wkLabel = (at) => {
-      const k = Math.floor((thisMon.getTime() / 1000 + 7 * 86400 - at) / (7 * 86400));
-      return k === 0 ? 'Tuần này' : `${k} tuần trước`;
-    };
-    const DAYN = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-    const rowsHtml = list
-      .map((o) => {
-        const d = new Date(o.at * 1000);
-        return `<tr><td><span class="sc-wk">${wkLabel(o.at)}</span></td><td>${DAYN[d.getDay()]} ${dd(d)}</td>
-          <td><a href="/khach-hang/view/${o.cid}?t=order" target="_blank" rel="noopener">${esc(o.code || '')}</a></td>
-          <td title="${esc(o.cust)}">${esc(shortCompany(o.cust))}</td><td>${esc(o.quote || '')}</td><td>${esc(o.status || '')}</td><td class="num">${money(o.v)}</td></tr>`;
-      })
-      .join('');
+    const pending = Object.values(byCust).sort((a, b) => b.amount - a.amount);
+    const openAmount = open.reduce((a, q) => a + (Number(q.amount) || 0), 0);
+    // Xu hướng doanh số khách (TB 3 tháng gần nhất so với 2 tháng đầu trong 6 tháng)
+    const trendRows = custRows(quotes, orders).rows.filter((r) => mine(r.staff) && r.trend != null);
+    const down = trendRows.filter((r) => r.trend < 0).sort((a, b) => a.trend - b.trend).slice(0, 8);
+    const up = trendRows.filter((r) => r.trend > 0).sort((a, b) => b.trend - a.trend).slice(0, 8);
+    const custLink = (cid, name) =>
+      cid ? `<a class="sc-link" href="/khach-hang/view/${cid}?t=order" target="_blank" rel="noopener" title="${esc(name)}">${esc(shortCompany(name))}</a>` : esc(shortCompany(name));
+    const kpi = (icon, label, val, sub = '', cls = '') => `<div class="sc-kpi ${cls}"><div class="sc-ki">${icon}</div><div><div class="sc-kl">${label}</div><div class="sc-kv">${val}</div>${sub ? `<div class="sc-ks">${sub}</div>` : ''}</div></div>`;
+    const trendList = (list, cls) =>
+      list.length
+        ? list.map((r) => `<div class="sc-li">${custLink(r.cid, r.name)}<span class="ct-chg ${cls}">${r.trend >= 0 ? '↑' : '↓'}${Math.abs(r.trend).toLocaleString('vi-VN')}%</span><span class="sc-amt">${moneyShortG(r.m[4] + r.m[3] + r.m[2])}<small>/3 tháng</small></span></div>`).join('')
+        : '<div class="muted sc-empty">Không có</div>';
+    const pendingHtml = pending.length
+      ? pending
+          .slice(0, 12)
+          .map((g) => `<div class="sc-li">${custLink(g.cid, g.name)}<span class="sc-n" title="${esc(g.codes.map((q) => q.code).join(', '))}">${g.n} BG</span><span class="sc-amt">${g.amount ? moneyShortG(g.amount) : '0đ'}</span></div>`)
+          .join('') + (pending.length > 12 ? `<div class="muted sc-empty">… và ${pending.length - 12} khách khác</div>` : '')
+      : '<div class="muted sc-empty">Không có báo giá tồn đọng</div>';
     const anim = state.weekAnimKey !== `sc:${staff}`; // hiệu ứng chỉ khi vừa mở màn hình
     state.weekAnimKey = `sc:${staff}`;
     return `<div class="ctab wk sc${anim ? ' anim' : ''}">
@@ -3123,9 +3153,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="ct-sub">${rank >= 0 ? `Hạng ${rank + 1}/${allRows.length} tuần này · ${money(allRows[rank].total)} · ${allRows[rank].n} đơn` : 'Chưa có doanh số tuần này'}</div></span></span>
         <span class="sc-medal">${rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank >= 0 ? `#${rank + 1}` : '🏁'}</span></div>
       ${staffOverview(staff, info, orders, now, dd)}
-      <div class="ct-wrap"><table class="ct"><thead><tr><th>Tuần</th><th>Ngày</th><th>Mã đơn</th><th>Khách hàng</th><th>Báo giá</th><th>Trạng thái</th><th class="num">Doanh thu (sau VAT)</th></tr>
-        <tr class="ct-sum"><td colspan="6">Σ ${list.length} đơn trong 4 tuần</td><td class="num">${moneyShortG(list.reduce((a, o) => a + o.v, 0))}</td></tr></thead>
-        <tbody>${rowsHtml || '<tr><td colspan="7" class="muted">Chưa có đơn hàng nào trong 4 tuần gần nhất.</td></tr>'}</tbody></table></div>
+      <div class="sc-kpis">
+        ${kpi('👥', 'Khách hàng phụ trách', custs.size, `${trendRows.length} khách có đơn trong 6 tháng`)}
+        ${kpi('📝', 'Báo giá chưa chốt', open.length, `${pending.length} khách · trong 90 ngày`, 'warn')}
+        ${kpi('💼', 'Giá trị tồn đọng', moneyShortG(openAmount), 'tổng tiền báo giá chưa chốt', 'warn')}
+        ${kpi('📉', 'Khách giảm doanh số', trendRows.filter((r) => r.trend < 0).length, '', 'down')}
+        ${kpi('📈', 'Khách tăng doanh số', trendRows.filter((r) => r.trend > 0).length, '', 'up')}
+      </div>
+      ${staffOverview(staff, info, orders, now, dd)}
+      <div class="sc-grid">
+        <div class="sc-box"><div class="sc-bh">📝 Báo giá tồn đọng theo khách <b>${open.length}</b></div>${pendingHtml}</div>
+        <div class="sc-box down"><div class="sc-bh">📉 Khách đang giảm doanh số</div>${trendList(down, 'down')}</div>
+        <div class="sc-box up"><div class="sc-bh">📈 Khách đang tăng doanh số</div>${trendList(up, 'up')}</div>
+      </div>
+      <div class="muted ct-note">Xu hướng: trung bình 3 tháng gần nhất so với 2 tháng đầu (6 tháng, doanh thu sau VAT). Tồn đọng: báo giá 90 ngày gần nhất chưa chốt, chưa lên đơn.</div>
     </div>`;
   }
 
@@ -4019,7 +4060,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
 
   async function onClick(e) {
     // Tab Khách hàng: bấm tên khách → mở trang khách ở tab mới (trình duyệt tự mở) và thu gọn bảng
-    if (e.target.closest('.ct-name a')) {
+    if (e.target.closest('.ct-name a, .sc-link')) {
       setPanelOpen(false);
       return render();
     }
