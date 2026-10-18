@@ -2220,7 +2220,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .db-due { font-size: 12px; font-weight: 800; color: #0369a1; background: #e0f2fe; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
     .db-due.soon { color: #fff; background: #f97316; }
     .db-blue { background: #0284c7 !important; }
-    .debt table.ct td { vertical-align: middle; }
+    .debt table.ct td { vertical-align: middle; padding: 5px 8px; font-size: 12.5px; }
+    .debt table.ct th { padding: 6px 8px; }
+    .debt table.ct { table-layout: fixed; }
+    .db-cust { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .db-cust b { font-weight: 800; } .db-cust .kh { margin-left: 6px; font-size: 10px; }
+    .debt .ct-who .ava { width: 16px !important; height: 16px !important; }
+    .debt .db-days, .debt .db-due { font-size: 11px; padding: 0 8px; }
+    .sx-h b .hot-count { color: #fff; font-size: 12px; margin-left: 4px; }
     .db-hbtns { display: flex; gap: 8px; align-items: center; }
     /* ===== Tab Cài đặt ===== */
     .sx .ct-head { align-items: center; }
@@ -4922,8 +4928,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           })
           .join('')}</div><div class="db-leg"><span><i class="c"></i>Đã thu</span><span><i class="e"></i>Dự kiến thu</span></div>`
       : '<div class="muted">Chưa có số liệu thu theo ngày.</div>';
-    const custCell = (r) => `<td><b>${esc(shortCompany(r.customerName || ''))}</b> <span class="kh">${esc(r.customerCode || '')}</span><div class="muted db-sub">${r.phone ? `📞 ${esc(r.phone)} · ` : ''}hạn mức ${r.allowDebtDay ?? '?'} ngày</div></td>`;
+    // Gọn 1 dòng: tên khách + mã KH (hạn mức ngày nợ xem khi rê chuột); không hiện SĐT
+    const custCell = (r) => `<td class="db-cust" title="${esc(r.customerName || '')} · hạn mức ${r.allowDebtDay ?? '?'} ngày"><b>${esc(shortCompany(r.customerName || ''))}</b><span class="kh">${esc(r.customerCode || '')}</span></td>`;
     const whoCell = (r) => `<td><span class="ct-who">${avatarHtml(r.staffName, 18)}${esc(shortName(r.staffName || ''))}</span></td>`;
+    const DB_COLS = '<colgroup><col style="width:30px"><col><col style="width:84px"><col style="width:112px"><col style="width:112px"><col style="width:84px"></colgroup>';
     const overRows = overdue
       .map((r, i) => `<tr><td class="ct-no">${i + 1}</td>${custCell(r)}${whoCell(r)}<td class="num">${money(r.totalDebt)}</td><td class="num db-red">${money(r.overdueAmount)}</td>
         <td class="num"><span class="db-days ${dayCls(r.maxDaysOverdue || 0)}">${r.maxDaysOverdue || 0} ngày</span></td></tr>`)
@@ -4952,10 +4960,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="sx-card"><div class="sx-h"><span class="sx-hic violet">👥</span><div><b>Công nợ theo NVKD</b><span>Bấm để lọc</span></div></div><div class="db-staffs">${staffRows}</div></div></div>` : ''}
       <div class="db-two">
         <div class="sx-card db-over"><div class="sx-h"><span class="sx-hic red">⏰</span><div><b>Quá hạn <span class="hot-count">${overdue.length}</span></b><span>Xếp theo số tiền quá hạn – cần thu ngay</span></div></div>
-          <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Quá hạn</th><th class="num">Trễ</th></tr></thead>
+          <div class="ct-wrap"><table class="ct">${DB_COLS}<thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Quá hạn</th><th class="num">Trễ</th></tr></thead>
           <tbody>${overRows || '<tr><td colspan="6" class="muted">🎉 Không có khách quá hạn.</td></tr>'}</tbody></table></div></div>
         <div class="sx-card"><div class="sx-h"><span class="sx-hic sky">📆</span><div><b>Sắp đến hạn <span class="hot-count db-blue">${upcoming.length}</span></b><span>Xếp theo ngày đến hạn gần nhất – nhắc khách chuẩn bị</span></div></div>
-          <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Chưa đến hạn</th><th class="num">Đến hạn</th></tr></thead>
+          <div class="ct-wrap"><table class="ct">${DB_COLS}<thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Chưa đến hạn</th><th class="num">Đến hạn</th></tr></thead>
           <tbody>${upRows || '<tr><td colspan="6" class="muted">Không có khoản sắp đến hạn.</td></tr>'}</tbody></table></div></div>
       </div></div>`;
   }
