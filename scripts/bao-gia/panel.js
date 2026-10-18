@@ -275,16 +275,23 @@
       return;
     }
     if (kind === 'debtRows') {
-      // Công nợ: lưu từng bản ghi (khoá = id, không có thì nguồn + vị trí) và thông tin nguồn (API, tổng số)
-      const src = data.url.replace(/[?&](page|limit|offset)=\d+/g, '');
+      // Công nợ (kv 'debt2'): cust:<id> = 1 khách (tổng nợ, quá hạn, chưa đến hạn…), list:<overdue|upcoming> = danh sách hiện tại,
+      // inv:<id> = hoá đơn của khách, ov:<số ngày> = thu / dự kiến theo ngày
+      const url = String(data.url || '');
+      const now = Date.now();
       const patch = {};
-      data.rows.forEach((r, i) => {
-        const id = r.id ?? r.code ?? `${src}#${i}`;
-        patch[String(id).slice(0, 120)] = { ...r, _src: src, _page: data.page, _at: Date.now() };
-      });
-      if (Object.keys(patch).length) await kvMerge('debts', patch);
-      await kvMerge('debtMeta', { [src.slice(0, 150)]: { url: data.url, page: data.page, total: data.total, n: data.rows.length, at: Date.now(), keys: Object.keys(data.rows[0] || {}) } });
-      return;
+      if (/\/debt\/customers\?/.test(url)) {
+        const type = /overdueOnly=true/.test(url) ? 'overdue' : /notDueOnly=true/.test(url) ? 'upcoming' : 'all';
+        const cur = await kvGet('debt2');
+        for (const r of data.rows) if (r.customerId != null) patch[`cust:${r.customerId}`] = { ...(cur[`cust:${r.customerId}`] || {}), ...r, [`in_${type}`]: now, at: now };
+        patch[`list:${type}`] = { ids: data.rows.map((r) => r.customerId).filter((x) => x != null), at: now };
+      } else if (/\/debt\/customers\/(\d+)/.test(url)) {
+        patch[`inv:${url.match(/\/debt\/customers\/(\d+)/)[1]}`] = { items: data.rows, at: now };
+      } else if (/\/debt\/overview/.test(url)) {
+        patch[`ov:${url.match(/days=(\d+)/)?.[1] || 'x'}`] = { rows: data.rows, at: now };
+      } else return;
+      await kvMerge('debt2', patch);
+      return render();
     }
     if (kind === 'auth') {
       loggedOut = !data.ok || /^\/login\b/.test(location.pathname);
@@ -2187,6 +2194,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-boss { font-size: 12.5px; color: #3730a3; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 5px 10px; }
     .dl-listwrap { margin: 12px; }
     .bigtab.set { margin-left: auto; }
+    /* ===== Tab Công nợ ===== */
+    .sx-tile.t-red { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .sx-hic.red { background: #fee2e2; }
+    .db-wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; margin: 12px; align-items: start; }
+    .db-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 12px; align-items: start; }
+    .db-chart { display: flex; align-items: flex-end; gap: 3px; height: 150px; padding-top: 6px; }
+    .db-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+    .db-col span { font-size: 9px; color: #94a3b8; margin-top: 3px; white-space: nowrap; }
+    .db-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 1px; }
+    .db-bars i { display: block; width: 45%; border-radius: 3px 3px 0 0; min-height: 1px; }
+    .db-bars i.c { background: linear-gradient(180deg, #34d399, #059669); } .db-bars i.e { background: #c7d2fe; }
+    .db-leg { display: flex; gap: 14px; font-size: 12px; color: #64748b; } .db-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .db-leg i.c { background: #10b981; } .db-leg i.e { background: #c7d2fe; }
+    .db-staffs { display: grid; gap: 6px; }
+    .db-staff { font: inherit; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; text-align: left; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 7px 10px; background: #fff; cursor: pointer; }
+    .db-staff:hover { border-color: #a5b4fc; } .db-staff.on { border-color: #6366f1; background: #eef2ff; }
+    .db-staff b { display: block; font-size: 13px; } .db-staff small { font-size: 11px; color: #64748b; }
+    .db-staff em { font-style: normal; font-size: 12px; font-weight: 800; color: #b91c1c; background: #fee2e2; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+    .db-staff em.ok { color: #166534; background: #dcfce7; }
+    .db-sub { font-size: 11px; } .db-red { color: #b91c1c !important; }
+    .db-days { font-size: 12px; font-weight: 900; border-radius: 999px; padding: 1px 9px; color: #fff; white-space: nowrap; }
+    .db-days.red { background: #dc2626; animation: rpUrge 1.4s ease-in-out infinite; } .db-days.orange { background: #f97316; } .db-days.amber { background: #f59e0b; }
+    .db-due { font-size: 12px; font-weight: 800; color: #0369a1; background: #e0f2fe; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+    .db-due.soon { color: #fff; background: #f97316; }
+    .db-blue { background: #0284c7 !important; }
+    .debt table.ct td { vertical-align: middle; }
     /* ===== Tab Cài đặt ===== */
     .sx .ct-head { align-items: center; }
     .sx-live { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 5px 14px; }
@@ -2446,7 +2480,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Lựa chọn giao diện (xếp, lọc, bung/thu gọn, toàn màn hình, độ rộng…) lưu thêm vào kho của extension:
   // CRM có lúc xoá localStorage → F5 bị mất; khi mở trang sẽ khôi phục lại từ kho.
-  const UI_KEYS = ['dgDealStaff', 'dgReport', 'dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
+  const UI_KEYS = ['dgDebtStaff', 'dgDealStaff', 'dgReport', 'dgWeekOff', 'dgWeekOpen', 'dgShowHiddenCust', 'dgTab', 'dgCustNoCur', 'dgStaff', 'dgHotCollapsed', 'dgSort', 'dgFilter', 'dgPanelOpen', 'dgPanelW', 'dgPanelFull', 'dgSidePos', 'dgSideCollapsed'];
   const uiSnapshot = () => JSON.stringify(Object.fromEntries(UI_KEYS.map((k) => [k, lsGet(k)])));
   let uiSaved = null;
   async function restoreUiPrefs() {
@@ -2474,7 +2508,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     host.id = 'dg-root';
     document.documentElement.append(host);
     root = host.attachShadow({ mode: 'open' });
-    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Đánh giá NVKD</button><div class="panel" hidden></div><div class="grip" hidden title="Kéo để dãn / thu hẹp · bấm đúp để về mặc định"></div><div class="side" hidden></div>`;
+    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Trợ lý ERP</button><div class="panel" hidden></div><div class="grip" hidden title="Kéo để dãn / thu hẹp · bấm đúp để về mặc định"></div><div class="side" hidden></div>`;
     wireGrip(root.querySelector('.grip'));
     root.querySelector('.fab').onclick = () => {
       const open = root.querySelector('.panel').hidden;
@@ -3547,7 +3581,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const ADMIN_NAMES = ['Nguyễn Trung Toán'];
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
   // perms = { enforced: bool, users: { <tên chuẩn hoá>: { name, enabled, role: 'admin'|'sale', tabs: [...] } } }
-  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['set', '⚙️ Cài đặt']];
+  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['set', '⚙️ Cài đặt']];
   const SALE_TABS = ['hot', 'deal', 'week']; // mặc định cho NVKD khi mới cấp quyền
   let PERMS = {};
   let MY_ACCESS = true;
@@ -4351,7 +4385,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })
       .sort((a, b) => (b.at || b.seenAt) - (a.at || a.seenAt));
     if (Object.keys(autoDone).length) kvMerge('handovers', autoDone).catch(() => {});
-    fab.innerHTML = `📊 Đánh giá NVKD${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}${handovers.length ? ` <span class="fab-badge">🔁 ${handovers.length}</span>` : ''}`;
+    fab.innerHTML = `📊 Trợ lý ERP${alertCount ? ` <span class="fab-badge">🎯 ${alertCount}</span>` : ''}${handovers.length ? ` <span class="fab-badge">🔁 ${handovers.length}</span>` : ''}`;
     // Bảng đang thu gọn mà có báo giá cần hỏi lại → nút nổi nhấp nháy, nảy nhẹ để gây chú ý
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     // Thẻ cố định bên phải trang báo giá: báo giá đang mở (câu hỏi gợi ý, % Flexo/Offset, mua hàng, đánh giá)
@@ -4610,7 +4644,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
         const allowed = perm.tabs;
-        let tab = ['cust', 'week', 'hot', 'deal', 'set'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
@@ -4623,11 +4657,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'deal' ? ' on' : ''}" data-act="tab" data-tab="deal">🧠 Phân tích deal</button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button>
+          <button class="bigtab${tab === 'debt' ? ' on' : ''}" data-act="tab" data-tab="debt">💰 Công nợ</button>
           <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
         // Chỉ hiện các tab được phân quyền
         const bar = barRaw.replace(/<button class="bigtab[^"]*" data-act="tab" data-tab="(\w+)">[\s\S]*?<\/button>/g, (m, t) => (allowed.includes(t) ? m : ''));
         if (!tab) return '<div class="muted" style="margin:16px">Chưa được cấp màn hình nào.</div>';
         if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
+        if (tab === 'debt') return bar + debtTab(await kvGet('debt2'), perm);
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
@@ -4807,6 +4843,90 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       </div>
       ${admin ? `<div class="sx-perm">${await permsCard(quotes)}</div>` : ''}
       <div class="muted ct-note">🔐 Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic nhập trong popup của extension (biểu tượng trên thanh Chrome).</div></div>`;
+  }
+
+  // ---------- Tab "💰 Công nợ": tổng quan công nợ từ trang /cong-no (quá hạn, sắp đến hạn, đã thu 30 ngày) ----------
+  function debtTab(db, perm) {
+    db = db || {};
+    const list = (t) => (db[`list:${t}`]?.ids || []).map((id) => db[`cust:${id}`]).filter(Boolean);
+    let overdue = list('overdue');
+    let upcoming = list('upcoming');
+    // NVKD (không phải quản trị) chỉ xem công nợ khách của mình; quản trị lọc theo NVKD
+    const staffSel = perm.admin ? lsGet('dgDebtStaff') || '' : meName;
+    const mine = (r) => !staffSel || norm(r.staffName) === norm(staffSel);
+    const allCust = new Map();
+    [...overdue, ...upcoming].forEach((r) => allCust.set(r.customerId, r));
+    const staffs = {};
+    allCust.forEach((r) => {
+      const k = r.staffName || 'Chưa rõ';
+      (staffs[k] ||= { name: k, total: 0, over: 0, n: 0, nOver: 0 });
+      staffs[k].total += r.totalDebt || 0;
+      staffs[k].over += r.overdueAmount || 0;
+      staffs[k].n++;
+      if ((r.overdueAmount || 0) > 0) staffs[k].nOver++;
+    });
+    overdue = overdue.filter(mine).sort((a, b) => (b.overdueAmount || 0) - (a.overdueAmount || 0) || (b.maxDaysOverdue || 0) - (a.maxDaysOverdue || 0));
+    upcoming = upcoming.filter(mine).sort((a, b) => (a.minDaysUntilDue ?? 999) - (b.minDaysUntilDue ?? 999));
+    const custs = [...allCust.values()].filter(mine);
+    const sum = (arr, k) => arr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+    const totalDebt = sum(custs, 'totalDebt');
+    const overAmt = sum(custs, 'overdueAmount');
+    const notDue = sum(custs, 'notDueAmount');
+    const soon7 = upcoming.filter((r) => (r.minDaysUntilDue ?? 99) <= 7);
+    const ov = (db['ov:30']?.rows || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const collected30 = ov.reduce((a, r) => a + (Number(r.collected) || 0), 0);
+    const expected30 = ov.reduce((a, r) => a + (Number(r.expected) || 0), 0);
+    const updated = Math.max(db['list:overdue']?.at || 0, db['list:upcoming']?.at || 0, db['ov:30']?.at || 0);
+    if (!updated)
+      return `<div class="ctab wk debt"><div class="ct-head"><div><div class="ct-title">💰 Công nợ</div><div class="ct-sub">Chưa có dữ liệu – mở trang Công nợ của CRM (hoặc chờ thu thập ngầm) để extension đọc.</div></div></div></div>`;
+    const dayCls = (d) => (d > 30 ? 'red' : d > 7 ? 'orange' : 'amber');
+    const tile = (cls, ic, label, val, sub) => `<div class="sx-tile ${cls}"><div class="sx-ic">${ic}</div><div class="sx-tv"><span>${label}</span><b>${val}</b><small>${sub}</small></div></div>`;
+    const maxBar = Math.max(...ov.map((r) => Math.max(Number(r.collected) || 0, Number(r.expected) || 0)), 1);
+    const chart = ov.length
+      ? `<div class="db-chart">${ov
+          .map((r) => {
+            const c = Number(r.collected) || 0;
+            const e = Number(r.expected) || 0;
+            const d = String(r.date || '').slice(5).split('-').reverse().join('/');
+            return `<div class="db-col" title="${esc(d)} · đã thu ${money(c)}${e ? ` · dự kiến ${money(e)}` : ''}"><div class="db-bars"><i class="e" style="height:${Math.round((e / maxBar) * 100)}%"></i><i class="c" style="height:${Math.round((c / maxBar) * 100)}%"></i></div><span>${d}</span></div>`;
+          })
+          .join('')}</div><div class="db-leg"><span><i class="c"></i>Đã thu</span><span><i class="e"></i>Dự kiến thu</span></div>`
+      : '<div class="muted">Chưa có số liệu thu theo ngày.</div>';
+    const custCell = (r) => `<td><b>${esc(shortCompany(r.customerName || ''))}</b> <span class="kh">${esc(r.customerCode || '')}</span><div class="muted db-sub">${r.phone ? `📞 ${esc(r.phone)} · ` : ''}hạn mức ${r.allowDebtDay ?? '?'} ngày</div></td>`;
+    const whoCell = (r) => `<td><span class="ct-who">${avatarHtml(r.staffName, 18)}${esc(shortName(r.staffName || ''))}</span></td>`;
+    const overRows = overdue
+      .map((r, i) => `<tr><td class="ct-no">${i + 1}</td>${custCell(r)}${whoCell(r)}<td class="num">${money(r.totalDebt)}</td><td class="num db-red">${money(r.overdueAmount)}</td>
+        <td class="num"><span class="db-days ${dayCls(r.maxDaysOverdue || 0)}">${r.maxDaysOverdue || 0} ngày</span></td></tr>`)
+      .join('');
+    const upRows = upcoming
+      .map((r, i) => `<tr><td class="ct-no">${i + 1}</td>${custCell(r)}${whoCell(r)}<td class="num">${money(r.totalDebt)}</td><td class="num">${money(r.notDueAmount)}</td>
+        <td class="num"><span class="db-due ${(r.minDaysUntilDue ?? 99) <= 7 ? 'soon' : ''}">còn ${r.minDaysUntilDue ?? '?'} ngày</span></td></tr>`)
+      .join('');
+    const staffRows = Object.values(staffs)
+      .sort((a, b) => b.over - a.over || b.total - a.total)
+      .map((x) => `<button class="db-staff${staffSel === x.name ? ' on' : ''}" ${perm.admin ? `data-act="debt-staff" data-staff="${esc(x.name)}"` : 'disabled'}>${avatarHtml(x.name, 22)}<span><b>${esc(shortName(x.name))}</b><small>${x.n} khách · nợ ${moneyShortG(x.total)}</small></span>${x.over ? `<em>quá hạn ${moneyShortG(x.over)}</em>` : '<em class="ok">✓ không quá hạn</em>'}</button>`)
+      .join('');
+    return `<div class="ctab wk debt">
+      <div class="ct-head"><div><div class="ct-title">💰 Báo cáo tổng quan công nợ${staffSel ? ` · ${esc(staffSel)}` : ''}</div>
+        <div class="ct-sub">${custs.length} khách đang nợ · cập nhật ${ago(Math.floor(updated / 1000))} từ trang Công nợ của CRM</div></div>
+        ${perm.admin && staffSel ? '<button class="sx-btn" data-act="debt-staff" data-staff="">✕ Xem tất cả NVKD</button>' : ''}</div>
+      <div class="sx-tiles">
+        ${tile('t-read', '💼', 'Tổng công nợ', moneyShortG(totalDebt), `${custs.length} khách hàng`)}
+        ${tile('t-red', '⏰', 'Quá hạn', moneyShortG(overAmt), `${overdue.length} khách · lâu nhất ${Math.max(0, ...overdue.map((r) => r.maxDaysOverdue || 0))} ngày`)}
+        ${tile('t-ver', '📆', 'Đến hạn trong 7 ngày', moneyShortG(sum(soon7, 'notDueAmount')), `${soon7.length} khách`)}
+        ${tile('t-sync', '🧾', 'Chưa đến hạn', moneyShortG(notDue), `${upcoming.length} khách`)}
+        ${perm.admin ? tile('t-bal', '✅', 'Đã thu 30 ngày', moneyShortG(collected30), expected30 ? `dự kiến ${moneyShortG(expected30)}` : 'theo ngày') : ''}
+      </div>
+      ${perm.admin ? `<div class="db-wrap"><div class="sx-card"><div class="sx-h"><span class="sx-hic green">📈</span><div><b>Thu tiền 30 ngày</b><span>Đã thu và dự kiến thu theo ngày</span></div></div>${chart}</div>
+        <div class="sx-card"><div class="sx-h"><span class="sx-hic violet">👥</span><div><b>Công nợ theo NVKD</b><span>Bấm để lọc</span></div></div><div class="db-staffs">${staffRows}</div></div></div>` : ''}
+      <div class="db-two">
+        <div class="sx-card db-over"><div class="sx-h"><span class="sx-hic red">⏰</span><div><b>Quá hạn <span class="hot-count">${overdue.length}</span></b><span>Xếp theo số tiền quá hạn – cần thu ngay</span></div></div>
+          <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Quá hạn</th><th class="num">Trễ</th></tr></thead>
+          <tbody>${overRows || '<tr><td colspan="6" class="muted">🎉 Không có khách quá hạn.</td></tr>'}</tbody></table></div></div>
+        <div class="sx-card"><div class="sx-h"><span class="sx-hic sky">📆</span><div><b>Sắp đến hạn <span class="hot-count db-blue">${upcoming.length}</span></b><span>Xếp theo ngày đến hạn gần nhất – nhắc khách chuẩn bị</span></div></div>
+          <div class="ct-wrap"><table class="ct"><thead><tr><th>#</th><th>Khách hàng</th><th>NVKD</th><th class="num">Tổng nợ</th><th class="num">Chưa đến hạn</th><th class="num">Đến hạn</th></tr></thead>
+          <tbody>${upRows || '<tr><td colspan="6" class="muted">Không có khoản sắp đến hạn.</td></tr>'}</tbody></table></div></div>
+      </div></div>`;
   }
 
   // ---------- Tab "Phân tích deal": AI đọc từng báo giá đang mở của 1 NVKD, gợi ý bước kế tiếp cho NVKD ----------
@@ -5382,6 +5502,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         users[k] = { ...u, at: Date.now(), by: meName };
         await kvMerge('perms', { users });
       }
+      render();
+    }
+    else if (act === 'debt-staff') {
+      lsSet('dgDebtStaff', b.dataset.staff || null);
       render();
     }
     else if (act === 'perm-sub') {
