@@ -1639,6 +1639,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .bigtab:hover { color: #1e293b; background: #f8fafc; }
     .bigtab.on { color: #4338ca; border-bottom-color: #6366f1; }
     .bigtab.on b { background: #6366f1; color: #fff; }
+    .bigtab.hot.has b { background: #ea580c; color: #fff; animation: dgpulse 1.6s ease-in-out infinite; }
+    .bigtab.hot.on { color: #c2410c; border-bottom-color: #f97316; }
     .ctab { margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
     .ct-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; color: #fff;
       background: linear-gradient(135deg, #4f46e5, #7c3aed); }
@@ -2062,6 +2064,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     @keyframes dghotglow { 0%, 100% { border-color: #fed7aa; box-shadow: 0 0 0 0 rgba(251,146,60,0); }
       50% { border-color: #fb923c; box-shadow: 0 0 18px 0 rgba(251,146,60,.35); } }
     @media (prefers-reduced-motion: reduce) { .hotbox.collapsed.has-data, .hotbox.collapsed.has-data * { animation: none !important; } }
+    .hot-sum { margin-left: 8px; font-size: 14px; font-weight: 900; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 999px; padding: 1px 10px; }
+    .hot-miss { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; }
+    .hot-miss b { color: #b91c1c; font-weight: 800; margin-right: 2px; }
+    .hot-miss i { font-style: normal; font-weight: 700; color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; border-radius: 999px; padding: 1px 9px; }
+    .hot-steps { display: grid; gap: 3px; margin-top: 5px; font-size: 12.5px; }
+    .hot-steps b { color: #c2410c; font-weight: 800; }
+    .hot-step { display: flex; align-items: flex-start; gap: 7px; color: #7c2d12; font-weight: 600; }
+    .hot-step em { flex: none; font-style: normal; width: 18px; height: 18px; border-radius: 50%; background: #f97316; color: #fff; font-size: 11px; font-weight: 900;
+      display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
     .hot-done { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; color: #94a3b8; font-size: 15px;
       font-weight: 900; cursor: pointer; transition: all .15s; }
     .hot-done:hover { border-color: #16a34a; background: #16a34a; color: #fff; transform: scale(1.08); }
@@ -4327,20 +4338,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
-        const tab = ['cust', 'week'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        const tab = ['cust', 'week', 'hot'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        const hotData = (await kvGet('aiHot')).latest;
+        const hotDone = await kvGet('aiHotDone');
+        const hotN = (hotData?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !hotDone[x.id]).length;
         renderCtx.custHidden = Object.fromEntries(Object.entries(await kvGet('custHidden')).filter(([, v]) => v && !v.off));
         const cust = custRows(quotes, renderCtx.orders);
         const bar = `<div class="bigtabs">
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
+          <button class="bigtab hot${tab === 'hot' ? ' on' : ''}${hotN ? ' has' : ''}" data-act="tab" data-tab="hot">🔥 Gợi ý chốt đơn <b>${hotN}</b></button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng 6 tháng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button></div>`;
+        if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
         if (tab === 'week') {
           renderCtx.reports = await kvGet('reports');
           return bar + weekTab(quotes, renderCtx.orders, await kvGet('me'));
         }
         return tab === 'cust'
           ? bar + custTab(cust)
-          : bar + headHtml + hotBox((await kvGet('aiHot')).latest, quotes, await kvGet('aiHotDone')) + overdueBox + learnedBox(await kvGet('learned'));
+          : bar + headHtml + overdueBox + learnedBox(await kvGet('learned'));
       })()}
     `;
     if (searchFocused) {
@@ -4399,7 +4415,10 @@ Tín hiệu chốt mạnh: khách đã ok giá / đồng ý / hứa lên đơn /
 Tín hiệu yếu: khách chê giá cao chưa xử lý, im lặng lâu, khách đặt chỗ khác, chưa có giá, chỉ hỏi tham khảo.
 Chỉ dựa trên dữ liệu được cung cấp, không bịa.
 Trả về DUY NHẤT một JSON array, xếp từ khả năng cao xuống thấp, mỗi phần tử:
-{"code":"BGxxxxx","kha_nang":0-100,"ly_do":"1 câu ngắn, nêu tín hiệu cụ thể trong bình luận","viec_can_lam":"1 việc cụ thể quản lý/NVKD cần làm ngay để chốt"}
+{"code":"BGxxxxx","kha_nang":0-100,"ly_do":"1 câu ngắn, nêu tín hiệu cụ thể trong bình luận",
+ "con_thieu":["các điều kiện CÒN THIẾU để chốt, mỗi mục 2–6 chữ, vd: Khách chưa ok giá / Chưa có mẫu / Chưa duyệt maket / Chưa cọc / Chưa ký hợp đồng / Chưa có giá / Chưa xác nhận số lượng / Chưa hẹn ngày giao"],
+ "buoc_tiep":["2–3 bước kế tiếp theo thứ tự, mỗi bước 1 câu ngắn ghi rõ AI làm (NVKD / sếp) và làm gì"],
+ "viec_can_lam":"bước quan trọng nhất cần làm ngay (trùng bước 1)"}
 Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoài JSON.`;
 
   function compactThread(q, c) {
@@ -4442,7 +4461,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         type: 'claude',
         system: HOT_SYSTEM,
         prompt: `Thời điểm hiện tại: ${fmtTime(Date.now() / 1000)}\n\n${blocks.join('\n\n')}`,
-        maxTokens: 6000,
+        maxTokens: 10000,
       });
       let items = [];
       try {
@@ -4457,6 +4476,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         pct: Math.max(0, Math.min(100, Number(x.kha_nang) || 0)),
         why: String(x.ly_do || ''),
         next: String(x.viec_can_lam || ''),
+        missing: (Array.isArray(x.con_thieu) ? x.con_thieu : []).map(String).filter(Boolean).slice(0, 6),
+        steps: (Array.isArray(x.buoc_tiep) ? x.buoc_tiep : []).map(String).filter(Boolean).slice(0, 4),
       }));
       await kvMerge('aiHot', { latest: { at: Date.now(), items, from: cands.length } });
       state.hotOpen = true;
@@ -4491,7 +4512,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     setInterval(() => maybeMorningHot().catch((e) => console.warn('[DG] hot', e)), 10 * 60e3);
   }
 
-  function hotBox(hot, quotes, done = {}) {
+  function hotBox(hot, quotes, done = {}, inTab = false) {
     const busy = state.busy.has('hot');
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
     // Ẩn: đã chốt / thất bại, đã lên đơn (CRM ghi "lên đơn hàng", mã đơn Misa, hoặc có trong lịch sử mua hàng của khách), đã bấm ✓
@@ -4499,6 +4520,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       (x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !done[x.id],
     );
     const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
+    const hotSum = items.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0); // tổng tiền các báo giá đang gợi ý
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
     const rows = items
       .map((x, i) => {
@@ -4509,16 +4531,19 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           <span class="hot-no">${i + 1}</span>
           <span class="hot-main"><span class="hot-top"><b>${esc(x.code)}</b>${custTag(q)}<span class="hot-name">${esc(q.name || '')}</span></span>
             <span class="hot-why">💡 ${esc(x.why)}</span>
-            <span class="hot-next">👉 ${esc(x.next)}</span></span>
+            ${x.missing?.length ? `<span class="hot-miss"><b>🧩 Còn thiếu:</b>${x.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</span>` : ''}
+            ${x.steps?.length
+              ? `<span class="hot-steps"><b>👉 Bước kế tiếp:</b>${x.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</span>`
+              : `<span class="hot-next">👉 ${esc(x.next)}</span>`}</span>
           <span class="hot-side"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span><span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></a>`;
       })
       .join('');
-    const collapsed = lsGet('dgHotCollapsed') === '1';
-    const toggle = `<button class="hot-toggle" data-act="hot-toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button>`;
+    const collapsed = !inTab && lsGet('dgHotCollapsed') === '1';
+    const toggle = inTab ? '' : `<button class="hot-toggle" data-act="hot-toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button>`;
     if (collapsed)
-      return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
+      return `<div class="hotbox collapsed${items.length ? ' has-data' : ''}"><div class="hot-head"><h3>${toggle}<span class="hot-fire">🔥</span> Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''}${items.length ? '<span class="hot-hint">bấm ▸ để xem</span>' : ''}</h3>${btn}</div></div>`;
     return `<div class="hotbox">
-      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span> <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
+      <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''} <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3>${btn}</div>
       ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''} · tự phân tích lại mỗi sáng từ ${HOT_MORNING_HOUR}h</div>` : `<div class="muted">Tự phân tích mỗi sáng từ ${HOT_MORNING_HOUR}h khi mở CRM, hoặc bấm nút để chạy ngay (mỗi lần 1 lượt gọi Claude).</div>`}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
