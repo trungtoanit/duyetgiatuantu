@@ -5660,7 +5660,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           id: l.id,
           code: l.code,
           text: `${ask}\n${line}`,
-          html: `<div>${esc(ask)}</div><div>. <b>${esc(l.code)}</b>${l.cust ? ` (<b>${esc(l.cust)}</b>)` : ''}${esc(l.rest)}<b>${esc(l.val)}</b></div>`,
+          html: `<div>${esc(ask)}</div><div>. <b>${esc(l.code)}</b>${l.cust ? ` (<b>${esc(l.cust)}</b>)` : ''}${esc(l.rest)}<b><span style="color:#15803d;font-weight:bold">${esc(l.val)}</span></b></div>`,
         };
       });
     }

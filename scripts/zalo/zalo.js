@@ -145,6 +145,24 @@
     log(`sau khi ghi thẳng: "${typed(box).slice(0, 40)}" html=${box.innerHTML.slice(0, 200)}`);
     return ok() ? 'direct' : '';
   }
+  // Nút "Định dạng tin nhắn" trên thanh công cụ ô soạn – bấm nếu chưa bật
+  async function enableFormat() {
+    const btns = [...document.querySelectorAll('[title], [data-translate-title], [icon]')].filter(visible);
+    const btn = btns.find((e) => /định dạng|format|rich ?text|font/i.test(`${e.getAttribute('title') || ''} ${e.getAttribute('data-translate-title') || ''} ${e.getAttribute('icon') || ''}`));
+    if (!btn) {
+      const bar = document.querySelector('#chat-input-content-id')?.parentElement?.parentElement;
+      call({ type: 'remote.push', ns: 'zaloDebug', patch: { toolbar: { at: Date.now(), html: (bar?.outerHTML || '').replace(/<div id="chat-input-content-id"[\s\S]*$/, '').slice(0, 6000) } } }).catch(() => {});
+      return 'không thấy nút';
+    }
+    const isOn = () => /active|selected|--on|checked/i.test(`${btn.className} ${btn.parentElement?.className || ''}`) || btn.getAttribute('aria-pressed') === 'true' || !!document.querySelector('[class*="format-toolbar"], [class*="text-format"], [class*="richtext-toolbar"]');
+    const info = `${btn.tagName}.${String(btn.className).slice(0, 60)} title=${btn.getAttribute('title') || btn.getAttribute('data-translate-title') || ''}`;
+    if (isOn()) return `đã bật (${info})`;
+    btn.click();
+    await sleep(500);
+    const bar = btn.closest('[class*="toolbar"], [class*="chat-box-input"], footer') || btn.parentElement?.parentElement;
+    call({ type: 'remote.push', ns: 'zaloDebug', patch: { toolbar: { at: Date.now(), html: (bar?.outerHTML || '').slice(0, 8000) } } }).catch(() => {});
+    return `bấm bật (${info})`;
+  }
   // Gửi thông tin chẩn đoán về máy chủ (để chỉnh lại khi Zalo đổi giao diện)
   function debugDump(step, el, extra = '') {
     const foot = el?.closest('footer, [class*="footer"], [class*="chat-input"], [class*="ChatInput"]') || el?.parentElement?.parentElement?.parentElement;
@@ -164,7 +182,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.162';
+  const ZVER = '1.2.163';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -237,7 +255,12 @@
     }
     await sleep(800);
     if (!headerHas(used)) return fail(`Khung chat đang mở không phải "${used}" – đã dừng, không gửi.`);
+    // Bật chế độ "Định dạng tin nhắn" (nút A✎ trên thanh công cụ) để giữ chữ đậm / màu khi dán
+    const fmt = await enableFormat();
+    tr(`định dạng: ${fmt}`);
     const how = await pasteText(chatInput() || input, job.text, job.html, tr);
+    const rich = document.querySelector('#richInput');
+    tr(`sau khi dán: đậm=${!!rich?.querySelector('b, strong, [style*="bold"], [style*="700"]')} · màu=${!!rich?.querySelector('[style*="color"]')}`);
     tr(`điền nội dung: ${how || 'KHÔNG ĐƯỢC'}`);
     debugDump(`paste:${how || 'fail'}`, chatInput() || input);
     if (!how) return fail('Không dán được nội dung vào ô chat.');
