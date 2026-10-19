@@ -192,7 +192,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.168';
+  const ZVER = '1.2.169';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -272,6 +272,21 @@
     }
     await sleep(800);
     if (!headerHas(used)) return fail(`Khung chat đang mở không phải "${used}" – đã dừng, không gửi.`);
+    // Chống trùng: khung chat đã có tin nhắn chứa mã báo giá này (gửi từ trước / bằng tay) → không soạn lại
+    await sleep(800);
+    const inp = chatInput();
+    const inTop = inp ? inp.getBoundingClientRect().top - 40 : window.innerHeight * 0.8;
+    const dup = job.code && [...document.querySelectorAll('div, span')].some((e) => {
+      if (e.children.length > 3 || !visible(e) || !(e.textContent || '').includes(job.code)) return false;
+      if (inp && (inp.contains(e) || e.contains(inp))) return false;
+      const r = e.getBoundingClientRect();
+      return r.left > LEFT_COL() && r.top > 60 && r.bottom < inTop;
+    });
+    if (dup) {
+      tr(`đã có tin nhắn ${job.code} trong chat → bỏ qua`);
+      await markSent(job, false);
+      return setStatus(id, { ...job, status: 'error', error: `Trong chat với ${used} đã có tin nhắn về ${job.code} – không soạn lại.`, doneAt: Date.now() });
+    }
     // Bật chế độ "Định dạng tin nhắn" (nút A✎ trên thanh công cụ) để giữ chữ đậm / màu khi dán
     const fmt = await enableFormat();
     tr(`định dạng: ${fmt}`);
