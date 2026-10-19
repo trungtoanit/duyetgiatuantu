@@ -84,7 +84,7 @@
     return all.find((e) => e.contains(document.activeElement)) || all.find((e) => e.id !== 'richInput') || all[0] || null;
   };
   // Chữ thật trong ô soạn (bỏ dòng gợi ý "Nhập @, tin nhắn tới …")
-  const typed = (el) => norm((el?.innerText ?? el?.value ?? '').replace(/^Nhập @.*$/m, ''));
+  const typed = (el) => norm((el?.innerText ?? el?.value ?? '').replace(/^Nhập @.*$/gm, '').replace(/^Nhấn .*định dạng tin nhắn.*$/gim, ''));
   // Tiêu đề cuộc trò chuyện đang mở có chứa tên người nhận
   // Khung chat đang mở đúng người: tên hiện ở phía trên khung phải
   const headerHas = (name) => {
