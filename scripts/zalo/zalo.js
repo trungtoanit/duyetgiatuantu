@@ -58,18 +58,20 @@
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
   // Các phần tử chữ trong danh sách kết quả có tên KHỚP ĐÚNG
+  // Phần tử (sâu nhất) có chữ KHỚP ĐÚNG tên – tên trong kết quả tìm kiếm thường bị tách thành nhiều <span> tô sáng
   function exactMatches(name) {
     const want = norm(name);
     const out = [];
-    for (const e of document.querySelectorAll('div, span')) {
-      if (e.children.length || !visible(e)) continue;
-      if (norm(e.textContent) !== want) continue;
-      if (e.closest('#richInput, [contenteditable="true"], header, .header')) continue;
+    for (const e of document.querySelectorAll('div, span, a, p, div-b16, div-14, div-16')) {
+      if (!visible(e) || norm(e.textContent) !== want) continue;
+      if ([...e.children].some((c) => norm(c.textContent) === want)) continue; // còn con khớp → lấy con
+      if (e.closest('#richInput, [contenteditable="true"], input')) continue;
       const r = e.getBoundingClientRect();
       if (r.left > window.innerWidth * 0.45) continue; // kết quả nằm ở cột trái
       out.push(e);
     }
-    return out;
+    // Ưu tiên kết quả trong khung tìm kiếm (không phải danh sách hội thoại bên dưới)
+    return out.sort((a, b) => !!a.closest('#conversationList') - !!b.closest('#conversationList'));
   }
   // Ô soạn tin
   const chatInput = () =>
@@ -79,40 +81,69 @@
   // Chữ thật trong ô soạn (bỏ dòng gợi ý "Nhập @, tin nhắn tới …")
   const typed = (el) => norm((el?.innerText ?? el?.value ?? '').replace(/^Nhập @.*$/m, ''));
   // Tiêu đề cuộc trò chuyện đang mở có chứa tên người nhận
-  const headerHas = (name) =>
-    [...document.querySelectorAll('header, .header, [class*="header"], [class*="Header"]')].some(
-      (h) => visible(h) && h.getBoundingClientRect().left > window.innerWidth * 0.25 && norm(h.textContent).includes(norm(name))
-    );
+  // Khung chat đang mở đúng người: tên hiện ở phía trên khung phải
+  const headerHas = (name) => {
+    const want = norm(name);
+    return [...document.querySelectorAll('div, span, h1, h2, h3, div-b16, div-16, div-18')].some((e) => {
+      if (!visible(e) || !norm(e.textContent).startsWith(want) || norm(e.textContent).length > want.length + 40) return false;
+      const r = e.getBoundingClientRect();
+      return r.left > window.innerWidth * 0.2 && r.top < 160;
+    });
+  };
 
-  async function pasteText(el, text, html) {
-    el.click();
-    el.focus();
-    // Dán kiểu clipboard (giữ xuống dòng, chữ đậm nếu Zalo nhận định dạng)
+  // Ô soạn của Zalo (#richInput + dòng #input_line_0) là trình soạn tự viết: thử lần lượt nhiều cách điền, cách nào ra chữ thì dừng
+  async function pasteText(el, text, html, log = () => {}) {
+    const box = document.querySelector('#richInput') || el;
+    const line = document.querySelector('#input_line_0') || box;
+    const r = line.getBoundingClientRect();
+    const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + 10, clientY: r.top + r.height / 2, button: 0 };
+    for (const t of ['mousedown', 'mouseup', 'click']) line.dispatchEvent(new MouseEvent(t, o));
+    box.focus();
+    line.focus?.();
+    await sleep(300);
+    const tgt = () => (box.contains(document.activeElement) || document.activeElement === box ? document.activeElement : box);
+    const ok = () => typed(box).length >= Math.min(15, norm(text).length);
+    const sel = () => {
+      // Đặt con trỏ vào cuối dòng soạn
+      try {
+        const rg = document.createRange();
+        rg.selectNodeContents(line);
+        rg.collapse(false);
+        const s2 = getSelection();
+        s2.removeAllRanges();
+        s2.addRange(rg);
+      } catch {}
+    };
+    sel();
+    log(`ô soạn: ce=${box.getAttribute('contenteditable')} · focus=${document.activeElement?.id || document.activeElement?.tagName}`);
+    // 1) Sự kiện dán (clipboardData)
     try {
       const dt = new DataTransfer();
       dt.setData('text/plain', text);
       if (html) dt.setData('text/html', html);
-      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-    } catch {}
+      tgt().dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    } catch (e) {
+      log(`paste lỗi ${e}`);
+    }
     await sleep(500);
-    if (typed(el).length >= Math.min(20, norm(text).length)) return 'paste';
-    // Dự phòng: gõ từng dòng, Shift+Enter để xuống dòng
-    const lines = text.split('\n');
-    lines.forEach((ln, i) => {
-      if (ln) document.execCommand('insertText', false, ln);
-      if (i < lines.length - 1) {
-        const o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, shiftKey: true, bubbles: true, cancelable: true };
-        el.dispatchEvent(new KeyboardEvent('keydown', o));
-        if (!el.innerHTML.endsWith('<br>')) document.execCommand('insertLineBreak');
-        el.dispatchEvent(new KeyboardEvent('keyup', o));
-      }
-    });
+    if (ok()) return 'paste';
+    // 2) beforeinput / input kiểu gõ chữ
+    sel();
+    tgt().dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertFromPaste', data: text, bubbles: true, cancelable: true, dataTransfer: (() => { try { const d = new DataTransfer(); d.setData('text/plain', text); return d; } catch { return null; } })() }));
     await sleep(300);
-    if (typed(el).length > 0) return 'type';
-    // Dự phòng cuối: chèn cả đoạn một lần
+    if (ok()) return 'beforeinput';
+    // 3) execCommand insertText
+    sel();
     document.execCommand('insertText', false, text);
     await sleep(300);
-    return typed(el).length > 0 ? 'insert' : '';
+    if (ok()) return 'insertText';
+    // 4) Ghi thẳng vào dòng soạn rồi báo input cho trình soạn cập nhật
+    line.textContent = text;
+    box.classList.remove('empty');
+    box.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
+    await sleep(300);
+    log(`sau khi ghi thẳng: "${typed(box).slice(0, 40)}" html=${box.innerHTML.slice(0, 200)}`);
+    return ok() ? 'direct' : '';
   }
   // Gửi thông tin chẩn đoán về máy chủ (để chỉnh lại khi Zalo đổi giao diện)
   function debugDump(step, el, extra = '') {
@@ -133,7 +164,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.161';
+  const ZVER = '1.2.162';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -206,7 +237,8 @@
     }
     await sleep(800);
     if (!headerHas(used)) return fail(`Khung chat đang mở không phải "${used}" – đã dừng, không gửi.`);
-    const how = await pasteText(chatInput() || input, job.text, job.html);
+    const how = await pasteText(chatInput() || input, job.text, job.html, tr);
+    tr(`điền nội dung: ${how || 'KHÔNG ĐƯỢC'}`);
     debugDump(`paste:${how || 'fail'}`, chatInput() || input);
     if (!how) return fail('Không dán được nội dung vào ô chat.');
     await sleep(500);
