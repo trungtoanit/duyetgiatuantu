@@ -133,14 +133,17 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.160';
+  const ZVER = '1.2.161';
   let trace = [];
+  let runId = '';
+  // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
   const tr = (t) => {
-    trace.push(`${new Date().toLocaleTimeString('vi-VN')} ${t}`);
-    call({ type: 'remote.push', ns: 'zaloDebug', patch: { trace: { ver: ZVER, at: Date.now(), trace } } }).catch(() => {});
+    trace.push(t);
+    call({ type: 'remote.push', ns: 'zaloDebug', patch: { [`${runId}-${String(trace.length).padStart(2, '0')}`]: { ver: ZVER, at: Date.now(), t, hidden: document.hidden } } }).catch(() => {});
   };
   async function runJob(id, job) {
     trace = [];
+    runId = new Date().toISOString().slice(5, 19);
     tr(`bắt đầu gửi cho ${job.to}`);
     const fail = (why) => {
       tr(`LỖI: ${why}`);
@@ -148,11 +151,13 @@
     };
     const box = await waitFor(searchBox, 20000);
     if (!box) return fail('Chưa thấy ô tìm kiếm của Zalo (Zalo chưa đăng nhập / chưa tải xong).');
+    tr('thấy ô tìm kiếm');
     const names = [...new Set([job.zaloName, job.to].filter(Boolean))];
     let hit = null;
     let used = '';
     for (const name of names) {
       typeInto(box, name);
+      tr(`gõ "${name}"`);
       await sleep(1500);
       const list = await waitFor(() => (exactMatches(name).length ? exactMatches(name) : null), 5000);
       if (list?.length) {
@@ -230,7 +235,10 @@
       await sleep(300);
       const again = (await kvGet('zaloJobs'))[id];
       if (again?.tab !== TAB) return;
-      await runJob(id, job).catch((e) => setStatus(id, { ...job, status: 'error', error: String(e.message || e), doneAt: Date.now() }));
+      await runJob(id, job).catch((e) => {
+        tr(`NGOẠI LỆ: ${e?.stack || e}`);
+        return setStatus(id, { ...job, status: 'error', error: String(e.message || e), doneAt: Date.now() });
+      });
     } catch {
     } finally {
       busy = false;
