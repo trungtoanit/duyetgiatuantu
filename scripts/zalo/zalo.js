@@ -34,6 +34,12 @@
   setInterval(beat, 3000);
 
   const visible = (e) => !!e && e.getClientRects().length > 0;
+  // Mép phải của cột trái (danh sách hội thoại / kết quả tìm kiếm) – khung chat nằm bên phải mép này
+  const LEFT_COL = () => {
+    const l = document.querySelector('#conversationList, #contact-search-input');
+    const r = l?.closest('[class*="sidebar"], [class*="Sidebar"], nav, aside')?.getBoundingClientRect() || l?.getBoundingClientRect();
+    return Math.max(200, Math.min((r?.right || 360) - 10, window.innerWidth * 0.5));
+  };
   async function waitFor(fn, ms = 8000, step = 250) {
     const end = Date.now() + ms;
     while (Date.now() < end) {
@@ -79,7 +85,7 @@
     const inArea = (e) => {
       if (!visible(e)) return false;
       const r = e.getBoundingClientRect();
-      return r.top > window.innerHeight * 0.5 && r.left > window.innerWidth * 0.2 && r.width > 40;
+      return r.top > window.innerHeight * 0.5 && r.left > LEFT_COL() && r.width > 40;
     };
     // Trình soạn định dạng (khi nút A✎ đang bật): contenteditable lớn, không phải #richInput
     const fmtOn = !!document.querySelector('[data-id="div_RTF_Menu"].focused, [icon="TextFormat_24_Line"].focused');
@@ -100,7 +106,7 @@
     return [...document.querySelectorAll('div, span, h1, h2, h3, div-b16, div-16, div-18')].some((e) => {
       if (!visible(e) || !norm(e.textContent).startsWith(want) || norm(e.textContent).length > want.length + 40) return false;
       const r = e.getBoundingClientRect();
-      return r.left > window.innerWidth * 0.2 && r.top < 160;
+      return r.left > LEFT_COL() && r.top < 160;
     });
   };
 
@@ -186,7 +192,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.166';
+  const ZVER = '1.2.167';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
