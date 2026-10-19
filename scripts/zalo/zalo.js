@@ -74,10 +74,15 @@
     return out.sort((a, b) => !!a.closest('#conversationList') - !!b.closest('#conversationList'));
   }
   // Ô soạn tin
-  const chatInput = () =>
-    [...document.querySelectorAll('#richInput, #input_line_0, [contenteditable="true"], [contenteditable=""], textarea')].find(
-      (e) => visible(e) && e.getBoundingClientRect().top > window.innerHeight * 0.6 && e.getBoundingClientRect().left > window.innerWidth * 0.2
-    ) || document.querySelector('#richInput');
+  // Ô soạn đang hiện: chế độ thường là #richInput; bật "Định dạng tin nhắn" thì là trình soạn khác (contenteditable id ngẫu nhiên)
+  const chatInput = () => {
+    const all = [...document.querySelectorAll('[contenteditable="true"], [contenteditable=""], #richInput, textarea')].filter((e) => {
+      if (!visible(e)) return false;
+      const r = e.getBoundingClientRect();
+      return r.top > window.innerHeight * 0.5 && r.left > window.innerWidth * 0.2 && r.width > 150;
+    });
+    return all.find((e) => e.contains(document.activeElement)) || all.find((e) => e.id !== 'richInput') || all[0] || null;
+  };
   // Chữ thật trong ô soạn (bỏ dòng gợi ý "Nhập @, tin nhắn tới …")
   const typed = (el) => norm((el?.innerText ?? el?.value ?? '').replace(/^Nhập @.*$/m, ''));
   // Tiêu đề cuộc trò chuyện đang mở có chứa tên người nhận
@@ -93,21 +98,17 @@
 
   // Ô soạn của Zalo (#richInput + dòng #input_line_0) là trình soạn tự viết: thử lần lượt nhiều cách điền, cách nào ra chữ thì dừng
   async function pasteText(el, text, html, log = () => {}) {
-    const box = document.querySelector('#richInput') || el;
-    const line = document.querySelector('#input_line_0') || box;
-    const r = line.getBoundingClientRect();
-    const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + 10, clientY: r.top + r.height / 2, button: 0 };
-    for (const t of ['mousedown', 'mouseup', 'click']) line.dispatchEvent(new MouseEvent(t, o));
-    box.focus();
-    line.focus?.();
+    const ed = chatInput() || el;
+    const r = ed.getBoundingClientRect();
+    const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + 20, clientY: r.top + Math.min(20, r.height / 2), button: 0 };
+    for (const t of ['mousedown', 'mouseup', 'click']) ed.dispatchEvent(new MouseEvent(t, o));
+    ed.focus();
     await sleep(300);
-    const tgt = () => (box.contains(document.activeElement) || document.activeElement === box ? document.activeElement : box);
-    const ok = () => typed(box).length >= Math.min(15, norm(text).length);
+    const ok = () => typed(ed).length >= Math.min(15, norm(text).length);
     const sel = () => {
-      // Đặt con trỏ vào cuối dòng soạn
       try {
         const rg = document.createRange();
-        rg.selectNodeContents(line);
+        rg.selectNodeContents(ed);
         rg.collapse(false);
         const s2 = getSelection();
         s2.removeAllRanges();
@@ -115,8 +116,9 @@
       } catch {}
     };
     sel();
-    log(`ô soạn: ce=${box.getAttribute('contenteditable')} · focus=${document.activeElement?.id || document.activeElement?.tagName}`);
-    // 1) Sự kiện dán (clipboardData)
+    const tgt = () => (ed.contains(document.activeElement) ? document.activeElement : ed);
+    log(`ô soạn: ${ed.tagName}#${ed.id}.${String(ed.className).slice(0, 50)} · focus=${document.activeElement?.id || document.activeElement?.tagName}`);
+    // 1) Sự kiện dán (kèm HTML để giữ chữ đậm / màu ở chế độ định dạng)
     try {
       const dt = new DataTransfer();
       dt.setData('text/plain', text);
@@ -125,25 +127,19 @@
     } catch (e) {
       log(`paste lỗi ${e}`);
     }
-    await sleep(500);
+    await sleep(600);
     if (ok()) return 'paste';
-    // 2) beforeinput / input kiểu gõ chữ
+    // 2) execCommand chèn HTML / chữ
     sel();
-    tgt().dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertFromPaste', data: text, bubbles: true, cancelable: true, dataTransfer: (() => { try { const d = new DataTransfer(); d.setData('text/plain', text); return d; } catch { return null; } })() }));
+    if (html) document.execCommand('insertHTML', false, html);
     await sleep(300);
-    if (ok()) return 'beforeinput';
-    // 3) execCommand insertText
+    if (ok()) return 'insertHTML';
     sel();
     document.execCommand('insertText', false, text);
     await sleep(300);
     if (ok()) return 'insertText';
-    // 4) Ghi thẳng vào dòng soạn rồi báo input cho trình soạn cập nhật
-    line.textContent = text;
-    box.classList.remove('empty');
-    box.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
-    await sleep(300);
-    log(`sau khi ghi thẳng: "${typed(box).slice(0, 40)}" html=${box.innerHTML.slice(0, 200)}`);
-    return ok() ? 'direct' : '';
+    log(`không điền được · html ô soạn: ${(ed.parentElement?.outerHTML || '').slice(0, 1500)}`);
+    return '';
   }
   // Nút "Định dạng tin nhắn" trên thanh công cụ ô soạn – bấm nếu chưa bật
   async function enableFormat() {
@@ -154,7 +150,7 @@
       call({ type: 'remote.push', ns: 'zaloDebug', patch: { toolbar: { at: Date.now(), html: (bar?.outerHTML || '').replace(/<div id="chat-input-content-id"[\s\S]*$/, '').slice(0, 6000) } } }).catch(() => {});
       return 'không thấy nút';
     }
-    const isOn = () => /active|selected|--on|checked/i.test(`${btn.className} ${btn.parentElement?.className || ''}`) || btn.getAttribute('aria-pressed') === 'true' || !!document.querySelector('[class*="format-toolbar"], [class*="text-format"], [class*="richtext-toolbar"]');
+    const isOn = () => /active|selected|--on|checked|focused/i.test(`${btn.className} ${btn.parentElement?.className || ''}`) || btn.getAttribute('aria-pressed') === 'true' || !!document.querySelector('[class*="format-toolbar"], [class*="text-format"], [class*="richtext-toolbar"]');
     const info = `${btn.tagName}.${String(btn.className).slice(0, 60)} title=${btn.getAttribute('title') || btn.getAttribute('data-translate-title') || ''}`;
     if (isOn()) return `đã bật (${info})`;
     btn.click();
@@ -182,7 +178,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.163';
+  const ZVER = '1.2.164';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -260,7 +256,8 @@
     tr(`định dạng: ${fmt}`);
     const how = await pasteText(chatInput() || input, job.text, job.html, tr);
     const rich = document.querySelector('#richInput');
-    tr(`sau khi dán: đậm=${!!rich?.querySelector('b, strong, [style*="bold"], [style*="700"]')} · màu=${!!rich?.querySelector('[style*="color"]')}`);
+    const edn = chatInput();
+    tr(`sau khi dán: đậm=${!!edn?.querySelector('b, strong, [style*="bold"], [style*="700"]')} · màu=${!!edn?.querySelector('[style*="color"]')} · ${(edn?.innerHTML || '').slice(0, 600)}`);
     tr(`điền nội dung: ${how || 'KHÔNG ĐƯỢC'}`);
     debugDump(`paste:${how || 'fail'}`, chatInput() || input);
     if (!how) return fail('Không dán được nội dung vào ô chat.');
