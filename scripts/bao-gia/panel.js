@@ -2162,6 +2162,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-btn { white-space: nowrap; }
     .hot-diff { margin-left: 8px; font-size: 14px; font-weight: 800; color: #6d28d9; background: #ede9fe; border: 1px solid #ddd6fe; border-radius: 999px; padding: 2px 10px; vertical-align: 1px; }
     .hot-dv { font-size: 12px; font-weight: 800; color: #6d28d9; white-space: nowrap; } .hot-dv.neg { color: #b91c1c; }
+    .zl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 2px; font-size: 12px; }
+    .zl-bar > b { color: #0068ff; }
+    .zl-item { display: inline-flex; gap: 3px; }
+    .zl-btn { border: 1px solid #93c5fd; background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 12px; cursor: pointer; }
+    .zl-btn i { font-style: normal; background: #1d4ed8; color: #fff; border-radius: 999px; padding: 0 6px; margin-left: 3px; font-size: 10px; }
+    .zl-btn:hover { background: #0068ff; color: #fff; }
+    .zl-btn.sent { background: #dcfce7; border-color: #86efac; color: #15803d; } .zl-btn.sent i { background: #15803d; }
+    .zl-btn.err { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; } .zl-btn.err i { background: #b91c1c; }
+    .zl-btn.run { background: #fef9c3; border-color: #fde047; color: #a16207; }
+    .zl-btn.all { background: #0068ff; border-color: #0068ff; color: #fff; }
+    .zl-fix { border: 1px dashed #fca5a5; background: #fff; color: #b91c1c; border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
     .hot-btns { display: flex; gap: 8px; align-items: center; flex: none; }
     .hot-copy { white-space: nowrap; font-weight: 700; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
@@ -4866,7 +4877,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         // Chỉ hiện các tab được phân quyền
         const bar = barRaw.replace(/<button class="bigtab[^"]*" data-act="tab" data-tab="(\w+)">[\s\S]*?<\/button>/g, (m, t) => (allowed.includes(t) ? m : ''));
         if (!tab) return '<div class="muted" style="margin:16px">Chưa được cấp màn hình nào.</div>';
-        if (tab === 'hot') return bar + hotBox(hotData, quotes, hotDone, true);
+        if (tab === 'hot') {
+          [renderCtx.zaloJobs, renderCtx.zaloNames, renderCtx.zaloAlive] = await Promise.all([kvGet('zaloJobs'), kvGet('zaloNames'), kvGet('zaloAlive')]);
+          return bar + hotBox(hotData, quotes, hotDone, true);
+        }
         if (tab === 'debt') return bar + debtTab(await kvGet('debt2'), perm);
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
@@ -5626,6 +5640,34 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     state.hotCopyHtml = items.length
       ? `<div>${esc(head)}</div>${groups.map(([who, ls]) => `<div><br></div><div><b>${esc(who)}</b></div>${ls.map((l) => `<div>. <b>${esc(l.code)}</b>${l.cust ? ` (<b>${esc(l.cust)}</b>)` : ''}${esc(l.rest)}<b style="color:#15803d"><font color="#15803d">${esc(l.val)}</font></b></div>`).join('')}`).join('')}`
       : '';
+    // Gửi Zalo riêng từng NVKD: tin nhắn chỉ gồm deal của người đó
+    state.hotZalo = {};
+    for (const [who, ls] of groups) {
+      if (who === 'Chưa rõ NVKD') continue;
+      const p = addressFor(who, renderCtx.comments, quotes);
+      const h1 = `${p.charAt(0).toUpperCase() + p.slice(1)} xem lại các deal này và kéo đơn về nhé`;
+      state.hotZalo[who] = {
+        text: [h1, ...ls.map((l) => `. ${l.code}${l.cust ? ` (${l.cust})` : ''}${l.rest}${l.val}`)].join('\n'),
+        html: `<div>${esc(h1)}</div>${ls.map((l) => `<div>. <b>${esc(l.code)}</b>${l.cust ? ` (<b>${esc(l.cust)}</b>)` : ''}${esc(l.rest)}<b>${esc(l.val)}</b></div>`).join('')}`,
+      };
+    }
+    const zJobs = Object.values(renderCtx.zaloJobs || {});
+    const zState = (who) => zJobs.filter((j) => j?.to === who).sort((a, b) => b.at - a.at)[0];
+    const zaloBar = inTab && groups.length
+      ? `<div class="zl-bar"><b>💬 Hỏi NVKD qua Zalo:</b>${groups
+          .filter(([who]) => state.hotZalo[who])
+          .map(([who, ls]) => {
+            const j = zState(who);
+            const st = !j ? '' : j.status === 'sent' ? ' sent' : j.status === 'error' ? ' err' : ' run';
+            const tip = !j ? `Mở Zalo, tìm "${renderCtx.zaloNames?.[norm(who)]?.name || who}" và gửi ${ls.length} deal`
+              : j.status === 'sent' ? `Đã gửi lúc ${new Date(j.doneAt).toLocaleTimeString('vi-VN')} – bấm để gửi lại`
+              : j.status === 'error' ? `Lỗi: ${j.error}` : 'Đang gửi trong tab Zalo…';
+            const icon = !j ? '📨' : j.status === 'sent' ? '✅' : j.status === 'error' ? '⚠️' : '⏳';
+            return `<span class="zl-item"><button class="zl-btn${st}" data-act="zalo-send" data-who="${esc(who)}" title="${esc(tip)}">${icon} ${esc(shortName(who))} <i>${ls.length}</i></button>${j?.status === 'error' ? `<button class="zl-fix" data-act="zalo-name" data-who="${esc(who)}" title="Đặt tên Zalo của ${esc(who)} (tên hiển thị trong danh bạ Zalo)">✏️ Tên Zalo</button>` : ''}</span>`;
+          })
+          .join('')}<button class="zl-btn all" data-act="zalo-send" data-who="*" title="Gửi lần lượt cho tất cả NVKD trong danh sách">📨 Gửi tất cả</button>
+          <span class="muted">Tự mở tab Zalo Web (chat.zalo.me), tìm đúng tên NVKD và gửi tin nhắn chỉ gồm deal của người đó.</span></div>`
+      : '';
     const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button>` : '';
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
     const rows = items
@@ -5650,6 +5692,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     return `<div class="hotbox">
       <div class="hot-head"><h3>${toggle}🔥 Có thể chốt liền <span class="hot-count">${items.length}</span>${hotSum ? `<span class="hot-sum" title="Tổng giá trị các báo giá có thể chốt liền">💰 ${moneyShortG(hotSum)}</span>` : ''}${diffTag} <span class="muted">– AI đọc ${hot?.from || HOT.candidates} báo giá khả thi điểm cao nhất, chọn ra tối đa ${HOT.show} đơn nên ưu tiên</span></h3><span class="hot-btns">${copyBtn}${btn}</span></div>
       ${hot ? `<div class="muted">Phân tích lúc ${new Date(hot.at).toLocaleString('vi-VN')}${doneN ? ` · ✓ đã xong ${doneN} đơn` : ''} · tự phân tích lại mỗi sáng từ ${HOT_MORNING_HOUR}h</div>` : `<div class="muted">Tự phân tích mỗi sáng từ ${HOT_MORNING_HOUR}h khi mở CRM, hoặc bấm nút để chạy ngay (mỗi lần 1 lượt gọi Claude).</div>`}
+      ${zaloBar}
       ${rows ? `<div class="hot-list">${rows}</div>` : hot ? '<div class="muted">AI chưa thấy báo giá nào chốt được ngay.</div>' : ''}
     </div>`;
   }
@@ -6059,6 +6102,35 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'export-xlsx') exportList();
     else if (act === 'hot-run') analyzeHot();
+    else if (act === 'zalo-send') {
+      // Mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ) – đã có tab Zalo đang chạy thì thôi
+      const zal = renderCtx.zaloAlive;
+      if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
+      const who = b.dataset.who;
+      const list = who === '*' ? Object.keys(state.hotZalo || {}) : [who];
+      const names = await kvGet('zaloNames');
+      const patch = {};
+      list.forEach((w, i) => {
+        const m = state.hotZalo?.[w];
+        if (m) patch[`${Date.now()}-${i}`] = { to: w, zaloName: names[norm(w)]?.name || '', text: m.text, html: m.html, status: 'pending', at: Date.now() + i };
+      });
+      if (!Object.keys(patch).length) return;
+      // Dọn việc cũ hơn 1 ngày
+      const old = await kvGet('zaloJobs');
+      const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+      await call({ type: 'kv.set', key: 'zaloJobs', value: { ...keep, ...patch } });
+      // Vẽ lại vài lần để thấy trạng thái gửi
+      for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
+      render();
+    }
+    else if (act === 'zalo-name') {
+      const who = b.dataset.who;
+      const names = await kvGet('zaloNames');
+      const v = prompt(`Tên Zalo của ${who} (đúng như hiện trong danh bạ / tìm kiếm Zalo):`, names[norm(who)]?.name || who);
+      if (v == null) return;
+      await kvMerge('zaloNames', { [norm(who)]: { name: v.trim(), staff: who, at: Date.now(), by: meName } });
+      render();
+    }
     else if (act === 'hot-copy') {
       try {
         try {

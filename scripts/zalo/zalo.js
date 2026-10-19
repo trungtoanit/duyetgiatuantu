@@ -1,0 +1,174 @@
+// Chạy trong world USER_SCRIPT trên chat.zalo.me.
+// Nhận "việc gửi tin" do bảng Trợ lý ERP (trang CRM) xếp hàng trong kv 'zaloJobs',
+// tìm đúng người nhận theo tên NVKD, mở cuộc trò chuyện, dán tin nhắn và gửi.
+// An toàn: chỉ gửi khi tên kết quả tìm kiếm KHỚP ĐÚNG tên cần tìm và tiêu đề cuộc trò chuyện cũng khớp;
+// không chắc chắn thì dừng và báo lỗi lại cho bảng (không gửi nhầm người).
+(() => {
+  if (window.top !== window || window.__dgZalo) return;
+  window.__dgZalo = true;
+
+  const call = (msg) =>
+    new Promise((resolve, reject) => {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return reject(new Error('no runtime'));
+      chrome.runtime.sendMessage(msg, (r) => {
+        const err = chrome.runtime.lastError;
+        if (err) reject(new Error(err.message));
+        else if (r?.error) reject(new Error(r.error));
+        else resolve(r?.result);
+      });
+    });
+  const kvGet = async (key) => (await call({ type: 'kv.get', key })) || {};
+  const kvMerge = (key, patch) => call({ type: 'kv.merge', key, patch });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const norm = (s) =>
+    String(s || '')
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  const TAB = Math.random().toString(36).slice(2);
+
+  // Nhịp tim: bảng CRM biết đã có tab Zalo đang mở thì không mở thêm tab mới
+  const beat = () => call({ type: 'kv.set', key: 'zaloAlive', value: { tab: TAB, at: Date.now(), url: location.href } }).catch(() => {});
+  beat();
+  setInterval(beat, 3000);
+
+  const visible = (e) => !!e && e.getClientRects().length > 0;
+  async function waitFor(fn, ms = 8000, step = 250) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const v = fn();
+      if (v) return v;
+      await sleep(step);
+    }
+    return null;
+  }
+  const setStatus = (id, patch) => kvMerge('zaloJobs', { [id]: patch }).catch(() => {});
+
+  // Ô tìm kiếm của Zalo Web
+  const searchBox = () =>
+    document.querySelector('#contact-search-input') ||
+    [...document.querySelectorAll('input')].find((i) => visible(i) && /tìm kiếm|search/i.test(i.placeholder || ''));
+  function typeInto(input, text) {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    input.focus();
+    input.click();
+    set.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  // Các phần tử chữ trong danh sách kết quả có tên KHỚP ĐÚNG
+  function exactMatches(name) {
+    const want = norm(name);
+    const out = [];
+    for (const e of document.querySelectorAll('div, span')) {
+      if (e.children.length || !visible(e)) continue;
+      if (norm(e.textContent) !== want) continue;
+      if (e.closest('#richInput, [contenteditable="true"], header, .header')) continue;
+      const r = e.getBoundingClientRect();
+      if (r.left > window.innerWidth * 0.45) continue; // kết quả nằm ở cột trái
+      out.push(e);
+    }
+    return out;
+  }
+  // Ô soạn tin
+  const chatInput = () =>
+    document.querySelector('#richInput') ||
+    [...document.querySelectorAll('[contenteditable="true"]')].find((e) => visible(e) && e.getBoundingClientRect().top > window.innerHeight * 0.5);
+  // Tiêu đề cuộc trò chuyện đang mở có chứa tên người nhận
+  const headerHas = (name) =>
+    [...document.querySelectorAll('header, .header, [class*="header"], [class*="Header"]')].some(
+      (h) => visible(h) && h.getBoundingClientRect().left > window.innerWidth * 0.25 && norm(h.textContent).includes(norm(name))
+    );
+
+  async function pasteText(el, text, html) {
+    el.focus();
+    // Dán kiểu clipboard (giữ xuống dòng, chữ đậm nếu Zalo nhận định dạng)
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', text);
+      if (html) dt.setData('text/html', html);
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    } catch {}
+    await sleep(400);
+    if (norm(el.textContent).length >= Math.min(20, norm(text).length)) return true;
+    // Dự phòng: gõ từng dòng, Shift+Enter để xuống dòng
+    const lines = text.split('\n');
+    lines.forEach((ln, i) => {
+      if (ln) document.execCommand('insertText', false, ln);
+      if (i < lines.length - 1) {
+        const o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, shiftKey: true, bubbles: true, cancelable: true };
+        el.dispatchEvent(new KeyboardEvent('keydown', o));
+        if (!el.innerHTML.endsWith('<br>')) document.execCommand('insertLineBreak');
+        el.dispatchEvent(new KeyboardEvent('keyup', o));
+      }
+    });
+    await sleep(300);
+    return norm(el.textContent).length > 0;
+  }
+  function pressSend(el) {
+    const btn = [...document.querySelectorAll('[icon*="Sent"], [data-translate-title*="SEND"], [title="Gửi"], .send-btn, [class*="send-btn"]')].find(visible);
+    if (btn) return btn.click();
+    const o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    el.dispatchEvent(new KeyboardEvent('keydown', o));
+    el.dispatchEvent(new KeyboardEvent('keypress', o));
+    el.dispatchEvent(new KeyboardEvent('keyup', o));
+  }
+
+  async function runJob(id, job) {
+    const fail = (why) => setStatus(id, { ...job, status: 'error', error: why, doneAt: Date.now() });
+    const box = await waitFor(searchBox, 20000);
+    if (!box) return fail('Chưa thấy ô tìm kiếm của Zalo (Zalo chưa đăng nhập / chưa tải xong).');
+    const names = [...new Set([job.zaloName, job.to].filter(Boolean))];
+    let hit = null;
+    let used = '';
+    for (const name of names) {
+      typeInto(box, name);
+      await sleep(1500);
+      const list = await waitFor(() => (exactMatches(name).length ? exactMatches(name) : null), 5000);
+      if (list?.length) {
+        hit = list[0];
+        used = name;
+        break;
+      }
+    }
+    if (!hit) return fail(`Không tìm thấy liên hệ Zalo tên đúng "${names.join('" / "')}". Đặt tên Zalo cho NVKD này rồi gửi lại.`);
+    hit.click();
+    (hit.closest('[data-id], [class*="item"], li') || hit).click();
+    const input = await waitFor(chatInput, 8000);
+    if (!input) return fail('Không mở được khung chat.');
+    await sleep(800);
+    if (!headerHas(used)) return fail(`Khung chat đang mở không phải "${used}" – đã dừng, không gửi.`);
+    if (!(await pasteText(input, job.text, job.html))) return fail('Không dán được nội dung vào ô chat.');
+    await sleep(500);
+    pressSend(input);
+    await sleep(1500);
+    const left = norm(chatInput()?.textContent || '');
+    if (left.length > 10) return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
+    await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
+  }
+
+  let busy = false;
+  async function poll() {
+    if (busy) return;
+    busy = true;
+    try {
+      const jobs = await kvGet('zaloJobs');
+      const next = Object.entries(jobs)
+        .filter(([, j]) => j?.status === 'pending' && Date.now() - j.at < 10 * 60e3)
+        .sort((a, b) => a[1].at - b[1].at)[0];
+      if (!next) return;
+      const [id, job] = next;
+      // Nhận việc (tránh 2 tab Zalo cùng gửi)
+      await setStatus(id, { ...job, status: 'sending', tab: TAB, startAt: Date.now() });
+      await sleep(300);
+      const again = (await kvGet('zaloJobs'))[id];
+      if (again?.tab !== TAB) return;
+      await runJob(id, job).catch((e) => setStatus(id, { ...job, status: 'error', error: String(e.message || e), doneAt: Date.now() }));
+    } catch {
+    } finally {
+      busy = false;
+    }
+  }
+  setInterval(poll, 1500);
+})();

@@ -1,5 +1,5 @@
 {
-  "version": "1.2.155",
+  "version": "1.2.156",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -24,6 +24,18 @@
       "runAt": "document_start",
       "world": "USER_SCRIPT",
       "allFrames": true
+    },
+    {
+      "id": "zalo",
+      "files": [
+        "zalo/zalo.js"
+      ],
+      "matches": [
+        "https://chat.zalo.me/*"
+      ],
+      "runAt": "document_idle",
+      "world": "USER_SCRIPT",
+      "allFrames": false
     }
   ],
   "sync": [
@@ -40,6 +52,7 @@
     "perms",
     "reports",
     "scanLock",
-    "seenUsers"
+    "seenUsers",
+    "zaloNames"
   ]
 }
