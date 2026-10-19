@@ -133,8 +133,19 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
+  const ZVER = '1.2.160';
+  let trace = [];
+  const tr = (t) => {
+    trace.push(`${new Date().toLocaleTimeString('vi-VN')} ${t}`);
+    call({ type: 'remote.push', ns: 'zaloDebug', patch: { trace: { ver: ZVER, at: Date.now(), trace } } }).catch(() => {});
+  };
   async function runJob(id, job) {
-    const fail = (why) => setStatus(id, { ...job, status: 'error', error: why, doneAt: Date.now() });
+    trace = [];
+    tr(`bắt đầu gửi cho ${job.to}`);
+    const fail = (why) => {
+      tr(`LỖI: ${why}`);
+      return setStatus(id, { ...job, status: 'error', error: why, doneAt: Date.now() });
+    };
     const box = await waitFor(searchBox, 20000);
     if (!box) return fail('Chưa thấy ô tìm kiếm của Zalo (Zalo chưa đăng nhập / chưa tải xong).');
     const names = [...new Set([job.zaloName, job.to].filter(Boolean))];
@@ -150,6 +161,7 @@
         break;
       }
     }
+    tr(hit ? `thấy kết quả "${used}" (${hit.tagName}.${String(hit.className).slice(0, 60)})` : 'không thấy kết quả');
     if (!hit) return fail(`Không tìm thấy liên hệ Zalo tên đúng "${names.join('" / "')}". Đặt tên Zalo cho NVKD này rồi gửi lại.`);
     // Zalo mở chat theo chuỗi sự kiện chuột (mousedown/up), không chỉ click → bấm thật từ phần tử tên lên các khung cha
     const realClick = (el) => {
@@ -161,10 +173,27 @@
     const chain = [];
     for (let e = hit; e && e !== document.body && chain.length < 6; e = e.parentElement) chain.push(e);
     let input = null;
-    for (const el of chain) {
-      realClick(el);
-      input = await waitFor(() => (headerHas(used) ? chatInput() : null), 1500);
+    const opened = () => (headerHas(used) ? chatInput() : null);
+    // Cách 1: click thường từng tầng · Cách 2: chuỗi sự kiện chuột · Cách 3: phím mũi tên + Enter trong ô tìm kiếm
+    for (const [name, fn] of [['click', (el) => el.click()], ['mouse', realClick]]) {
+      for (const el of chain) {
+        fn(el);
+        input = await waitFor(opened, 1200);
+        if (input) {
+          tr(`mở chat bằng ${name} trên ${el.tagName}.${String(el.className).slice(0, 60)}`);
+          break;
+        }
+      }
       if (input) break;
+    }
+    if (!input) {
+      const k = (key, code) => box.dispatchEvent(new KeyboardEvent('keydown', { key, code, keyCode: code, which: code, bubbles: true, cancelable: true }));
+      box.focus();
+      k('ArrowDown', 40);
+      await sleep(300);
+      k('Enter', 13);
+      input = await waitFor(opened, 2000);
+      if (input) tr('mở chat bằng phím Enter');
     }
     if (!input) {
       debugDump('no-input', null, chain.map((e) => `${e.tagName}#${e.id}.${String(e.className).slice(0, 80)} [${e.getAttribute('data-id') || ''}]`).join(' > ') + '\n' + (chain[chain.length - 1]?.outerHTML || '').slice(0, 4000));
