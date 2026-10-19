@@ -192,7 +192,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.167';
+  const ZVER = '1.2.168';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -200,10 +200,17 @@
     trace.push(t);
     call({ type: 'remote.push', ns: 'zaloDebug', patch: { [`${runId}-${String(trace.length).padStart(2, '0')}`]: { ver: ZVER, at: Date.now(), t, hidden: document.hidden } } }).catch(() => {});
   };
+  // Ghi lại deal đã hỏi (đồng bộ giữa các máy) – mỗi deal chỉ hỏi 1 lần, mỗi người 1 tin / 30 phút
+  const markSent = (job, drafted) => (job.qid ? kvMerge('zaloSent', { [job.qid]: { to: job.to, code: job.code, at: Date.now(), drafted } }).catch(() => {}) : null);
   async function runJob(id, job) {
     trace = [];
     runId = new Date().toISOString().slice(5, 19);
     tr(`bắt đầu gửi cho ${job.to}`);
+    // Kiểm tra lại trước khi gửi (phòng 2 máy cùng bấm)
+    const sentAll = await kvGet('zaloSent');
+    if (job.qid && sentAll[job.qid]) return setStatus(id, { ...job, status: 'error', error: 'Deal này đã hỏi rồi – không gửi lại.', doneAt: Date.now() });
+    const lastTo = Math.max(0, ...Object.values(sentAll).filter((x) => norm(x?.to) === norm(job.to)).map((x) => x.at || 0));
+    if (Date.now() - lastTo < 30 * 60e3) return setStatus(id, { ...job, status: 'error', error: `Đã nhắn ${job.to} trong 30 phút qua – chưa soạn tin mới.`, doneAt: Date.now() });
     const fail = (why) => {
       tr(`LỖI: ${why}`);
       return setStatus(id, { ...job, status: 'error', error: why, doneAt: Date.now() });
@@ -277,11 +284,15 @@
     if (!how) return fail('Không dán được nội dung vào ô chat.');
     await sleep(500);
     // Chế độ thử: chỉ soạn sẵn, không bấm gửi
-    if (job.draft) return setStatus(id, { ...job, status: 'sent', drafted: true, doneAt: Date.now(), via: used });
+    if (job.draft) {
+      await markSent(job, true);
+      return setStatus(id, { ...job, status: 'sent', drafted: true, doneAt: Date.now(), via: used });
+    }
     pressSend(input);
     await sleep(1500);
     const left = typed(chatInput());
     if (left.length > 10) return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
+    await markSent(job, false);
     await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
   }
 
