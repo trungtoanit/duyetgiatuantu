@@ -668,6 +668,7 @@ Quy tắc:
     setBusy(key, true);
     try {
       const [quotes, comments, me, learned] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('me'), kvGet('learned')]);
+      quickLearn = await kvGet('quickLearn');
       renderCtx.orders = await kvGet('orders');
       meName = myName(me);
       const q = quotes[id];
@@ -704,10 +705,10 @@ Quy tắc:
       const text = await call({
         type: 'claude',
         system: suggestSystem(learned),
-        prompt: [styleBlock(examples, myName(me)), context, threadText(q, c)].filter(Boolean).join('\n\n'),
+        prompt: [styleBlock(examples, myName(me)), editExamples(staffOf(q, c)), context, threadText(q, c)].filter(Boolean).join('\n\n'),
         maxTokens: 4000,
       });
-      await kvMerge('suggests', { [id]: { text: text.trim(), at: Date.now(), overdue, mode, styleFrom: examples.list.length } });
+      await kvMerge('suggests', { [id]: { text: text.trim(), orig: text.trim(), at: Date.now(), overdue, mode, styleFrom: examples.list.length } });
     } catch (e) {
       state.error = e.message;
     } finally {
@@ -1692,6 +1693,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .sent { color: #047857; font-weight: 700; }
     .warn.quick { display: grid; gap: 6px; }
     .quick-why { font-weight: 600; }
+    .learned-tag { display: inline-block; margin-left: 4px; font-size: 11px; font-weight: 700; color: #7c3aed; background: #f3e8ff; border-radius: 999px; padding: 0 8px; }
     .quick-row { display: flex; align-items: center; gap: 12px; }
     .quick-text { flex: 1; font: inherit; font-size: 16px; font-weight: 700; color: #1f2328; background: #fff; border-radius: 8px;
       padding: 8px 12px; border: 1px dashed #d4a72c; resize: vertical; min-height: 110px; max-height: 50vh; line-height: 1.4; }
@@ -3278,18 +3280,63 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   let quickCtx = {}; // id → câu hỏi nhanh đang hiển thị (dùng khi bấm gửi)
+  // ---------- Học từ mỗi lần gửi bình luận ----------
+  // Mỗi lần bấm "Bình luận ngay" / "Gửi bình luận": lưu câu gợi ý gốc + câu thật sự gửi (kv 'quickLearn', đồng bộ).
+  //  - Câu hỏi viết sẵn: cùng mẫu câu (bỏ xưng hô, mốc thời gian) mà lần trước quản lý đã sửa → lần sau gợi ý luôn theo câu đã sửa.
+  //  - Gợi ý của Claude: đưa các lần sửa gần nhất vào đề bài làm ví dụ.
+  let quickLearn = {};
+  const DUR_RE = /\d+\s*(phút|giờ|ngày|tuần|tháng|năm)/g;
+  const PRONOUNS = ['chị', 'anh', 'em'];
+  // Mẫu câu: mốc thời gian → {t}, xưng hô với NVKD → {p}
+  const toPattern = (text, p) => {
+    let t = String(text || '').trim().replace(DUR_RE, '{t}');
+    if (p) t = t.replace(new RegExp(`(^|[^\\p{L}])${p}(?![\\p{L}])`, 'giu'), '$1{p}');
+    return t;
+  };
+  async function recordSend({ kind, base, sent, p, why, staff, code }) {
+    if (!sent) return;
+    await kvMerge('quickLearn', {
+      [`${Date.now()}-${code || ''}`]: { kind, base: base || '', sent, p: p || '', why: why || '', staff: staff || '', code: code || '', edited: !!base && base.trim() !== sent.trim(), at: Date.now(), by: meName },
+    }).catch(() => {});
+  }
+  // Câu gợi ý viết sẵn → nếu cùng mẫu câu đã từng bị sửa thì dùng câu đã sửa (lần sửa gần nhất)
+  function applyLearned(base, p) {
+    const pat = toPattern(base, p);
+    const hit = Object.values(quickLearn)
+      .filter((x) => x.kind === 'quick' && x.edited && toPattern(x.base, x.p) === pat)
+      .sort((a, b) => b.at - a.at)[0];
+    if (!hit) return null;
+    const durs = String(base).match(DUR_RE) || [];
+    let i = 0;
+    const out = toPattern(hit.sent, hit.p)
+      .replace(/\{t\}/g, () => durs[Math.min(i++, durs.length - 1)] || '')
+      .replace(/\{p\}/g, p || 'em');
+    return out.includes('{t}') ? null : out;
+  }
+  // Ví dụ cho Claude: các lần quản lý sửa gợi ý trước khi gửi (ưu tiên cùng NVKD)
+  function editExamples(staff, limit = 15) {
+    const all = Object.values(quickLearn).filter((x) => x.edited).sort((a, b) => b.at - a.at);
+    const same = all.filter((x) => staff && x.staff === staff).slice(0, 8);
+    const list = [...same, ...all.filter((x) => !same.includes(x))].slice(0, limit);
+    if (!list.length) return '';
+    return `CÁC LẦN QUẢN LÝ SỬA GỢI Ý TRƯỚC KHI GỬI (học theo: quản lý thích cách viết ở vế "đã gửi"):\n${list
+      .map((x) => `- [${x.why || x.kind} · ${x.staff || '?'}] gợi ý: "${x.base.replace(/\s+/g, ' ').slice(0, 200)}"\n  → đã gửi: "${x.sent.replace(/\s+/g, ' ').slice(0, 200)}"`)
+      .join('\n')}`;
+  }
+
   const quickBox = (q, c, mode) => {
     const p = addressFor(staffOf(q, c), renderCtx.comments, renderCtx.quotes);
     const qq = quickQuestion(q, c, mode, p);
     if (!qq) return '';
     const id = q.id;
     const draft = renderCtx.quickDraft[id];
-    const text = draft?.base === qq.text ? draft.text : qq.text; // giữ bản đã sửa nếu câu gốc chưa đổi
-    quickCtx[id] = { base: qq.text, text };
+    const learned = applyLearned(qq.text, p);
+    const text = draft?.base === qq.text ? draft.text : learned || qq.text; // giữ bản đã sửa nếu câu gốc chưa đổi
+    quickCtx[id] = { base: qq.text, text, p, why: qq.why, learned: !!learned };
     const sent = renderCtx.quickSent[id];
     const key = `quick:${id}`;
     return `<div class="warn quick">
-      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:</div>
+      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:${learned ? ' <span class="learned-tag" title="Lần trước bạn đã sửa câu gợi ý cùng tình huống – dùng lại cách bạn viết">✨ học từ lần bạn sửa</span>' : ''}</div>
       <div class="quick-row"><textarea class="quick-text quick-edit" data-id="${id}" rows="4">${esc(text)}</textarea>
         <button class="act primary" data-act="quick-send" data-id="${id}" ${state.busy.has(key) ? 'disabled' : ''}>
           ${state.busy.has(key) ? '<span class="spinner light"></span> Đang gửi…' : sent ? '📨 Gửi lại' : '📨 Bình luận ngay'}</button></div>
@@ -4629,6 +4676,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     fab.classList.toggle('alert', alertCount > 0 && !isOpen());
     // Thẻ cố định bên phải trang báo giá: báo giá đang mở (câu hỏi gợi ý, % Flexo/Offset, mua hàng, đánh giá)
     avatars = avatarIndex(quotes);
+    quickLearn = await kvGet('quickLearn');
     renderCtx = { comments, quotes, collected, orders: dedupOrders(await kvGet('orders'), quotes), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
     const btn = (act, key, label, busyLabel, attrs = '') =>
@@ -6110,8 +6158,11 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const text = (root.querySelector(`textarea.quick-edit[data-id="${id}"]`)?.value ?? quickCtx[id].text).trim();
       setBusy(key, true);
       try {
-        await sendComment(text, (await kvGet('quotes'))[id]?.code || document.title.match(/#(BG\d+)/)?.[1]);
+        const qx = (await kvGet('quotes'))[id];
+        const code = qx?.code || document.title.match(/#(BG\d+)/)?.[1];
+        await sendComment(text, code);
         await kvMerge('quickSent', { [id]: { text, at: Date.now() } });
+        recordSend({ kind: 'quick', base: quickCtx[id].base, sent: text, p: quickCtx[id].p, why: quickCtx[id].why, staff: staffOf(qx, renderCtx.comments[id]), code });
       } catch (err) {
         state.error = err.message;
       } finally {
@@ -6229,6 +6280,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           await sendComment(text, code);
           const cur = (await kvGet('suggests'))[id] || {};
           await kvMerge('suggests', { [id]: { ...cur, text, sentAt: Date.now() } });
+          recordSend({ kind: 'ai', base: cur.orig || '', sent: text, why: cur.mode || 'gợi ý Claude', staff: staffOf((await kvGet('quotes'))[id], renderCtx.comments[id]), code });
         } catch (err) {
           state.error = err.message;
         } finally {

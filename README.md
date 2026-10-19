@@ -62,6 +62,14 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### ✨ Học từ mỗi lần gửi bình luận
+
+Mỗi lần bấm **Bình luận ngay** (câu hỏi viết sẵn) hoặc **Gửi bình luận** (gợi ý của Claude), extension lưu câu gợi ý gốc và
+câu bạn thật sự gửi (kv `quickLearn`, đồng bộ). Lần sau:
+- Câu hỏi viết sẵn cùng mẫu (bỏ xưng hô, mốc thời gian) mà bạn đã sửa → gợi ý luôn theo câu bạn sửa, tự thay xưng hô và thời gian;
+  ô gợi ý có nhãn **✨ học từ lần bạn sửa**.
+- Gợi ý của Claude: 15 lần sửa gần nhất (ưu tiên cùng NVKD) được đưa vào đề bài làm ví dụ để viết sát giọng bạn hơn.
+
 ### 🔥 Có thể chốt liền (AI)
 
 Ô cam ở đầu bảng 📊: bấm **🔥 AI chọn đơn chốt được liền** → Claude đọc 40 báo giá khả thi điểm cao nhất
