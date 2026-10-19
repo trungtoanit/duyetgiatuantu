@@ -3118,6 +3118,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     'Giá này {p} gửi khách chưa? Khách chê cao hay ok rồi {p}?',
   ];
 
+  // Khách lâu chưa xuống đơn (lần cuối lên đơn đã quá 30 ngày)
+  const LONG_NO_ORDER = [
+    'Vì sao khách hàng này lâu chưa xuống đơn hàng vậy {p}?',
+    'Khách này đâu rồi {p}, lâu anh chưa thấy có đơn hàng vậy?',
+    'Chào lại khách hàng này xem {p}, lâu quá chưa có đơn.',
+    'Xem tình hình đơn hàng của khách hàng này sao {p}?',
+  ];
+
   // Chào lại: các cách nói của cùng 1 câu "Báo cáo lại khách hàng này"
   const REPORT_BACK = [
     'Báo cáo lại khách hàng này nhé {p}.',
@@ -3171,7 +3179,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã lâu → hỏi vì sao lâu chưa xuống đơn
     const lo = lastCustomerOrderNote(q);
     if (lo && hoursSince(lo.createdAt) >= 30 * 24) {
-      return { icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: `Vì sao khách hàng này lâu chưa xuống đơn hàng vậy ${p}?` };
+      const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
+      return { icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: selfFix(fillP(pickFor(LONG_NO_ORDER, q.id, salt), p), p) };
     }
     // Chưa có bình luận nào (đã mở xem/ thu thập mà không thấy) → hỏi NVKD vì sao chưa có thông tin
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
