@@ -2117,6 +2117,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .bok { margin-left: 6px; display: inline-block; background: #dcfce7; color: #166534; border: 1px solid #86efac; border-radius: 999px; padding: 0 9px;
       font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .fchip.green { --c: #16a34a; --bg: #dcfce7; }
+    .bok.reo { background: #e0f2fe; color: #075985; border-color: #7dd3fc; }
     .it-main .bok { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .nosheet { margin-left: 6px; display: inline-block; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 999px; padding: 0 9px;
       font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
@@ -2944,7 +2945,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const bossOkInfo = (q, c) => (!q || hasOrderFull(q, c) ? null : bossOrderInfo(c));
   const bossOkTag = (q, c) => {
     const t = bossOkInfo(q, c);
-    return t ? ` <span class="bok" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">✅ Lấy đơn</span>` : '';
+    if (!t) return '';
+    const keep = KEEP_PRICE_RE.test(t.text || '');
+    return ` <span class="bok${keep ? ' reo' : ''}" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">${keep ? '🔁 Tái đơn' : '✅ Lấy đơn'}</span>`;
   };
   // Có sản phẩm giá giấy tấm 0đ/m2 → chưa có giá giấy tấm (Flexo chưa chính xác)
   const noSheetTag = (q) => (q?.noSheet ? ` <span class="nosheet" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – cần cập nhật giá giấy tấm">😡 Chưa có giá giấy tấm</span>` : '');
@@ -3089,7 +3092,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       "{d} chưa nghe phản hồi, {p} báo cáo lại giúp anh. "
   ];
   // Sếp bảo lấy / chốt đơn mà chưa lên đơn
-  const BOSS_ORDER_RE = /(lấy|chốt|lên|làm)\s*(cái\s*)?đơn\s*(này|đi|luôn|nha|nhé|em)|(nhập|đồng ý|ok)\s*(giá\s*)?(lấy|chốt)\s*đơn/iu;
+  // "Giữ giá cũ" (đơn tái bản giữ nguyên giá) cũng là sếp cho lấy đơn → nhãn "🔁 Tái đơn"
+  const KEEP_PRICE_RE = /giữ\s*(nguyên\s*)?giá\s*(cũ|như cũ)?/iu;
+  const BOSS_ORDER_RE = /(lấy|chốt|lên|làm)\s*(cái\s*)?đơn\s*(này|đi|luôn|nha|nhé|em)|(nhập|đồng ý|ok)\s*(giá\s*)?(lấy|chốt)\s*đơn|giữ\s*(nguyên\s*)?giá\s*(cũ|như cũ)/iu;
   function bossOrderInfo(c) {
     let hit = null;
     const walk = (t) => {
