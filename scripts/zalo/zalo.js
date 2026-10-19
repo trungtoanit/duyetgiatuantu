@@ -115,14 +115,14 @@
     return typed(el).length > 0 ? 'insert' : '';
   }
   // Gửi thông tin chẩn đoán về máy chủ (để chỉnh lại khi Zalo đổi giao diện)
-  function debugDump(step, el) {
+  function debugDump(step, el, extra = '') {
     const foot = el?.closest('footer, [class*="footer"], [class*="chat-input"], [class*="ChatInput"]') || el?.parentElement?.parentElement?.parentElement;
     const cands = [...document.querySelectorAll('[contenteditable], textarea, #richInput, #input_line_0')].map((e) => ({
       tag: e.tagName, id: e.id, cls: String(e.className).slice(0, 120), ce: e.getAttribute('contenteditable'), vis: visible(e),
       top: Math.round(e.getBoundingClientRect().top), left: Math.round(e.getBoundingClientRect().left), text: (e.innerText || '').slice(0, 80),
     }));
     return call({ type: 'remote.push', ns: 'zaloDebug', patch: { last: { step, at: Date.now(), cands, chosen: el ? { tag: el.tagName, id: el.id, cls: String(el.className).slice(0, 120) } : null,
-      foot: (foot?.outerHTML || '').slice(0, 6000), w: innerWidth, h: innerHeight } } }).catch(() => {});
+      foot: (foot?.outerHTML || '').slice(0, 6000), extra, w: innerWidth, h: innerHeight } } }).catch(() => {});
   }
   function pressSend(el) {
     const btn = [...document.querySelectorAll('[icon*="Sent"], [data-translate-title*="SEND"], [title="Gửi"], .send-btn, [class*="send-btn"]')].find(visible);
@@ -151,12 +151,24 @@
       }
     }
     if (!hit) return fail(`Không tìm thấy liên hệ Zalo tên đúng "${names.join('" / "')}". Đặt tên Zalo cho NVKD này rồi gửi lại.`);
-    hit.click();
-    (hit.closest('[data-id], [class*="item"], li') || hit).click();
-    const input = await waitFor(chatInput, 8000);
+    // Zalo mở chat theo chuỗi sự kiện chuột (mousedown/up), không chỉ click → bấm thật từ phần tử tên lên các khung cha
+    const realClick = (el) => {
+      const r = el.getBoundingClientRect();
+      const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+      for (const t of ['pointerover', 'mouseover', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'])
+        el.dispatchEvent(t.startsWith('pointer') ? new PointerEvent(t, { ...o, pointerId: 1, isPrimary: true }) : new MouseEvent(t, o));
+    };
+    const chain = [];
+    for (let e = hit; e && e !== document.body && chain.length < 6; e = e.parentElement) chain.push(e);
+    let input = null;
+    for (const el of chain) {
+      realClick(el);
+      input = await waitFor(() => (headerHas(used) ? chatInput() : null), 1500);
+      if (input) break;
+    }
     if (!input) {
-      debugDump('no-input', null);
-      return fail('Không mở được khung chat.');
+      debugDump('no-input', null, chain.map((e) => `${e.tagName}#${e.id}.${String(e.className).slice(0, 80)} [${e.getAttribute('data-id') || ''}]`).join(' > ') + '\n' + (chain[chain.length - 1]?.outerHTML || '').slice(0, 4000));
+      return fail('Đã tìm thấy nhưng không mở được khung chat của người này.');
     }
     await sleep(800);
     if (!headerHas(used)) return fail(`Khung chat đang mở không phải "${used}" – đã dừng, không gửi.`);
