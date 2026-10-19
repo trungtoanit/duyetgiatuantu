@@ -76,12 +76,20 @@
   // Ô soạn tin
   // Ô soạn đang hiện: chế độ thường là #richInput; bật "Định dạng tin nhắn" thì là trình soạn khác (contenteditable id ngẫu nhiên)
   const chatInput = () => {
-    const all = [...document.querySelectorAll('[contenteditable="true"], [contenteditable=""], #richInput, textarea')].filter((e) => {
+    const inArea = (e) => {
       if (!visible(e)) return false;
       const r = e.getBoundingClientRect();
-      return r.top > window.innerHeight * 0.5 && r.left > window.innerWidth * 0.2 && r.width > 150;
-    });
-    return all.find((e) => e.contains(document.activeElement)) || all.find((e) => e.id !== 'richInput') || all[0] || null;
+      return r.top > window.innerHeight * 0.5 && r.left > window.innerWidth * 0.2 && r.width > 40;
+    };
+    // Trình soạn định dạng (khi nút A✎ đang bật): contenteditable lớn, không phải #richInput
+    const fmtOn = !!document.querySelector('[data-id="div_RTF_Menu"].focused, [icon="TextFormat_24_Line"].focused');
+    if (fmtOn) {
+      const ed = [...document.querySelectorAll('[contenteditable="true"]')].find((e) => e.id !== 'richInput' && inArea(e) && e.getBoundingClientRect().width > 150);
+      if (ed) return ed;
+    }
+    const rich = document.querySelector('#richInput');
+    if (rich && inArea(rich)) return rich;
+    return [...document.querySelectorAll('[contenteditable="true"], textarea')].find(inArea) || null;
   };
   // Chữ thật trong ô soạn (bỏ dòng gợi ý "Nhập @, tin nhắn tới …")
   const typed = (el) => norm((el?.innerText ?? el?.value ?? '').replace(/^Nhập @.*$/gm, '').replace(/^Nhấn .*định dạng tin nhắn.*$/gim, ''));
@@ -178,7 +186,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.164';
+  const ZVER = '1.2.166';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
