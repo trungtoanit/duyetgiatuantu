@@ -73,8 +73,11 @@
   }
   // Ô soạn tin
   const chatInput = () =>
-    document.querySelector('#richInput') ||
-    [...document.querySelectorAll('[contenteditable="true"]')].find((e) => visible(e) && e.getBoundingClientRect().top > window.innerHeight * 0.5);
+    [...document.querySelectorAll('#richInput, #input_line_0, [contenteditable="true"], [contenteditable=""], textarea')].find(
+      (e) => visible(e) && e.getBoundingClientRect().top > window.innerHeight * 0.6 && e.getBoundingClientRect().left > window.innerWidth * 0.2
+    ) || document.querySelector('#richInput');
+  // Chữ thật trong ô soạn (bỏ dòng gợi ý "Nhập @, tin nhắn tới …")
+  const typed = (el) => norm((el?.innerText ?? el?.value ?? '').replace(/^Nhập @.*$/m, ''));
   // Tiêu đề cuộc trò chuyện đang mở có chứa tên người nhận
   const headerHas = (name) =>
     [...document.querySelectorAll('header, .header, [class*="header"], [class*="Header"]')].some(
@@ -82,6 +85,7 @@
     );
 
   async function pasteText(el, text, html) {
+    el.click();
     el.focus();
     // Dán kiểu clipboard (giữ xuống dòng, chữ đậm nếu Zalo nhận định dạng)
     try {
@@ -90,8 +94,8 @@
       if (html) dt.setData('text/html', html);
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
     } catch {}
-    await sleep(400);
-    if (norm(el.textContent).length >= Math.min(20, norm(text).length)) return true;
+    await sleep(500);
+    if (typed(el).length >= Math.min(20, norm(text).length)) return 'paste';
     // Dự phòng: gõ từng dòng, Shift+Enter để xuống dòng
     const lines = text.split('\n');
     lines.forEach((ln, i) => {
@@ -104,7 +108,21 @@
       }
     });
     await sleep(300);
-    return norm(el.textContent).length > 0;
+    if (typed(el).length > 0) return 'type';
+    // Dự phòng cuối: chèn cả đoạn một lần
+    document.execCommand('insertText', false, text);
+    await sleep(300);
+    return typed(el).length > 0 ? 'insert' : '';
+  }
+  // Gửi thông tin chẩn đoán về máy chủ (để chỉnh lại khi Zalo đổi giao diện)
+  function debugDump(step, el) {
+    const foot = el?.closest('footer, [class*="footer"], [class*="chat-input"], [class*="ChatInput"]') || el?.parentElement?.parentElement?.parentElement;
+    const cands = [...document.querySelectorAll('[contenteditable], textarea, #richInput, #input_line_0')].map((e) => ({
+      tag: e.tagName, id: e.id, cls: String(e.className).slice(0, 120), ce: e.getAttribute('contenteditable'), vis: visible(e),
+      top: Math.round(e.getBoundingClientRect().top), left: Math.round(e.getBoundingClientRect().left), text: (e.innerText || '').slice(0, 80),
+    }));
+    return call({ type: 'remote.push', ns: 'zaloDebug', patch: { last: { step, at: Date.now(), cands, chosen: el ? { tag: el.tagName, id: el.id, cls: String(el.className).slice(0, 120) } : null,
+      foot: (foot?.outerHTML || '').slice(0, 6000), w: innerWidth, h: innerHeight } } }).catch(() => {});
   }
   function pressSend(el) {
     const btn = [...document.querySelectorAll('[icon*="Sent"], [data-translate-title*="SEND"], [title="Gửi"], .send-btn, [class*="send-btn"]')].find(visible);
@@ -136,14 +154,21 @@
     hit.click();
     (hit.closest('[data-id], [class*="item"], li') || hit).click();
     const input = await waitFor(chatInput, 8000);
-    if (!input) return fail('Không mở được khung chat.');
+    if (!input) {
+      debugDump('no-input', null);
+      return fail('Không mở được khung chat.');
+    }
     await sleep(800);
     if (!headerHas(used)) return fail(`Khung chat đang mở không phải "${used}" – đã dừng, không gửi.`);
-    if (!(await pasteText(input, job.text, job.html))) return fail('Không dán được nội dung vào ô chat.');
+    const how = await pasteText(chatInput() || input, job.text, job.html);
+    debugDump(`paste:${how || 'fail'}`, chatInput() || input);
+    if (!how) return fail('Không dán được nội dung vào ô chat.');
     await sleep(500);
+    // Chế độ thử: chỉ soạn sẵn, không bấm gửi
+    if (job.draft) return setStatus(id, { ...job, status: 'sent', drafted: true, doneAt: Date.now(), via: used });
     pressSend(input);
     await sleep(1500);
-    const left = norm(chatInput()?.textContent || '');
+    const left = typed(chatInput());
     if (left.length > 10) return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
     await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
   }
