@@ -3236,7 +3236,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     'Tìm được trực tiếp thu mua chưa {p}?',
     'Có được báo giá thử cho khách này chưa {p}?',
     'Khách này đang lấy hàng bên nào {p}?',
-    'Tình hình khách này sao rồi {p}, có cơ hội làm đơn không?',
+    'Tình hình khách này sao rồi {p}, có cơ hội báo giá không?',
   ];
   // Hỏi thăm 1 deal qua Zalo
   // Số phút còn phải chờ trước khi soạn tin mới cho 1 NVKD (mỗi người 1 tin / 30 phút; tin đang chờ gửi cũng tính)
