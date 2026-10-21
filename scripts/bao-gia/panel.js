@@ -216,7 +216,7 @@
     return Object.values(quotes)
       .filter(
         (q) =>
-          q.id && q.quoteStatus && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !hasOrder(q, comments[q.id]) &&
+          q.id && q.quoteStatus && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !hasOrder(q, comments[q.id]) && !/^\s*SO\s*\d+/i.test(q.name || '') &&
           !(q.customer?.id && ordersMap?.[q.customer.id]?.orders?.some((o) => o.quote === q.code)) &&
           !isExcluded(staffOf(q, comments[q.id])) && q.createdAt && hoursSince(q.createdAt) <= 90 * 24,
       )
@@ -2923,6 +2923,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
   }
   // Báo giá đã thành đơn: có đơn Misa / dòng "lên đơn hàng" / đơn trong lịch sử mua hàng trỏ về báo giá này
+  const isOrdered = (q, c) => CLOSED.has(q?.quoteStatus) || /^\s*SO\s*\d+/i.test(q?.name || '') || hasOrderFull(q, c);
   const hasOrderFull = (q, c) =>
     !!(q?.hasOrder || hasOrder(q, c) || (q?.customer?.id && renderCtx.orders?.[q.customer.id]?.orders?.some((o) => o.quote === q.code)));
   const sampleTag = (q, c) => {
@@ -4638,7 +4639,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const silent = noCommentList(live, liveComments, collected);
     // Tất cả báo giá CHƯA ĐỌC trên CRM (dòng in đậm) – hiện đủ 100%
     const unreadAll = Object.values(live)
-      .filter((q) => q.isRead === false && !isExcluded(staffOf(q, comments[q.id])))
+      // Bỏ báo giá đã chốt / đã lên đơn (tình trạng Duyệt lên đơn, Thành công; có đơn Misa; tên là mã đơn "SO1234")
+      .filter((q) => q.isRead === false && !isExcluded(staffOf(q, comments[q.id])) && !isOrdered(q, comments[q.id]))
       .map((q) => {
         const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
         return { q, c, last: lastComment(c) };
