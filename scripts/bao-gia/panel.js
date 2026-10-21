@@ -5543,6 +5543,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Duyệt mọi báo giá: báo giá nào đang cần hỏi NVKD, bằng bộ câu nào, câu gì + điểm ưu tiên (tính lại tối đa 2 phút / lần)
   const QA_WEIGHT = { bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
+  const QA_GAP = 4 * 3600e3; // 1 báo giá không xuất hiện lại trong 4 giờ sau khi đã hỏi
   function qaScanAll() {
     if (state.qaScan && Date.now() - state.qaScan.at < 120e3) return state.qaScan.list;
     const qs = renderCtx.quotes || {};
@@ -5568,8 +5569,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       } catch {}
       score += Math.min(25, Math.max(0, Math.round((f?.score || 0) / 4)));
       if (renderCtx.hotSet?.has(q.id)) score += 40;
+      // Đã hỏi trong 4 giờ qua (bấm Bình luận ngay, hoặc sếp tự bình luận trên CRM) → không đưa vào lại
       const sent = renderCtx.quickSent?.[q.id];
-      const recent = !!sent && Date.now() - sent.at < 24 * 3600e3;
+      let bossAt = 0;
+      const walk = (t) => {
+        if (norm(t.staff?.name) === norm(meName) && t.createdAt > bossAt) bossAt = t.createdAt;
+        (t.children || []).forEach(walk);
+      };
+      (c.threads || []).forEach(walk);
+      const lastAsk = Math.max(sent?.at || 0, bossAt * 1000);
+      const recent = Date.now() - lastAsk < QA_GAP;
       list.push({ q, c, staff, r, score, amt, recent });
     }
     state.qaScan = { at: Date.now(), list };
@@ -5578,7 +5587,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const qaLevel = (sc) => (sc >= 140 ? ['hi', '🔴 Cao'] : sc >= 95 ? ['mid', '🟠 Vừa'] : ['lo', '🟢 Thấp']);
   // Tab con "Tổng quan": việc cần bình luận cho NVKD, xếp ưu tiên từ cao xuống thấp
   function qaOverview() {
-    const all = qaScanAll().filter((x) => !x.recent).sort((a, b) => b.score - a.score);
+    // Mỗi báo giá chỉ 1 dòng (trùng mã thì giữ dòng điểm cao nhất)
+    const seen = new Set();
+    const all = qaScanAll()
+      .filter((x) => !x.recent)
+      .sort((a, b) => b.score - a.score)
+      .filter((x) => {
+        const k = x.q.code || x.q.id;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
     const staffF = state.qaStaff || '';
     const rows = staffF ? all.filter((x) => x.staff === staffF) : all;
     const byStaff = {};
@@ -5605,7 +5624,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .join('');
     return `<div class="qa-pane qo">
         <div class="qa-ph"><span class="qa-pic">📊</span><div><h3>Tổng quan – cần bình luận cho NVKD</h3>
-          <span class="muted">${rows.length} báo giá cần hỏi · xếp theo điểm ưu tiên (tình huống + giá trị báo giá + khả năng chốt + đang trong 🔥 Gợi ý chốt đơn) · ẩn báo giá đã hỏi trong 24 giờ</span></div></div>
+          <span class="muted">${rows.length} báo giá cần hỏi · xếp theo điểm ưu tiên (tình huống + giá trị báo giá + khả năng chốt + đang trong 🔥 Gợi ý chốt đơn) · báo giá đã hỏi thì ẩn 4 giờ rồi mới hiện lại</span></div></div>
         <div class="qo-kpi"><div class="qo-k hi"><b>${lv.hi}</b><span>🔴 Ưu tiên cao</span></div><div class="qo-k mid"><b>${lv.mid}</b><span>🟠 Ưu tiên vừa</span></div><div class="qo-k lo"><b>${lv.lo}</b><span>🟢 Ưu tiên thấp</span></div></div>
         <div class="qo-sts">${staffChips}</div>
         <div class="qo-bks">${bankChips}</div>
