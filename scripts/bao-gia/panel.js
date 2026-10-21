@@ -1139,6 +1139,40 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Báo giá Offset: trong khung ẩn, bấm số lượng từng sản phẩm → mở "Tính giá offset" → Ctrl+Shift+G.
   // hook.js trong khung đọc bảng chiết giá (iframe#printWindow) và gửi "Đang bán (X%)" về để lưu. Lệnh in bị chặn.
+  // Bảng sản phẩm của báo giá: cột STT có loại ("1 Flexo", "3 Offset", "2 Khác"), "Kết cấu giấy" có mã NCC
+  // trước dấu "_" (PNTP_T140/… → PNTP), "Tổng tiền" là thành tiền sau VAT của dòng.
+  // → kindTotals { flexo, offset, other, flexoSup[], offsetSup[] } lưu vào margins[mã BG] (đồng bộ).
+  function readKindTotals(doc) {
+    const t = [...doc.querySelectorAll('.ant-table')].find((x) => {
+      const hs = [...x.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+      return hs.includes('Tổng tiền') && hs.includes('Số lượng');
+    });
+    if (!t) return null;
+    const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+    const iStt = hs.indexOf('STT');
+    const iKc = hs.indexOf('Kết cấu giấy');
+    const iTot = hs.lastIndexOf('Tổng tiền');
+    const out = { flexo: 0, offset: 0, other: 0, flexoSup: [], offsetSup: [] };
+    let n = 0;
+    for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+      if (tr.classList.contains('ant-table-measure-row') || tr.cells.length <= iTot) continue;
+      const kind = /offset/i.test(tr.cells[iStt]?.innerText || '') ? 'offset' : /flexo/i.test(tr.cells[iStt]?.innerText || '') ? 'flexo' : 'other';
+      const total = Number(String(tr.cells[iTot]?.innerText || '').replace(/[^\d]/g, '')) || 0;
+      out[kind] += total;
+      n++;
+      const sup = iKc >= 0 && (tr.cells[iKc]?.innerText || '').match(/\|\s*([A-Z0-9]+)_/)?.[1];
+      if (sup && kind !== 'other' && !out[`${kind}Sup`].includes(sup)) out[`${kind}Sup`].push(sup);
+    }
+    return n ? out : null;
+  }
+  async function saveKindTotals(doc, code) {
+    const kt = code && readKindTotals(doc);
+    if (!kt) return;
+    const cur = (await kvGet('margins'))[code] || { products: {} };
+    const same = JSON.stringify({ ...cur.kindTotals, at: 0 }) === JSON.stringify({ ...kt, at: 0 });
+    if (!same) await kvMerge('margins', { [code]: { ...cur, kindTotals: { ...kt, at: Math.floor(Date.now() / 1000) } } });
+  }
+
   async function readOffsetMargins(f) {
     const doc = f.contentDocument;
     if (!doc) return;
@@ -1200,6 +1234,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   async function readFlexoCost(f, q) {
     const doc = f.contentDocument;
     if (!doc) return;
+    await saveKindTotals(doc, q?.code).catch(() => {});
     const vis = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
     const poBtn = [...doc.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lên PO');
     if (!poBtn) return;
@@ -2852,21 +2887,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Số tiền dạng triệu: 1.234.567 → "1,23 tr"
   const trM = (v) => `${(v / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tr`;
   // Báo giá vừa Flexo vừa Offset: chỉ lấy phần thành tiền của loại đang tính (tỉ trọng từ các dòng sản phẩm)
-  const kindPart = (q, kind, total) => (total && q?.kindShare?.[kind] ? total * q.kindShare[kind] : total);
+  // Phần tiền của 1 loại hàng: ưu tiên "Tổng tiền" các dòng loại đó đọc từ bảng sản phẩm (kindTotals),
+  // không có thì chia theo tỉ trọng thành tiền (kindShare) – chỉ khi báo giá có từ 2 loại / có dòng khác
+  const kindTotalsOf = (q) => renderCtx.margins?.[q?.code]?.kindTotals;
+  const kindPart = (q, kind, total) => {
+    const kt = kindTotalsOf(q);
+    if (kt?.[kind] && (kt.flexo && kt.offset || kt.other)) return kt[kind];
+    return total && q?.kindShare?.[kind] ? total * q.kindShare[kind] : total;
+  };
   const flexoInfo = (q) => {
     const fx = q?.code && renderCtx.margins?.[q.code]?.flexo;
     // Tổng báo giá vừa đổi → dùng tổng mới ngay trong lúc chờ đọc lại PO
     const base = kindPart(q, 'flexo', flexoAmountChanged(fx, q) ? q.amount : fx?.quoteTotal || q?.amount);
     if (!fx?.suppliers?.length || !base) return null;
-    // Mỗi nhà cung cấp lo giấy tấm cho các sản phẩm khác nhau → chi phí giấy tấm = TỔNG PO của các nhà cung cấp
-    const sum = fx.suppliers.reduce((a, s) => a + (s.total || 0), 0);
-    const best = { code: fx.suppliers.map((s) => s.code).join(' + '), total: sum };
+    // Mỗi nhà cung cấp lo giấy tấm cho các sản phẩm khác nhau → chi phí giấy tấm = TỔNG PO của các nhà cung cấp.
+    // Chỉ lấy NCC giấy của sản phẩm Flexo (cột Kết cấu giấy); NCC giấy của sản phẩm Offset (vd. VS) không tính vào Flexo.
+    const fxSup = kindTotalsOf(q)?.flexoSup || [];
+    const own = fxSup.length ? fx.suppliers.filter((s) => fxSup.includes(s.code)) : [];
+    const sups = own.length ? own : fx.suppliers;
+    const skipped = own.length ? fx.suppliers.filter((s) => !fxSup.includes(s.code)) : [];
+    const sum = sups.reduce((a, s) => a + (s.total || 0), 0);
+    const best = { code: sups.map((s) => s.code).join(' + '), total: sum };
     const cost = Math.round((sum / base) * 1000) / 10;
     // PO giấy tấm lớn hơn cả giá trị báo giá (thường do số lượng tấm tối thiểu / MOQ) → không tính %
     const missing = fx.missing || [];
     const diff = base - sum; // chênh lệch tổng đơn – giấy tấm (âm = giấy tấm vượt báo giá)
-    if (cost > 100) return { best, cost, rest: null, invalid: true, base, diff, suppliers: fx.suppliers, missing, at: fx.at };
-    return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, diff, suppliers: fx.suppliers, missing, at: fx.at };
+    if (cost > 100) return { best, cost, rest: null, invalid: true, base, diff, suppliers: sups, skipped, missing, at: fx.at };
+    return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, diff, suppliers: sups, skipped, missing, at: fx.at };
   };
   const marginOf = (q) => {
     const m = q?.code && renderCtx.margins?.[q.code];
@@ -3749,7 +3796,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ? `<span class="calc"><span class="spinner"></span><span class="calc-bar"><i></i></span><span class="muted">đang tính…</span></span>`
       : `<span class="muted">chưa có</span><button class="side-btn calc-btn" data-side="calc" title="Tính lại ngay">↻ Tính ngay</button>`;
 
+  // Đang xem báo giá: đọc bảng sản phẩm (tổng tiền + NCC giấy theo loại), tối đa 1 lần / 20 giây
+  let ktAt = 0;
+  function watchKindTotals(q) {
+    if (!IS_TOP || !q?.code || Date.now() - ktAt < 20000) return;
+    ktAt = Date.now();
+    saveKindTotals(document, q.code).catch(() => {});
+  }
+
   function renderSide(q, qid = q?.id, body = '', ho = '', hoN = 0) {
+    watchKindTotals(q);
     const el = root?.querySelector('.side');
     if (!el) return;
     // Đang gõ trong ô câu hỏi / gợi ý / bàn giao của thẻ → không vẽ lại để khỏi mất chữ
@@ -3827,6 +3883,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       (od ? offsetSteps(q, od) : '');
     const fxRows = fx
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
+        (fx.skipped || []).map((s) => `<tr class="muted"><td>PO ${esc(s.code)} – giấy cho sản phẩm Offset, không tính vào Flexo</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td><s>${money(s.total)}</s></td><td></td></tr>`).join('') +
         `<tr><td><b>Tổng giấy tấm</b></td><td></td><td><b>${money(fx.best.total)}</b></td><td class="num"><b>${fx.cost}%</b></td></tr>` +
         `<tr><td><b>Chênh lệch (BG − giấy tấm)</b></td><td></td><td><b class="${fx.diff < 0 ? 'warnx' : 'pos'}">${fx.diff < 0 ? '−' : ''}${trM(Math.abs(fx.diff))}</b></td><td class="num">${fx.rest != null ? `${fx.rest}%` : ''}</td></tr>`
       : '';
