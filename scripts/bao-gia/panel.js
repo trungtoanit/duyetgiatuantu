@@ -2264,6 +2264,29 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qr-who { display: inline-flex; align-items: center; gap: 4px; color: #475569; }
     .qr-why { color: #94a3b8; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .qr-q { grid-column: 1 / -1; color: #3730a3; font-style: italic; }
+    .qa-ov { font-weight: 800; color: #0f172a; } .qa-ov.on { background: linear-gradient(90deg, #fee2e2, #fff7ed) !important; color: #9a3412 !important; box-shadow: inset 3px 0 0 #f97316 !important; }
+    .qa-sep { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; padding: 8px 8px 2px; border-top: 1px solid #f1f5f9; margin-top: 4px; }
+    .qo-kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .qo-k { border-radius: 12px; padding: 8px 12px; display: grid; } .qo-k b { font-size: 26px; line-height: 1.1; } .qo-k span { font-size: 12px; font-weight: 700; }
+    .qo-k.hi { background: #fef2f2; color: #b91c1c; } .qo-k.mid { background: #fff7ed; color: #c2410c; } .qo-k.lo { background: #f0fdf4; color: #15803d; }
+    .qo-sts, .qo-bks { display: flex; flex-wrap: wrap; gap: 5px; }
+    .qo-st { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #e2e8f0; background: #fff; border-radius: 999px; padding: 2px 10px 2px 4px; font: inherit; font-size: 12px; cursor: pointer; }
+    .qo-st b { color: #64748b; } .qo-st.on { background: #1e293b; color: #fff; border-color: #1e293b; } .qo-st.on b { color: #e2e8f0; }
+    .qo-bk { font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 1px 8px; color: #475569; } .qo-bk b { color: #4338ca; }
+    .qo-list { display: grid; gap: 4px; }
+    .qo-row { display: grid; grid-template-columns: 26px 78px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-decoration: none; color: inherit; background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #e2e8f0; border-radius: 8px; padding: 5px 10px; }
+    .qo-row.hi { border-left-color: #ef4444; } .qo-row.mid { border-left-color: #f97316; } .qo-row.lo { border-left-color: #22c55e; }
+    .qo-row:hover { box-shadow: 0 2px 10px rgba(15,23,42,.08); border-color: #c7d2fe; }
+    .qo-no { color: #94a3b8; font-weight: 800; text-align: right; font-size: 12px; }
+    .qo-lv { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; text-align: center; white-space: nowrap; }
+    .qo-lv.hi { background: #fee2e2; color: #b91c1c; } .qo-lv.mid { background: #ffedd5; color: #c2410c; } .qo-lv.lo { background: #dcfce7; color: #15803d; }
+    .qo-main { display: grid; gap: 1px; min-width: 0; }
+    .qo-top { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; } .qo-top b { color: #1d4ed8; } .qo-top .kh { margin: 0; font-size: 10px; }
+    .qo-bank { font-size: 11px; font-weight: 700; color: #4338ca; white-space: nowrap; }
+    .qo-why { font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qo-q { font-size: 12.5px; color: #3730a3; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qo-side { display: grid; justify-items: end; gap: 1px; } .qo-amt { font-weight: 800; color: #047857; font-size: 12.5px; }
+    .qo-who { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #64748b; }
     .qa-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; align-items: start; }
     .qa-menu { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; overflow: hidden; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
     .qa-mi { display: flex !important; width: 100% !important; min-width: 0; box-sizing: border-box; overflow: hidden; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
@@ -5516,6 +5539,79 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     qePreview(line);
   }
 
+  // Duyệt mọi báo giá: báo giá nào đang cần hỏi NVKD, bằng bộ câu nào, câu gì + điểm ưu tiên (tính lại tối đa 2 phút / lần)
+  const QA_WEIGHT = { bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
+  function qaScanAll() {
+    if (state.qaScan && Date.now() - state.qaScan.at < 120e3) return state.qaScan.list;
+    const qs = renderCtx.quotes || {};
+    const cm = renderCtx.comments || {};
+    const list = [];
+    for (const q of Object.values(qs)) {
+      if (!q?.id) continue;
+      const c = cm[q.id] || { id: q.id, threads: [] };
+      const staff = staffOf(q, c);
+      if (!staff || isExcluded(staff)) continue;
+      let r = null;
+      try {
+        r = quickQuestion(q, c, followMode(q, c), addressFor(staff, cm, qs));
+      } catch {}
+      if (!r?.bank) continue;
+      // Điểm ưu tiên: loại tình huống + giá trị báo giá + khả năng chốt + đang trong Gợi ý chốt đơn − vừa hỏi gần đây
+      const amt = Number(q.amount) || 0;
+      let score = QA_WEIGHT[r.bank] || 20;
+      score += Math.min(40, Math.round(Math.log10(1 + amt / 1e6) * 15));
+      let f = null;
+      try {
+        f = feasibility(q, c, renderCtx.orders);
+      } catch {}
+      score += Math.min(25, Math.max(0, Math.round((f?.score || 0) / 4)));
+      if (renderCtx.hotSet?.has(q.id)) score += 40;
+      const sent = renderCtx.quickSent?.[q.id];
+      const recent = !!sent && Date.now() - sent.at < 24 * 3600e3;
+      list.push({ q, c, staff, r, score, amt, recent });
+    }
+    state.qaScan = { at: Date.now(), list };
+    return list;
+  }
+  const qaLevel = (sc) => (sc >= 140 ? ['hi', '🔴 Cao'] : sc >= 95 ? ['mid', '🟠 Vừa'] : ['lo', '🟢 Thấp']);
+  // Tab con "Tổng quan": việc cần bình luận cho NVKD, xếp ưu tiên từ cao xuống thấp
+  function qaOverview() {
+    const all = qaScanAll().filter((x) => !x.recent).sort((a, b) => b.score - a.score);
+    const staffF = state.qaStaff || '';
+    const rows = staffF ? all.filter((x) => x.staff === staffF) : all;
+    const byStaff = {};
+    all.forEach((x) => (byStaff[x.staff] = (byStaff[x.staff] || 0) + 1));
+    const lv = { hi: 0, mid: 0, lo: 0 };
+    rows.forEach((x) => lv[qaLevel(x.score)[0]]++);
+    const byBank = {};
+    rows.forEach((x) => (byBank[x.r.bank] = (byBank[x.r.bank] || 0) + 1));
+    const bankChips = QBANKS.filter((b) => byBank[b.id]).map((b) => `<span class="qo-bk" title="${esc(b.when)}">${b.icon} ${esc(b.title)} <b>${byBank[b.id]}</b></span>`).join('');
+    const staffChips = [['', 'Tất cả', all.length], ...Object.entries(byStaff).sort((a, b) => b[1] - a[1]).map(([n, k]) => [n, shortName(n), k])]
+      .map(([n, label, k]) => `<button class="qo-st${n === staffF ? ' on' : ''}" data-act="qa-staff" data-staff="${esc(n)}">${n ? avatarHtml(n, 16) : ''}${esc(label)} <b>${k}</b></button>`)
+      .join('');
+    const list = rows
+      .slice(0, 80)
+      .map((x, i) => {
+        const [cls, lab] = qaLevel(x.score);
+        const b = QBANKS.find((k) => k.id === x.r.bank);
+        return `<a class="qo-row ${cls}" href="/bao-gia/update/${x.q.id}" data-nav data-code="${esc(x.q.code)}">
+          <span class="qo-no">${i + 1}</span><span class="qo-lv ${cls}" title="Điểm ưu tiên ${x.score}">${lab}</span>
+          <span class="qo-main"><span class="qo-top"><b>${esc(x.q.code)}</b>${custTag(x.q)}<span class="qo-bank">${b?.icon || ''} ${esc(b?.title || '')}</span><span class="qo-why">${esc(x.r.why)}</span></span>
+            <span class="qo-q" title="${esc(x.r.text)}">💬 “${esc(x.r.text)}”</span></span>
+          <span class="qo-side"><span class="qo-amt">${x.amt ? moneyShortG(x.amt) : '<span class="muted">0đ</span>'}</span><span class="qo-who">${avatarHtml(x.staff, 18)}${esc(shortName(x.staff))}</span></span></a>`;
+      })
+      .join('');
+    return `<div class="qa-pane qo">
+        <div class="qa-ph"><span class="qa-pic">📊</span><div><h3>Tổng quan – cần bình luận cho NVKD</h3>
+          <span class="muted">${rows.length} báo giá cần hỏi · xếp theo điểm ưu tiên (tình huống + giá trị báo giá + khả năng chốt + đang trong 🔥 Gợi ý chốt đơn) · ẩn báo giá đã hỏi trong 24 giờ</span></div></div>
+        <div class="qo-kpi"><div class="qo-k hi"><b>${lv.hi}</b><span>🔴 Ưu tiên cao</span></div><div class="qo-k mid"><b>${lv.mid}</b><span>🟠 Ưu tiên vừa</span></div><div class="qo-k lo"><b>${lv.lo}</b><span>🟢 Ưu tiên thấp</span></div></div>
+        <div class="qo-sts">${staffChips}</div>
+        <div class="qo-bks">${bankChips}</div>
+        <div class="qo-list">${list || '<div class="muted">Không có báo giá nào cần hỏi.</div>'}</div>
+        ${rows.length > 80 ? `<div class="muted">… và ${rows.length - 80} báo giá ưu tiên thấp hơn</div>` : ''}
+        <div class="muted">Bấm 1 dòng để mở báo giá – thẻ bên phải có sẵn câu hỏi, sửa nếu cần rồi bấm 📨 Bình luận ngay.</div></div>`;
+  }
+
   // Review: câu hỏi hiện thế nào với từng cách gọi + các báo giá ĐANG khớp điều kiện bộ này (câu đúng như thẻ bên phải sẽ gợi ý)
   function qaReview(sel) {
     const P = ['em', 'chị', 'anh'].includes(state.qaP) ? state.qaP : 'em';
@@ -5523,29 +5619,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const chat = lines
       .map((t) => `<div class="qr-b"><span class="qr-ava">👨‍💼</span><div class="qr-msg">${esc(selfFix(fillP(t, P, '5 ngày'), P))}</div></div>`)
       .join('');
-    let live = [];
-    // Tính lại tối đa 2 phút / lần cho mỗi bộ (duyệt cả nghìn báo giá khá nặng)
-    const ck = state.qrCache?.[sel.id];
-    if (ck && Date.now() - ck.at < 120e3) live = ck.live;
-    else if (sel.id !== 'zalo' && sel.id !== 'silentLead') {
-      const qs = renderCtx.quotes || {};
-      const cm = renderCtx.comments || {};
-      for (const q of Object.values(qs)) {
-        if (!q?.id || q.quoteStatus === 'REJECT' && sel.id !== 'reportBack') continue;
-        const c = cm[q.id];
-        if (!c?.threads?.length && sel.id !== 'noComment' && sel.id !== 'connect' && sel.id !== 'monthly') continue;
-        const staff = staffOf(q, c);
-        if (!staff || isExcluded(staff)) continue;
-        let r = null;
-        try {
-          r = quickQuestion(q, c || { id: q.id, threads: [] }, followMode(q, c), addressFor(staff, cm, qs));
-        } catch {}
-        if (r?.bank === sel.id) live.push({ q, staff, r });
-        if (live.length >= 60) break;
-      }
-      live.sort((a, b) => (b.q.updatedAt || b.q.createdAt || 0) - (a.q.updatedAt || a.q.createdAt || 0));
-      state.qrCache = { ...(state.qrCache || {}), [sel.id]: { at: Date.now(), live } };
-    }
+    const live = sel.id === 'zalo' || sel.id === 'silentLead' ? [] : qaScanAll().filter((x) => x.r.bank === sel.id).sort((a, b) => b.score - a.score);
     const liveHtml = sel.id === 'zalo'
       ? '<div class="muted">Bộ này dùng ở tab 🔥 Gợi ý chốt đơn (nút 💬 từng deal).</div>'
       : sel.id === 'silentLead'
@@ -5563,10 +5637,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   function qaTab(admin) {
     const ex = (t) => esc(fillP(t, 'em', '5 ngày'));
+    const ov = !lsGet('dgQaSel') || lsGet('dgQaSel') === 'overview';
     const sel = QBANKS.find((b) => b.id === lsGet('dgQaSel')) || QBANKS[0];
     const isEd = (b) => !!QB[b.id]?.lines?.filter(Boolean).length;
     // Menu con bên trái: mỗi bộ câu hỏi 1 dòng (theo thứ tự ưu tiên)
-    const menu = QBANKS.map((b, i) => `<button class="qa-mi${b.id === sel.id ? ' on' : ''}" data-act="qa-sel" data-id="${b.id}" title="${esc(b.when)}">
+    const menu = `<button class="qa-mi qa-ov${ov ? ' on' : ''}" data-act="qa-sel" data-id="overview"><span class="qa-mt">📊 Tổng quan – cần bình luận</span><span class="qa-mc">${qaScanAll().filter((x) => !x.recent).length}</span></button><div class="qa-sep">Bộ câu hỏi (thứ tự ưu tiên)</div>` + QBANKS.map((b, i) => `<button class="qa-mi${!ov && b.id === sel.id ? ' on' : ''}" data-act="qa-sel" data-id="${b.id}" title="${esc(b.when)}">
         <span class="qb-no">${i + 1}</span><span class="qa-mt">${b.icon} ${esc(b.title)}</span><span class="qa-mc">${qbank(b.id).length}</span>${isEd(b) ? '<span class="qa-dot" title="Đã sửa">✏️</span>' : ''}</button>`).join('');
     const o = QB[sel.id];
     const lines = qbank(sel.id);
@@ -5588,7 +5663,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ${qaReview(sel)}
         ${admin ? '' : `<div class="qa-lbl">👀 Các câu (gọi NVKD là "em")</div><div class="qb-ex">${lines.map((t, k) => `<div><em>${k + 1}</em>${ex(t)}</div>`).join('')}</div>`}</div>`;
     return `<div class="qb-tab"><div class="qb-intro">💬 Thẻ bên phải trang báo giá xét các điều kiện <b>theo thứ tự 1 → ${QBANKS.length}</b>, khớp điều kiện nào trước thì dùng bộ câu đó; mỗi báo giá lấy 1 câu cố định, bấm <b>Gửi lại</b> thì đổi câu khác.</div>
-      <div class="qa-wrap"><div class="qa-menu">${menu}</div>${pane}</div></div>`;
+      <div class="qa-wrap"><div class="qa-menu">${menu}</div>${ov ? qaOverview() : pane}</div></div>`;
   }
 
   // ---------- Tab "⚙️ Cài đặt": các thông số của extension (giống popup) ngay trên bảng ----------
@@ -6742,6 +6817,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
       render();
     }
+    else if (act === 'qa-staff') {
+      state.qaStaff = b.dataset.staff || '';
+      render();
+    }
     else if (act === 'qa-p') {
       if (state.qbDirty) return; // đang sửa – không vẽ lại
       state.qaP = b.dataset.p;
@@ -6795,6 +6874,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const lines = act === 'qb-reset' ? [] : [...root.querySelectorAll(`.qe[data-id="${id}"] .qe-line`)].map(qSerialize).filter(Boolean);
       state.qbDirty = false;
       await kvMerge('qbank', { [id]: { lines, at: Date.now(), by: meName } });
+      state.qaScan = null; // câu đã đổi → tính lại Review / Tổng quan
       b.textContent = '✅ Đã lưu';
       root.activeElement?.blur?.();
       lastPanelHtml = '';
