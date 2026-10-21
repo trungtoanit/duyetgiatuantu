@@ -2323,6 +2323,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qb-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
     .qb-ex { font-size: 12px; color: #475569; display: grid; gap: 2px; }
     .bigtab.qa.on { color: #6d28d9; }
+    .quick-src { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: #6b7280; margin-bottom: 4px; } .quick-src b { color: #4338ca; }
+    .quick-fix { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 0 9px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .quick-fix:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
     .learn-hint { font-size: 12px; color: #6b21a8; margin-top: 4px; }
     .learn-use { border: 1px dashed #c4b5fd; background: #faf5ff; color: #6b21a8; border-radius: 8px; padding: 1px 8px; font: inherit; font-style: italic; cursor: pointer; text-align: left; }
     .learn-use:hover { background: #ede9fe; }
@@ -3488,6 +3491,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const t = fillP(pickFor(qbank('silentLead'), q.id, salt + 7), p, humanDuration(hours)).trim();
     return t ? `${t.charAt(0).toUpperCase()}${t.slice(1)} ` : '';
   };
+  // Câu hỏi đang hiện là câu số mấy trong bộ (và đoạn mở đầu thuộc câu mấy của bộ 12)
+  function qaLineOf(bankId, text, p, d = '') {
+    const norm2 = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const T = norm2(text);
+    const main = qbank(bankId).findIndex((t) => {
+      const f = norm2(fillP(t, p, d));
+      return f && T.includes(f);
+    });
+    const lead = qbank('silentLead').findIndex((t) => {
+      const f = fillP(t, p, '\u0000').toLowerCase().replace(/\s+/g, ' ').split('\u0000');
+      return f.every((part) => !part || T.includes(part.trim())) && f.join('').trim().length > 4 && T.startsWith(f[0].trim());
+    });
+    return { main, lead };
+  }
   const qSalt = (q) => (renderCtx.quickSent?.[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0);
   function quickQuestion(q, c, mode, p) {
     if (q && monthlyAsk(q, c)) {
@@ -3645,6 +3662,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const sent = renderCtx.quickSent[id];
     const key = `quick:${id}`;
     return `<div class="warn quick">
+      ${MY_ADMIN && qq.bank ? (() => {
+        const bno = QBANKS.findIndex((k) => k.id === qq.bank) + 1;
+        const li = qaLineOf(qq.bank, qq.text, p);
+        const lno = QBANKS.findIndex((k) => k.id === 'silentLead') + 1;
+        return `<div class="quick-src">Câu này từ <b>Bộ ${bno}${li.main >= 0 ? ` · câu ${li.main + 1}` : ''}</b>
+          <button class="quick-fix" data-act="qa-edit" data-bank="${qq.bank}" data-idx="${li.main}" title="Câu chưa hợp lý? Mở bộ câu số ${bno} để sửa (áp dụng mọi máy)">✏️ Sửa câu</button>
+          ${li.lead >= 0 ? `<button class="quick-fix" data-act="qa-edit" data-bank="silentLead" data-idx="${li.lead}" title="Sửa đoạn mở đầu (bộ ${lno})">✏️ Sửa đoạn mở đầu (Bộ ${lno})</button>` : ''}</div>`;
+      })() : ''}
       <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:${learned ? ` <span class="learned-tag" title="Anh đã ${lr.n} lần sửa câu gợi ý cùng tình huống thành câu này">✨ theo cách anh hay viết</span>` : ''}</div>
       <div class="quick-row"><textarea class="quick-text quick-edit" data-id="${id}" rows="4">${esc(text)}</textarea>
         <button class="act primary" data-act="quick-send" data-id="${id}" ${state.busy.has(key) ? 'disabled' : ''}>
@@ -6864,6 +6889,9 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       if (state.qbDirty && !confirm('Bộ câu đang sửa chưa lưu – bỏ các thay đổi?')) return;
       state.qbDirty = false;
       lsSet('dgQaSel', b.dataset.bank);
+      // Bấm từ thẻ bên phải: mở bảng ở tab Bộ câu hỏi
+      lsSet('dgTab', 'qa');
+      if (!isOpen()) setPanelOpen(true);
       const idx = Number(b.dataset.idx);
       lastPanelHtml = '';
       await render();
