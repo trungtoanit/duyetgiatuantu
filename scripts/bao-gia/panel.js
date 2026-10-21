@@ -3392,13 +3392,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     { id: 'longNoOrder', icon: '📦', title: 'Khách lâu chưa xuống đơn', when: 'Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã quá 30 ngày.', def: LONG_NO_ORDER },
     { id: 'noComment', icon: '📭', title: 'Báo giá chưa có bình luận', when: 'Báo giá tạo hơn 24 giờ, đã đọc mà không có bình luận nào.', def: ['Báo giá này chưa có thông tin gì, tình hình khách sao rồi {p}?'] },
     { id: 'bossOrder', icon: '✅', title: 'Sếp cho lấy đơn mà chưa lên đơn', when: 'Sếp bình luận "lấy / chốt / lên đơn này", "đồng ý lấy đơn", "giữ giá cũ" … quá 12 giờ báo giá vẫn chưa có đơn.', def: BOSS_ORDER_ASK },
-    { id: 'promise', icon: '🤝', title: 'Khách hứa lên đơn nhưng chưa lên', when: 'NVKD báo khách hứa / đồng ý lên đơn, quá 1 ngày chưa có đơn (quá 3 ngày thêm câu "x ngày chưa có phản hồi…" phía trước).', def: ['Khách hứa lên đơn mà sao chưa lên vậy {p}, lý do gì {p}?'] },
+    { id: 'promise', icon: '🤝', title: 'Khách hứa lên đơn nhưng chưa lên', when: 'NVKD báo khách hứa / đồng ý lên đơn, quá 1 ngày chưa có đơn. Quá 3 ngày thì thêm câu mở đầu của bộ 12 ("x ngày chưa có phản hồi…") phía trước.', def: ['Khách hứa lên đơn mà sao chưa lên vậy {p}, lý do gì {p}?'] },
     { id: 'bossPrice', icon: '💰', title: 'Sếp đã cho giá, NVKD chưa phản hồi', when: 'Bình luận cho giá mới nhất của sếp (kèm hình bảng giá, hoặc "cho em giá / duyệt giá") mà trong cùng luồng chưa ai trả lời, quá 12 giờ.', def: BOSS_PRICE_ASK },
     { id: 'connect', icon: '🔌', title: 'Báo giá chưa có Flexo / Offset (kết nối khách)', when: 'Bảng sản phẩm chưa có dòng Flexo hay Offset nào, báo giá tạo hơn 24 giờ (hỏi cả khi báo giá 0đ).', def: CONNECT_ASK },
     { id: 'reprint', icon: '🔁', title: 'Đơn tái bản', when: 'Sản phẩm đã có mã (tái bản), báo giá đã có giá, chưa có đơn.', def: ['Khách xuống đơn tái bản chưa {p}?'] },
     { id: 'offsetGap', icon: '🟪', title: 'Khách chưa dùng Offset', when: 'Khách chưa từng có báo giá Offset, báo giá gần nhất đã quá 30 ngày, sếp chưa hỏi về offset trong luồng.', def: ['Khách hàng này có dùng offset không {p}?'] },
     { id: 'priceAsk', icon: '⏰', title: 'Quá 12 giờ chưa chốt', when: `Bình luận cuối đã quá ${FOLLOW_UP_HOURS} giờ (dưới ${MAX_FOLLOW_UP_DAYS} ngày), báo giá đã có giá, chưa chốt / chưa có đơn.`, def: PRICE_ASK },
-    { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu "Quá 12 giờ chưa chốt" khi đã hơn 3 ngày không có bình luận. {d} = khoảng thời gian (vd. "5 ngày").', def: SILENT_LEAD },
+    { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu hỏi của bộ 6 (khách hứa lên đơn), 7 (sếp đã cho giá), 9 (tái bản), 11 (quá 12 giờ chưa chốt) khi đã hơn 3 ngày chưa có phản hồi – vd. "35 ngày chưa có phản hồi, báo cáo lại nhé em." {d} = khoảng thời gian.', def: SILENT_LEAD },
     { id: 'reportBack', icon: '💤', title: 'Im lặng quá lâu / báo giá thất bại', when: `Bình luận cuối đã quá ${MAX_FOLLOW_UP_DAYS} ngày, hoặc báo giá Thất bại → chào lại khách.`, def: REPORT_BACK },
     { id: 'zalo', icon: '💬', title: 'Hỏi NVKD qua Zalo (tab Gợi ý chốt đơn)', when: 'Bấm 💬 ở 1 deal trong tab 🔥 Gợi ý chốt đơn – câu hỏi thăm đặt trước dòng deal (mỗi deal 1 lần, mỗi NVKD 1 tin / 30 phút).', def: ZALO_ASK },
   ];
@@ -3482,6 +3482,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return !asked;
   }
 
+  // Câu mở đầu khi im lặng lâu (bộ 12, có {d} = khoảng thời gian) – dùng chung cho các bộ 6, 7, 9, 11
+  const silentLead = (q, hours, p, salt = qSalt(q)) => {
+    if (!(hours >= 72)) return '';
+    const t = fillP(pickFor(qbank('silentLead'), q.id, salt + 7), p, humanDuration(hours)).trim();
+    return t ? `${t.charAt(0).toUpperCase()}${t.slice(1)} ` : '';
+  };
   const qSalt = (q) => (renderCtx.quickSent?.[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0);
   function quickQuestion(q, c, mode, p) {
     if (q && monthlyAsk(q, c)) {
@@ -3518,7 +3524,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Khách hứa lên đơn mà quá 1 ngày vẫn chưa lên
     const pr = promiseInfo(q, c);
     if (pr && hoursSince(pr.at) >= 24) {
-      const lead0 = hoursSince(pr.at) >= 72 ? `${humanDuration(hoursSince(pr.at))} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
+      const lead0 = silentLead(q, hoursSince(pr.at), p);
       return { bank: 'promise', icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: lead0 + selfFix(fillP(pickFor(qbank('promise'), q.id, qSalt(q)), p), p) };
     }
     // Sếp đã cho giá (hình bảng giá đỏ / "cho em giá") là bình luận cuối, quá 12 giờ NVKD chưa phản hồi → hỏi khách phản hồi giá
@@ -3526,7 +3532,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (bp && hoursSince(bp.createdAt) >= FOLLOW_UP_HOURS) {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
       const hb = hoursSince(bp.createdAt);
-      const lead3 = hb >= 72 ? `${humanDuration(hb)} chưa có phản hồi. ` : '';
+      const lead3 = silentLead(q, hb, p);
       return {
         bank: 'bossPrice',
         icon: '💰',
@@ -3543,13 +3549,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (noPrice(q)) return null;
     const last = lastComment(c);
     const h = last ? hoursSince(last.createdAt) : 0;
-    const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
+    const lead = silentLead(q, h, p);
     if (q.isReprint) return { bank: 'reprint', icon: '🔁', why: 'Đơn tái bản', text: lead + selfFix(fillP(pickFor(qbank('reprint'), q.id, qSalt(q)), p), p) };
     // Khách chưa từng có báo giá Offset và đã lâu không có báo giá mới → hỏi khách có dùng offset không
     if (mode && offsetGap(q, c)) return { bank: 'offsetGap', icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: selfFix(fillP(pickFor(qbank('offsetGap'), q.id, qSalt(q)), p), p) };
     if (mode === 'hoiNhanh') {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
-      const lead2 = h >= 72 ? fillP(pickFor(qbank('silentLead'), q.id, salt + 7), p, humanDuration(h)) : '';
+      const lead2 = silentLead(q, h, p, salt);
       const text = lead2 + fillP(pickFor(qbank('priceAsk'), q.id, salt), p);
       return { bank: 'priceAsk', icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: selfFix(text.charAt(0).toUpperCase() + text.slice(1), p) };
     }
@@ -5657,7 +5663,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const liveHtml = sel.id === 'zalo'
       ? '<div class="muted">Bộ này dùng ở tab 🔥 Gợi ý chốt đơn (nút 💬 từng deal).</div>'
       : sel.id === 'silentLead'
-        ? '<div class="muted">Bộ này ghép phía trước câu của bộ 11 (Quá 12 giờ chưa chốt) khi im lặng hơn 3 ngày.</div>'
+        ? '<div class="muted">Bộ này ghép phía trước câu hỏi của bộ 6, 7, 9, 11 khi đã hơn 3 ngày chưa có phản hồi (vd. &quot;35 ngày chưa có phản hồi, báo cáo lại nhé em.&quot;).</div>'
         : live.length
           ? `<div class="qr-live">${live.slice(0, 15).map(({ q, staff, r }) => `<a class="qr-row" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">
               <b>${esc(q.code)}</b>${custTag(q)}<span class="qr-who">${avatarHtml(staff, 18)}${esc(shortName(staff))}</span><span class="qr-why">${esc(r.why)}</span><span class="qr-q">“${esc(r.text)}”</span></a>`).join('')}</div>
