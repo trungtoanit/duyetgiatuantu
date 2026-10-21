@@ -2240,6 +2240,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qb-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
     .qb-ex { font-size: 12px; color: #475569; display: grid; gap: 2px; }
     .bigtab.qa.on { color: #6d28d9; }
+    .learn-hint { font-size: 12px; color: #6b21a8; margin-top: 4px; }
+    .learn-use { border: 1px dashed #c4b5fd; background: #faf5ff; color: #6b21a8; border-radius: 8px; padding: 1px 8px; font: inherit; font-style: italic; cursor: pointer; text-align: left; }
+    .learn-use:hover { background: #ede9fe; }
     .hot-btns { display: flex; gap: 8px; align-items: center; flex: none; }
     .hot-copy { white-space: nowrap; font-weight: 700; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
@@ -3475,18 +3478,35 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }).catch(() => {});
   }
   // Câu gợi ý viết sẵn → nếu cùng mẫu câu đã từng bị sửa thì dùng câu đã sửa (lần sửa gần nhất)
-  function applyLearned(base, p) {
+  // Mềm mại: 1 lần sửa chỉ là 1 tình huống riêng → KHÔNG tự thay, chỉ gợi ý "lần trước anh viết…" để bấm dùng.
+  // Chỉ tự dùng khi cùng 1 cách sửa lặp lại từ 2 lần trở lên và câu không nhắc chi tiết riêng của deal khác (Flexo/Offset sai loại, mã BG, con số).
+  function applyLearned(base, p, q) {
     const pat = toPattern(base, p);
-    const hit = Object.values(quickLearn)
+    const edits = Object.values(quickLearn)
       .filter((x) => x.kind === 'quick' && x.edited && toPattern(x.base, x.p) === pat)
-      .sort((a, b) => b.at - a.at)[0];
-    if (!hit) return null;
+      .sort((a, b) => b.at - a.at);
+    if (!edits.length) return null;
     const durs = String(base).match(DUR_RE) || [];
-    let i = 0;
-    const out = toPattern(hit.sent, hit.p)
-      .replace(/\{t\}/g, () => durs[Math.min(i++, durs.length - 1)] || '')
-      .replace(/\{p\}/g, p || 'em');
-    return out.includes('{t}') ? null : out;
+    const fill = (x) => {
+      let i = 0;
+      const out = toPattern(x.sent, x.p)
+        .replace(/\{t\}/g, () => durs[Math.min(i++, durs.length - 1)] || '')
+        .replace(/\{p\}/g, p || 'em');
+      return out.includes('{t}') ? null : out;
+    };
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+    const specific = (t) =>
+      /BG\d{3,}|\d[\d.,]{2,}/i.test(t) || (/offset/i.test(t) && !kinds.includes('offset')) || (/flexo/i.test(t) && !kinds.includes('flexo'));
+    // Đếm số lần sửa ra cùng một câu
+    const counts = {};
+    for (const x of edits) {
+      const k = toPattern(x.sent, x.p);
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    const top = edits.map((x) => ({ x, n: counts[toPattern(x.sent, x.p)] })).sort((a, b) => b.n - a.n || b.x.at - a.x.at)[0];
+    const text = fill(top.x);
+    if (!text) return null;
+    return { text, auto: top.n >= 2 && !specific(text), n: top.n };
   }
   // Ví dụ cho Claude: các lần quản lý sửa gợi ý trước khi gửi (ưu tiên cùng NVKD)
   function editExamples(staff, limit = 15) {
@@ -3505,16 +3525,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!qq) return '';
     const id = q.id;
     const draft = renderCtx.quickDraft[id];
-    const learned = applyLearned(qq.text, p);
+    const lr = applyLearned(qq.text, p, q);
+    const learned = lr?.auto ? lr.text : null;
+    const hint = lr && !lr.auto && lr.text !== qq.text ? lr.text : null; // chỉ gợi ý, anh bấm mới dùng
     const text = draft?.base === qq.text ? draft.text : learned || qq.text; // giữ bản đã sửa nếu câu gốc chưa đổi
     quickCtx[id] = { base: qq.text, text, p, why: qq.why, learned: !!learned };
     const sent = renderCtx.quickSent[id];
     const key = `quick:${id}`;
     return `<div class="warn quick">
-      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:${learned ? ' <span class="learned-tag" title="Lần trước bạn đã sửa câu gợi ý cùng tình huống – dùng lại cách bạn viết">✨ học từ lần bạn sửa</span>' : ''}</div>
+      <div class="quick-why">${qq.icon} ${esc(qq.why)} – câu hỏi gợi ý <span class="muted">(sửa được trước khi gửi)</span>:${learned ? ` <span class="learned-tag" title="Anh đã ${lr.n} lần sửa câu gợi ý cùng tình huống thành câu này">✨ theo cách anh hay viết</span>` : ''}</div>
       <div class="quick-row"><textarea class="quick-text quick-edit" data-id="${id}" rows="4">${esc(text)}</textarea>
         <button class="act primary" data-act="quick-send" data-id="${id}" ${state.busy.has(key) ? 'disabled' : ''}>
           ${state.busy.has(key) ? '<span class="spinner light"></span> Đang gửi…' : sent ? '📨 Gửi lại' : '📨 Bình luận ngay'}</button></div>
+      ${hint ? `<div class="learn-hint">💡 Lần trước tình huống tương tự anh viết: <button class="learn-use" data-act="quick-use" data-id="${id}" data-text="${esc(hint)}" title="Bấm để dùng câu này">“${esc(hint)}”</button></div>` : ''}
       ${sent ? `<div class="sent">✅ Đã bình luận lúc ${new Date(sent.at).toLocaleTimeString('vi-VN')}</div>` : ''}
     </div>`;
   };
@@ -6519,6 +6542,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       // Vẽ lại vài lần để thấy trạng thái gửi
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
       render();
+    }
+    else if (act === 'quick-use') {
+      const ta = b.closest('.quick')?.querySelector('.quick-edit');
+      if (ta) {
+        ta.value = b.dataset.text;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.focus();
+      }
     }
     else if (act === 'qb-save' || act === 'qb-reset') {
       const id = b.dataset.id;
