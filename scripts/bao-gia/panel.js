@@ -2411,6 +2411,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     /* Tab Phân tích deal đã lọc theo 1 NVKD → ẩn cột NVKD (cột thứ 7) */
     .dl-list a.item, .dl-list .item-head { grid-template-columns: 34px 84px 74px minmax(0, .45fr) 130px minmax(0, 1.75fr) 74px 136px 120px 52px; }
     .dl-list a.item > :nth-child(7), .dl-list .item-head > :nth-child(7) { display: none; }
+    .it-main .dl-hotbadge.sm { font-size: 10px; padding: 0 7px; margin-right: 4px; animation: none; }
     .dl-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 6px 44px; padding: 5px 10px; font-size: 12px; color: #334155;
       background: #f8faff; border-left: 3px solid #a5b4fc; border-radius: 6px; }
     .dl-sub .hot-miss { margin: 0; } .dl-sub .hot-miss i { font-size: 11px; padding: 0 7px; }
@@ -5017,7 +5018,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const hue = Math.round(30 + t * 112); // 30 = cam, 142 = xanh lá
       return `color:hsl(${hue},75%,${Math.round(40 - t * 12)}%);background:hsl(${hue},80%,${Math.round(95 - t * 6)}%)`;
     };
-    const itemHtml = ({ q, c, last, f }, i) => {
+    const itemHtml = ({ q, c, last, f, badge = '' }, i) => {
       const staff = staffOf(q, c);
       const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
         last ? `Bình luận cuối ${ago(last.createdAt)} (${last.staff?.name || '?'})` : `Chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`,
@@ -5026,7 +5027,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <span class="it-no">${i + 1}</span>
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-cust">${custTag(q).trim()}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
@@ -5659,13 +5660,13 @@ Không markdown, không giải thích ngoài JSON.`;
     const rowsData = deals
       .map((q) => {
         const c = comments[q.id] || { id: q.id, code: q.code, threads: [] };
-        return { q, c, last: lastComment(c), f: feasibility(q, c, renderCtx.orders), a: aiBy[q.id] };
+        return { q, c, last: lastComment(c), f: feasibility(q, c, renderCtx.orders), a: aiBy[q.id], badge: hotBy[q.id] ? '<span class="dl-hotbadge sm" title="Ưu tiên chốt (từ tab Gợi ý chốt đơn)">🔥 Ưu tiên</span>' : '' };
       })
       .sort((x, y) => !!hotBy[y.q.id] - !!hotBy[x.q.id] || (y.a?.health ?? -1) - (x.a?.health ?? -1) || (Number(y.q.amount) || 0) - (Number(x.q.amount) || 0));
     const sub = ({ q, a }) => {
-      const tag = hotBy[q.id] ? '<span class="dl-hotbadge">🔥 Ưu tiên chốt</span>' : '';
-      if (!a) return tag ? `<div class="dl-sub">${tag}</div>` : '';
-      return `<div class="dl-sub">${tag}<span class="dl-stage ${stageCls(a.stage)}">${esc(a.stage)}</span>
+      // Nhãn "🔥 Ưu tiên" nằm ngay trong dòng (cột Nhãn) – không thêm dòng phụ riêng
+      if (!a) return '';
+      return `<div class="dl-sub"><span class="dl-stage ${stageCls(a.stage)}">${esc(a.stage)}</span>
         <span class="dl-hmini ${hCls(a.health)}" title="Sức khoẻ deal">❤ ${a.health}%</span>
         ${a.missing.length ? `<span class="hot-miss">${a.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</span>` : ''}
         ${a.steps.length ? `<span class="dl-step1">👉 ${esc(a.steps[0])}${a.steps.length > 1 ? ` <span class="muted">(+${a.steps.length - 1} bước)</span>` : ''}</span>` : ''}
