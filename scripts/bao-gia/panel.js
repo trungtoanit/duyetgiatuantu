@@ -2269,7 +2269,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qa-ov { font-weight: 800; color: #0f172a; } .qa-ov.on { background: linear-gradient(90deg, #fee2e2, #fff7ed) !important; color: #9a3412 !important; box-shadow: inset 3px 0 0 #f97316 !important; }
     .qa-sep { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; padding: 8px 8px 2px; border-top: 1px solid #f1f5f9; margin-top: 4px; }
     .qo-kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .qo-k { border-radius: 12px; padding: 8px 12px; display: grid; } .qo-k b { font-size: 26px; line-height: 1.1; } .qo-k span { font-size: 12px; font-weight: 700; }
+    .qo-k { border-radius: 12px; padding: 8px 12px; display: grid; }
+    .qo-kr { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .qo-kr em { font-style: normal; font-size: 18px; font-weight: 800; } .qo-k b { font-size: 26px; line-height: 1.1; } .qo-k span { font-size: 12px; font-weight: 700; }
     .qo-k.hi { background: #fef2f2; color: #b91c1c; } .qo-k.mid { background: #fff7ed; color: #c2410c; } .qo-k.lo { background: #f0fdf4; color: #15803d; }
     .qo-sts, .qo-bks { display: flex; flex-wrap: wrap; gap: 5px; }
     .qo-st { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #e2e8f0; background: #fff; border-radius: 999px; padding: 2px 10px 2px 4px; font: inherit; font-size: 12px; cursor: pointer; }
@@ -5721,7 +5722,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const byStaff = {};
     all.forEach((x) => (byStaff[x.staff] = (byStaff[x.staff] || 0) + 1));
     const lv = { hi: 0, mid: 0, lo: 0 };
-    rows.forEach((x) => lv[qaLevel(x.score)[0]]++);
+    const lvAmt = { hi: 0, mid: 0, lo: 0 }; // tổng giá trị báo giá mỗi nhóm
+    rows.forEach((x) => {
+      const k = qaLevel(x.score)[0];
+      lv[k]++;
+      lvAmt[k] += x.amt || 0;
+    });
     const byBank = {};
     rows.forEach((x) => (byBank[x.r.bank] = (byBank[x.r.bank] || 0) + 1));
     const bankChips = QBANKS.filter((b) => byBank[b.id]).map((b) => `<span class="qo-bk" title="${esc(b.when)}">${b.icon} ${esc(b.title)} <b>${byBank[b.id]}</b></span>`).join('');
@@ -5745,7 +5751,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<div class="qa-pane qo">
         <div class="qa-ph"><span class="qa-pic">📊</span><div><h3>Tổng quan – cần bình luận cho NVKD</h3>
           <span class="muted">${rows.length} báo giá cần hỏi · xếp theo điểm ưu tiên (tình huống + giá trị báo giá + khả năng chốt + đang trong 🔥 Gợi ý chốt đơn) · báo giá đã hỏi thì ẩn 4 giờ rồi mới hiện lại</span></div></div>
-        <div class="qo-kpi"><div class="qo-k hi"><b>${lv.hi}</b><span>🔴 Ưu tiên cao</span></div><div class="qo-k mid"><b>${lv.mid}</b><span>🟠 Ưu tiên vừa</span></div><div class="qo-k lo"><b>${lv.lo}</b><span>🟢 Ưu tiên thấp</span></div></div>
+        <div class="qo-kpi">${[['hi', '🔴 Ưu tiên cao'], ['mid', '🟠 Ưu tiên vừa'], ['lo', '🟢 Ưu tiên thấp']]
+          .map(([k, label]) => `<div class="qo-k ${k}"><div class="qo-kr"><b>${lv[k]}</b><em title="Tổng giá trị ${lv[k]} báo giá: ${money(lvAmt[k])}">💰 ${moneyShortG(lvAmt[k]) || '0đ'}</em></div><span>${label} · báo giá</span></div>`)
+          .join('')}</div>
         <div class="qo-sts">${staffChips}</div>
         <div class="qo-bks">${bankChips}</div>
         <div class="qo-list">${list || '<div class="muted">Không có báo giá nào cần hỏi.</div>'}</div>
