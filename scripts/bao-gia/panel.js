@@ -269,6 +269,8 @@
     })
     .catch(() => {});
 
+  const OFF_VER = 2; // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
+  const offsetStale = (m) => !Object.keys(m?.products || {}).length || m?.offVer !== OFF_VER;
   async function save({ kind, data }) {
     if (kind === 'debtUrl') {
       const k = String(data.url).replace(/^https?:\/\/[^/]+/, '').replace(/[?#].*$/, '').slice(0, 150) || 'x';
@@ -333,7 +335,11 @@
     } else if (kind === 'margin') {
       const all = await kvGet('margins');
       const cur = all[data.code] || { products: {} };
-      cur.products[data.spec || 'sản phẩm'] = { pct: data.pct, price: data.price, qty: data.qty, reprint: data.reprint, at: data.at };
+      // Khoá theo quy cách + SL + giá: 2 mã cùng quy cách (khác số lượng) không ghi đè nhau.
+      // Bản lưu cũ (khoá chỉ theo quy cách, offVer < 2) → bỏ, đọc lại từ đầu.
+      if (cur.offVer !== OFF_VER) Object.assign(cur, { products: {}, offVer: OFF_VER });
+      const spec = data.spec || 'sản phẩm';
+      cur.products[[spec, data.qty, data.price].filter(Boolean).join(' | ')] = { spec, pct: data.pct, price: data.price, qty: data.qty, reprint: data.reprint, at: data.at };
       cur.at = data.at;
       await kvMerge('margins', { [data.code]: cur });
     } else if (kind === 'ordersAll') {
@@ -1391,7 +1397,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         collect.current = q.code;
         progress();
         const mg = (await kvGet('margins'))[q.code];
-        const needOffset = q.offset && !Object.keys(mg?.products || {}).length;
+        const needOffset = q.offset && offsetStale(mg);
         const needFlexo = (q.kinds || []).includes('flexo') && q.amount && flexoStale(mg?.flexo, q);
         await loadInFrame(q.id, undefined, undefined, needOffset || needFlexo
           ? async (f) => {
@@ -1426,7 +1432,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           .filter(({ q }) => {
             const k = q.kinds || (q.offset ? ['offset'] : []);
             const mg = m3[q.code] || {};
-            return (k.includes('offset') && !Object.keys(mg.products || {}).length) || (k.includes('flexo') && q.amount && flexoStale(mg.flexo, q));
+            return (k.includes('offset') && offsetStale(mg)) || (k.includes('flexo') && q.amount && flexoStale(mg.flexo, q));
           })
           .slice(0, 10);
         for (const { q } of missing) {
@@ -3876,7 +3882,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const { flexo, offset } = marginParts(q);
     const busy = !!q && marginFetching.has(q.id);
     const oldFx = !!q && renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo, q);
-    if (IS_TOP && q && ((kinds.includes('offset') && offset == null) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
+    if (IS_TOP && q && ((kinds.includes('offset') && (offset == null || offsetStale(renderCtx.margins?.[q.code]))) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
     const open = el.querySelector('details')?.open;
     const collapsed = lsGet('dgSideCollapsed') === '1';
     el.hidden = false;
@@ -3915,7 +3921,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const m = renderCtx.margins?.[q.code] || {};
     const offs = Object.entries(m.products || {});
     const fx = flexoInfo(q);
-    const needOff = kinds.includes('offset') && !offs.length;
+    const needOff = kinds.includes('offset') && offsetStale(m);
     const needFx = kinds.includes('flexo') && q.amount && (!fx || flexoStale(m.flexo, q));
     if (IS_TOP && (needOff || needFx)) setTimeout(() => fetchMarginNow(q), 0);
     const pct = marginOf(q);
@@ -3926,7 +3932,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (kinds.includes('offset')) segs.push(`🟪 Offset ${parts.offset != null ? `<b class="${pctCls(parts.offset)}">${parts.offset}%</b>` : `<span class="muted">${busy ? 'đang tính…' : '–'}</span>`}`);
     const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
     const od = offs.length ? offsetDiff(q) : null;
-    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('') +
+    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(x.spec || spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('') +
       (od ? offsetSteps(q, od) : '');
     const fxRows = fx
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
