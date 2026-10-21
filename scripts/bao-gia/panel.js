@@ -694,6 +694,9 @@ Quy tắc:
           ? 'BÁO GIÁ ĐANG 0đ: quản lý CHƯA cho giá. KHÔNG hỏi NVKD "giá đạt chưa / khách phản hồi giá"; nếu cần thì chỉ hỏi NVKD còn thiếu thông tin gì để quản lý tính giá.'
           : '',
         q?.isReprint ? 'ĐƠN TÁI BẢN: sản phẩm của báo giá đã có mã SP (tái bản) – chỉ hỏi khách xuống đơn tái bản chưa.' : '',
+        monthlyAsk(q, c)
+          ? 'KHÁCH CŨ, THÁNG NÀY CHƯA CÓ BÁO GIÁ MỚI: chỉ hỏi đúng 1 câu "Tháng này khách hàng này sao chưa nhập vậy <xưng hô>?" (ưu tiên hơn mọi chế độ khác).'
+          : '',
         mode && !q?.isReprint && offsetGap(q, c)
           ? 'KHÁCH CHƯA CÓ BÁO GIÁ OFFSET và đã lâu không có báo giá mới: chỉ hỏi đúng 1 câu "Khách hàng này có dùng offset không <xưng hô>?" (ưu tiên hơn chế độ hỏi nhanh / chào lại).'
           : '',
@@ -3281,7 +3284,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return last && HANDOVER_CMT.test(last.text || '') ? last : null;
   }
 
+  // Khách cũ (≥ 2 đơn / 12 tháng) mà tháng này (từ ngày 10) chưa có báo giá mới nào → hỏi sao tháng này chưa nhập
+  const MONTH_ASK_DAY = 10;
+  function monthStartVN() {
+    const vn = new Date(Date.now() + 7 * 3600e3);
+    return { day: vn.getUTCDate(), start: Math.floor((Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), 1) - 7 * 3600e3) / 1000) };
+  }
+  function monthlyAsk(q, c) {
+    const { day, start } = monthStartVN();
+    if (day < MONTH_ASK_DAY || !q?.customer?.id) return false;
+    const os = orderSummary(renderCtx.orders?.[q.customer.id]);
+    if (!os || os.year < 2) return false; // chưa phải khách cũ
+    if (os.list.some((o) => o.at >= start)) return false; // tháng này đã có đơn
+    const key = custKey(q);
+    if (Object.values(renderCtx.quotes || {}).some((x) => custKey(x) === key && (x.createdAt || 0) >= start)) return false; // tháng này đã có báo giá
+    let asked = false;
+    const walk = (t) => {
+      if (t.staff?.name === meName && t.createdAt >= start && /tháng này/i.test(t.text || '')) asked = true;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return !asked;
+  }
+
   function quickQuestion(q, c, mode, p) {
+    if (q && monthlyAsk(q, c)) {
+      return { icon: '📅', why: 'Khách cũ, tháng này chưa có báo giá mới', text: `Tháng này khách hàng này sao chưa nhập vậy ${p}?` };
+    }
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
     // Vừa bàn giao khách cho NVKD mới, quá 12 giờ chưa thấy phản hồi → hỏi đã liên hệ khách chưa
     const ho = handoverPending(c);
