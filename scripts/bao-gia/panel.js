@@ -5018,7 +5018,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const hue = Math.round(30 + t * 112); // 30 = cam, 142 = xanh lá
       return `color:hsl(${hue},75%,${Math.round(40 - t * 12)}%);background:hsl(${hue},80%,${Math.round(95 - t * 6)}%)`;
     };
-    const itemHtml = ({ q, c, last, f, badge = '' }, i) => {
+    // Báo giá đang nằm trong "🔥 Gợi ý chốt đơn" (chưa ✓, chưa chốt / chưa có đơn) → nhãn "🔥 Ưu tiên" ở mọi bảng
+    const hotLatest = (await kvGet('aiHot')).latest;
+    const hotDoneAll = await kvGet('aiHotDone');
+    renderCtx.hotSet = new Set((hotLatest?.items || []).filter((x) => !hotDoneAll[x.id]).map((x) => x.id));
+    const HOT_BADGE = '<span class="dl-hotbadge sm" title="Ưu tiên chốt (từ tab Gợi ý chốt đơn)">🔥 Ưu tiên</span>';
+    const itemHtml = ({ q, c, last, f, badge }, i) => {
+      if (badge === undefined) badge = q && renderCtx.hotSet.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) ? HOT_BADGE : '';
       const staff = staffOf(q, c);
       const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
         last ? `Bình luận cuối ${ago(last.createdAt)} (${last.staff?.name || '?'})` : `Chưa có bình luận · tạo ${q?.createdAt ? ago(q.createdAt) : '?'}`,
