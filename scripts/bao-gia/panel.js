@@ -2233,7 +2233,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qe-add:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
     .qe-tip { margin-left: auto; font-size: 11px; color: #94a3b8; }
     /* Gọn: mỗi câu 1 dòng mỏng, 2 cột khi màn rộng; xem trước chỉ hiện khi đang sửa câu đó; nút xoá hiện khi rê chuột */
-    .qe-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); column-gap: 14px; padding: 4px 6px; }
+    .qe-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(420px, 45%), 1fr)); column-gap: 14px; padding: 4px 6px; }
     .qe-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 20px; gap: 6px; align-items: center; padding: 1px 4px; border-bottom: 1px dashed #f1f5f9; }
     .qe-row:hover { background: #fafaff; }
     .qe-no { width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #6366f1; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
@@ -2248,7 +2248,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qv:hover { filter: brightness(.95); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
     .qe-del { border: 0; background: none; color: #cbd5e1; font-size: 12px; cursor: pointer; border-radius: 6px; opacity: 0; padding: 0; } .qe-row:hover .qe-del { opacity: 1; } .qe-del:hover { color: #dc2626; background: #fee2e2; }
     .qe-new { width: 100%; border: 0; border-top: 1px dashed #e2e8f0; background: #fff; color: #6366f1; font: inherit; font-weight: 700; font-size: 12px; padding: 6px; cursor: pointer; } .qe-new:hover { background: #eef2ff; }
-    .qe-dirty { color: #d97706; font-size: 12px; font-weight: 800; }
+    .qe-dirty { color: #d97706; font-size: 12px; font-weight: 800; } .qe-dirty.ok { color: #15803d; }
     .qr { border: 1px solid #e0e7ff; background: #fbfbff; border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
     .qr-h { display: flex; align-items: center; gap: 10px; } .qr-h b { color: #3730a3; }
     .qr-ps { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; }
@@ -5564,11 +5564,34 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return out.replace(/\s+/g, ' ').trim();
   };
   const qeRenumber = (box) => box?.querySelectorAll('.qe-row').forEach((r, k) => (r.querySelector('.qe-no').textContent = k + 1));
+  // Gõ tới đâu tự lưu tới đó (chờ 0,8 giây sau lần gõ cuối) – lưu cả bộ, áp dụng mọi máy
+  let qeTimer = null;
   const qeDirty = (box) => {
     state.qbDirty = true;
     const d = box?.closest('.qa-pane')?.querySelector('.qe-dirty');
-    if (d) d.hidden = false;
+    if (d) {
+      d.hidden = false;
+      d.className = 'qe-dirty';
+      d.textContent = '● đang lưu…';
+    }
+    clearTimeout(qeTimer);
+    qeTimer = setTimeout(() => qeAutosave(box), 800);
   };
+  async function qeAutosave(box) {
+    if (!box?.isConnected) return;
+    const id = box.dataset.id;
+    const lines = [...box.querySelectorAll('.qe-line')].map(qSerialize).filter(Boolean);
+    if (!lines.length) return; // không lưu bộ rỗng (muốn về câu gốc thì bấm "Về mặc định")
+    await kvMerge('qbank', { [id]: { lines, at: Date.now(), by: meName } });
+    QB = { ...QB, [id]: { lines, at: Date.now(), by: meName } };
+    state.qbDirty = false;
+    state.qaScan = null;
+    const d = box.closest('.qa-pane')?.querySelector('.qe-dirty');
+    if (d) {
+      d.className = 'qe-dirty ok';
+      d.textContent = `✓ Đã tự lưu lúc ${new Date().toLocaleTimeString('vi-VN')} – áp dụng mọi máy`;
+    }
+  }
   let qeLast = null; // ô câu + vị trí con trỏ gần nhất (để chèn biến)
   const qeSel = () => (root.getSelection ? root.getSelection() : getSelection());
   function qeRemember() {
@@ -5778,7 +5801,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
               <div class="qe-rows">${lines.map((t, k) => qeRow(t, k)).join('')}</div>
               <button class="qe-new" data-act="qb-row-add">＋ Thêm câu</button>
             </div>
-            <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${sel.id}">💾 Lưu – áp dụng mọi máy</button>${isEd(sel) ? `<button class="act" data-act="qb-reset" data-id="${sel.id}">↺ Về mặc định</button>` : ''}<span class="qe-dirty" hidden>● chưa lưu</span></div>`
+            <div class="qb-btns"><span class="qe-dirty ok">💾 Tự lưu khi sửa – áp dụng mọi máy</span>${isEd(sel) ? `<button class="act" data-act="qb-reset" data-id="${sel.id}">↺ Về mặc định</button>` : ''}</div>`
           : ''}
         ${qaReview(sel)}
         ${admin ? '' : `<div class="qa-lbl">👀 Các câu (gọi NVKD là "em")</div><div class="qb-ex">${lines.map((t, k) => `<div><em>${k + 1}</em>${ex(t)}</div>`).join('')}</div>`}</div>`;
@@ -6941,8 +6964,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       // Nhảy tới bộ câu và tô sáng đúng câu đang dùng để sửa tại chỗ
       e.preventDefault();
       e.stopPropagation();
-      if (state.qbDirty && !confirm('Bộ câu đang sửa chưa lưu – bỏ các thay đổi?')) return;
-      state.qbDirty = false;
+      if (state.qbDirty) await qeAutosave(root.querySelector('.qe'));
       lsSet('dgQaSel', b.dataset.bank);
       // Bấm từ thẻ bên phải: mở bảng ở tab Bộ câu hỏi
       lsSet('dgTab', 'qa');
@@ -7013,8 +7035,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       }
     }
     else if (act === 'qa-sel') {
-      if (state.qbDirty && !confirm('Bộ câu đang sửa chưa lưu – bỏ các thay đổi?')) return;
-      state.qbDirty = false;
+      if (state.qbDirty) await qeAutosave(root.querySelector('.qe'));
       lsSet('dgQaSel', b.dataset.id);
       render();
     }
