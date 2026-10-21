@@ -3235,7 +3235,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     '{P} có tìm được thông tin khách hàng khác không?',
     'Tìm được trực tiếp thu mua chưa {p}?',
     'Có được báo giá thử cho khách này chưa {p}?',
-    'Khách này đang lấy hàng bên nào {p}, giá bên đó bao nhiêu?',
+    'Khách này đang lấy hàng bên nào {p}?',
     'Tình hình khách này sao rồi {p}, có cơ hội làm đơn không?',
   ];
   // Hỏi thăm 1 deal qua Zalo
