@@ -3449,15 +3449,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       offs: Object.entries(m.products || {}),
     };
   }
-  // Chênh lệch Offset (tiền lời trên NVL): Σ giá 1 thùng × SL × đang bán % theo từng sản phẩm;
-  // không đọc được giá/SL thì ước tính = tổng BG × đang bán % thấp nhất
+  // Chênh lệch Offset (tiền lời trên NVL) = giá trị báo giá × đang bán %.
+  // Báo giá nhiều sản phẩm: % chung = trung bình "đang bán %" theo tỉ trọng (giá 1 thùng × SL) đọc từ bảng chiết giá.
+  // Không lấy thẳng giá × SL của bảng chiết giá làm tổng: SL ở đó có thể khác đơn vị / chỉ là 1 phần đơn
+  // (vd. BG26883: 10.900đ × 405 = 4,4 tr trong khi báo giá 47,4 tr).
   const numOf = (t) => Number(String(t || '').replace(/[^\d]/g, '')) || 0;
   function offsetDiff(q) {
     const prods = Object.values(renderCtx.margins?.[q?.code]?.products || {});
     if (!prods.length) return null;
     const rows = prods.map((x) => ({ pct: x.pct, val: numOf(x.price) * numOf(x.qty) }));
-    if (rows.every((r) => r.val > 0)) return { diff: rows.reduce((a, r) => a + (r.val * r.pct) / 100, 0), exact: true, rows };
-    return q?.amount ? { diff: (q.amount * Math.min(...prods.map((x) => x.pct))) / 100, exact: false, rows } : null;
+    const sumVal = rows.reduce((a, r) => a + r.val, 0);
+    const weighted = rows.every((r) => r.val > 0) && sumVal > 0;
+    const pct = weighted ? rows.reduce((a, r) => a + r.val * r.pct, 0) / sumVal : Math.min(...rows.map((r) => r.pct));
+    if (q?.amount) {
+      // Tổng của bảng chiết giá khớp giá trị báo giá (±15%) thì coi là chính xác
+      const exact = weighted && Math.abs(sumVal - q.amount) / q.amount <= 0.15;
+      return { diff: (q.amount * pct) / 100, exact, rows, pct };
+    }
+    return weighted ? { diff: (sumVal * pct) / 100, exact: false, rows, pct } : null;
   }
   // Dòng % ở cột phải danh sách: 🟦 Flexo X% · 🟪 Offset Y%
   const pctLine = (q) => {
@@ -3598,7 +3607,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const od = offset == null ? null : offsetDiff(q);
     if (!od) return '<span class="pc dl wait" title="Offset: đang chờ tính">…</span>';
-    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: ${od.exact ? 'Σ giá 1 thùng × SL × đang bán %' : `ước tính = BG ${money(q.amount)} × đang bán ${offset}%`}">${od.exact ? '' : '≈'}${trM(od.diff)}</span>`;
+    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: chênh lệch = BG ${money(q.amount)} × đang bán ${Math.round(od.pct * 10) / 10}%${od.rows.length > 1 ? ' (trung bình theo tỉ trọng sản phẩm)' : ''}${od.exact ? '' : ' – ước tính'}">${od.exact ? '' : '≈'}${trM(od.diff)}</span>`;
   };
 
   const lsGet = (k) => {
@@ -3762,7 +3771,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const head = compact ? '' : `📊 Đơn hàng này: ${segs.join(' · ')}`;
     const od = offs.length ? offsetDiff(q) : null;
     const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td><td class="num"><b>${x.pct}%</b></td></tr>`).join('') +
-      (od ? `<tr><td><b>Chênh lệch Offset (BG − NVL)</b></td><td></td><td><b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b></td><td class="num">${od.exact ? '' : 'ước tính'}</td></tr>` : '');
+      (od ? `<tr><td><b>Chênh lệch Offset (BG − NVL)</b><br><span class="muted">= BG ${money(q.amount)} × đang bán ${Math.round(od.pct * 10) / 10}%</span></td><td></td><td><b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b></td><td class="num">${od.exact ? '' : 'ước tính'}</td></tr>` : '');
     const fxRows = fx
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
         `<tr><td><b>Tổng giấy tấm</b></td><td></td><td><b>${money(fx.best.total)}</b></td><td class="num"><b>${fx.cost}%</b></td></tr>` +
