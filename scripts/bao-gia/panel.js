@@ -2274,6 +2274,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .dl-hot-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 15px; color: #9a3412; margin-bottom: 8px; }
     .dl-fire { font-size: 24px; display: inline-block; animation: dgflame 1.1s ease-in-out infinite; transform-origin: 50% 90%; }
     .dl-hot-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 8px; }
+    .dl-hot-item, .dl-big-item { cursor: pointer; }
     .dl-hot-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; background: #fff; border: 1px solid #fed7aa;
       border-radius: 12px; padding: 8px 12px; }
     .dl-hot-body { grid-column: 1 / -1; font-size: 12.5px; color: #7c2d12; }
@@ -5625,7 +5626,7 @@ Không markdown, không giải thích ngoài JSON.`;
           .map((q) => {
             const a = aiBy[q.id];
             const last = lastComment(comments[q.id]);
-            return `<div class="dl-big-item"><div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
+            return `<div class="dl-big-item"><div class="dl-top"><a class="dl-code" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">${esc(q.code)}</a>${custTag(q)}
                 <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="dl-amt big">${money(q.amount)}</span></div>
               <div class="dl-meta">${esc(shortCompany(q.customer?.name || ''))}${last ? ` · BL cuối ${ago(last.createdAt)}` : ' · chưa có bình luận'}${a?.stage ? ` · ${esc(a.stage)}` : ''}</div>
               <div class="dl-cta">👉 ${esc((!isOldBig(q) && a?.boss) || bigCta(q))}</div></div>`;
@@ -5639,7 +5640,7 @@ Không markdown, không giải thích ngoài JSON.`;
         <div class="dl-hot-list">${hotList
           .map((x) => {
             const q = quotes[x.id];
-            return `<div class="dl-hot-item"><a class="dl-code" href="/bao-gia/update/${q.id}" target="_blank" rel="noopener">${esc(q.code)}</a>${custTag(q)}
+            return `<div class="dl-hot-item"><a class="dl-code" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">${esc(q.code)}</a>${custTag(q)}
               <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="hot-pct ${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</span>
               <span class="dl-amt">${q.amount ? money(q.amount) : ''}</span>
               <div class="dl-hot-body">💡 ${esc(x.why)}${x.missing?.length ? `<div class="hot-miss"><b>🧩 Còn thiếu:</b>${x.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</div>` : ''}
@@ -6105,6 +6106,12 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const sum = e.target.closest('details.learnbox > summary');
     if (sum) state.learnOpen = !sum.parentElement.open;
     // Link trong bảng: chuyển trang ngay trong ứng dụng CRM (không tải lại cả trang)
+    // Tab Phân tích deal: bấm vào cả thẻ deal → mở báo giá đó (như bấm mã BG), tắt bảng
+    const dlCard = !e.target.closest('a, button, textarea, input') && e.target.closest('.dl-big-item, .dl-hot-item');
+    if (dlCard) {
+      const link = dlCard.querySelector('a.dl-code[data-nav]');
+      if (link) return link.click();
+    }
     const a = e.target.closest('a[data-nav]');
     if (a && !e.target.closest('button') && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
