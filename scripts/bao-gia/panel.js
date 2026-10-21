@@ -2226,12 +2226,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .zl-draft { border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 12px; cursor: pointer; }
     .zl-draft:not(.on) { border-color: #f87171; background: #fef2f2; color: #b91c1c; }
     .zl-fix { border: 1px dashed #fca5a5; background: #fff; color: #b91c1c; border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
-    .qa-wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 12px; align-items: start; }
-    .qa-menu { display: grid; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
-    .qa-mi { display: flex; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
+    .qa-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; align-items: start; }
+    .qa-menu { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; overflow: hidden; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
+    .qa-mi { display: flex !important; width: 100% !important; min-width: 0; box-sizing: border-box; overflow: hidden; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
     .qa-mi:hover { background: #f5f3ff; }
     .qa-mi.on { background: linear-gradient(90deg, #ede9fe, #f5f3ff); color: #4c1d95; font-weight: 700; box-shadow: inset 3px 0 0 #7c3aed; }
     .qa-mt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qa-mi .qb-no, .qa-mc, .qa-dot { flex: none; }
     .qa-mc { font-size: 11px; color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 0 7px; }
     .qa-dot { font-size: 11px; }
     .qa-pane { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; }
