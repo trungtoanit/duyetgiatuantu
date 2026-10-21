@@ -2247,6 +2247,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qe-del { border: 0; background: none; color: #cbd5e1; font-size: 14px; cursor: pointer; margin-top: 3px; border-radius: 6px; } .qe-del:hover { color: #dc2626; background: #fee2e2; }
     .qe-new { width: 100%; border: 0; border-top: 1px dashed #e2e8f0; background: #fff; color: #6366f1; font: inherit; font-weight: 700; font-size: 12.5px; padding: 8px; cursor: pointer; } .qe-new:hover { background: #eef2ff; }
     .qe-dirty { color: #d97706; font-size: 12px; font-weight: 800; }
+    .qr { border: 1px solid #e0e7ff; background: #fbfbff; border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+    .qr-h { display: flex; align-items: center; gap: 10px; } .qr-h b { color: #3730a3; }
+    .qr-ps { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; }
+    .qr-p { border: 1px solid #c7d2fe; background: #fff; color: #4338ca; border-radius: 999px; padding: 1px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .qr-p.on { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .qr-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 12px; }
+    .qr-chat { display: grid; gap: 6px; max-height: 360px; overflow: auto; padding: 8px; background: #e2e8f0; border-radius: 10px; }
+    .qr-b { display: flex; gap: 6px; justify-content: flex-end; }
+    .qr-msg { background: #dbeafe; color: #0f172a; border-radius: 12px 12px 2px 12px; padding: 5px 10px; font-size: 12.5px; max-width: 90%; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .qr-ava { order: 2; font-size: 16px; }
+    .qr-live { display: grid; gap: 4px; max-height: 360px; overflow: auto; }
+    .qr-row { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); gap: 4px 8px; align-items: center; text-decoration: none; color: inherit; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; }
+    .qr-row:hover { border-color: #818cf8; }
+    .qr-row b { color: #1d4ed8; } .qr-row .kh { margin: 0; font-size: 10px; }
+    .qr-who { display: inline-flex; align-items: center; gap: 4px; color: #475569; }
+    .qr-why { color: #94a3b8; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qr-q { grid-column: 1 / -1; color: #3730a3; font-style: italic; }
     .qa-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; align-items: start; }
     .qa-menu { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; overflow: hidden; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
     .qa-mi { display: flex !important; width: 100% !important; min-width: 0; box-sizing: border-box; overflow: hidden; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
@@ -3434,30 +3451,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const qSalt = (q) => (renderCtx.quickSent?.[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0);
   function quickQuestion(q, c, mode, p) {
     if (q && monthlyAsk(q, c)) {
-      return { icon: '📅', why: 'Khách cũ, tháng này chưa có báo giá mới', text: selfFix(fillP(pickFor(qbank('monthly'), q.id, qSalt(q)), p), p) };
+      return { bank: 'monthly', icon: '📅', why: 'Khách cũ, tháng này chưa có báo giá mới', text: selfFix(fillP(pickFor(qbank('monthly'), q.id, qSalt(q)), p), p) };
     }
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
     // Vừa bàn giao khách cho NVKD mới, quá 12 giờ chưa thấy phản hồi → hỏi đã liên hệ khách chưa
     const ho = handoverPending(c);
     if (ho && hoursSince(ho.createdAt) >= 12) {
-      return { icon: '🔁', why: `Đã bàn giao khách ${humanDuration(hoursSince(ho.createdAt))} trước, NVKD chưa phản hồi`, text: selfFix(fillP(pickFor(qbank('handover'), q.id, qSalt(q)), p), p) };
+      return { bank: 'handover', icon: '🔁', why: `Đã bàn giao khách ${humanDuration(hoursSince(ho.createdAt))} trước, NVKD chưa phản hồi`, text: selfFix(fillP(pickFor(qbank('handover'), q.id, qSalt(q)), p), p) };
     }
     // Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã lâu → hỏi vì sao lâu chưa xuống đơn
     const lo = lastCustomerOrderNote(q);
     if (lo && hoursSince(lo.createdAt) >= 30 * 24) {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
-      return { icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: selfFix(fillP(pickFor(qbank('longNoOrder'), q.id, salt), p), p) };
+      return { bank: 'longNoOrder', icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: selfFix(fillP(pickFor(qbank('longNoOrder'), q.id, salt), p), p) };
     }
     // Chưa có bình luận nào (đã mở xem/ thu thập mà không thấy) → hỏi NVKD vì sao chưa có thông tin
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
     if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {
-      return { icon: '📭', why: 'Chưa có bình luận nào', text: selfFix(fillP(pickFor(qbank('noComment'), q.id, qSalt(q)), p), p) };
+      return { bank: 'noComment', icon: '📭', why: 'Chưa có bình luận nào', text: selfFix(fillP(pickFor(qbank('noComment'), q.id, qSalt(q)), p), p) };
     }
     // Sếp đã bảo "lấy đơn này / chốt đơn này / lên đơn đi" mà quá 12 giờ vẫn chưa có đơn → hỏi sao khách chưa lên đơn
     const bo = bossOrderInfo(c);
     if (bo && hoursSince(bo.createdAt) >= FOLLOW_UP_HOURS) {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
       return {
+        bank: 'bossOrder',
         icon: '📦',
         why: `Sếp đã chốt lấy đơn ${humanDuration(hoursSince(bo.createdAt))} trước mà chưa lên đơn`,
         text: selfFix(fillP(pickFor(qbank('bossOrder'), q.id, salt), p), p),
@@ -3467,7 +3485,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const pr = promiseInfo(q, c);
     if (pr && hoursSince(pr.at) >= 24) {
       const lead0 = hoursSince(pr.at) >= 72 ? `${humanDuration(hoursSince(pr.at))} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
-      return { icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: lead0 + selfFix(fillP(pickFor(qbank('promise'), q.id, qSalt(q)), p), p) };
+      return { bank: 'promise', icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: lead0 + selfFix(fillP(pickFor(qbank('promise'), q.id, qSalt(q)), p), p) };
     }
     // Sếp đã cho giá (hình bảng giá đỏ / "cho em giá") là bình luận cuối, quá 12 giờ NVKD chưa phản hồi → hỏi khách phản hồi giá
     const bp = bossPriceInfo(c);
@@ -3476,6 +3494,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const hb = hoursSince(bp.createdAt);
       const lead3 = hb >= 72 ? `${humanDuration(hb)} chưa có phản hồi. ` : '';
       return {
+        bank: 'bossPrice',
         icon: '💰',
         why: `Sếp đã cho giá${bp.img ? ' (hình)' : ''} ${humanDuration(hb)} trước, NVKD chưa phản hồi`,
         text: selfFix(lead3 + fillP(pickFor(qbank('bossPrice'), q.id, salt), p), p),
@@ -3485,23 +3504,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const noKind = Array.isArray(q.kinds) && !q.kinds.length && !q.offset;
     if (noKind && q.createdAt && hoursSince(q.createdAt) >= 24) {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
-      return { icon: '🔌', why: 'Báo giá chưa có sản phẩm Flexo / Offset (đang kết nối khách)', text: selfFix(fillP(pickFor(qbank('connect'), q.id, salt), p), p) };
+      return { bank: 'connect', icon: '🔌', why: 'Báo giá chưa có sản phẩm Flexo / Offset (đang kết nối khách)', text: selfFix(fillP(pickFor(qbank('connect'), q.id, salt), p), p) };
     }
     if (noPrice(q)) return null;
     const last = lastComment(c);
     const h = last ? hoursSince(last.createdAt) : 0;
     const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
-    if (q.isReprint) return { icon: '🔁', why: 'Đơn tái bản', text: lead + selfFix(fillP(pickFor(qbank('reprint'), q.id, qSalt(q)), p), p) };
+    if (q.isReprint) return { bank: 'reprint', icon: '🔁', why: 'Đơn tái bản', text: lead + selfFix(fillP(pickFor(qbank('reprint'), q.id, qSalt(q)), p), p) };
     // Khách chưa từng có báo giá Offset và đã lâu không có báo giá mới → hỏi khách có dùng offset không
-    if (mode && offsetGap(q, c)) return { icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: selfFix(fillP(pickFor(qbank('offsetGap'), q.id, qSalt(q)), p), p) };
+    if (mode && offsetGap(q, c)) return { bank: 'offsetGap', icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: selfFix(fillP(pickFor(qbank('offsetGap'), q.id, qSalt(q)), p), p) };
     if (mode === 'hoiNhanh') {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
       const lead2 = h >= 72 ? fillP(pickFor(qbank('silentLead'), q.id, salt + 7), p, humanDuration(h)) : '';
       const text = lead2 + fillP(pickFor(qbank('priceAsk'), q.id, salt), p);
-      return { icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: selfFix(text.charAt(0).toUpperCase() + text.slice(1), p) };
+      return { bank: 'priceAsk', icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: selfFix(text.charAt(0).toUpperCase() + text.slice(1), p) };
     }
     if (mode === 'chaoLai')
       return {
+        bank: 'reportBack',
         icon: '💤',
         why: q.quoteStatus === 'REJECT' ? 'Báo giá thất bại' : `Im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`,
         text: fillP(pickFor(qbank('reportBack'), q.id, renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0), p),
@@ -5433,7 +5453,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const qChip = (v) => `<span class="qv qv-${v === 'd' ? 'd' : 'p'}" contenteditable="false" data-act="qv-chip" data-v="${v}" title="${esc(QVARS[v]?.title || '')} – bấm để đổi">${QVARS[v]?.icon || ''} ${esc(QVARS[v]?.label || v)}</span>`;
   const qToHtml = (t) => esc(t).replace(/\{([pPd])\}/g, (m, v) => qChip(v));
   const qeRow = (t, k) => `<div class="qe-row"><span class="qe-no">${k + 1}</span><div class="qe-cell"><div class="qe-line qb-edit" contenteditable="true" spellcheck="false">${qToHtml(t)}</div>
-      <div class="qe-prev">${esc(fillP(t, 'em', '5 ngày'))}</div></div><button class="qe-del" data-act="qb-row-del" title="Xoá câu này">✕</button></div>`;
+      <div class="qe-prev">${esc(fillP(t, state.qaP || 'em', '5 ngày'))}</div></div><button class="qe-del" data-act="qb-row-del" title="Xoá câu này">✕</button></div>`;
   // Ô câu → chuỗi có {p} / {P} / {d}
   const qSerialize = (el) => {
     let out = '';
@@ -5461,7 +5481,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   function qePreview(line) {
     const prev = line.closest('.qe-row')?.querySelector('.qe-prev');
-    if (prev) prev.textContent = fillP(qSerialize(line), 'em', '5 ngày');
+    if (prev) prev.textContent = fillP(qSerialize(line), state.qaP || 'em', '5 ngày');
     qeDirty(line.closest('.qe'));
   }
   function qeInsert(v) {
@@ -5493,6 +5513,51 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     qePreview(line);
   }
 
+  // Review: câu hỏi hiện thế nào với từng cách gọi + các báo giá ĐANG khớp điều kiện bộ này (câu đúng như thẻ bên phải sẽ gợi ý)
+  function qaReview(sel) {
+    const P = ['em', 'chị', 'anh'].includes(state.qaP) ? state.qaP : 'em';
+    const lines = qbank(sel.id);
+    const chat = lines
+      .map((t) => `<div class="qr-b"><span class="qr-ava">👨‍💼</span><div class="qr-msg">${esc(selfFix(fillP(t, P, '5 ngày'), P))}</div></div>`)
+      .join('');
+    let live = [];
+    // Tính lại tối đa 2 phút / lần cho mỗi bộ (duyệt cả nghìn báo giá khá nặng)
+    const ck = state.qrCache?.[sel.id];
+    if (ck && Date.now() - ck.at < 120e3) live = ck.live;
+    else if (sel.id !== 'zalo' && sel.id !== 'silentLead') {
+      const qs = renderCtx.quotes || {};
+      const cm = renderCtx.comments || {};
+      for (const q of Object.values(qs)) {
+        if (!q?.id || q.quoteStatus === 'REJECT' && sel.id !== 'reportBack') continue;
+        const c = cm[q.id];
+        if (!c?.threads?.length && sel.id !== 'noComment' && sel.id !== 'connect' && sel.id !== 'monthly') continue;
+        const staff = staffOf(q, c);
+        if (!staff || isExcluded(staff)) continue;
+        let r = null;
+        try {
+          r = quickQuestion(q, c || { id: q.id, threads: [] }, followMode(q, c), addressFor(staff, cm, qs));
+        } catch {}
+        if (r?.bank === sel.id) live.push({ q, staff, r });
+        if (live.length >= 60) break;
+      }
+      live.sort((a, b) => (b.q.updatedAt || b.q.createdAt || 0) - (a.q.updatedAt || a.q.createdAt || 0));
+      state.qrCache = { ...(state.qrCache || {}), [sel.id]: { at: Date.now(), live } };
+    }
+    const liveHtml = sel.id === 'zalo'
+      ? '<div class="muted">Bộ này dùng ở tab 🔥 Gợi ý chốt đơn (nút 💬 từng deal).</div>'
+      : sel.id === 'silentLead'
+        ? '<div class="muted">Bộ này ghép phía trước câu của bộ 11 (Quá 12 giờ chưa chốt) khi im lặng hơn 3 ngày.</div>'
+        : live.length
+          ? `<div class="qr-live">${live.slice(0, 15).map(({ q, staff, r }) => `<a class="qr-row" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">
+              <b>${esc(q.code)}</b>${custTag(q)}<span class="qr-who">${avatarHtml(staff, 18)}${esc(shortName(staff))}</span><span class="qr-why">${esc(r.why)}</span><span class="qr-q">“${esc(r.text)}”</span></a>`).join('')}</div>
+            ${live.length > 15 ? `<div class="muted">… và ${live.length - 15} báo giá khác</div>` : ''}`
+          : '<div class="muted">Hiện chưa có báo giá nào khớp điều kiện này (hoặc đã bị điều kiện ưu tiên cao hơn lấy trước).</div>';
+    return `<div class="qr"><div class="qr-h"><b>🔍 Review bộ câu hỏi</b>
+        <span class="qr-ps">Gọi NVKD là:${['em', 'chị', 'anh'].map((x) => `<button class="qr-p${x === P ? ' on' : ''}" data-act="qa-p" data-p="${x}">${x}</button>`).join('')}</span></div>
+      <div class="qr-cols"><div><div class="qa-lbl">💬 Tin nhắn sẽ hiện (${lines.length} câu)</div><div class="qr-chat">${chat}</div></div>
+        <div><div class="qa-lbl">📋 Báo giá đang khớp điều kiện (${sel.id === 'zalo' || sel.id === 'silentLead' ? '–' : live.length})</div>${liveHtml}</div></div></div>`;
+  }
+
   function qaTab(admin) {
     const ex = (t) => esc(fillP(t, 'em', '5 ngày'));
     const sel = QBANKS.find((b) => b.id === lsGet('dgQaSel')) || QBANKS[0];
@@ -5517,6 +5582,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
             </div>
             <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${sel.id}">💾 Lưu – áp dụng mọi máy</button>${isEd(sel) ? `<button class="act" data-act="qb-reset" data-id="${sel.id}">↺ Về mặc định</button>` : ''}<span class="qe-dirty" hidden>● chưa lưu</span></div>`
           : ''}
+        ${qaReview(sel)}
         ${admin ? '' : `<div class="qa-lbl">👀 Các câu (gọi NVKD là "em")</div><div class="qb-ex">${lines.map((t, k) => `<div><em>${k + 1}</em>${ex(t)}</div>`).join('')}</div>`}</div>`;
     return `<div class="qb-tab"><div class="qb-intro">💬 Thẻ bên phải trang báo giá xét các điều kiện <b>theo thứ tự 1 → ${QBANKS.length}</b>, khớp điều kiện nào trước thì dùng bộ câu đó; mỗi báo giá lấy 1 câu cố định, bấm <b>Gửi lại</b> thì đổi câu khác.</div>
       <div class="qa-wrap"><div class="qa-menu">${menu}</div>${pane}</div></div>`;
@@ -6671,6 +6737,11 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       await call({ type: 'kv.set', key: 'zaloJobs', value: { ...keep, ...patch } });
       // Vẽ lại vài lần để thấy trạng thái gửi
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
+      render();
+    }
+    else if (act === 'qa-p') {
+      if (state.qbDirty) return; // đang sửa – không vẽ lại
+      state.qaP = b.dataset.p;
       render();
     }
     else if (act === 'qv-add') {
