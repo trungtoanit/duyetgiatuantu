@@ -3379,9 +3379,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Chọn cố định theo báo giá (không đổi mỗi lần vẽ lại); bấm "Gửi lại" thì đổi câu khác
   const pickFor = (arr, id, salt = 0) => arr[(Math.abs(Number(id) * 2654435761 + salt * 40503) >>> 0) % arr.length];
-  const fillP = (t, p, d = '') => t.replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
+  // Sếp tự xưng trong câu mẫu là "anh"; gọi NVKD là "chị" / "anh" (người lớn hơn) thì sếp xưng "em"
+  const selfAdj = (t, p) =>
+    p === 'chị' || p === 'anh' ? t.replace(/(^|[^\p{L}{])anh(?![\p{L}}])/gu, '$1em').replace(/(^|[^\p{L}{])Anh(?![\p{L}}])/gu, '$1Em') : t;
+  const fillP = (t, p, d = '') => selfAdj(t, p).replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
   // "anh" trong mẫu là quản lý tự xưng; nếu NVKD được gọi là "anh" thì quản lý xưng "em"
-  const selfFix = (t, p) => (p === 'anh' ? t.replace(/\b(giúp|với|cho|báo|tính lại|duyệt|hỗ trợ) anh\b/g, '$1 em').replace(/Giá anh duyệt/g, 'Giá em duyệt') : t);
+  const selfFix = (t) => t; // xưng hô của sếp đã xử lý trong fillP (selfAdj)
 
   // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
   // Bình luận mới nhất trong mọi báo giá cùng khách; trả về nếu đó là dòng "… lên đơn hàng …" / "Mã đơn hàng Misa"
