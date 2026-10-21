@@ -2289,6 +2289,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qo-q { font-size: 12.5px; color: #3730a3; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .qo-side { display: grid; justify-items: end; gap: 1px; } .qo-amt { font-weight: 800; color: #047857; font-size: 12.5px; }
     .qo-who { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #64748b; }
+    .qo-bno { font-style: normal; font-size: 10px; font-weight: 900; color: #fff; background: #6366f1; border-radius: 999px; padding: 0 6px; margin-right: 4px; }
+    .qo-qr { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .qo-edit { flex: none; border: 1px solid #e2e8f0; background: #fff; color: #475569; border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0; transition: opacity .15s; }
+    .qo-row:hover .qo-edit { opacity: 1; } .qo-edit:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .qe-flash { animation: qeFlash 2.4s ease; }
+    @keyframes qeFlash { 0%, 60% { background: #fef08a; box-shadow: 0 0 0 2px #facc15; } 100% { background: transparent; box-shadow: none; } }
     .qa-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; align-items: start; }
     .qa-menu { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; overflow: hidden; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
     .qa-mi { display: flex !important; width: 100% !important; min-width: 0; box-sizing: border-box; overflow: hidden; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
@@ -5579,7 +5585,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       (c.threads || []).forEach(walk);
       const lastAsk = Math.max(sent?.at || 0, bossAt * 1000);
       const recent = Date.now() - lastAsk < QA_GAP;
-      list.push({ q, c, staff, r, score, amt, recent });
+      // Câu số mấy trong bộ (để bấm "Sửa câu" nhảy đúng câu)
+      const pp = addressFor(staff, cm, qs);
+      const lineIdx = qbank(r.bank).findIndex((t) => {
+        const f2 = fillP(t, pp, '');
+        return f2 && r.text.includes(f2.replace(/\s+$/, ''));
+      });
+      list.push({ q, c, staff, r, score, amt, recent, lineIdx });
     }
     state.qaScan = { at: Date.now(), list };
     return list;
@@ -5615,10 +5627,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .map((x, i) => {
         const [cls, lab] = qaLevel(x.score);
         const b = QBANKS.find((k) => k.id === x.r.bank);
+        const bno = QBANKS.indexOf(b) + 1;
         return `<a class="qo-row ${cls}" href="/bao-gia/update/${x.q.id}" data-nav data-code="${esc(x.q.code)}">
           <span class="qo-no">${i + 1}</span><span class="qo-lv ${cls}" title="Điểm ưu tiên ${x.score}">${lab}</span>
-          <span class="qo-main"><span class="qo-top"><b>${esc(x.q.code)}</b>${custTag(x.q)}<span class="qo-bank">${b?.icon || ''} ${esc(b?.title || '')}</span><span class="qo-why">${esc(x.r.why)}</span></span>
-            <span class="qo-q" title="${esc(x.r.text)}">💬 “${esc(x.r.text)}”</span></span>
+          <span class="qo-main"><span class="qo-top"><b>${esc(x.q.code)}</b>${custTag(x.q)}<span class="qo-bank" title="Bộ câu số ${bno}${x.lineIdx >= 0 ? ` · câu ${x.lineIdx + 1}` : ''}"><i class="qo-bno">Bộ ${bno}${x.lineIdx >= 0 ? `·câu ${x.lineIdx + 1}` : ''}</i>${b?.icon || ''} ${esc(b?.title || '')}</span><span class="qo-why">${esc(x.r.why)}</span></span>
+            <span class="qo-qr"><span class="qo-q" title="${esc(x.r.text)}">💬 “${esc(x.r.text)}”</span><button class="qo-edit" data-act="qa-edit" data-bank="${x.r.bank}" data-idx="${x.lineIdx}" title="Câu này chưa hợp lý? Sửa ngay trong bộ câu số ${bno}">✏️ Sửa câu</button></span></span>
           <span class="qo-side"><span class="qo-amt">${x.amt ? moneyShortG(x.amt) : '<span class="muted">0đ</span>'}</span><span class="qo-who">${avatarHtml(x.staff, 18)}${esc(shortName(x.staff))}</span></span></a>`;
       })
       .join('');
@@ -6837,6 +6850,35 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       // Vẽ lại vài lần để thấy trạng thái gửi
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
       render();
+    }
+    else if (act === 'qa-edit') {
+      // Nhảy tới bộ câu và tô sáng đúng câu đang dùng để sửa tại chỗ
+      e.preventDefault();
+      e.stopPropagation();
+      if (state.qbDirty && !confirm('Bộ câu đang sửa chưa lưu – bỏ các thay đổi?')) return;
+      state.qbDirty = false;
+      lsSet('dgQaSel', b.dataset.bank);
+      const idx = Number(b.dataset.idx);
+      lastPanelHtml = '';
+      await render();
+      setTimeout(() => {
+        const rows = root.querySelectorAll('.qe-row');
+        const row = rows[idx >= 0 ? idx : 0];
+        if (!row) return;
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        row.classList.add('qe-flash');
+        const line = row.querySelector('.qe-line');
+        line?.focus();
+        try {
+          const rg = document.createRange();
+          rg.selectNodeContents(line);
+          rg.collapse(false);
+          const sl = qeSel();
+          sl.removeAllRanges();
+          sl.addRange(rg);
+        } catch {}
+        setTimeout(() => row.classList.remove('qe-flash'), 2500);
+      }, 120);
     }
     else if (act === 'qa-staff') {
       state.qaStaff = b.dataset.staff || '';
