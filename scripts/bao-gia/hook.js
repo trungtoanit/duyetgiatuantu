@@ -131,6 +131,26 @@
     for (const k of ['staff', 'user']) if (isPerson(c[k])) return { v: c[k], k: `customer.${k}` };
     return null;
   };
+  // Thành tiền 1 dòng sản phẩm: ưu tiên tổng của dòng, không có thì giá × số lượng
+  const lineTotal = (p) => {
+    const n = (v) => (v == null || v === '' ? NaN : Number(v));
+    const t = [p.totalPrice, p.totalAmount, p.amount, p.total].map(n).find((v) => Number.isFinite(v) && v > 0);
+    if (t) return t;
+    const price = [p.price, p.unitPrice, p.salePrice].map(n).find((v) => Number.isFinite(v) && v > 0);
+    const qty = [p.quantity, p.qty, p.amountProduct].map(n).find((v) => Number.isFinite(v) && v > 0);
+    return price && qty ? price * qty : 0;
+  };
+  function kindShareOf(products) {
+    if (!Array.isArray(products) || !products.length) return undefined;
+    const sum = { flexo: 0, offset: 0 };
+    for (const p of products) {
+      const k = /OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : null;
+      if (k) sum[k] += lineTotal(p);
+    }
+    const all = sum.flexo + sum.offset;
+    if (!sum.flexo || !sum.offset || !all) return undefined; // chỉ cần khi có cả 2 loại và đọc được thành tiền
+    return { flexo: sum.flexo / all, offset: sum.offset / all };
+  }
   const slimQuote = (o) => ({
     id: o.id,
     code: o.code,
@@ -150,6 +170,8 @@
     kinds: Array.isArray(o.opportunityProducts)
       ? [...new Set(o.opportunityProducts.map((p) => (/OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : null)).filter(Boolean))]
       : undefined,
+    // Tỉ trọng thành tiền theo loại hàng (báo giá vừa Flexo vừa Offset): % Flexo / Offset tính trên phần tiền của loại đó
+    kindShare: kindShareOf(o.opportunityProducts),
     // NVKD = người phụ trách khách (cột Sale của ERP); creator = người tạo báo giá
     staff: person(saleOf(o)?.v || o.staff),
     creator: person(o.staff),

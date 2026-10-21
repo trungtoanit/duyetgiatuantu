@@ -2847,10 +2847,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Flexo: tỉ lệ giấy tấm (nhà cung cấp rẻ nhất) trên tổng giá trị báo giá; phần còn lại = 100% − tỉ lệ đó
   // Số tiền dạng triệu: 1.234.567 → "1,23 tr"
   const trM = (v) => `${(v / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tr`;
+  // Báo giá vừa Flexo vừa Offset: chỉ lấy phần thành tiền của loại đang tính (tỉ trọng từ các dòng sản phẩm)
+  const kindPart = (q, kind, total) => (total && q?.kindShare?.[kind] ? total * q.kindShare[kind] : total);
   const flexoInfo = (q) => {
     const fx = q?.code && renderCtx.margins?.[q.code]?.flexo;
     // Tổng báo giá vừa đổi → dùng tổng mới ngay trong lúc chờ đọc lại PO
-    const base = flexoAmountChanged(fx, q) ? q.amount : fx?.quoteTotal || q?.amount;
+    const base = kindPart(q, 'flexo', flexoAmountChanged(fx, q) ? q.amount : fx?.quoteTotal || q?.amount);
     if (!fx?.suppliers?.length || !base) return null;
     // Mỗi nhà cung cấp lo giấy tấm cho các sản phẩm khác nhau → chi phí giấy tấm = TỔNG PO của các nhà cung cấp
     const sum = fx.suppliers.reduce((a, s) => a + (s.total || 0), 0);
@@ -3471,19 +3473,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const sumVal = rows.reduce((a, r) => a + r.val, 0); // tổng giá trước VAT theo bảng chiết giá
     const weighted = rows.every((r) => r.val > 0) && sumVal > 0;
     const pct = weighted ? rows.reduce((a, r) => a + r.val * r.pct, 0) / sumVal : Math.min(...rows.map((r) => r.pct));
-    if (!q?.amount) {
+    const amount = kindPart(q, 'offset', q?.amount);
+    if (!amount) {
       if (!weighted) return null;
       const nvlPre = rows.reduce((a, r) => a + r.nvl, 0);
       return { diff: sumVal - nvlPre, exact: false, rows, pct, nvlPre, nvlPost: nvlPre, vat: null, base: sumVal };
     }
     // VAT: tỉ lệ giá trị BG ÷ tổng bảng chiết giá gần đúng 1 / 1,05 / 1,08 / 1,1 → báo giá đã gồm VAT đó
-    const ratio = weighted ? q.amount / sumVal : null;
+    const ratio = weighted ? amount / sumVal : null;
     const vat = ratio == null ? null : [0, 5, 8, 10].find((v) => Math.abs(ratio - (1 + v / 100)) <= 0.015) ?? null;
     const exact = vat != null;
     // NVL sau VAT: tính đúng từ bảng chiết giá khi khớp; không khớp thì ước theo tỉ lệ đang bán % trên giá trị BG
     const nvlPre = exact ? rows.reduce((a, r) => a + r.nvl, 0) : null;
-    const nvlPost = exact ? nvlPre * (1 + vat / 100) : q.amount * (1 - pct / 100);
-    return { diff: q.amount - nvlPost, exact, rows, pct, nvlPre, nvlPost, vat, base: q.amount };
+    const nvlPost = exact ? nvlPre * (1 + vat / 100) : amount * (1 - pct / 100);
+    return { diff: amount - nvlPost, exact, rows, pct, nvlPre, nvlPost, vat, base: amount, part: amount !== q.amount };
   }
   // Các bước tính chênh lệch Offset (bảng Giải thích): NVL 1 thùng → NVL trước VAT → NVL sau VAT → BG − NVL
   function offsetSteps(q, od) {
@@ -3497,7 +3500,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     } else {
       out.push(r(`NVL sau VAT ≈ BG × (1 − ${pctTxt})`, `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'ước tính', 'warn-row'));
     }
-    out.push(r(`Giá trị BG${od.vat ? ` (đã gồm VAT ${od.vat}%)` : ''}`, money(q.amount)));
+    out.push(r(`${od.part ? 'Thành tiền phần Offset' : 'Giá trị BG'}${od.vat ? ` (đã gồm VAT ${od.vat}%)` : ''}`, money(Math.round(od.base))));
     out.push(r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', `<b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`, pctTxt));
     if (!od.exact) out.push(`<tr><td colspan="4" class="muted">Tổng trên bảng chiết giá (giá × SL) không khớp giá trị BG theo mức VAT 0/5/8/10% → ước tính theo đang bán %.</td></tr>`);
     return out.join('');
@@ -3641,7 +3644,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const od = offset == null ? null : offsetDiff(q);
     if (!od) return '<span class="pc dl wait" title="Offset: đang chờ tính">…</span>';
-    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: chênh lệch = BG ${money(q.amount)} − NVL sau VAT${od.vat ? ` ${od.vat}%` : ''} ${money(Math.round(od.nvlPost))}${od.exact ? '' : ' (ước tính theo đang bán %)'}">${od.exact ? '' : '≈'}${trM(od.diff)}</span>`;
+    return `<span class="pc dl o ${pctCls(offset)}" title="Offset: chênh lệch = ${od.part ? 'phần Offset' : 'BG'} ${money(Math.round(od.base))} − NVL sau VAT${od.vat ? ` ${od.vat}%` : ''} ${money(Math.round(od.nvlPost))}${od.exact ? '' : ' (ước tính theo đang bán %)'}">${od.exact ? '' : '≈'}${trM(od.diff)}</span>`;
   };
 
   const lsGet = (k) => {
@@ -3777,7 +3780,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
       ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>` : '') : ''}
-      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · BG ${trM(q.amount || od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b>${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
+      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b>${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
       ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
@@ -3813,7 +3816,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       : '';
     return `<details class="mgnbox"><summary>${head}${busy ? ' <span class="spinner"></span>' : ''} <span class="link">Giải thích</span></summary>
       ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
-      ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = (tổng PO của tất cả nhà cung cấp) ÷ tổng giá trị báo giá (${money(fx.base)})</i>. ${fx.invalid
+      ${fx ? `<div class="expl"><b>Flexo</b> – Lên PO → Giấy tấm, chọn từng nhà cung cấp: <i>tỉ lệ giấy tấm = (tổng PO của tất cả nhà cung cấp) ÷ ${q?.kindShare ? 'thành tiền phần Flexo' : 'tổng giá trị báo giá'} (${money(Math.round(fx.base))})</i>. ${fx.invalid
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá (${money(fx.base)}) <b>${trM(-fx.diff)}</b> – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
