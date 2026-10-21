@@ -3228,6 +3228,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     'Giá này {p} gửi khách chưa? Khách chê cao hay ok rồi {p}?',
   ];
 
+  // Báo giá chưa có Flexo / Offset (mới kết nối khách) – hỏi tình hình kết nối
+  const CONNECT_ASK = [
+    'Báo cáo lại anh khách hàng này nhé {p}.',
+    'Kết nối được khách hàng này chưa {p}?',
+    '{P} có tìm được thông tin khách hàng khác không?',
+    'Khách này có nhu cầu thùng / hộp gì chưa {p}, đã gặp được người phụ trách mua hàng chưa?',
+    'Đã gửi mẫu hay báo giá thử cho khách này chưa {p}?',
+    'Khách này đang lấy hàng bên nào {p}, giá bên đó bao nhiêu?',
+    'Tình hình khách này sao rồi {p}, có cơ hội làm đơn không?',
+  ];
   // Hỏi thăm 1 deal qua Zalo
   // Số phút còn phải chờ trước khi soạn tin mới cho 1 NVKD (mỗi người 1 tin / 30 phút; tin đang chờ gửi cũng tính)
   const ZALO_GAP = 30 * 60e3;
@@ -3376,6 +3386,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         why: `Sếp đã cho giá${bp.img ? ' (hình)' : ''} ${humanDuration(hb)} trước, NVKD chưa phản hồi`,
         text: selfFix(lead3 + fillP(pickFor(BOSS_PRICE_ASK, q.id, salt), p), p),
       };
+    }
+    // Báo giá chưa có sản phẩm Flexo / Offset nào (mới là kết nối / chào khách) → hỏi tình hình kết nối khách
+    const noKind = Array.isArray(q.kinds) && !q.kinds.length && !q.offset;
+    if (noKind && q.createdAt && hoursSince(q.createdAt) >= 24) {
+      const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
+      return { icon: '🔌', why: 'Báo giá chưa có sản phẩm Flexo / Offset (đang kết nối khách)', text: selfFix(fillP(pickFor(CONNECT_ASK, q.id, salt), p), p) };
     }
     if (noPrice(q)) return null;
     const last = lastComment(c);
