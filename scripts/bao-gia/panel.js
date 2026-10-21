@@ -3233,7 +3233,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     'Báo cáo lại anh khách hàng này nhé {p}.',
     'Kết nối được khách hàng này chưa {p}?',
     '{P} có tìm được thông tin khách hàng khác không?',
-    'Khách này có nhu cầu thùng / hộp gì chưa {p}, đã gặp được người phụ trách mua hàng chưa?',
+    'Tìm được trực tiếp thu mua chưa {p}?',
     'Có được báo giá thử cho khách này chưa {p}?',
     'Khách này đang lấy hàng bên nào {p}, giá bên đó bao nhiêu?',
     'Tình hình khách này sao rồi {p}, có cơ hội làm đơn không?',
