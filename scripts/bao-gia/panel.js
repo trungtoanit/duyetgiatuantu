@@ -2514,6 +2514,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .side-btn { margin-left: auto; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; width: 24px; height: 22px; cursor: pointer; font-size: 12px; line-height: 1; }
     .side.collapsed { width: auto; padding: 8px 10px; }
     .side.collapsed .side-h { margin-bottom: 0; }
+    /* Thẻ thu gọn: nổi bật hơn – viền gradient chạy, phát sáng nhịp thở, nảy nhẹ khi mới hiện */
+    .side.collapsed { border: 2px solid transparent; border-radius: 14px;
+      background: linear-gradient(#fff, #fff) padding-box, linear-gradient(120deg, #6366f1, #ec4899, #f59e0b, #10b981, #6366f1) border-box;
+      background-size: 100% 100%, 300% 300%; animation: dgSideBorder 4s linear infinite, dgSideGlow 2.2s ease-in-out infinite, dgSidePop .5s cubic-bezier(.2,1.4,.4,1) 1; }
+    .side.collapsed .side-h { font-size: 15px; }
+    .side.collapsed:hover { transform: translateY(-2px) scale(1.03); transition: transform .15s; }
+    @keyframes dgSideBorder { 0% { background-position: 0 0, 0% 50%; } 100% { background-position: 0 0, 300% 50%; } }
+    @keyframes dgSideGlow { 0%, 100% { box-shadow: 0 6px 18px rgba(99,102,241,.25), 0 0 0 0 rgba(236,72,153,.35); } 50% { box-shadow: 0 10px 28px rgba(99,102,241,.45), 0 0 0 8px rgba(236,72,153,0); } }
+    @keyframes dgSidePop { 0% { transform: scale(.6); opacity: 0; } 100% { transform: none; opacity: 1; } }
     .side-mini { font-weight: 700; font-size: 13px; margin-left: 6px; }
     .side-mini b.good { color: #047857; } .side-mini b.bad { color: #b91c1c; }
     .calc { display: inline-flex; align-items: center; gap: 8px; }
