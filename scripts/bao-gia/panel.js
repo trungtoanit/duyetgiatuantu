@@ -2244,6 +2244,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qe-prev { display: none; font-size: 11px; color: #94a3b8; padding: 1px 7px 3px; } .qe-prev::before { content: '👀 '; }
     .qe-row:focus-within .qe-prev { display: block; }
     .qv { display: inline-flex; align-items: center; gap: 2px; margin: 0 1px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 800; cursor: pointer; user-select: none; vertical-align: 1px; line-height: 17px; }
+    .qv-s { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
     .qv-p { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; } .qv-d { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
     .qv:hover { filter: brightness(.95); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
     .qe-del { border: 0; background: none; color: #cbd5e1; font-size: 12px; cursor: pointer; border-radius: 6px; opacity: 0; padding: 0; } .qe-row:hover .qe-del { opacity: 1; } .qe-del:hover { color: #dc2626; background: #fee2e2; }
@@ -5549,11 +5550,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const QVARS = {
     p: { icon: '👤', label: 'em / chị / anh', title: 'Cách gọi NVKD (tự theo từng người)' },
     P: { icon: '👤', label: 'Em / Chị / Anh', title: 'Cách gọi NVKD – viết hoa (đầu câu)' },
+    s: { icon: '🧑‍💼', label: 'anh / em (sếp)', title: 'Sếp tự xưng – gọi NVKD là "em" thì "anh", gọi "chị / anh" thì "em"' },
+    S: { icon: '🧑‍💼', label: 'Anh / Em (sếp)', title: 'Sếp tự xưng – viết hoa (đầu câu)' },
     d: { icon: '⏱', label: 'khoảng thời gian', title: 'Bao lâu chưa có phản hồi (vd. 5 ngày)' },
   };
-  const qVars = (id) => (id === 'silentLead' ? ['p', 'P', 'd'] : ['p', 'P']);
-  const qChip = (v) => `<span class="qv qv-${v === 'd' ? 'd' : 'p'}" contenteditable="false" data-act="qv-chip" data-v="${v}" title="${esc(QVARS[v]?.title || '')} – bấm để đổi">${QVARS[v]?.icon || ''} ${esc(QVARS[v]?.label || v)}</span>`;
-  const qToHtml = (t) => esc(t).replace(/\{([pPd])\}/g, (m, v) => qChip(v));
+  const qVars = (id) => (id === 'silentLead' ? ['p', 'P', 's', 'S', 'd'] : ['p', 'P', 's', 'S']);
+  const qChip = (v) => `<span class="qv qv-${v === 'd' ? 'd' : v === 's' || v === 'S' ? 's' : 'p'}" contenteditable="false" data-act="qv-chip" data-v="${v}" title="${esc(QVARS[v]?.title || '')} – bấm để đổi">${QVARS[v]?.icon || ''} ${esc(QVARS[v]?.label || v)}</span>`;
+  // Câu lưu: {p}/{P}/{d} và chữ "anh / Anh" (sếp tự xưng, tự đổi theo NVKD) → hiện thành nút
+  const qToHtml = (t) =>
+    esc(t)
+      .replace(/(^|[^\p{L}{])(anh|Anh)(?![\p{L}}])/gu, (m, pre, w) => `${pre}{${w === 'Anh' ? 'S' : 's'}}`)
+      .replace(/\{([pPdsS])\}/g, (m, v) => qChip(v));
   const qeRow = (t, k) => `<div class="qe-row"><span class="qe-no">${k + 1}</span><div class="qe-cell"><div class="qe-line qb-edit" contenteditable="true" spellcheck="false">${qToHtml(t)}</div>
       <div class="qe-prev">${esc(fillP(t, state.qaP || 'em', '5 ngày'))}</div></div><button class="qe-del" data-act="qb-row-del" title="Xoá câu này">✕</button></div>`;
   // Ô câu → chuỗi có {p} / {P} / {d}
@@ -5561,7 +5568,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     let out = '';
     const walk = (n) => {
       if (n.nodeType === 3) out += n.textContent;
-      else if (n.dataset?.v) out += `{${n.dataset.v}}`;
+      else if (n.dataset?.v) out += n.dataset.v === 's' ? 'anh' : n.dataset.v === 'S' ? 'Anh' : `{${n.dataset.v}}`;
       else if (n.tagName === 'BR') out += ' ';
       else n.childNodes.forEach(walk);
     };
