@@ -2226,6 +2226,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .zl-draft { border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 12px; cursor: pointer; }
     .zl-draft:not(.on) { border-color: #f87171; background: #fef2f2; color: #b91c1c; }
     .zl-fix { border: 1px dashed #fca5a5; background: #fff; color: #b91c1c; border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+    .qa-wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 12px; align-items: start; }
+    .qa-menu { display: grid; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
+    .qa-mi { display: flex; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
+    .qa-mi:hover { background: #f5f3ff; }
+    .qa-mi.on { background: linear-gradient(90deg, #ede9fe, #f5f3ff); color: #4c1d95; font-weight: 700; box-shadow: inset 3px 0 0 #7c3aed; }
+    .qa-mt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qa-mc { font-size: 11px; color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 0 7px; }
+    .qa-dot { font-size: 11px; }
+    .qa-pane { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; }
+    .qa-ph { display: flex; align-items: center; gap: 10px; } .qa-ph h3 { margin: 0; font-size: 17px; }
+    .qa-pic { font-size: 26px; } .qb-no.big { width: 28px; height: 28px; font-size: 13px; }
+    .qa-lbl { font-size: 12px; font-weight: 800; color: #475569; }
+    .qa-pane .qb-ex { gap: 4px; } .qa-pane .qb-ex em { font-style: normal; display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 900; align-items: center; justify-content: center; margin-right: 6px; }
     .qb-tab { margin-top: 10px; }
     .qb-intro { background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #4c1d95; margin-bottom: 10px; }
     .qb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 10px; }
@@ -5373,23 +5386,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- Tab "💬 Bộ câu hỏi": các bộ câu hỏi nhanh, điều kiện dùng, thứ tự ưu tiên; quản trị sửa được (kv 'qbank') ----------
   function qaTab(admin) {
     const ex = (t) => esc(fillP(t, 'em', '5 ngày'));
-    const cards = QBANKS.map((b, i) => {
-      const o = QB[b.id];
-      const lines = qbank(b.id);
-      const edited = !!o?.lines?.filter(Boolean).length;
-      return `<div class="qb-card"><div class="qb-h"><span class="qb-no">${i + 1}</span><span class="qb-ic">${b.icon}</span><b>${esc(b.title)}</b>
-          <span class="qb-n">${lines.length} câu</span>${edited ? `<span class="qb-ed" title="Sửa bởi ${esc(o.by || '')} lúc ${new Date(o.at || 0).toLocaleString('vi-VN')}">✏️ đã sửa</span>` : '<span class="qb-def">mặc định</span>'}</div>
-        <div class="qb-when"><b>Khi nào dùng:</b> ${esc(b.when)}</div>
+    const sel = QBANKS.find((b) => b.id === lsGet('dgQaSel')) || QBANKS[0];
+    const isEd = (b) => !!QB[b.id]?.lines?.filter(Boolean).length;
+    // Menu con bên trái: mỗi bộ câu hỏi 1 dòng (theo thứ tự ưu tiên)
+    const menu = QBANKS.map((b, i) => `<button class="qa-mi${b.id === sel.id ? ' on' : ''}" data-act="qa-sel" data-id="${b.id}" title="${esc(b.when)}">
+        <span class="qb-no">${i + 1}</span><span class="qa-mt">${b.icon} ${esc(b.title)}</span><span class="qa-mc">${qbank(b.id).length}</span>${isEd(b) ? '<span class="qa-dot" title="Đã sửa">✏️</span>' : ''}</button>`).join('');
+    const o = QB[sel.id];
+    const lines = qbank(sel.id);
+    const idx = QBANKS.indexOf(sel) + 1;
+    const pane = `<div class="qa-pane">
+        <div class="qa-ph"><span class="qb-no big">${idx}</span><span class="qa-pic">${sel.icon}</span><div><h3>${esc(sel.title)}</h3>
+          <span class="muted">Ưu tiên ${idx}/${QBANKS.length} · ${lines.length} câu · ${isEd(sel) ? `✏️ sửa bởi ${esc(o.by || '')} lúc ${new Date(o.at || 0).toLocaleString('vi-VN')}` : 'câu mặc định'}</span></div></div>
+        <div class="qb-when"><b>📌 Khi nào dùng:</b> ${esc(sel.when)}</div>
         ${admin
-          ? `<textarea class="qb-edit" data-id="${b.id}" rows="${Math.min(8, lines.length + 1)}" spellcheck="false">${esc(lines.join('\n'))}</textarea>
-            <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${b.id}">💾 Lưu</button>${edited ? `<button class="act" data-act="qb-reset" data-id="${b.id}">↺ Về mặc định</button>` : ''}
-              <span class="muted">Mỗi dòng 1 câu · {p} = cách gọi NVKD (em / chị / anh)${b.id === 'silentLead' ? ' · {d} = khoảng thời gian' : ''}</span></div>`
+          ? `<div class="qa-lbl">✏️ Sửa bộ câu <span class="muted">(mỗi dòng 1 câu · {p} = cách gọi NVKD: em / chị / anh${sel.id === 'silentLead' ? ' · {d} = khoảng thời gian' : ''})</span></div>
+            <textarea class="qb-edit" data-id="${sel.id}" rows="${Math.min(14, Math.max(4, lines.length + 1))}" spellcheck="false">${esc(lines.join('\n'))}</textarea>
+            <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${sel.id}">💾 Lưu – áp dụng mọi máy</button>${isEd(sel) ? `<button class="act" data-act="qb-reset" data-id="${sel.id}">↺ Về mặc định</button>` : ''}</div>`
           : ''}
-        <div class="qb-ex">${lines.map((t) => `<div>• ${ex(t)}</div>`).join('')}</div></div>`;
-    }).join('');
-    return `<div class="qb-tab"><div class="qb-intro">💬 <b>Bộ câu hỏi nhanh</b> – thẻ bên phải trang báo giá tự gợi ý câu hỏi cho NVKD. Hệ thống xét các điều kiện <b>theo thứ tự từ 1 trở xuống</b>, điều kiện nào khớp trước thì dùng bộ câu đó; mỗi báo giá lấy 1 câu cố định trong bộ, bấm <b>Gửi lại</b> thì đổi câu khác.
-      ${admin ? 'Sửa xong bấm <b>Lưu</b> – áp dụng ngay cho mọi máy.' : ''}</div>
-      <div class="qb-grid">${cards}</div></div>`;
+        <div class="qa-lbl">👀 Xem trước (gọi NVKD là "em")</div>
+        <div class="qb-ex">${lines.map((t, k) => `<div><em>${k + 1}</em>${ex(t)}</div>`).join('')}</div></div>`;
+    return `<div class="qb-tab"><div class="qb-intro">💬 Thẻ bên phải trang báo giá xét các điều kiện <b>theo thứ tự 1 → ${QBANKS.length}</b>, khớp điều kiện nào trước thì dùng bộ câu đó; mỗi báo giá lấy 1 câu cố định, bấm <b>Gửi lại</b> thì đổi câu khác.</div>
+      <div class="qa-wrap"><div class="qa-menu">${menu}</div>${pane}</div></div>`;
   }
 
   // ---------- Tab "⚙️ Cài đặt": các thông số của extension (giống popup) ngay trên bảng ----------
@@ -6541,6 +6558,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       await call({ type: 'kv.set', key: 'zaloJobs', value: { ...keep, ...patch } });
       // Vẽ lại vài lần để thấy trạng thái gửi
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
+      render();
+    }
+    else if (act === 'qa-sel') {
+      lsSet('dgQaSel', b.dataset.id);
       render();
     }
     else if (act === 'quick-use') {
