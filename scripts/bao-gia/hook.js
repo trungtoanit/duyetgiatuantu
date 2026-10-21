@@ -140,16 +140,31 @@
     const qty = [p.quantity, p.qty, p.amountProduct].map(n).find((v) => Number.isFinite(v) && v > 0);
     return price && qty ? price * qty : 0;
   };
+  const kindOfProduct = (p) => (/OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : 'other');
+  // Tỉ trọng thành tiền theo loại. Mẫu số gồm cả dòng "Khác" (chi phí bản in…) để phần Flexo / Offset không bị cộng lẫn.
   function kindShareOf(products) {
     if (!Array.isArray(products) || !products.length) return undefined;
-    const sum = { flexo: 0, offset: 0 };
+    const sum = { flexo: 0, offset: 0, other: 0 };
+    for (const p of products) sum[kindOfProduct(p)] += lineTotal(p);
+    const all = sum.flexo + sum.offset + sum.other;
+    if (!all || (!(sum.flexo && sum.offset) && !sum.other)) return undefined; // chỉ 1 loại, không có dòng khác → khỏi chia
+    return { flexo: sum.flexo / all, offset: sum.offset / all, other: sum.other / all };
+  }
+  // NCC giấy của từng loại: mã trước "_" trong kết cấu giấy (PNTP_T140/X120… → PNTP, VS_*/X90… → VS), tìm trong mọi chuỗi của dòng
+  function kindSupOf(products) {
+    if (!Array.isArray(products) || !products.length) return undefined;
+    const out = { flexo: [], offset: [] };
+    const strings = (o, depth = 0) =>
+      !o || typeof o !== 'object' || depth > 2 ? [] : Object.values(o).flatMap((v) => (typeof v === 'string' ? [v] : strings(v, depth + 1)));
     for (const p of products) {
-      const k = /OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : null;
-      if (k) sum[k] += lineTotal(p);
+      const k = kindOfProduct(p);
+      if (k === 'other') continue;
+      for (const t of strings(p)) {
+        const m = t.match(/(?:^|[\s|])([A-Z][A-Z0-9]{1,7})_[A-Z*]{1,2}\d*\//);
+        if (m && !out[k].includes(m[1])) out[k].push(m[1]);
+      }
     }
-    const all = sum.flexo + sum.offset;
-    if (!sum.flexo || !sum.offset || !all) return undefined; // chỉ cần khi có cả 2 loại và đọc được thành tiền
-    return { flexo: sum.flexo / all, offset: sum.offset / all };
+    return out.flexo.length || out.offset.length ? out : undefined;
   }
   const slimQuote = (o) => ({
     id: o.id,
@@ -172,6 +187,7 @@
       : undefined,
     // Tỉ trọng thành tiền theo loại hàng (báo giá vừa Flexo vừa Offset): % Flexo / Offset tính trên phần tiền của loại đó
     kindShare: kindShareOf(o.opportunityProducts),
+    kindSup: kindSupOf(o.opportunityProducts),
     // NVKD = người phụ trách khách (cột Sale của ERP); creator = người tạo báo giá
     staff: person(saleOf(o)?.v || o.staff),
     creator: person(o.staff),

@@ -2902,7 +2902,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!fx?.suppliers?.length || !base) return null;
     // Mỗi nhà cung cấp lo giấy tấm cho các sản phẩm khác nhau → chi phí giấy tấm = TỔNG PO của các nhà cung cấp.
     // Chỉ lấy NCC giấy của sản phẩm Flexo (cột Kết cấu giấy); NCC giấy của sản phẩm Offset (vd. VS) không tính vào Flexo.
-    const fxSup = kindTotalsOf(q)?.flexoSup || [];
+    const fxSup = kindTotalsOf(q)?.flexoSup?.length ? kindTotalsOf(q).flexoSup : q?.kindSup?.flexo || [];
     const own = fxSup.length ? fx.suppliers.filter((s) => fxSup.includes(s.code)) : [];
     const sups = own.length ? own : fx.suppliers;
     const skipped = own.length ? fx.suppliers.filter((s) => !fxSup.includes(s.code)) : [];
