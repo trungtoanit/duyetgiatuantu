@@ -2290,6 +2290,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qo-q { font-size: 12.5px; color: #3730a3; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .qo-side { display: grid; justify-items: end; gap: 1px; } .qo-amt { font-weight: 800; color: #047857; font-size: 12.5px; }
     .qo-who { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #64748b; }
+    .qo-sync { font-size: 11px; font-weight: 600; color: #64748b; margin-left: 8px; }
     .qo-loading { padding: 30px; text-align: center; color: #64748b; font-size: 13px; }
     .qo-more { border: 1px dashed #c7d2fe; background: #f8faff; color: #4338ca; border-radius: 8px; padding: 8px; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; } .qo-more:hover { background: #eef2ff; }
     .qo-bno { font-style: normal; font-size: 10px; font-weight: 900; color: #fff; background: #6366f1; border-radius: 999px; padding: 0 6px; margin-right: 4px; }
@@ -5403,7 +5404,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           return bar + hotBox(hotData, quotes, hotDone, true);
         }
         if (tab === 'debt') return bar + debtTab(await kvGet('debt2'), perm);
-        if (tab === 'qa') return bar + qaTab(perm.admin);
+        if (tab === 'qa') {
+          await qaHydrate();
+          return bar + qaTab(perm.admin);
+        }
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
@@ -5637,6 +5641,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Duyệt mọi báo giá: báo giá nào đang cần hỏi NVKD, bằng bộ câu nào, câu gì + điểm ưu tiên (tính lại tối đa 2 phút / lần)
   const QA_WEIGHT = { bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
   const QA_GAP = 4 * 3600e3; // 1 báo giá không xuất hiện lại trong 4 giờ sau khi đã hỏi
+  // Mở tab lần đầu: lấy kết quả đã lưu trên máy để hiện ngay (đánh dấu cũ → vẫn tính lại ngầm)
+  async function qaHydrate() {
+    if (state.qaScan || state.qaHydrated) return;
+    state.qaHydrated = true;
+    try {
+      const cache = await kvGet('qaScanCache');
+      const qs = renderCtx.quotes || {};
+      const cm = renderCtx.comments || {};
+      const list = (cache?.list || [])
+        .filter((x) => qs[x.id])
+        .map((x) => ({ ...x, q: qs[x.id], c: cm[x.id] || { id: x.id, threads: [] } }));
+      if (list.length) state.qaScan = { at: 0, list, cachedAt: cache.at }; // at = 0 → coi là cũ, tự làm mới
+    } catch {}
+  }
   // Chạy ngầm từng đợt (không đứng màn hình): trả về kết quả cũ / null trong lúc đang tính, tính xong tự vẽ lại
   function qaScanAll() {
     const fresh = state.qaScan && Date.now() - state.qaScan.at < 120e3;
@@ -5695,6 +5713,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       list.push({ q, c, staff, r, score, amt, recent, lineIdx });
     }
     state.qaScan = { at: Date.now(), list };
+    // Lưu bản gọn trên máy (lần sau mở tab hiện ngay, rồi tính lại ngầm)
+    call({
+      type: 'kv.set',
+      key: 'qaScanCache',
+      value: { at: Date.now(), list: list.map((x) => ({ id: x.q.id, staff: x.staff, r: { bank: x.r.bank, why: x.r.why, text: x.r.text }, score: x.score, amt: x.amt, recent: x.recent, lineIdx: x.lineIdx })) },
+    }).catch(() => {});
     } finally {
       state.qaScanning = false;
     }
@@ -5749,7 +5773,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       })
       .join('');
     return `<div class="qa-pane qo">
-        <div class="qa-ph"><span class="qa-pic">📊</span><div><h3>Tổng quan – cần bình luận cho NVKD</h3>
+        <div class="qa-ph"><span class="qa-pic">📊</span><div><h3>Tổng quan – cần bình luận cho NVKD ${state.qaScanning ? `<span class="qo-sync"><span class="spinner"></span> đang làm mới…</span>` : ''}</h3>
           <span class="muted">${rows.length} báo giá cần hỏi · xếp theo điểm ưu tiên (tình huống + giá trị báo giá + khả năng chốt + đang trong 🔥 Gợi ý chốt đơn) · báo giá đã hỏi thì ẩn 4 giờ rồi mới hiện lại</span></div></div>
         <div class="qo-kpi">${[['hi', '🔴 Ưu tiên cao'], ['mid', '🟠 Ưu tiên vừa'], ['lo', '🟢 Ưu tiên thấp']]
           .map(([k, label]) => `<div class="qo-k ${k}"><div class="qo-kr"><b>${lv[k]}</b><em title="Tổng giá trị ${lv[k]} báo giá: ${money(lvAmt[k])}">💰 ${moneyShortG(lvAmt[k]) || '0đ'}</em></div><span>${label} · báo giá</span></div>`)
