@@ -2226,6 +2226,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .zl-draft { border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 12px; cursor: pointer; }
     .zl-draft:not(.on) { border-color: #f87171; background: #fef2f2; color: #b91c1c; }
     .zl-fix { border: 1px dashed #fca5a5; background: #fff; color: #b91c1c; border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+    .qe { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #fff; }
+    .qe-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 10px; background: linear-gradient(180deg, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 1; }
+    .qe-bl { font-size: 12px; font-weight: 800; color: #475569; }
+    .qe-add { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .qe-add:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .qe-tip { margin-left: auto; font-size: 11px; color: #94a3b8; }
+    .qe-rows { display: grid; }
+    .qe-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px; gap: 8px; align-items: start; padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
+    .qe-row:hover { background: #fafaff; }
+    .qe-no { width: 22px; height: 22px; margin-top: 4px; border-radius: 50%; background: #e0e7ff; color: #4338ca; font-size: 11px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; }
+    .qe-cell { min-width: 0; display: grid; gap: 2px; }
+    .qe-line { min-height: 22px; padding: 3px 8px; border: 1px solid transparent; border-radius: 8px; font-size: 13.5px; line-height: 1.7; outline: none; white-space: pre-wrap; cursor: text; }
+    .qe-line:hover { border-color: #e2e8f0; background: #fff; } .qe-line:focus { border-color: #818cf8; background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .qe-line:empty::before { content: 'Gõ câu hỏi…'; color: #cbd5e1; }
+    .qe-prev { font-size: 11.5px; color: #94a3b8; padding: 0 9px; } .qe-prev::before { content: '👀 '; }
+    .qv { display: inline-flex; align-items: center; gap: 3px; margin: 0 2px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 800; cursor: pointer; user-select: none; vertical-align: 1px; line-height: 20px; }
+    .qv-p { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; } .qv-d { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+    .qv:hover { filter: brightness(.95); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+    .qe-del { border: 0; background: none; color: #cbd5e1; font-size: 14px; cursor: pointer; margin-top: 3px; border-radius: 6px; } .qe-del:hover { color: #dc2626; background: #fee2e2; }
+    .qe-new { width: 100%; border: 0; border-top: 1px dashed #e2e8f0; background: #fff; color: #6366f1; font: inherit; font-weight: 700; font-size: 12.5px; padding: 8px; cursor: pointer; } .qe-new:hover { background: #eef2ff; }
+    .qe-dirty { color: #d97706; font-size: 12px; font-weight: 800; }
     .qa-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; align-items: start; }
     .qa-menu { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; overflow: hidden; gap: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px; position: sticky; top: 0; }
     .qa-mi { display: flex !important; width: 100% !important; min-width: 0; box-sizing: border-box; overflow: hidden; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 8px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
@@ -2717,6 +2738,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     layoutPanel();
     restoreUiPrefs();
     root.querySelector('.panel').addEventListener('click', onClick);
+    // Trình soạn bộ câu hỏi: giữ con trỏ khi bấm nút chèn biến; cập nhật xem trước khi gõ; Enter = thêm câu
+    const pnl = root.querySelector('.panel');
+    pnl.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.qe-add, .qv')) e.preventDefault();
+    });
+    pnl.addEventListener('input', (e) => {
+      const line = e.target.closest?.('.qe-line');
+      if (line) qePreview(line);
+    });
+    pnl.addEventListener('keyup', qeRemember);
+    pnl.addEventListener('mouseup', qeRemember);
+    pnl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.closest?.('.qe-line')) {
+        e.preventDefault();
+        e.target.closest('.qe')?.querySelector('.qe-new')?.click();
+      }
+    });
     wireSide(root.querySelector('.side'));
     root.addEventListener('input', (e) => e.target.matches?.('textarea.quick-text') && fitText(e.target));
     // Ô câu hỏi trong thẻ bên phải: lưu nháp (bảng lớn đã có bộ lưu riêng)
@@ -5006,7 +5044,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     else renderSide(null, null); // không có quyền xem thẻ báo giá → ẩn thẻ
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
-    if (editing?.contains('handover-edit') || editing?.contains('rp-text') || editing?.contains('qb-edit')) return; // đang sửa – không vẽ lại
+    if (editing?.contains('handover-edit') || editing?.contains('rp-text') || editing?.contains('qb-edit') || (state.qbDirty && lsGet('dgTab') === 'qa')) return; // đang sửa – không vẽ lại
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
@@ -5385,6 +5423,76 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // ---------- Tab "💬 Bộ câu hỏi": các bộ câu hỏi nhanh, điều kiện dùng, thứ tự ưu tiên; quản trị sửa được (kv 'qbank') ----------
+  // Biến trong câu: hiện thành nút (chip), bấm để đổi loại
+  const QVARS = {
+    p: { icon: '👤', label: 'em / chị / anh', title: 'Cách gọi NVKD (tự theo từng người)' },
+    P: { icon: '👤', label: 'Em / Chị / Anh', title: 'Cách gọi NVKD – viết hoa (đầu câu)' },
+    d: { icon: '⏱', label: 'khoảng thời gian', title: 'Bao lâu chưa có phản hồi (vd. 5 ngày)' },
+  };
+  const qVars = (id) => (id === 'silentLead' ? ['p', 'P', 'd'] : ['p', 'P']);
+  const qChip = (v) => `<span class="qv qv-${v === 'd' ? 'd' : 'p'}" contenteditable="false" data-act="qv-chip" data-v="${v}" title="${esc(QVARS[v]?.title || '')} – bấm để đổi">${QVARS[v]?.icon || ''} ${esc(QVARS[v]?.label || v)}</span>`;
+  const qToHtml = (t) => esc(t).replace(/\{([pPd])\}/g, (m, v) => qChip(v));
+  const qeRow = (t, k) => `<div class="qe-row"><span class="qe-no">${k + 1}</span><div class="qe-cell"><div class="qe-line qb-edit" contenteditable="true" spellcheck="false">${qToHtml(t)}</div>
+      <div class="qe-prev">${esc(fillP(t, 'em', '5 ngày'))}</div></div><button class="qe-del" data-act="qb-row-del" title="Xoá câu này">✕</button></div>`;
+  // Ô câu → chuỗi có {p} / {P} / {d}
+  const qSerialize = (el) => {
+    let out = '';
+    const walk = (n) => {
+      if (n.nodeType === 3) out += n.textContent;
+      else if (n.dataset?.v) out += `{${n.dataset.v}}`;
+      else if (n.tagName === 'BR') out += ' ';
+      else n.childNodes.forEach(walk);
+    };
+    el.childNodes.forEach(walk);
+    return out.replace(/\s+/g, ' ').trim();
+  };
+  const qeRenumber = (box) => box?.querySelectorAll('.qe-row').forEach((r, k) => (r.querySelector('.qe-no').textContent = k + 1));
+  const qeDirty = (box) => {
+    state.qbDirty = true;
+    const d = box?.closest('.qa-pane')?.querySelector('.qe-dirty');
+    if (d) d.hidden = false;
+  };
+  let qeLast = null; // ô câu + vị trí con trỏ gần nhất (để chèn biến)
+  const qeSel = () => (root.getSelection ? root.getSelection() : getSelection());
+  function qeRemember() {
+    const sel = qeSel();
+    const line = root.activeElement?.closest?.('.qe-line');
+    if (line && sel?.rangeCount) qeLast = { line, range: sel.getRangeAt(0).cloneRange() };
+  }
+  function qePreview(line) {
+    const prev = line.closest('.qe-row')?.querySelector('.qe-prev');
+    if (prev) prev.textContent = fillP(qSerialize(line), 'em', '5 ngày');
+    qeDirty(line.closest('.qe'));
+  }
+  function qeInsert(v) {
+    const all = root.querySelectorAll('.qe-line');
+    let line = qeLast?.line?.isConnected ? qeLast.line : all[all.length - 1];
+    if (!line) return;
+    const tpl = document.createElement('template');
+    tpl.innerHTML = qChip(v);
+    const chip = tpl.content.firstChild;
+    const space = document.createTextNode(' ');
+    let range = qeLast?.line === line ? qeLast.range : null;
+    if (!range || !line.contains(range.startContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(line);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    range.insertNode(space);
+    range.insertNode(chip);
+    range.setStartAfter(space);
+    range.collapse(true);
+    line.focus();
+    const sel = qeSel();
+    try {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch {}
+    qeLast = { line, range: range.cloneRange() };
+    qePreview(line);
+  }
+
   function qaTab(admin) {
     const ex = (t) => esc(fillP(t, 'em', '5 ngày'));
     const sel = QBANKS.find((b) => b.id === lsGet('dgQaSel')) || QBANKS[0];
@@ -5400,12 +5508,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <span class="muted">Ưu tiên ${idx}/${QBANKS.length} · ${lines.length} câu · ${isEd(sel) ? `✏️ sửa bởi ${esc(o.by || '')} lúc ${new Date(o.at || 0).toLocaleString('vi-VN')}` : 'câu mặc định'}</span></div></div>
         <div class="qb-when"><b>📌 Khi nào dùng:</b> ${esc(sel.when)}</div>
         ${admin
-          ? `<div class="qa-lbl">✏️ Sửa bộ câu <span class="muted">(mỗi dòng 1 câu · {p} = cách gọi NVKD: em / chị / anh${sel.id === 'silentLead' ? ' · {d} = khoảng thời gian' : ''})</span></div>
-            <textarea class="qb-edit" data-id="${sel.id}" rows="${Math.min(14, Math.max(4, lines.length + 1))}" spellcheck="false">${esc(lines.join('\n'))}</textarea>
-            <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${sel.id}">💾 Lưu – áp dụng mọi máy</button>${isEd(sel) ? `<button class="act" data-act="qb-reset" data-id="${sel.id}">↺ Về mặc định</button>` : ''}</div>`
+          ? `<div class="qa-lbl">✏️ Các câu trong bộ <span class="muted">(bấm vào từng câu để sửa riêng câu đó · dòng xám 👀 là xem trước khi gọi NVKD là "em")</span></div>
+            <div class="qe" data-id="${sel.id}">
+              <div class="qe-bar"><span class="qe-bl">Chèn biến:</span>${qVars(sel.id).map((v) => `<button class="qe-add" data-act="qv-add" data-v="${v}" title="${esc(QVARS[v].title)} – chèn vào vị trí con trỏ">${QVARS[v].icon} ${esc(QVARS[v].label)}</button>`).join('')}
+                <span class="qe-tip">Bấm vào biến trong câu để đổi loại · Enter = thêm câu mới</span></div>
+              <div class="qe-rows">${lines.map((t, k) => qeRow(t, k)).join('')}</div>
+              <button class="qe-new" data-act="qb-row-add">＋ Thêm câu</button>
+            </div>
+            <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${sel.id}">💾 Lưu – áp dụng mọi máy</button>${isEd(sel) ? `<button class="act" data-act="qb-reset" data-id="${sel.id}">↺ Về mặc định</button>` : ''}<span class="qe-dirty" hidden>● chưa lưu</span></div>`
           : ''}
-        <div class="qa-lbl">👀 Xem trước (gọi NVKD là "em")</div>
-        <div class="qb-ex">${lines.map((t, k) => `<div><em>${k + 1}</em>${ex(t)}</div>`).join('')}</div></div>`;
+        ${admin ? '' : `<div class="qa-lbl">👀 Các câu (gọi NVKD là "em")</div><div class="qb-ex">${lines.map((t, k) => `<div><em>${k + 1}</em>${ex(t)}</div>`).join('')}</div>`}</div>`;
     return `<div class="qb-tab"><div class="qb-intro">💬 Thẻ bên phải trang báo giá xét các điều kiện <b>theo thứ tự 1 → ${QBANKS.length}</b>, khớp điều kiện nào trước thì dùng bộ câu đó; mỗi báo giá lấy 1 câu cố định, bấm <b>Gửi lại</b> thì đổi câu khác.</div>
       <div class="qa-wrap"><div class="qa-menu">${menu}</div>${pane}</div></div>`;
   }
@@ -6561,7 +6673,38 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
       render();
     }
+    else if (act === 'qv-add') {
+      qeInsert(b.dataset.v);
+    }
+    else if (act === 'qv-chip') {
+      // Bấm biến trong câu → đổi loại (p → P → d → p)
+      const line = b.closest('.qe-line');
+      const vars = qVars(b.closest('.qe')?.dataset.id);
+      const nv = vars[(vars.indexOf(b.dataset.v) + 1) % vars.length];
+      const tpl = document.createElement('template');
+      tpl.innerHTML = qChip(nv);
+      b.replaceWith(tpl.content.firstChild);
+      if (line) qePreview(line);
+    }
+    else if (act === 'qb-row-del') {
+      const box = b.closest('.qe');
+      b.closest('.qe-row')?.remove();
+      qeRenumber(box);
+      qeDirty(box);
+    }
+    else if (act === 'qb-row-add') {
+      const rows = b.closest('.qe')?.querySelector('.qe-rows');
+      if (rows) {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = qeRow('', rows.children.length);
+        rows.append(tpl.content.firstChild);
+        rows.lastElementChild.querySelector('.qe-line').focus();
+        qeDirty(b.closest('.qe'));
+      }
+    }
     else if (act === 'qa-sel') {
+      if (state.qbDirty && !confirm('Bộ câu đang sửa chưa lưu – bỏ các thay đổi?')) return;
+      state.qbDirty = false;
       lsSet('dgQaSel', b.dataset.id);
       render();
     }
@@ -6575,7 +6718,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'qb-save' || act === 'qb-reset') {
       const id = b.dataset.id;
-      const lines = act === 'qb-reset' ? [] : (root.querySelector(`.qb-edit[data-id="${id}"]`)?.value || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      const lines = act === 'qb-reset' ? [] : [...root.querySelectorAll(`.qe[data-id="${id}"] .qe-line`)].map(qSerialize).filter(Boolean);
+      state.qbDirty = false;
       await kvMerge('qbank', { [id]: { lines, at: Date.now(), by: meName } });
       b.textContent = '✅ Đã lưu';
       root.activeElement?.blur?.();
