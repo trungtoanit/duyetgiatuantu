@@ -2226,6 +2226,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .zl-draft { border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 12px; cursor: pointer; }
     .zl-draft:not(.on) { border-color: #f87171; background: #fef2f2; color: #b91c1c; }
     .zl-fix { border: 1px dashed #fca5a5; background: #fff; color: #b91c1c; border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+    .qb-tab { margin-top: 10px; }
+    .qb-intro { background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #4c1d95; margin-bottom: 10px; }
+    .qb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 10px; }
+    .qb-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+    .qb-h { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+    .qb-no { width: 22px; height: 22px; border-radius: 50%; background: #6366f1; color: #fff; font-size: 11px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+    .qb-n { margin-left: auto; font-size: 11px; color: #64748b; }
+    .qb-ed { font-size: 11px; font-weight: 700; color: #b45309; background: #fef3c7; border-radius: 999px; padding: 0 8px; }
+    .qb-def { font-size: 11px; color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 0 8px; }
+    .qb-when { font-size: 12px; color: #334155; background: #f8fafc; border-left: 3px solid #a5b4fc; padding: 4px 8px; border-radius: 4px; }
+    .qb-edit { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; resize: vertical; }
+    .qb-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+    .qb-ex { font-size: 12px; color: #475569; display: grid; gap: 2px; }
+    .bigtab.qa.on { color: #6d28d9; }
     .hot-btns { display: flex; gap: 8px; align-items: center; flex: none; }
     .hot-copy { white-space: nowrap; font-weight: 700; }
     .hot-list { display: grid; gap: 6px; margin-top: 8px; }
@@ -3267,6 +3281,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     'Báo cáo lại khách hàng này {p} nhé.',
     'Báo cáo lại khách hàng này {p} nha.',
   ];
+  // ---------- Bộ câu hỏi (tab 💬 Bộ câu hỏi): câu mặc định ở đây, quản trị sửa được → lưu kv 'qbank' (đồng bộ mọi máy) ----------
+  // Thứ tự = thứ tự ưu tiên khi chọn câu hỏi nhanh cho 1 báo giá (điều kiện nào khớp trước thì dùng bộ đó)
+  const QBANKS = [
+    { id: 'monthly', icon: '📅', title: 'Khách cũ tháng này chưa nhập', when: 'Khách cũ (đã từng có đơn), từ ngày 10 của tháng mà tháng này chưa có báo giá / đơn mới.', def: ['Tháng này khách hàng này sao chưa nhập vậy {p}?'] },
+    { id: 'handover', icon: '🔁', title: 'Đã bàn giao khách, NVKD chưa phản hồi', when: 'Có bình luận "Bàn giao khách hàng …" cho NVKD mới, quá 12 giờ chưa thấy NVKD đó phản hồi.', def: ['{P} liên hệ khách này được chưa, báo cáo lại cho anh'] },
+    { id: 'longNoOrder', icon: '📦', title: 'Khách lâu chưa xuống đơn', when: 'Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã quá 30 ngày.', def: LONG_NO_ORDER },
+    { id: 'noComment', icon: '📭', title: 'Báo giá chưa có bình luận', when: 'Báo giá tạo hơn 24 giờ, đã đọc mà không có bình luận nào.', def: ['Báo giá này chưa có thông tin gì, tình hình khách sao rồi {p}?'] },
+    { id: 'bossOrder', icon: '✅', title: 'Sếp cho lấy đơn mà chưa lên đơn', when: 'Sếp bình luận "lấy / chốt / lên đơn này", "đồng ý lấy đơn", "giữ giá cũ" … quá 12 giờ báo giá vẫn chưa có đơn.', def: BOSS_ORDER_ASK },
+    { id: 'promise', icon: '🤝', title: 'Khách hứa lên đơn nhưng chưa lên', when: 'NVKD báo khách hứa / đồng ý lên đơn, quá 1 ngày chưa có đơn (quá 3 ngày thêm câu "x ngày chưa có phản hồi…" phía trước).', def: ['Khách hứa lên đơn mà sao chưa lên vậy {p}, lý do gì {p}?'] },
+    { id: 'bossPrice', icon: '💰', title: 'Sếp đã cho giá, NVKD chưa phản hồi', when: 'Bình luận cho giá mới nhất của sếp (kèm hình bảng giá, hoặc "cho em giá / duyệt giá") mà trong cùng luồng chưa ai trả lời, quá 12 giờ.', def: BOSS_PRICE_ASK },
+    { id: 'connect', icon: '🔌', title: 'Báo giá chưa có Flexo / Offset (kết nối khách)', when: 'Bảng sản phẩm chưa có dòng Flexo hay Offset nào, báo giá tạo hơn 24 giờ (hỏi cả khi báo giá 0đ).', def: CONNECT_ASK },
+    { id: 'reprint', icon: '🔁', title: 'Đơn tái bản', when: 'Sản phẩm đã có mã (tái bản), báo giá đã có giá, chưa có đơn.', def: ['Khách xuống đơn tái bản chưa {p}?'] },
+    { id: 'offsetGap', icon: '🟪', title: 'Khách chưa dùng Offset', when: 'Khách chưa từng có báo giá Offset, báo giá gần nhất đã quá 30 ngày, sếp chưa hỏi về offset trong luồng.', def: ['Khách hàng này có dùng offset không {p}?'] },
+    { id: 'priceAsk', icon: '⏰', title: 'Quá 12 giờ chưa chốt', when: `Bình luận cuối đã quá ${FOLLOW_UP_HOURS} giờ (dưới ${MAX_FOLLOW_UP_DAYS} ngày), báo giá đã có giá, chưa chốt / chưa có đơn.`, def: PRICE_ASK },
+    { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu "Quá 12 giờ chưa chốt" khi đã hơn 3 ngày không có bình luận. {d} = khoảng thời gian (vd. "5 ngày").', def: SILENT_LEAD },
+    { id: 'reportBack', icon: '💤', title: 'Im lặng quá lâu / báo giá thất bại', when: `Bình luận cuối đã quá ${MAX_FOLLOW_UP_DAYS} ngày, hoặc báo giá Thất bại → chào lại khách.`, def: REPORT_BACK },
+    { id: 'zalo', icon: '💬', title: 'Hỏi NVKD qua Zalo (tab Gợi ý chốt đơn)', when: 'Bấm 💬 ở 1 deal trong tab 🔥 Gợi ý chốt đơn – câu hỏi thăm đặt trước dòng deal (mỗi deal 1 lần, mỗi NVKD 1 tin / 30 phút).', def: ZALO_ASK },
+  ];
+  let QB = {}; // bản đã sửa (kv 'qbank')
+  const qbank = (id) => {
+    const o = QB[id]?.lines?.map((x) => String(x).trim()).filter(Boolean);
+    return o?.length ? o : QBANKS.find((b) => b.id === id)?.def || [''];
+  };
+
   // Chọn cố định theo báo giá (không đổi mỗi lần vẽ lại); bấm "Gửi lại" thì đổi câu khác
   const pickFor = (arr, id, salt = 0) => arr[(Math.abs(Number(id) * 2654435761 + salt * 40503) >>> 0) % arr.length];
   const fillP = (t, p, d = '') => t.replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
@@ -3338,26 +3376,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return !asked;
   }
 
+  const qSalt = (q) => (renderCtx.quickSent?.[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0);
   function quickQuestion(q, c, mode, p) {
     if (q && monthlyAsk(q, c)) {
-      return { icon: '📅', why: 'Khách cũ, tháng này chưa có báo giá mới', text: `Tháng này khách hàng này sao chưa nhập vậy ${p}?` };
+      return { icon: '📅', why: 'Khách cũ, tháng này chưa có báo giá mới', text: selfFix(fillP(pickFor(qbank('monthly'), q.id, qSalt(q)), p), p) };
     }
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
     // Vừa bàn giao khách cho NVKD mới, quá 12 giờ chưa thấy phản hồi → hỏi đã liên hệ khách chưa
     const ho = handoverPending(c);
     if (ho && hoursSince(ho.createdAt) >= 12) {
-      return { icon: '🔁', why: `Đã bàn giao khách ${humanDuration(hoursSince(ho.createdAt))} trước, NVKD chưa phản hồi`, text: `${p.charAt(0).toUpperCase() + p.slice(1)} liên hệ khách này được chưa, báo cáo lại cho ${p === 'anh' ? 'em' : 'anh'}` };
+      return { icon: '🔁', why: `Đã bàn giao khách ${humanDuration(hoursSince(ho.createdAt))} trước, NVKD chưa phản hồi`, text: selfFix(fillP(pickFor(qbank('handover'), q.id, qSalt(q)), p), p) };
     }
     // Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã lâu → hỏi vì sao lâu chưa xuống đơn
     const lo = lastCustomerOrderNote(q);
     if (lo && hoursSince(lo.createdAt) >= 30 * 24) {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
-      return { icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: selfFix(fillP(pickFor(LONG_NO_ORDER, q.id, salt), p), p) };
+      return { icon: '📦', why: `Lần cuối khách lên đơn ${humanDuration(hoursSince(lo.createdAt))} trước`, text: selfFix(fillP(pickFor(qbank('longNoOrder'), q.id, salt), p), p) };
     }
     // Chưa có bình luận nào (đã mở xem/ thu thập mà không thấy) → hỏi NVKD vì sao chưa có thông tin
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
     if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {
-      return { icon: '📭', why: 'Chưa có bình luận nào', text: `Báo giá này chưa có thông tin gì, tình hình khách sao rồi ${p}?` };
+      return { icon: '📭', why: 'Chưa có bình luận nào', text: selfFix(fillP(pickFor(qbank('noComment'), q.id, qSalt(q)), p), p) };
     }
     // Sếp đã bảo "lấy đơn này / chốt đơn này / lên đơn đi" mà quá 12 giờ vẫn chưa có đơn → hỏi sao khách chưa lên đơn
     const bo = bossOrderInfo(c);
@@ -3366,14 +3405,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return {
         icon: '📦',
         why: `Sếp đã chốt lấy đơn ${humanDuration(hoursSince(bo.createdAt))} trước mà chưa lên đơn`,
-        text: selfFix(fillP(pickFor(BOSS_ORDER_ASK, q.id, salt), p), p),
+        text: selfFix(fillP(pickFor(qbank('bossOrder'), q.id, salt), p), p),
       };
     }
     // Khách hứa lên đơn mà quá 1 ngày vẫn chưa lên
     const pr = promiseInfo(q, c);
     if (pr && hoursSince(pr.at) >= 24) {
       const lead0 = hoursSince(pr.at) >= 72 ? `${humanDuration(hoursSince(pr.at))} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
-      return { icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: `${lead0}Khách hứa lên đơn mà sao chưa lên vậy ${p}, lý do gì ${p}?` };
+      return { icon: '🤝', why: 'Khách hứa lên đơn nhưng chưa lên', text: lead0 + selfFix(fillP(pickFor(qbank('promise'), q.id, qSalt(q)), p), p) };
     }
     // Sếp đã cho giá (hình bảng giá đỏ / "cho em giá") là bình luận cuối, quá 12 giờ NVKD chưa phản hồi → hỏi khách phản hồi giá
     const bp = bossPriceInfo(c);
@@ -3384,33 +3423,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return {
         icon: '💰',
         why: `Sếp đã cho giá${bp.img ? ' (hình)' : ''} ${humanDuration(hb)} trước, NVKD chưa phản hồi`,
-        text: selfFix(lead3 + fillP(pickFor(BOSS_PRICE_ASK, q.id, salt), p), p),
+        text: selfFix(lead3 + fillP(pickFor(qbank('bossPrice'), q.id, salt), p), p),
       };
     }
     // Báo giá chưa có sản phẩm Flexo / Offset nào (mới là kết nối / chào khách) → hỏi tình hình kết nối khách
     const noKind = Array.isArray(q.kinds) && !q.kinds.length && !q.offset;
     if (noKind && q.createdAt && hoursSince(q.createdAt) >= 24) {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
-      return { icon: '🔌', why: 'Báo giá chưa có sản phẩm Flexo / Offset (đang kết nối khách)', text: selfFix(fillP(pickFor(CONNECT_ASK, q.id, salt), p), p) };
+      return { icon: '🔌', why: 'Báo giá chưa có sản phẩm Flexo / Offset (đang kết nối khách)', text: selfFix(fillP(pickFor(qbank('connect'), q.id, salt), p), p) };
     }
     if (noPrice(q)) return null;
     const last = lastComment(c);
     const h = last ? hoursSince(last.createdAt) : 0;
     const lead = h >= 72 ? `${humanDuration(h)} chưa có phản hồi, báo cáo lại nhé ${p}. ` : '';
-    if (q.isReprint) return { icon: '🔁', why: 'Đơn tái bản', text: `${lead}Khách xuống đơn tái bản chưa ${p}?` };
+    if (q.isReprint) return { icon: '🔁', why: 'Đơn tái bản', text: lead + selfFix(fillP(pickFor(qbank('reprint'), q.id, qSalt(q)), p), p) };
     // Khách chưa từng có báo giá Offset và đã lâu không có báo giá mới → hỏi khách có dùng offset không
-    if (mode && offsetGap(q, c)) return { icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: `Khách hàng này có dùng offset không ${p}?` };
+    if (mode && offsetGap(q, c)) return { icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: selfFix(fillP(pickFor(qbank('offsetGap'), q.id, qSalt(q)), p), p) };
     if (mode === 'hoiNhanh') {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
-      const lead2 = h >= 72 ? fillP(pickFor(SILENT_LEAD, q.id, salt + 7), p, humanDuration(h)) : '';
-      const text = lead2 + fillP(pickFor(PRICE_ASK, q.id, salt), p);
+      const lead2 = h >= 72 ? fillP(pickFor(qbank('silentLead'), q.id, salt + 7), p, humanDuration(h)) : '';
+      const text = lead2 + fillP(pickFor(qbank('priceAsk'), q.id, salt), p);
       return { icon: '⏰', why: `Quá ${FOLLOW_UP_HOURS} giờ chưa chốt`, text: selfFix(text.charAt(0).toUpperCase() + text.slice(1), p) };
     }
     if (mode === 'chaoLai')
       return {
         icon: '💤',
         why: q.quoteStatus === 'REJECT' ? 'Báo giá thất bại' : `Im lặng quá ${MAX_FOLLOW_UP_DAYS} ngày`,
-        text: fillP(pickFor(REPORT_BACK, q.id, renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0), p),
+        text: fillP(pickFor(qbank('reportBack'), q.id, renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0), p),
       };
     return null;
   }
@@ -4064,7 +4103,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const ADMIN_NAMES = ['Nguyễn Trung Toán'];
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
   // perms = { enforced: bool, users: { <tên chuẩn hoá>: { name, enabled, role: 'admin'|'sale', tabs: [...] } } }
-  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['set', '⚙️ Cài đặt']];
+  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['qa', '💬 Bộ câu hỏi'], ['set', '⚙️ Cài đặt']];
   // Ngoài các tab: quyền xem thẻ báo giá bên phải (lợi nhuận, câu hỏi gợi ý, đánh giá NVKD, bàn giao)
   const PERM_ITEMS = [...TABS, ['side', '📌 Thẻ báo giá (bên phải)']];
   const SALE_TABS = ['hot', 'deal', 'week']; // mặc định cho NVKD khi mới cấp quyền
@@ -4807,6 +4846,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const meObj = await kvGet('me');
     meName = myName(meObj);
     PERMS = (await kvGet('perms')) || {};
+    QB = (await kvGet('qbank')) || {};
     const perm = userPerm(meObj);
     MY_ACCESS = perm.access;
     MY_ADMIN = perm.admin;
@@ -4929,7 +4969,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     else renderSide(null, null); // không có quyền xem thẻ báo giá → ẩn thẻ
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
-    if (editing?.contains('handover-edit') || editing?.contains('rp-text')) return; // đang sửa – không vẽ lại
+    if (editing?.contains('handover-edit') || editing?.contains('rp-text') || editing?.contains('qb-edit')) return; // đang sửa – không vẽ lại
 
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
@@ -5146,7 +5186,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
         const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t));
-        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt', 'qa'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
@@ -5160,6 +5200,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button>
           <button class="bigtab${tab === 'debt' ? ' on' : ''}" data-act="tab" data-tab="debt">💰 Công nợ</button>
+          <button class="bigtab qa${tab === 'qa' ? ' on' : ''}" data-act="tab" data-tab="qa">💬 Bộ câu hỏi</button>
           <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
         // Chỉ hiện các tab được phân quyền
         const bar = barRaw.replace(/<button class="bigtab[^"]*" data-act="tab" data-tab="(\w+)">[\s\S]*?<\/button>/g, (m, t) => (allowed.includes(t) ? m : ''));
@@ -5169,6 +5210,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           return bar + hotBox(hotData, quotes, hotDone, true);
         }
         if (tab === 'debt') return bar + debtTab(await kvGet('debt2'), perm);
+        if (tab === 'qa') return bar + qaTab(perm.admin);
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
@@ -5303,6 +5345,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="ct-wrap"><table class="ct pm-t"><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Được dùng</th><th>Màn hình được vào</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="4" class="muted">${sub === 'on' ? 'Chưa cấp quyền cho ai.' : 'Mọi người đều đã được phân quyền.'}</td></tr>`}</tbody></table></div>
       <div class="muted">Danh sách gồm mọi NVKD trong dữ liệu báo giá và những người đã mở extension. Quyền đồng bộ giữa các máy, có hiệu lực ngay.</div></div>`;
+  }
+
+  // ---------- Tab "💬 Bộ câu hỏi": các bộ câu hỏi nhanh, điều kiện dùng, thứ tự ưu tiên; quản trị sửa được (kv 'qbank') ----------
+  function qaTab(admin) {
+    const ex = (t) => esc(fillP(t, 'em', '5 ngày'));
+    const cards = QBANKS.map((b, i) => {
+      const o = QB[b.id];
+      const lines = qbank(b.id);
+      const edited = !!o?.lines?.filter(Boolean).length;
+      return `<div class="qb-card"><div class="qb-h"><span class="qb-no">${i + 1}</span><span class="qb-ic">${b.icon}</span><b>${esc(b.title)}</b>
+          <span class="qb-n">${lines.length} câu</span>${edited ? `<span class="qb-ed" title="Sửa bởi ${esc(o.by || '')} lúc ${new Date(o.at || 0).toLocaleString('vi-VN')}">✏️ đã sửa</span>` : '<span class="qb-def">mặc định</span>'}</div>
+        <div class="qb-when"><b>Khi nào dùng:</b> ${esc(b.when)}</div>
+        ${admin
+          ? `<textarea class="qb-edit" data-id="${b.id}" rows="${Math.min(8, lines.length + 1)}" spellcheck="false">${esc(lines.join('\n'))}</textarea>
+            <div class="qb-btns"><button class="act primary" data-act="qb-save" data-id="${b.id}">💾 Lưu</button>${edited ? `<button class="act" data-act="qb-reset" data-id="${b.id}">↺ Về mặc định</button>` : ''}
+              <span class="muted">Mỗi dòng 1 câu · {p} = cách gọi NVKD (em / chị / anh)${b.id === 'silentLead' ? ' · {d} = khoảng thời gian' : ''}</span></div>`
+          : ''}
+        <div class="qb-ex">${lines.map((t) => `<div>• ${ex(t)}</div>`).join('')}</div></div>`;
+    }).join('');
+    return `<div class="qb-tab"><div class="qb-intro">💬 <b>Bộ câu hỏi nhanh</b> – thẻ bên phải trang báo giá tự gợi ý câu hỏi cho NVKD. Hệ thống xét các điều kiện <b>theo thứ tự từ 1 trở xuống</b>, điều kiện nào khớp trước thì dùng bộ câu đó; mỗi báo giá lấy 1 câu cố định trong bộ, bấm <b>Gửi lại</b> thì đổi câu khác.
+      ${admin ? 'Sửa xong bấm <b>Lưu</b> – áp dụng ngay cho mọi máy.' : ''}</div>
+      <div class="qb-grid">${cards}</div></div>`;
   }
 
   // ---------- Tab "⚙️ Cài đặt": các thông số của extension (giống popup) ngay trên bảng ----------
@@ -5934,7 +5998,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const p = addressFor(who, renderCtx.comments, quotes);
       state.hotZalo[who] = ls.map((l) => {
         const sent = Object.values(renderCtx.zaloJobs || {}).filter((j) => j?.qid === l.id).length;
-        const ask = selfFix(fillP(pickFor(ZALO_ASK, l.id, sent), p), p);
+        const ask = selfFix(fillP(pickFor(qbank('zalo'), l.id, sent), p), p);
         const line = `. ${l.code}${l.cust ? ` (${l.cust})` : ''}${l.rest}${l.val}`;
         return {
           id: l.id,
@@ -6455,6 +6519,15 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       // Vẽ lại vài lần để thấy trạng thái gửi
       for (let k = 0; k < 40; k++) setTimeout(render, 1500 * (k + 1));
       render();
+    }
+    else if (act === 'qb-save' || act === 'qb-reset') {
+      const id = b.dataset.id;
+      const lines = act === 'qb-reset' ? [] : (root.querySelector(`.qb-edit[data-id="${id}"]`)?.value || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      await kvMerge('qbank', { [id]: { lines, at: Date.now(), by: meName } });
+      b.textContent = '✅ Đã lưu';
+      root.activeElement?.blur?.();
+      lastPanelHtml = '';
+      setTimeout(render, 600);
     }
     else if (act === 'zalo-draft') {
       lsSet('dgZaloDraft', lsGet('dgZaloDraft') !== '0' ? '0' : '1');

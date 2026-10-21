@@ -1,5 +1,5 @@
 {
-  "version": "1.2.180",
+  "version": "1.2.181",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -50,6 +50,7 @@
     "notifRead",
     "notifs",
     "perms",
+    "qbank",
     "quickLearn",
     "reports",
     "scanLock",
