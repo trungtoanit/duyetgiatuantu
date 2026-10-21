@@ -2232,20 +2232,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qe-add { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
     .qe-add:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
     .qe-tip { margin-left: auto; font-size: 11px; color: #94a3b8; }
-    .qe-rows { display: grid; }
-    .qe-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px; gap: 8px; align-items: start; padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
+    /* Gọn: mỗi câu 1 dòng mỏng, 2 cột khi màn rộng; xem trước chỉ hiện khi đang sửa câu đó; nút xoá hiện khi rê chuột */
+    .qe-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); column-gap: 14px; padding: 4px 6px; }
+    .qe-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 20px; gap: 6px; align-items: center; padding: 1px 4px; border-bottom: 1px dashed #f1f5f9; }
     .qe-row:hover { background: #fafaff; }
-    .qe-no { width: 22px; height: 22px; margin-top: 4px; border-radius: 50%; background: #e0e7ff; color: #4338ca; font-size: 11px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; }
-    .qe-cell { min-width: 0; display: grid; gap: 2px; }
-    .qe-line { min-height: 22px; padding: 3px 8px; border: 1px solid transparent; border-radius: 8px; font-size: 13.5px; line-height: 1.7; outline: none; white-space: pre-wrap; cursor: text; }
-    .qe-line:hover { border-color: #e2e8f0; background: #fff; } .qe-line:focus { border-color: #818cf8; background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .qe-no { width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #6366f1; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+    .qe-cell { min-width: 0; display: grid; }
+    .qe-line { min-height: 20px; padding: 2px 6px; border: 1px solid transparent; border-radius: 6px; font-size: 13px; line-height: 1.55; outline: none; white-space: pre-wrap; cursor: text; }
+    .qe-line:hover { border-color: #e2e8f0; background: #fff; } .qe-line:focus { border-color: #818cf8; background: #fff; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
     .qe-line:empty::before { content: 'Gõ câu hỏi…'; color: #cbd5e1; }
-    .qe-prev { font-size: 11.5px; color: #94a3b8; padding: 0 9px; } .qe-prev::before { content: '👀 '; }
-    .qv { display: inline-flex; align-items: center; gap: 3px; margin: 0 2px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 800; cursor: pointer; user-select: none; vertical-align: 1px; line-height: 20px; }
+    .qe-prev { display: none; font-size: 11px; color: #94a3b8; padding: 1px 7px 3px; } .qe-prev::before { content: '👀 '; }
+    .qe-row:focus-within .qe-prev { display: block; }
+    .qv { display: inline-flex; align-items: center; gap: 2px; margin: 0 1px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 800; cursor: pointer; user-select: none; vertical-align: 1px; line-height: 17px; }
     .qv-p { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; } .qv-d { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
     .qv:hover { filter: brightness(.95); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
-    .qe-del { border: 0; background: none; color: #cbd5e1; font-size: 14px; cursor: pointer; margin-top: 3px; border-radius: 6px; } .qe-del:hover { color: #dc2626; background: #fee2e2; }
-    .qe-new { width: 100%; border: 0; border-top: 1px dashed #e2e8f0; background: #fff; color: #6366f1; font: inherit; font-weight: 700; font-size: 12.5px; padding: 8px; cursor: pointer; } .qe-new:hover { background: #eef2ff; }
+    .qe-del { border: 0; background: none; color: #cbd5e1; font-size: 12px; cursor: pointer; border-radius: 6px; opacity: 0; padding: 0; } .qe-row:hover .qe-del { opacity: 1; } .qe-del:hover { color: #dc2626; background: #fee2e2; }
+    .qe-new { width: 100%; border: 0; border-top: 1px dashed #e2e8f0; background: #fff; color: #6366f1; font: inherit; font-weight: 700; font-size: 12px; padding: 6px; cursor: pointer; } .qe-new:hover { background: #eef2ff; }
     .qe-dirty { color: #d97706; font-size: 12px; font-weight: 800; }
     .qr { border: 1px solid #e0e7ff; background: #fbfbff; border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
     .qr-h { display: flex; align-items: center; gap: 10px; } .qr-h b { color: #3730a3; }
@@ -5651,10 +5653,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <span class="muted">Ưu tiên ${idx}/${QBANKS.length} · ${lines.length} câu · ${isEd(sel) ? `✏️ sửa bởi ${esc(o.by || '')} lúc ${new Date(o.at || 0).toLocaleString('vi-VN')}` : 'câu mặc định'}</span></div></div>
         <div class="qb-when"><b>📌 Khi nào dùng:</b> ${esc(sel.when)}</div>
         ${admin
-          ? `<div class="qa-lbl">✏️ Các câu trong bộ <span class="muted">(bấm vào từng câu để sửa riêng câu đó · dòng xám 👀 là xem trước khi gọi NVKD là "em")</span></div>
+          ? `<div class="qa-lbl">✏️ Các câu trong bộ <span class="muted">(${lines.length} câu · đang sửa câu nào thì hiện xem trước 👀 của câu đó)</span></div>
             <div class="qe" data-id="${sel.id}">
               <div class="qe-bar"><span class="qe-bl">Chèn biến:</span>${qVars(sel.id).map((v) => `<button class="qe-add" data-act="qv-add" data-v="${v}" title="${esc(QVARS[v].title)} – chèn vào vị trí con trỏ">${QVARS[v].icon} ${esc(QVARS[v].label)}</button>`).join('')}
-                <span class="qe-tip">Bấm vào biến trong câu để đổi loại · Enter = thêm câu mới</span></div>
+                <span class="qe-tip">Bấm vào câu để sửa · bấm biến để đổi loại · Enter = thêm câu</span></div>
               <div class="qe-rows">${lines.map((t, k) => qeRow(t, k)).join('')}</div>
               <button class="qe-new" data-act="qb-row-add">＋ Thêm câu</button>
             </div>
