@@ -573,6 +573,10 @@ Yêu cầu:
     // Tình huống đặc biệt nhận ra từ nội dung bình luận – ưu tiên hơn các chế độ trên
     tinhHuong: [
       {
+        khi: 'bình luận CUỐI CÙNG là quản lý bàn giao khách ("Bàn giao khách hàng … từ nhân viên … qua nhân viên …") và NVKD mới chưa phản hồi gì',
+        hoi: '"Em liên hệ khách này được chưa, báo cáo lại cho anh" (giữ cách nói này, chỉ đổi xưng hô cho đúng)',
+      },
+      {
         khi: 'NVKD đã báo khách hẹn đặt sau / để sau / đợi (vd. "khách xem báo giá trước, đợi hàng bớt kho đặt hàng sau", "khách hẹn tuần sau báo lại")',
         hoi: 'Kết quả của báo giá này sao rồi?',
       },
@@ -3223,8 +3227,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return !asked;
   }
 
+  // Bình luận cuối của luồng là "Bàn giao khách hàng … qua nhân viên …" (quản lý) và NVKD mới chưa trả lời
+  const HANDOVER_CMT = /^\s*Bàn giao khách hàng\s+.+\s+(qua|cho)\s+nhân viên\s+/i;
+  function handoverPending(c) {
+    const last = lastComment(c);
+    return last && HANDOVER_CMT.test(last.text || '') ? last : null;
+  }
+
   function quickQuestion(q, c, mode, p) {
     if (!q || CLOSED.has(q.quoteStatus) || hasOrder(q, c)) return null;
+    // Vừa bàn giao khách cho NVKD mới, quá 12 giờ chưa thấy phản hồi → hỏi đã liên hệ khách chưa
+    const ho = handoverPending(c);
+    if (ho && hoursSince(ho.createdAt) >= 12) {
+      return { icon: '🔁', why: `Đã bàn giao khách ${humanDuration(hoursSince(ho.createdAt))} trước, NVKD chưa phản hồi`, text: `${p.charAt(0).toUpperCase() + p.slice(1)} liên hệ khách này được chưa, báo cáo lại cho ${p === 'anh' ? 'em' : 'anh'}` };
+    }
     // Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã lâu → hỏi vì sao lâu chưa xuống đơn
     const lo = lastCustomerOrderNote(q);
     if (lo && hoursSince(lo.createdAt) >= 30 * 24) {
