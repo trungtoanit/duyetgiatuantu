@@ -2289,6 +2289,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .qo-q { font-size: 12.5px; color: #3730a3; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .qo-side { display: grid; justify-items: end; gap: 1px; } .qo-amt { font-weight: 800; color: #047857; font-size: 12.5px; }
     .qo-who { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #64748b; }
+    .qo-loading { padding: 30px; text-align: center; color: #64748b; font-size: 13px; }
+    .qo-more { border: 1px dashed #c7d2fe; background: #f8faff; color: #4338ca; border-radius: 8px; padding: 8px; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; } .qo-more:hover { background: #eef2ff; }
     .qo-bno { font-style: normal; font-size: 10px; font-weight: 900; color: #fff; background: #6366f1; border-radius: 999px; padding: 0 6px; margin-right: 4px; }
     .qo-qr { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .qo-edit { flex: none; border: 1px solid #e2e8f0; background: #fff; color: #475569; border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0; transition: opacity .15s; }
@@ -3423,9 +3425,40 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Câu hỏi nhanh viết sẵn (không cần Claude) theo tình trạng báo giá
   // Bình luận mới nhất trong mọi báo giá cùng khách; trả về nếu đó là dòng "… lên đơn hàng …" / "Mã đơn hàng Misa"
   const ORDER_NOTE_RE = /lên đơn hàng|mã đơn hàng misa/i;
+  // Chỉ mục theo khách (dựng lại khi dữ liệu đổi): bình luận mới nhất mọi báo giá cùng khách, báo giá mới nhất của khách,
+  // khách có báo giá Offset chưa – để duyệt cả nghìn báo giá không phải quét lại toàn bộ cho từng báo giá
+  const custIdx = { q: null, c: null, last: new Map(), newest: new Map(), offset: new Map() };
+  function ensureCustIdx() {
+    if (custIdx.q === renderCtx.quotes && custIdx.c === renderCtx.comments) return custIdx;
+    custIdx.q = renderCtx.quotes;
+    custIdx.c = renderCtx.comments;
+    custIdx.last = new Map();
+    custIdx.newest = new Map();
+    custIdx.offset = new Map();
+    for (const x of Object.values(renderCtx.quotes || {})) {
+      const k = custKey(x);
+      if (!k) continue;
+      custIdx.newest.set(k, Math.max(custIdx.newest.get(k) || 0, x.createdAt || 0));
+      if ((x.kinds || (x.offset ? ['offset'] : [])).includes('offset')) custIdx.offset.set(k, true);
+    }
+    for (const c2 of Object.values(renderCtx.comments || {})) {
+      const cid = c2.customerId || renderCtx.quotes?.[c2.id]?.customer?.id;
+      if (!cid) continue;
+      let latest = custIdx.last.get(cid) || null;
+      const walk = (t) => {
+        if (t.createdAt && (!latest || t.createdAt > latest.createdAt)) latest = t;
+        (t.children || []).forEach(walk);
+      };
+      (c2.threads || []).forEach(walk);
+      if (latest) custIdx.last.set(cid, latest);
+    }
+    return custIdx;
+  }
   function lastCustomerOrderNote(q) {
     const cid = q?.customer?.id;
     if (!cid) return null;
+    const lt = ensureCustIdx().last.get(cid);
+    if (lt !== undefined) return lt && ORDER_NOTE_RE.test(lt.text || '') ? lt : null;
     let latest = null;
     const walk = (t) => {
       if (t.createdAt && (!latest || t.createdAt > latest.createdAt)) latest = t;
@@ -3442,9 +3475,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function offsetGap(q, c) {
     const key = custKey(q);
     if (!key) return false;
-    const mine = Object.values(renderCtx.quotes || {}).filter((x) => custKey(x) === key);
-    if (!mine.length || mine.some((x) => (x.kinds || (x.offset ? ['offset'] : [])).includes('offset'))) return false;
-    const newest = Math.max(...mine.map((x) => x.createdAt || 0));
+    const ix = ensureCustIdx();
+    if (ix.offset.get(key)) return false;
+    const newest = ix.newest.get(key) || 0;
     if (!newest || hoursSince(newest) < 30 * 24) return false;
     let asked = false;
     const walk = (t) => {
@@ -3474,8 +3507,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const os = orderSummary(renderCtx.orders?.[q.customer.id]);
     if (!os || os.year < 2) return false; // chưa phải khách cũ
     if (os.list.some((o) => o.at >= start)) return false; // tháng này đã có đơn
-    const key = custKey(q);
-    if (Object.values(renderCtx.quotes || {}).some((x) => custKey(x) === key && (x.createdAt || 0) >= start)) return false; // tháng này đã có báo giá
+    if ((ensureCustIdx().newest.get(custKey(q)) || 0) >= start) return false; // tháng này đã có báo giá
     let asked = false;
     const walk = (t) => {
       if (t.staff?.name === meName && t.createdAt >= start && /tháng này/i.test(t.text || '')) asked = true;
@@ -5581,12 +5613,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Duyệt mọi báo giá: báo giá nào đang cần hỏi NVKD, bằng bộ câu nào, câu gì + điểm ưu tiên (tính lại tối đa 2 phút / lần)
   const QA_WEIGHT = { bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
   const QA_GAP = 4 * 3600e3; // 1 báo giá không xuất hiện lại trong 4 giờ sau khi đã hỏi
+  // Chạy ngầm từng đợt (không đứng màn hình): trả về kết quả cũ / null trong lúc đang tính, tính xong tự vẽ lại
   function qaScanAll() {
-    if (state.qaScan && Date.now() - state.qaScan.at < 120e3) return state.qaScan.list;
+    const fresh = state.qaScan && Date.now() - state.qaScan.at < 120e3;
+    if (!fresh && !state.qaScanning) qaScanRun();
+    return state.qaScan?.list || null;
+  }
+  async function qaScanRun() {
+    state.qaScanning = true;
+    try {
     const qs = renderCtx.quotes || {};
     const cm = renderCtx.comments || {};
     const list = [];
-    for (const q of Object.values(qs)) {
+    const all = Object.values(qs);
+    state.qaScanProg = { done: 0, total: all.length };
+    let n = 0;
+    for (const q of all) {
+      if (++n % 120 === 0) {
+        state.qaScanProg = { done: n, total: all.length };
+        await new Promise((r) => setTimeout(r, 0)); // nhường cho giao diện
+      }
       if (!q?.id) continue;
       const c = cm[q.id] || { id: q.id, threads: [] };
       const staff = staffOf(q, c);
@@ -5625,14 +5671,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       list.push({ q, c, staff, r, score, amt, recent, lineIdx });
     }
     state.qaScan = { at: Date.now(), list };
-    return list;
+    } finally {
+      state.qaScanning = false;
+    }
+    lastPanelHtml = '';
+    if (lsGet('dgTab') === 'qa') render();
   }
   const qaLevel = (sc) => (sc >= 140 ? ['hi', '🔴 Cao'] : sc >= 95 ? ['mid', '🟠 Vừa'] : ['lo', '🟢 Thấp']);
   // Tab con "Tổng quan": việc cần bình luận cho NVKD, xếp ưu tiên từ cao xuống thấp
   function qaOverview() {
     // Mỗi báo giá chỉ 1 dòng (trùng mã thì giữ dòng điểm cao nhất)
     const seen = new Set();
-    const all = qaScanAll()
+    const scanned = qaScanAll();
+    if (!scanned) return `<div class="qa-pane qo"><div class="qo-loading"><span class="spinner"></span> Đang rà ${state.qaScanProg?.total || ''} báo giá để chọn việc cần bình luận… ${state.qaScanProg?.done || 0}/${state.qaScanProg?.total || 0}</div></div>`;
+    const all = scanned
       .filter((x) => !x.recent)
       .sort((a, b) => b.score - a.score)
       .filter((x) => {
@@ -5653,8 +5705,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const staffChips = [['', 'Tất cả', all.length], ...Object.entries(byStaff).sort((a, b) => b[1] - a[1]).map(([n, k]) => [n, shortName(n), k])]
       .map(([n, label, k]) => `<button class="qo-st${n === staffF ? ' on' : ''}" data-act="qa-staff" data-staff="${esc(n)}">${n ? avatarHtml(n, 16) : ''}${esc(label)} <b>${k}</b></button>`)
       .join('');
+    const show = state.qaShow || 40;
     const list = rows
-      .slice(0, 80)
+      .slice(0, show)
       .map((x, i) => {
         const [cls, lab] = qaLevel(x.score);
         const b = QBANKS.find((k) => k.id === x.r.bank);
@@ -5673,7 +5726,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         <div class="qo-sts">${staffChips}</div>
         <div class="qo-bks">${bankChips}</div>
         <div class="qo-list">${list || '<div class="muted">Không có báo giá nào cần hỏi.</div>'}</div>
-        ${rows.length > 80 ? `<div class="muted">… và ${rows.length - 80} báo giá ưu tiên thấp hơn</div>` : ''}
+        ${rows.length > show ? `<button class="qo-more" data-act="qa-more">Xem thêm 40 · còn ${rows.length - show} báo giá ưu tiên thấp hơn</button>` : ''}
         <div class="muted">Bấm 1 dòng để mở báo giá – thẻ bên phải có sẵn câu hỏi, sửa nếu cần rồi bấm 📨 Bình luận ngay.</div></div>`;
   }
 
@@ -5684,7 +5737,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const chat = lines
       .map((t) => `<div class="qr-b"><span class="qr-ava">👨‍💼</span><div class="qr-msg">${esc(selfFix(fillP(t, P, '5 ngày'), P))}</div></div>`)
       .join('');
-    const live = sel.id === 'zalo' || sel.id === 'silentLead' ? [] : qaScanAll().filter((x) => x.r.bank === sel.id).sort((a, b) => b.score - a.score);
+    const live = sel.id === 'zalo' || sel.id === 'silentLead' ? [] : (qaScanAll() || []).filter((x) => x.r.bank === sel.id).sort((a, b) => b.score - a.score);
     const liveHtml = sel.id === 'zalo'
       ? '<div class="muted">Bộ này dùng ở tab 🔥 Gợi ý chốt đơn (nút 💬 từng deal).</div>'
       : sel.id === 'silentLead'
@@ -5693,7 +5746,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           ? `<div class="qr-live">${live.slice(0, 15).map(({ q, staff, r }) => `<a class="qr-row" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">
               <b>${esc(q.code)}</b>${custTag(q)}<span class="qr-who">${avatarHtml(staff, 18)}${esc(shortName(staff))}</span><span class="qr-why">${esc(r.why)}</span><span class="qr-q">“${esc(r.text)}”</span></a>`).join('')}</div>
             ${live.length > 15 ? `<div class="muted">… và ${live.length - 15} báo giá khác</div>` : ''}`
-          : '<div class="muted">Hiện chưa có báo giá nào khớp điều kiện này (hoặc đã bị điều kiện ưu tiên cao hơn lấy trước).</div>';
+          : state.qaScan
+            ? '<div class="muted">Hiện chưa có báo giá nào khớp điều kiện này (hoặc đã bị điều kiện ưu tiên cao hơn lấy trước).</div>'
+            : '<div class="muted"><span class="spinner"></span> Đang rà các báo giá…</div>';
     return `<div class="qr"><div class="qr-h"><b>🔍 Review bộ câu hỏi</b>
         <span class="qr-ps">Gọi NVKD là:${['em', 'chị', 'anh'].map((x) => `<button class="qr-p${x === P ? ' on' : ''}" data-act="qa-p" data-p="${x}">${x}</button>`).join('')}</span></div>
       <div class="qr-cols"><div><div class="qa-lbl">💬 Tin nhắn sẽ hiện (${lines.length} câu)</div><div class="qr-chat">${chat}</div></div>
@@ -5706,7 +5761,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const sel = QBANKS.find((b) => b.id === lsGet('dgQaSel')) || QBANKS[0];
     const isEd = (b) => !!QB[b.id]?.lines?.filter(Boolean).length;
     // Menu con bên trái: mỗi bộ câu hỏi 1 dòng (theo thứ tự ưu tiên)
-    const menu = `<button class="qa-mi qa-ov${ov ? ' on' : ''}" data-act="qa-sel" data-id="overview"><span class="qa-mt">📊 Tổng quan – cần bình luận</span><span class="qa-mc">${qaScanAll().filter((x) => !x.recent).length}</span></button><div class="qa-sep">Bộ câu hỏi (thứ tự ưu tiên)</div>` + QBANKS.map((b, i) => `<button class="qa-mi${!ov && b.id === sel.id ? ' on' : ''}" data-act="qa-sel" data-id="${b.id}" title="${esc(b.when)}">
+    const menu = `<button class="qa-mi qa-ov${ov ? ' on' : ''}" data-act="qa-sel" data-id="overview"><span class="qa-mt">📊 Tổng quan – cần bình luận</span><span class="qa-mc">${state.qaScan ? state.qaScan.list.filter((x) => !x.recent).length : '…'}</span></button><div class="qa-sep">Bộ câu hỏi (thứ tự ưu tiên)</div>` + QBANKS.map((b, i) => `<button class="qa-mi${!ov && b.id === sel.id ? ' on' : ''}" data-act="qa-sel" data-id="${b.id}" title="${esc(b.when)}">
         <span class="qb-no">${i + 1}</span><span class="qa-mt">${b.icon} ${esc(b.title)}</span><span class="qa-mc">${qbank(b.id).length}</span>${isEd(b) ? '<span class="qa-dot" title="Đã sửa">✏️</span>' : ''}</button>`).join('');
     const o = QB[sel.id];
     const lines = qbank(sel.id);
@@ -6914,7 +6969,12 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         setTimeout(() => row.classList.remove('qe-flash'), 2500);
       }, 120);
     }
+    else if (act === 'qa-more') {
+      state.qaShow = (state.qaShow || 40) + 40;
+      render();
+    }
     else if (act === 'qa-staff') {
+      state.qaShow = 40;
       state.qaStaff = b.dataset.staff || '';
       render();
     }
