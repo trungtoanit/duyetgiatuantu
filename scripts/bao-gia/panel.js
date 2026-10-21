@@ -3833,8 +3833,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     saveKindTotals(document, q.code).catch(() => {});
   }
 
+  // Đang xem báo giá: trang có "Mã đơn hàng Misa: …" hoặc tình trạng đang chọn là đã chốt → ghi nhận ngay
+  // (dữ liệu API / đồng bộ có thể chậm hoặc cũ)
+  const STATUS_BY_LABEL = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [v, k]));
+  let odAt = 0;
+  function watchOrderDom(q) {
+    if (!IS_TOP || !q?.id || Date.now() - odAt < 15000) return;
+    odAt = Date.now();
+    const misa = [...document.querySelectorAll('span, div, b, strong')].some((e) => e.children.length === 0 && /^Mã đơn hàng Misa:?$/i.test(e.textContent.trim()));
+    const checked = [...document.querySelectorAll('.ant-tag-checkable-checked, .ant-tag-checkable.ant-tag-checkable-checked')]
+      .map((t) => STATUS_BY_LABEL[t.textContent.replace(/^[^\p{L}]+/u, '').trim()])
+      .find(Boolean);
+    const patch = {};
+    if (misa && !q.hasOrder) patch.hasOrder = true;
+    if (checked && checked !== q.quoteStatus && CLOSED.has(checked)) patch.quoteStatus = checked;
+    if (Object.keys(patch).length) kvMerge('quotes', { [q.id]: { ...q, ...patch, updatedAt: Math.max(q.updatedAt || 0, Math.floor(Date.now() / 1000)) } }).catch(() => {});
+  }
+
   function renderSide(q, qid = q?.id, body = '', ho = '', hoN = 0) {
     watchKindTotals(q);
+    watchOrderDom(q);
     const el = root?.querySelector('.side');
     if (!el) return;
     // Đang gõ trong ô câu hỏi / gợi ý / bàn giao của thẻ → không vẽ lại để khỏi mất chữ

@@ -381,6 +381,17 @@ function mergeEntry(ns, local, remote) {
   // NVKD phụ trách khách (cột Sale) – bản cũ của script chỉ có người tạo báo giá → không cho ghi đè
   if (ns === 'quotes' && local?.staffKey && local.staffKey !== 'staff' && !remote?.staffKey)
     return { ...remote, staff: local.staff, staffKey: local.staffKey, creator: local.creator, people: local.people };
+  // Báo giá: bản nào có thời gian cập nhật trên CRM mới hơn thì giữ tình trạng / đơn hàng của bản đó;
+  // đã chốt (Duyệt lên đơn / Thành công / Thất bại) hoặc đã có đơn thì máy khác đẩy bản cũ lên cũng không mở lại
+  if (ns === 'quotes' && local && remote) {
+    const CRM = ['quoteStatus', 'status', 'hasOrder', 'amount', 'updatedAt', 'name', 'isRead', 'kinds', 'kindShare', 'kindSup', 'isReprint', 'offset'];
+    const CLOSED = ['APPROVE', 'SUCCESS', 'REJECT'];
+    const out = { ...remote };
+    if ((local.updatedAt || 0) > (remote.updatedAt || 0)) for (const k of CRM) if (local[k] !== undefined) out[k] = local[k];
+    if (local.hasOrder && !out.hasOrder && (local.updatedAt || 0) >= (remote.updatedAt || 0)) out.hasOrder = true;
+    if (CLOSED.includes(local.quoteStatus) && !CLOSED.includes(out.quoteStatus) && (local.updatedAt || 0) >= (remote.updatedAt || 0)) out.quoteStatus = local.quoteStatus;
+    return out;
+  }
   if (ns !== 'comments' || !local?.threads) return remote;
   const m = new Map(local.threads.map((t) => [t.id, t]));
   for (const t of remote.threads || []) m.set(t.id, t);
