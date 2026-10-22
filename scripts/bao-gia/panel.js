@@ -1684,12 +1684,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Gắn nút "💲 Set giá" vào bình luận xin giá (luồng của báo giá Flexo đang mở)
   function injectPriceButtons() {
     if (!IS_TOP || !root) return;
-    const q = renderCtx.quotes?.[currentQuoteId()];
-    if (!q?.code || !(q.kinds || []).includes('flexo') || CLOSED.has(q.quoteStatus)) return;
+    const qid = currentQuoteId();
+    if (!qid) return;
+    // Mã báo giá: từ dữ liệu đã ghi nhận, chưa có thì lấy từ tiêu đề trang ("#BG26937 - …")
+    const q = renderCtx.quotes?.[qid] || { id: qid, code: document.title.match(/#(BG\d+)/)?.[1] };
+    if (!q.code) return;
+    // 💲 Set giá chỉ cho báo giá Flexo chưa chốt; 🖨 In báo giá → dán cho mọi báo giá
+    const canSet = (q.kinds || []).includes('flexo') && !CLOSED.has(q.quoteStatus);
+    // dữ liệu báo giá có thể tải sau → cập nhật ẩn/hiện nút Set giá đã gắn
+    document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet ? '' : 'none'));
     for (const cm of document.querySelectorAll('.ant-comment')) {
       const content = cm.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
       const actions = content?.querySelector(':scope > ul.ant-comment-actions');
-      if (!actions || actions.querySelector('.dg-setprice')) continue;
+      if (!actions || actions.querySelector('.dg-printq-reply')) continue;
       const text = content.querySelector('.ant-comment-content-detail')?.innerText || '';
       if (!PRICE_ASK_RE.test(text)) continue;
       // chỉ bình luận của NVKD (không gắn vào câu "E cho chị giá nhé" của chính quản lý)
@@ -1701,11 +1708,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const topContent = top.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
       if (![...(topContent?.querySelectorAll('.ant-tag') || [])].some((t) => t.textContent.trim() === q.code)) continue;
       const li = document.createElement('li');
+      if (!canSet) li.style.display = 'none';
       li.innerHTML = '<span class="dg-setprice" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">💲 Set giá</span>';
       li.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openPriceDialog(q);
+        openPriceDialog(renderCtx.quotes?.[qid] || q);
       });
       actions.append(li);
       // 🖨 In báo giá → dán ảnh vào ô "Trả lời" của chính bình luận này (tự mở ô trả lời nếu chưa mở)
