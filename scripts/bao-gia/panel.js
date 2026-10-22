@@ -1639,7 +1639,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       d.textContent = t;
       return d;
     };
-    box.append(line('Đã duyệt giá', true), line(`Người duyệt: ${meName}`), line(`Đơn vị: ${APPROVE_ORG}`), line(`Ngày duyệt: ${when}`));
+    // dòng tiêu đề có tick xanh "đã duyệt" (xác nhận duyệt giá nội bộ, không phải dấu xác thực chữ ký số)
+    const head = doc.createElement('div');
+    head.setAttribute('style', 'display:flex;align-items:center;gap:4px;font-weight:700;color:#15803d;');
+    const tick = doc.createElement('span');
+    tick.setAttribute('style', 'display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;line-height:1;');
+    tick.textContent = '✓';
+    head.append(tick, doc.createTextNode('Đã duyệt giá'));
+    box.setAttribute('style', box.getAttribute('style').replace('border:1px solid #94a3b8', 'border:1px solid #86efac').replace('background:#f8fafc', 'background:#f0fdf4'));
+    box.append(head, line(`Người duyệt: ${meName}`), line(`Đơn vị: ${APPROVE_ORG}`), line(`Ngày duyệt: ${when}`));
     const wrap = doc.createElement('div');
     wrap.setAttribute('style', 'text-align:center;');
     wrap.append(box);
