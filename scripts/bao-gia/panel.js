@@ -4679,7 +4679,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // Có cột Nguyên liệu → số NVL nằm đúng cột đó
       const nv = (label, v, note, cls = '') => (nvlCol ? r(label, '', note, cls, v) : r(label, v, note, cls));
       // Dòng sau VAT: NVL sau VAT (cột Nguyên liệu) + giá trị BG đã gồm VAT (cột Thành tiền) trên cùng 1 dòng
-      if (od.vat && nvlCol) out.push(r(`<b>Sau VAT (${od.vat}%)</b> – NVL · ${od.part ? 'phần Offset' : 'giá trị BG'}`, `<b>${money(Math.round(od.base))}</b>`, `× ${1 + od.vat / 100}`, 'nvl-sum', `<b>${money(Math.round(od.nvlPost))}</b>`));
+      if (od.vat && nvlCol) out.push(r(`<b>Sau VAT (${od.vat}%)</b> – NVL · ${od.part ? 'phần Offset' : 'giá trị BG'}`, `<b>${money(Math.round(od.base))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPost))}</b>`));
       else if (od.vat) out.push(nv(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
       else if (Math.round(od.nvlPost) !== Math.round(od.nvlPre)) out.push(nv('NVL quy theo giá trị BG (SL bảng chiết giá khác đơn)', `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'theo tỉ lệ', 'warn-row'));
     } else if (od.exact) {
@@ -4690,7 +4690,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       out.push(r(`NVL sau VAT ≈ BG × (1 − ${pctTxt})`, `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'ước tính', 'warn-row'));
     }
     if (!(od.sheet && od.vat && nvlCol)) out.push(r(`${od.part ? 'Thành tiền phần Offset' : 'Giá trị BG'}${od.vat ? ` (đã gồm VAT ${od.vat}%)` : ''}`, money(Math.round(od.base))));
-    out.push(r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', `<b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`, pctTxt));
+    const diffHtml = `<b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`;
+    // Có cột Nguyên liệu → số chênh lệch nằm ở cột Nguyên liệu (lệch trái 1 ô so với Thành tiền)
+    out.push(nvlCol ? r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', '', pctTxt, '', diffHtml) : r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', diffHtml, pctTxt));
     if (!od.exact) out.push(`<tr><td colspan="${nvlCol ? 6 : 4}" class="muted">Tổng trên bảng chiết giá (giá × SL) không khớp giá trị BG theo mức VAT 0/5/8/10% → ước tính theo đang bán %.</td></tr>`);
     return out.join('');
   }
