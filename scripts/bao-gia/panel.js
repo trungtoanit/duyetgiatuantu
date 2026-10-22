@@ -3068,6 +3068,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .quick-fix { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 0 9px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
     .quick-fix:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
     .nvl-u { display: block; font-size: 10.5px; color: #94a3b8; font-weight: 400; } .nvl-sum td { background: #fff7ed; }
+    .osim { width: 78px; border: 1px dashed #a78bfa; background: #fff; border-radius: 6px; padding: 2px 6px; font: inherit; font-weight: 700; text-align: right; color: #4c1d95; }
+    .osim:focus { outline: none; border-style: solid; box-shadow: 0 0 0 2px rgba(139,92,246,.2); } .osim.chg { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    .osim-hint { font-size: 11.5px; color: #6d28d9; background: #f5f3ff; } .osim-reset { border: 1px solid #c4b5fd; background: #fff; color: #6d28d9; border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
+    .osim-diff { font-size: 17px; font-weight: 900; } .osim-diff.neg { color: #b91c1c; }
+    .osim-dpct { font-size: 17px; font-weight: 900; color: #047857; }
     .learn-hint { font-size: 12px; color: #6b21a8; margin-top: 4px; }
     .learn-use { border: 1px dashed #c4b5fd; background: #faf5ff; color: #6b21a8; border-radius: 8px; padding: 1px 8px; font: inherit; font-style: italic; cursor: pointer; text-align: left; }
     .learn-use:hover { background: #ede9fe; }
@@ -3618,6 +3623,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     maybeAutoOpen();
     let saveTimer;
     root.querySelector('.side').addEventListener('click', onClick);
+    // Thử giá Offset trong bảng Giải thích
+    root.querySelector('.side').addEventListener('input', (e) => {
+      const inp = e.target.closest?.('input.osim');
+      if (!inp) return;
+      const code = inp.dataset.code;
+      state.offSim = state.offSim || {};
+      const v = numOf(inp.value);
+      state.offSim[code] = { ...(state.offSim[code] || {}), [inp.dataset.key]: v };
+      if (v === Number(inp.dataset.orig)) delete state.offSim[code][inp.dataset.key];
+      osimCalc(inp.closest('table'));
+    });
+    root.querySelector('.side').addEventListener('focusout', (e) => {
+      const inp = e.target.closest?.('input.osim');
+      if (inp && numOf(inp.value)) inp.value = numOf(inp.value).toLocaleString('vi-VN');
+    });
     let searchTimer;
     let rpTimer;
     const onInput = (e) => {
@@ -4602,6 +4622,37 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     return list.sort((a, b) => pos(a) - pos(b) || (a[1].at || 0) - (b[1].at || 0));
   }
+  // Tính lại bảng khi thử giá (chạy trực tiếp trên DOM, không vẽ lại thẻ)
+  function osimCalc(tb) {
+    if (!tb) return;
+    const vat = Number(tb.dataset.vat) || 0;
+    const nvlPost = Number(tb.dataset.nvlpost) || 0;
+    let sumTT = 0;
+    for (const tr of tb.querySelectorAll('tr.osim-r')) {
+      const inp = tr.querySelector('input.osim');
+      if (!inp) {
+        sumTT += Number(tr.dataset.tt) || 0;
+        continue;
+      }
+      const price = numOf(inp.value);
+      const tt = price * Number(inp.dataset.qty);
+      sumTT += tt;
+      tr.querySelector('.osim-tt').textContent = tt ? money(tt) : '–';
+      const pc = tr.querySelector('.osim-pct');
+      const pct = tt ? Math.round((1 - Number(inp.dataset.nvl) / tt) * 1000) / 10 : null;
+      pc.textContent = pct != null ? `${pct}%` : '–';
+      pc.className = `osim-pct ${pct != null ? pctCls(pct) : ''}`;
+      inp.classList.toggle('chg', price !== Number(inp.dataset.orig));
+    }
+    const bg = sumTT * (1 + vat / 100);
+    const diff = bg - nvlPost;
+    const set = (sel, v) => tb.querySelectorAll(sel).forEach((e) => (e.textContent = v));
+    set('.osim-sumtt', money(Math.round(sumTT)));
+    set('.osim-bg', money(Math.round(bg)));
+    set('.osim-diff', `${diff < 0 ? '−' : ''}${trM(Math.abs(diff))}`);
+    tb.querySelectorAll('.osim-diff').forEach((e) => e.classList.toggle('neg', diff < 0));
+    set('.osim-dpct', bg ? `${Math.round((diff / bg) * 1000) / 10}%` : '–');
+  }
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
     const offs = Object.values(m.products || {});
@@ -4674,12 +4725,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const out = [];
     if (od.sheet) {
       out.push(nvlCol
-        ? r('<b>Tổng</b> (bảng chiết giá, trước VAT)', `<b>${money(Math.round(od.rows.reduce((a, x) => a + (x.val || 0), 0)))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPre))}</b>`)
+        ? r('<b>Tổng</b> (bảng chiết giá, trước VAT)', `<b class="osim-sumtt">${money(Math.round(od.rows.reduce((a, x) => a + (x.val || 0), 0)))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPre))}</b>`)
         : r('Tổng Nguyên liệu (đọc thẳng bảng chiết giá)', money(Math.round(od.nvlPre)), od.rows.map((x) => (x.nvlUnit ? `${money(x.nvlUnit)}/thùng` : '')).filter(Boolean).join(' · ')));
       // Có cột Nguyên liệu → số NVL nằm đúng cột đó
       const nv = (label, v, note, cls = '') => (nvlCol ? r(label, '', note, cls, v) : r(label, v, note, cls));
       // Dòng sau VAT: NVL sau VAT (cột Nguyên liệu) + giá trị BG đã gồm VAT (cột Thành tiền) trên cùng 1 dòng
-      if (od.vat && nvlCol) out.push(r(`<b>Sau VAT (${od.vat}%)</b> – NVL · ${od.part ? 'phần Offset' : 'giá trị BG'}`, `<b>${money(Math.round(od.base))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPost))}</b>`));
+      if (od.vat && nvlCol) out.push(r(`<b>Sau VAT (${od.vat}%)</b> – NVL · ${od.part ? 'phần Offset' : 'giá trị BG'}`, `<b class="osim-bg">${money(Math.round(od.base))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPost))}</b>`));
       else if (od.vat) out.push(nv(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
       else if (Math.round(od.nvlPost) !== Math.round(od.nvlPre)) out.push(nv('NVL quy theo giá trị BG (SL bảng chiết giá khác đơn)', `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'theo tỉ lệ', 'warn-row'));
     } else if (od.exact) {
@@ -4690,9 +4741,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       out.push(r(`NVL sau VAT ≈ BG × (1 − ${pctTxt})`, `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'ước tính', 'warn-row'));
     }
     if (!(od.sheet && od.vat && nvlCol)) out.push(r(`${od.part ? 'Thành tiền phần Offset' : 'Giá trị BG'}${od.vat ? ` (đã gồm VAT ${od.vat}%)` : ''}`, money(Math.round(od.base))));
-    const diffHtml = `<b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`;
+    const diffHtml = `<b class="pos osim-diff">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`;
     // Có cột Nguyên liệu → số chênh lệch nằm ở cột Nguyên liệu (lệch trái 1 ô so với Thành tiền)
-    out.push(nvlCol ? r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', '', pctTxt, '', diffHtml) : r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', diffHtml, pctTxt));
+    out.push(nvlCol ? r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', '', `<span class="osim-dpct">${pctTxt}</span>`, '', diffHtml) : r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', diffHtml, pctTxt));
     if (!od.exact) out.push(`<tr><td colspan="${nvlCol ? 6 : 4}" class="muted">Tổng trên bảng chiết giá (giá × SL) không khớp giá trị BG theo mức VAT 0/5/8/10% → ước tính theo đang bán %.</td></tr>`);
     return out.join('');
   }
@@ -4971,7 +5022,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!el) return;
     // Đang gõ trong ô câu hỏi / gợi ý / bàn giao của thẻ → không vẽ lại để khỏi mất chữ
     const ae = root.activeElement;
-    if (ae && el.contains(ae) && ae.tagName === 'TEXTAREA') return;
+    if (ae && el.contains(ae) && (ae.tagName === 'TEXTAREA' || ae.classList?.contains('osim'))) return;
     if (!qid) {
       // Không ở trang báo giá: thẻ chỉ hiện khi có bàn giao khách hàng cần xử lý
       if (!ho) {
@@ -5042,7 +5093,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const od = offs.length ? offsetDiff(q) : null;
     // Có tổng Nguyên liệu từng sản phẩm (đọc thẳng bảng chiết giá) → thêm cột "Nguyên liệu"
     const nvlCol = offs.some(([, x]) => x.nvlTotal > 0);
-    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(x.spec || spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td>${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}${nvlCol ? `<td class="num">${numOf(x.price) && numOf(x.qty) ? money(numOf(x.price) * numOf(x.qty)) : '–'}</td>` : ''}<td class="num"><b>${x.pct ?? '–'}${x.pct != null ? '%' : ''}</b></td></tr>`).join('') +
+    // Thử giá: ô "Giá" sửa được (chỉ tính thử trên thẻ, không lưu vào báo giá) → tính lại %, thành tiền, chênh lệch
+    const sim = nvlCol && od?.sheet;
+    const simV = state.offSim?.[q.code] || {};
+    const offRows = offs.map(([key, x]) => {
+      const qty = numOf(x.qty);
+      const p0 = numOf(x.price);
+      const canSim = sim && x.nvlTotal > 0 && qty && p0;
+      const pv = canSim ? simV[key] ?? p0 : p0;
+      const tt = pv * qty;
+      const pct = canSim ? Math.round((1 - x.nvlTotal / tt) * 1000) / 10 : x.pct;
+      const priceTd = canSim
+        ? `<td><input class="osim${pv !== p0 ? ' chg' : ''}" inputmode="numeric" data-code="${esc(q.code)}" data-key="${esc(key)}" data-qty="${qty}" data-nvl="${x.nvlTotal}" data-orig="${p0}" value="${pv.toLocaleString('vi-VN')}" title="Sửa giá 1 thùng để thử – giá gốc ${money(p0)}"></td>`
+        : `<td>${esc(x.price || '')}</td>`;
+      return `<tr class="osim-r"${canSim ? '' : ` data-tt="${p0 * qty}"`}><td>Offset · ${esc(x.spec || key)}</td><td>${esc(x.qty || '')}</td>${priceTd}${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}${nvlCol ? `<td class="num"><span class="osim-tt">${tt ? money(tt) : '–'}</span></td>` : ''}<td class="num"><b class="osim-pct ${pct != null ? pctCls(pct) : ''}">${pct ?? '–'}${pct != null ? '%' : ''}</b></td></tr>`;
+    }).join('') +
       (od ? offsetSteps(q, od, nvlCol) : '');
     const fxRows = fx
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
@@ -5056,7 +5121,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá (${money(fx.base)}) <b>${trM(-fx.diff)}</b> – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
-      ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
+      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-vat="${od.vat || 0}" data-nvlpost="${Math.round(od.nvlPost)}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint">✏️ Sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
       ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
   };
@@ -7885,6 +7950,11 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         } catch {}
         setTimeout(() => row.classList.remove('qe-flash'), 2500);
       }, 120);
+    }
+    else if (act === 'osim-reset') {
+      if (state.offSim) delete state.offSim[b.dataset.code];
+      lastSideHtml = '';
+      render();
     }
     else if (act === 'qa-more') {
       state.qaShow = (state.qaShow || 40) + 40;
