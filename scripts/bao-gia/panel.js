@@ -1643,7 +1643,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Khung xác nhận duyệt giá dưới "Trưởng Phòng": người duyệt, đơn vị, ngày giờ.
   // Chỉ là xác nhận nội bộ – KHÔNG giả dạng chữ ký số (không có dấu "chữ ký hợp lệ" / chứng thư).
   const APPROVE_ORG = 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ';
-  function addApproval(root0) {
+  function addApproval(root0, signed = true) {
     const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng Phòng$/i.test(e.textContent.trim()));
     if (!label) return false;
     label.textContent = 'Ban lãnh đạo'; // chức danh ở cột duyệt
@@ -1666,7 +1666,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     tick.textContent = '✓';
     head.append(tick, doc.createTextNode('Đã duyệt giá'));
     box.setAttribute('style', box.getAttribute('style').replace('border:1px solid #94a3b8', 'border:1px solid #86efac').replace('background:#f8fafc', 'background:#f0fdf4'));
-    box.append(head, line(`Người duyệt: ${meName}`), line(`Đơn vị: ${APPROVE_ORG}`), line(`Ngày duyệt: ${when}`));
+    // Không ký tên → không ghi tên người duyệt, chỉ ghi "Người phê duyệt: Giám đốc"
+    box.append(head, line(signed ? `Người duyệt: ${meName}` : 'Người phê duyệt: Giám đốc'), line(`Đơn vị: ${APPROVE_ORG}`), line(`Ngày duyệt: ${when}`));
     const wrap = doc.createElement('div');
     wrap.setAttribute('style', 'text-align:center;');
     wrap.append(box);
@@ -1730,8 +1731,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
-    await addSignature(clone);
-    addApproval(clone);
+    if (signOn()) await addSignature(clone);
+    addApproval(clone, signOn());
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {
       try {
@@ -1870,6 +1871,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     setTimeout(() => show(label), 5000);
   }
 
+  const signOn = () => lsGet('dgSignOn') !== '0'; // mặc định có ký tên
   // Nút "🖨 In báo giá" cạnh tiêu đề "Bình luận" trên trang báo giá
   function injectPrintButton() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-printq')) return;
@@ -1893,12 +1895,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       e.stopPropagation();
       if (!b.textContent.startsWith('⏳') && !b.textContent.startsWith('📸')) printQuoteToComment(b);
     });
-    if (h) h.append(b);
+    // Nút bật / tắt ký tên trên ảnh báo giá (nhớ trên máy)
+    const sg = document.createElement('span');
+    sg.className = 'dg-signtg';
+    const paintSg = () => {
+      const on = signOn();
+      sg.textContent = on ? '✍️ Ký tên: Bật' : '✍️ Ký tên: Tắt';
+      sg.title = on ? 'Ảnh báo giá có chữ ký + "Người duyệt: <tên>". Bấm để tắt.' : 'Ảnh báo giá không có chữ ký, ô duyệt ghi "Người phê duyệt: Giám đốc". Bấm để bật.';
+      sg.setAttribute('style', `display:inline-block;margin-left:8px;vertical-align:middle;cursor:pointer;font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 11px;border:1px solid ${on ? '#86efac' : '#cbd5e1'};color:${on ? '#15803d' : '#64748b'};background:${on ? '#f0fdf4' : '#f8fafc'}`);
+    };
+    paintSg();
+    sg.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      lsSet('dgSignOn', signOn() ? '0' : '1');
+      paintSg();
+    });
+    if (h) h.append(b, sg);
     else {
       // không thấy tiêu đề → đặt nút ngay trên ô nhập bình luận
       const holder = document.createElement('div');
       holder.setAttribute('style', 'margin:0 0 6px');
-      holder.append(b);
+      holder.append(b, sg);
       const anchor = box.closest('.ant-comment, .ant-form-item, .ant-row') || box.parentElement;
       anchor.parentElement.insertBefore(holder, anchor);
     }
