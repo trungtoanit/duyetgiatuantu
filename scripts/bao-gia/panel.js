@@ -1948,14 +1948,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .filter(({ x, q }) => q && !done[x.id] && !CLOSED.has(q.quoteStatus) && !q.hasOrder)
       .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
-    const html = `🔥 <b>Gợi ý chốt đơn (${items.length}):</b> ${items
-      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink style="color:inherit;text-decoration:none;margin-right:14px;white-space:nowrap"><b>${i + 1}.</b> <b style="color:#1d4ed8">${esc(q.code)}</b> ${esc(q.customer?.code || '')} (${q.amount ? money(q.amount) : '0đ'})${x.pct ? ` <b style="color:#15803d">${x.pct}%</b>` : ''}</a>`)
-      .join(' ')}`;
+    // Giữ đúng kiểu chữ của CRM: "1. TÊN (số tiền)   2. …" – chỉ thay nội dung
+    const html = items
+      .map(({ q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink title="Gợi ý chốt đơn · ${esc(q.name || '')}" style="color:inherit;text-decoration:none">${i + 1}. ${esc(q.code)} - ${esc(q.customer?.name || q.customer?.code || '')} (${q.amount ? money(q.amount) : '0đ'})</a>`)
+      .join('&nbsp;&nbsp;&nbsp;');
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
     if (!box) {
       box = document.createElement('div');
       box.setAttribute('data-dg-hot', '1');
-      box.setAttribute('style', `${host.getAttribute('style') || ''};color:#9a3412;line-height:1.7;white-space:normal;cursor:default`);
+      box.setAttribute('style', host.getAttribute('style') || '');
       box.className = host.className;
       host.after(box);
     }
