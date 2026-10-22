@@ -3237,6 +3237,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .pos { color: #047857; }
     .side-h { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; cursor: move; user-select: none; touch-action: none; }
     .side .side-grip { color: #94a3b8; font-size: 14px; }
+    .side-btn.recalc-btn { margin-left: auto; width: auto; padding: 0 8px; font-weight: 700; color: #4338ca; }
+    .side-btn.recalc-btn + .side-btn { margin-left: 4px; }
     .side-btn { margin-left: auto; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; width: 24px; height: 22px; cursor: pointer; font-size: 12px; line-height: 1; }
     .side.collapsed { width: auto; padding: 8px 10px; }
     .side.collapsed .side-h { margin-bottom: 0; }
@@ -4725,6 +4727,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         if (q) fetchMarginNow(q, true);
         return;
       }
+      // ↻ Tính lại giá: xoá số liệu đã lưu (chiết giá Offset, PO giấy tấm Flexo, tổng theo loại) rồi đọc lại ngay
+      if (e.target.closest('[data-side="recalc"]')) {
+        const q = renderCtx.quotes?.[currentQuoteId()];
+        if (!q?.code || marginFetching.has(q.id)) return;
+        (async () => {
+          const cur = (await kvGet('margins'))[q.code] || {};
+          await kvMerge('margins', { [q.code]: { ...cur, products: {}, flexo: null, kindTotals: null, offVer: null, at: Math.floor(Date.now() / 1000) } });
+          renderCtx.margins = await kvGet('margins');
+          ktAt = 0; // đọc lại bảng sản phẩm của trang
+          watchKindTotals(q);
+          await fetchMarginNow(q, true);
+          render();
+        })().catch((err) => console.warn('[DG] recalc', err));
+        return;
+      }
       if (e.target.closest('[data-side="toggle"]')) {
         lsSet('dgSideCollapsed', lsGet('dgSideCollapsed') === '1' ? '0' : '1');
         render();
@@ -4800,7 +4817,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
     const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${collapsed ? '' : `${custTag(q)}${q?.quoteStatus ? `<span class="st-pill">${esc(statusLabel(q.quoteStatus))}</span>` : ''}`}${busy ? ' <span class="spinner"></span>' : ''}
-      ${collapsed ? `<span class="side-mini">${mini}</span>${hoN ? ` <span class="ho-n" title="Bàn giao khách hàng cần xử lý">🔁 ${hoN}</span>` : ''}` : ''}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
+      ${collapsed ? `<span class="side-mini">${mini}</span>${hoN ? ` <span class="ho-n" title="Bàn giao khách hàng cần xử lý">🔁 ${hoN}</span>` : ''}` : ''}${collapsed ? '' : `<button class="side-btn recalc-btn" data-side="recalc" title="Tính lại giá: đọc lại bảng chiết giá / PO giấy tấm">${busy ? '<span class="spinner"></span>' : '↻'}</button>`}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
     if (collapsed) {
       setSideHtml(el, header);
       placeSide(el);
