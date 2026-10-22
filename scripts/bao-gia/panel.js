@@ -3681,11 +3681,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, diff, suppliers: sups, skipped, missing, at: fx.at };
   };
   const marginOf = (q) => {
-    const m = q?.code && renderCtx.margins?.[q.code];
-    const list = m ? Object.values(m.products || {}) : [];
-    const vals = list.map((x) => x.pct);
-    const fx = flexoInfo(q);
-    if (fx && fx.rest != null) vals.push(fx.rest);
+    // % thấp nhất giữa Flexo (còn lại sau giấy tấm) và Offset (1 − NVL sau VAT ÷ BG) – cùng cách tính với thẻ
+    const { flexo, offset } = marginParts(q);
+    const vals = [];
+    if (offset != null) vals.push(offset);
+    if (flexo && flexo.rest != null) vals.push(flexo.rest);
     return vals.length ? Math.min(...vals) : null;
   };
   const marginTag = (q) => {
@@ -4430,9 +4430,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const m = renderCtx.margins?.[q?.code] || {};
     const offs = Object.values(m.products || {});
     const priced = offs.filter((x) => x.pct != null && !x.noPrice);
+    // % Offset = (1 − NVL sau VAT ÷ giá trị BG phần Offset) × 100 – khớp với số NVL / chênh lệch hiện trên thẻ.
+    // Chưa tính được NVL thì lấy "đang bán %" thấp nhất trong các sản phẩm.
+    let offset = priced.length ? Math.min(...priced.map((x) => x.pct)) : null;
+    if (priced.length) {
+      const od = offsetDiff(q);
+      if (od?.base > 0 && od.nvlPost >= 0) offset = Math.round((1 - od.nvlPost / od.base) * 1000) / 10;
+    }
     return {
       flexo: flexoInfo(q),
-      offset: priced.length ? Math.min(...priced.map((x) => x.pct)) : null,
+      offset,
       offNoPrice: offs.length > 0 && !priced.length, // bảng chiết giá đang 0đ (chưa cho giá)
       offs: Object.entries(m.products || {}),
     };
@@ -4848,7 +4855,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
       ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th><th class="num">%</th></tr>${offRows}${fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
-      ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: "Đang bán %" thấp nhất trong các sản phẩm.</div>` : ''}
+      ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
   };
 
