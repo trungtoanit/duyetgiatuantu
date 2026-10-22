@@ -1516,7 +1516,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // ---------- 🖨 In báo giá → chụp hình → dán vào ô bình luận ----------
   // Bấm nút "In" của CRM (hook.js chặn hộp thoại in), đợi iframe#printWindow có "BẢNG BÁO GIÁ",
-  // dựng lại thành ảnh PNG (SVG foreignObject), làm mờ SĐT khách, rồi dán vào ô bình luận như Ctrl+V.
+  // dựng lại thành ảnh PNG (SVG foreignObject), che SĐT khách bằng dấu *, rồi dán vào ô bình luận như Ctrl+V.
   const PHONE_RE = /(\+?84|0)[\d.\s-]{8,13}\d/g;
   function blurCustomerPhones(root0) {
     const walker = root0.ownerDocument.createTreeWalker(root0, NodeFilter.SHOW_TEXT);
@@ -1534,10 +1534,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       let last = 0;
       n.nodeValue.replace(PHONE_RE, (m, _a, i) => {
         frag.append(doc.createTextNode(n.nodeValue.slice(last, i)));
-        const sp = doc.createElement('span');
-        sp.setAttribute('style', 'filter:blur(6px);background:#cbd5e1;color:#64748b;border-radius:4px');
-        sp.textContent = m;
-        frag.append(sp);
+        // che bằng dấu sao ở giữa: giữ 3 số đầu + 3 số cuối (0374164311 → 037****311)
+        const d = m.replace(/\D/g, '');
+        frag.append(doc.createTextNode(d.length > 6 ? `${d.slice(0, 3)}${'*'.repeat(d.length - 6)}${d.slice(-3)}` : '*'.repeat(d.length)));
         last = i + m.length;
         return m;
       });
@@ -1709,7 +1708,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // kèm câu mẫu nếu ô đang trống
       const ta = await (getBox || (async () => findCommentBox()))();
       if (ta && !ta.value.trim()) setTextarea(ta, priceGiveText(q));
-      show(blurred ? '✅ Đã dán (đã làm mờ SĐT)' : '✅ Đã dán – không thấy SĐT để làm mờ');
+      show(blurred ? '✅ Đã dán (đã che SĐT)' : '✅ Đã dán – không thấy SĐT để che');
     } catch (e) {
       show(`⚠️ ${e.message}`);
     }
@@ -1732,7 +1731,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const b = document.createElement('span');
     b.className = 'dg-printq';
     b.textContent = '🖨 In báo giá → dán vào bình luận';
-    b.title = 'In báo giá (không mở hộp thoại in), chụp thành ảnh, làm mờ SĐT khách rồi dán vào ô bình luận';
+    b.title = 'In báo giá (không mở hộp thoại in), chụp thành ảnh, che SĐT khách rồi dán vào ô bình luận';
     b.setAttribute('style', 'display:inline-block;margin-left:12px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:999px;padding:3px 12px');
     b.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1816,7 +1815,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const pb = document.createElement('span');
       pb.className = 'dg-printq-reply';
       pb.textContent = '🖨 In báo giá → dán';
-      pb.title = 'In báo giá, chụp ảnh (làm mờ SĐT khách) rồi dán vào ô trả lời của bình luận này';
+      pb.title = 'In báo giá, chụp ảnh (che SĐT khách) rồi dán vào ô trả lời của bình luận này';
       pb.setAttribute('style', 'cursor:pointer;color:#fff;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px');
       const replyBox = async () => {
         let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
