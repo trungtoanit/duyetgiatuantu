@@ -1504,11 +1504,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     r.onload = () => res(r.result);
     r.readAsDataURL(b);
   });
+  // Ảnh khổ A4 đứng: 794 × 1123 px (96 dpi), lề như trang in; nội dung dài hơn 1 trang thì ảnh cao thêm
+  const A4 = { w: 794, h: 1123, pad: 30 };
   async function docToPng(doc, scale = 2) {
     const body = doc.body;
-    const width = Math.max(body.scrollWidth, doc.documentElement.scrollWidth, 794);
-    const height = Math.max(body.scrollHeight, doc.documentElement.scrollHeight);
+    // Tạm thu khung in về đúng bề ngang vùng in A4 để nội dung dàn trang như khi in
+    const frame = doc.defaultView?.frameElement;
+    const saved = frame && { w: frame.style.width, h: frame.style.height, minW: frame.style.minWidth };
+    if (frame) {
+      frame.style.minWidth = '0';
+      frame.style.width = `${A4.w - 2 * A4.pad}px`;
+      frame.style.height = `${A4.h}px`;
+      await sleep(250);
+    }
+    const width = A4.w;
+    // chiều cao nội dung thật (đáy phần tử thấp nhất) – không lấy chiều cao khung
+    const bottoms = [...body.querySelectorAll('*')].map((e) => e.getBoundingClientRect().bottom).filter((v) => v > 0);
+    const contentH = Math.ceil(Math.max(0, ...bottoms) + (doc.defaultView?.scrollY || 0)) + 2 * A4.pad;
+    const height = Math.max(A4.h, contentH);
     const clone = body.cloneNode(true);
+    if (frame) Object.assign(frame.style, { width: saved.w, height: saved.h, minWidth: saved.minW });
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
@@ -1523,7 +1538,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const css = [...doc.styleSheets]
       .map((ss) => {
         try {
-          return [...ss.cssRules].map((r) => r.cssText).join('\n');
+          // rule trong @media print áp luôn (ảnh chụp ở chế độ màn hình nên phải "mở" khối print ra)
+          return [...ss.cssRules]
+            .map((r) => (r.media && /print/i.test(r.media.mediaText || '') ? [...r.cssRules].map((x) => x.cssText).join('\n') : r.cssText))
+            .join('\n');
         } catch {
           return '';
         }
@@ -1533,7 +1551,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     // giữ kiểu của <body> khung in (phông chữ, lề…) – body không được chép sang ảnh
     const bcs = getComputedStyle(body);
-    wrap.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${width}px;background:#fff;box-sizing:border-box;`);
+    wrap.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${width}px;min-height:${height}px;padding:${A4.pad}px;margin:0;background:#fff;box-sizing:border-box;`);
     if (body.className) wrap.setAttribute('class', body.className);
     const st = document.createElement('style');
     st.textContent = `${css}\n@page{margin:0} body{margin:0}`;
