@@ -1505,23 +1505,40 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     r.readAsDataURL(b);
   });
   // Ảnh khổ A4 đứng: 794 × 1123 px (96 dpi), lề như trang in; nội dung dài hơn 1 trang thì ảnh cao thêm
-  const A4 = { w: 794, h: 1123, pad: 30 };
+  // Ảnh khổ A4 đứng, lề mỏng: dàn bảng báo giá ở bề ngang A4 (794px), đo khung bao phần nội dung thật
+  // (chữ, bảng, ảnh, đường kẻ) rồi cắt sát, chừa lề A4.m; giữ tỉ lệ A4 (cao ≥ rộng × 1,414)
+  const A4 = { w: 794, ratio: 1.4142, m: 14 };
+  function contentBox(doc) {
+    const view = doc.defaultView;
+    let l = Infinity, t = Infinity, r = 0, b = 0;
+    for (const e of doc.body.querySelectorAll('*')) {
+      const ownText = [...e.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim());
+      if (!ownText && !/^(IMG|HR|TD|TH|SVG|CANVAS)$/i.test(e.tagName)) continue;
+      const rc = e.getBoundingClientRect();
+      if (!rc.width || !rc.height || view.getComputedStyle(e).visibility === 'hidden') continue;
+      l = Math.min(l, rc.left); t = Math.min(t, rc.top); r = Math.max(r, rc.right); b = Math.max(b, rc.bottom);
+    }
+    const sx = view.scrollX || 0, sy = view.scrollY || 0;
+    return l === Infinity ? null : { l: l + sx, t: t + sy, r: r + sx, b: b + sy };
+  }
   async function docToPng(doc, scale = 2) {
     const body = doc.body;
-    // Tạm thu khung in về đúng bề ngang vùng in A4 để nội dung dàn trang như khi in
+    // Tạm cho khung in rộng đúng 1 trang A4 để nội dung dàn trang như khi in
     const frame = doc.defaultView?.frameElement;
     const saved = frame && { w: frame.style.width, h: frame.style.height, minW: frame.style.minWidth };
     if (frame) {
       frame.style.minWidth = '0';
-      frame.style.width = `${A4.w - 2 * A4.pad}px`;
-      frame.style.height = `${A4.h}px`;
+      frame.style.width = `${A4.w}px`;
+      frame.style.height = `${Math.round(A4.w * A4.ratio)}px`;
       await sleep(250);
     }
     const width = A4.w;
-    // chiều cao nội dung thật (đáy phần tử thấp nhất) – không lấy chiều cao khung
-    const bottoms = [...body.querySelectorAll('*')].map((e) => e.getBoundingClientRect().bottom).filter((v) => v > 0);
-    const contentH = Math.ceil(Math.max(0, ...bottoms) + (doc.defaultView?.scrollY || 0)) + 2 * A4.pad;
-    const height = Math.max(A4.h, contentH);
+    const box = contentBox(doc) || { l: 0, t: 0, r: width, b: Math.round(width * A4.ratio) };
+    const height = Math.ceil(box.b + A4.m); // chiều cao bản dựng (đủ tới đáy nội dung)
+    // vùng cắt: khung nội dung + lề mỏng
+    const cut = { x: Math.max(0, box.l - A4.m), y: Math.max(0, box.t - A4.m) };
+    cut.w = Math.min(width, box.r + A4.m) - cut.x;
+    cut.h = Math.max(Math.round(cut.w * A4.ratio), height - cut.y);
     const clone = body.cloneNode(true);
     if (frame) Object.assign(frame.style, { width: saved.w, height: saved.h, minWidth: saved.minW });
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
@@ -1551,7 +1568,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     // giữ kiểu của <body> khung in (phông chữ, lề…) – body không được chép sang ảnh
     const bcs = getComputedStyle(body);
-    wrap.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${width}px;min-height:${height}px;padding:${A4.pad}px;margin:0;background:#fff;box-sizing:border-box;`);
+    wrap.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${width}px;min-height:${height}px;margin:0;padding:${bcs.marginTop} ${bcs.marginRight} ${bcs.marginBottom} ${bcs.marginLeft};background:#fff;box-sizing:border-box;`);
     if (body.className) wrap.setAttribute('class', body.className);
     const st = document.createElement('style');
     st.textContent = `${css}\n@page{margin:0} body{margin:0}`;
@@ -1563,13 +1580,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     await img.decode();
     const canvas = document.createElement('canvas');
-    canvas.width = width * scale;
-    canvas.height = height * scale;
+    canvas.width = Math.round(cut.w * scale);
+    canvas.height = Math.round(cut.h * scale);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.scale(scale, scale);
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, -cut.x, -cut.y); // cắt sát nội dung, lề mỏng
     const png = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     return { png, blurred };
   }
