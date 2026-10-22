@@ -3641,7 +3641,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const rg = e.target.closest?.('input.osim-range');
       if (rg) {
         // Kéo tỷ lệ NVL / đơn giá → giá 1 thùng mỗi sản phẩm = NVL 1 thùng ÷ tỷ lệ (làm tròn lên 5đ)
-        const r = Number(rg.value) / 100;
+        const r = 1 - Number(rg.value) / 100; // thanh kéo là % bán → tỷ lệ NVL / đơn giá
         const tb = rg.closest('table');
         state.offSim = state.offSim || {};
         const sv = { ...(state.offSim[rg.dataset.code] || {}) };
@@ -4716,9 +4716,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       pv += numOf(ip.value) * Number(ip.dataset.qty);
     }
     const ratio = pv ? Math.round((nv / pv) * 1000) / 10 : null;
-    set('.osim-rv', ratio != null ? `${ratio}% · bán ${Math.round((100 - ratio) * 10) / 10}%` : '');
+    const sell = ratio != null ? Math.round((100 - ratio) * 10) / 10 : null;
+    set('.osim-rv', ratio != null ? `bán ${sell}% · NVL ${ratio}%` : '');
     const rg = tb.querySelector('input.osim-range');
-    if (rg && ratio != null && root.activeElement !== rg && !rg.matches(':active')) rg.value = ratio;
+    if (rg && sell != null && root.activeElement !== rg && !rg.matches(':active')) rg.value = sell;
   }
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
@@ -5191,11 +5192,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá (${money(fx.base)}) <b>${trM(-fx.diff)}</b> – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
-      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-vat="${od.vat || 0}" data-nvlpost="${Math.round(od.nvlPost)}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint"><div class="osim-sl">🎚️ Tỷ lệ Nguyên liệu / đơn giá: <input type="range" class="osim-range" data-code="${esc(q.code)}" min="30" max="95" step="0.5" value="${(() => {
+      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-vat="${od.vat || 0}" data-nvlpost="${Math.round(od.nvlPost)}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint"><div class="osim-sl">🎚️ % bán (kéo phải = bán cao hơn): <input type="range" class="osim-range" data-code="${esc(q.code)}" min="5" max="70" step="0.5" value="${(() => {
         const rows = offs.map(([k, x]) => ({ n: x.nvlTotal, p: (simV[k] ?? numOf(x.price)) * numOf(x.qty) })).filter((r) => r.n && r.p);
         const a = rows.reduce((t, r) => t + r.n, 0);
         const b2 = rows.reduce((t, r) => t + r.p, 0);
-        return b2 ? Math.round((a / b2) * 200) / 2 : 60;
+        return b2 ? Math.round((1 - a / b2) * 200) / 2 : 40; // % bán = 1 − NVL ÷ đơn giá
       })()}"><b class="osim-rv"></b></div>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
       ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
