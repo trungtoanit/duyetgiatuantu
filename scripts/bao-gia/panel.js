@@ -2351,6 +2351,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .unread a.item > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .it-code { font-weight: 800; font-size: 14px; }
     /* Cột mã khách hàng riêng: thẳng hàng giữa các dòng */
+    .kh-occ { font-style: normal; display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: #64748b; color: #fff; font-size: 10px; font-weight: 800; vertical-align: middle; }
     .it-cust .kh { margin-left: 0; font-size: 11px; padding: 0 7px; max-width: 100%; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
     .it-no { text-align: right; color: #94a3b8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .it-main .kh, .it-main .knd, .it-main .tgt, .it-main .hip, .it-main .crd, .it-main .prm, .it-main .smp, .it-main .ctr, .it-main .nodep
@@ -6081,7 +6082,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const hotDoneAll = await kvGet('aiHotDone');
     renderCtx.hotSet = new Set((hotLatest?.items || []).filter((x) => !hotDoneAll[x.id]).map((x) => x.id));
     const HOT_BADGE = '<span class="dl-hotbadge sm" title="Ưu tiên chốt (từ tab Gợi ý chốt đơn)">🔥 Ưu tiên</span>';
-    const itemHtml = ({ q, c, last, f, badge }, i) => {
+    // Đếm số lần khách xuất hiện từ trên xuống (lần 2, 3… hiện số bên cạnh mã khách)
+    const withOcc = (rows) => {
+      const seen = new Map();
+      return rows.map((x) => {
+        const k = custKey(x.q);
+        if (!k) return x;
+        const n = (seen.get(k) || 0) + 1;
+        seen.set(k, n);
+        return { ...x, occ: n };
+      });
+    };
+    const itemHtml = ({ q, c, last, f, badge, occ = 0 }, i) => {
       if (badge === undefined) badge = q && renderCtx.hotSet.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) ? HOT_BADGE : '';
       const staff = staffOf(q, c);
       const tip = [q?.customer?.name, q?.name, statusLabel(q?.quoteStatus),
@@ -6092,7 +6104,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
       <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
-      <span class="it-cust">${custTag(q).trim()}</span>
+      <span class="it-cust">${custTag(q).trim()}${occ > 1 ? `<i class="kh-occ" title="Khách này xuất hiện lần thứ ${occ} trong bảng (đã có báo giá phía trên)">${occ}</i>` : ''}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
       <span class="it-ago">${last ? `💬 ${ago(last.createdAt)}` : '📭 chưa BL'}${suggests[c.id]?.sentAt ? ' ✅' : ''}</span>
@@ -6122,7 +6134,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const sumTip = `Tổng ${rows.length} báo giá đang hiện: ${money(total)}`;
       return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
         <span class="it-ago">BL cuối</span><span class="it-amt" title="${esc(sumTip)}">Σ ${moneyShort(total)}</span>${diffHead(rows)}<span class="it-fea">Điểm</span></div>` +
-        rows.map(itemHtml).join('');
+        withOcc(rows).map(itemHtml).join('');
     };
     // Bảng giống tab Báo giá nhưng không áp bộ lọc / tìm kiếm của tab đó; 'after' chèn thêm dòng phụ dưới mỗi báo giá
     renderCtx.plainRows = (rows, after = () => '') => {
@@ -6130,7 +6142,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
       return `<div class="item-head"><span class="it-no">#</span><span class="it-date">Ngày tạo</span><span>Mã BG</span><span>Nhãn</span><span>Khách</span><span>Tên cơ hội</span><span>NVKD</span>
         <span class="it-ago">BL cuối</span><span class="it-amt" title="Tổng ${rows.length} báo giá: ${money(total)}">Σ ${moneyShort(total)}</span>${diffHead(rows)}<span class="it-fea">Điểm</span></div>` +
-        rows.map((x, i) => itemHtml(x, i) + after(x)).join('');
+        withOcc(rows).map((x, i) => itemHtml(x, i) + after(x)).join('');
     };
     // Gộp "Báo giá khả thi" + "Chưa đọc" vào 1 bảng: báo giá chưa đọc mà không khả thi nối thêm vào (không có điểm)
     const feasibleIds = new Set(feasible.map(({ q }) => q.id));
