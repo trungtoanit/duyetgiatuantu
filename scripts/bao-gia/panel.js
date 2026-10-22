@@ -3010,7 +3010,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Nhận diện "giá cao / chưa được giá" (khách chê giá, bên khác rẻ hơn…) – chỉ xét lời NVKD
   const HIGH_PRICE_RE =
-    /(giá|gia)\s*(bên\s*)?(mình|minh|em|mình\s*báo)?\s*(hơi\s*|còn\s*|quá\s*|khá\s*|rất\s*)?(cao|đắt|mắc)|chê\s*(giá\s*)?(cao|đắt|mắc)|(cao|đắt|mắc)\s*(quá|hơn)|chưa\s*(được|đc|dc|tới|đạt|tốt)\s*(giá|gia)(?![\p{L}])|(giá|gia)\s*(vẫn\s*)?chưa\s*(được|đc|dc|tới|đạt|tốt)|(rẻ|re)\s*hơn|bên\s*kia\s*(rẻ|re)/iu;
+    /(giá|gia)\s*(bên\s*)?(mình|minh|em|mình\s*báo)?\s*(hơi\s*|còn\s*|quá\s*|khá\s*|rất\s*)?(cao|đắt|mắc)|chê\s*(giá\s*)?(cao|đắt|mắc)|(cao|đắt|mắc)\s*(quá|hơn)|chưa\s*(được|đc|dc|tới|đạt|tốt)\s*(giá|gia)(?![\p{L}])|(giá|gia)\s*(vẫn\s*)?chưa\s*(được|đc|dc|tới|đạt|tốt)|(rẻ|re)\s*hơn|bên\s*kia\s*(rẻ|re)|(khách|chị|anh|bên\s*đó|bên\s*kia|họ|sếp\s*bên\s*đó)\s*(báo|nói|kêu|chê|thấy|phản\s*hồi)\s*(là\s*)?(giá\s*)?(hơi\s*|quá\s*|còn\s*)?(cao|đắt|mắc)|(giá|gia)\s*(chưa|không|ko|k)\s*(cạnh\s*tranh|hợp\s*lý|ổn)/iu;
   function highPriceInfo(c) {
     let hit = null;
     const walk = (t) => {
