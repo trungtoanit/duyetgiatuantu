@@ -1923,6 +1923,58 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPrintButton(), 2000);
 
+  // ---------- Băng vàng đầu trang CRM ("1. CÔNG TY … (xxđ) 2. …") → thay bằng danh sách 🔥 Gợi ý chốt đơn ----------
+  // Ẩn nội dung gốc của CRM và chèn danh sách deal ưu tiên (bấm để mở báo giá). NVKD chỉ thấy deal của mình.
+  let topHotHtml = '';
+  async function topHotBanner() {
+    if (!IS_TOP || !root) return;
+    let host = document.querySelector('[data-dg-hotbar]');
+    if (!host) {
+      const re = /^\s*1\.\s+\S[\s\S]*\(\s*[\d.,]+\s*đ\s*\)[\s\S]*\b2\.\s/;
+      const cands = [...document.querySelectorAll('body *')].filter((e) => {
+        if (e.closest('#dg-root, [data-dg-hot]')) return false;
+        const r = e.getBoundingClientRect();
+        return r.top < 260 && r.height > 0 && re.test(e.innerText || '');
+      });
+      // phần tử nhỏ nhất chứa đủ danh sách
+      host = cands.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length || b.querySelectorAll('*').length - a.querySelectorAll('*').length)[0];
+      if (!host) return;
+      host.setAttribute('data-dg-hotbar', '1');
+    }
+    const [hot, done] = await Promise.all([kvGet('aiHot'), kvGet('aiHotDone')]);
+    const quotes = renderCtx.quotes || (await kvGet('quotes'));
+    const items = (hot.latest?.items || [])
+      .map((x) => ({ x, q: quotes[x.id] }))
+      .filter(({ x, q }) => q && !done[x.id] && !CLOSED.has(q.quoteStatus) && !q.hasOrder)
+      .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
+    if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
+    const html = `🔥 <b>Gợi ý chốt đơn (${items.length}):</b> ${items
+      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink style="color:inherit;text-decoration:none;margin-right:14px;white-space:nowrap"><b>${i + 1}.</b> <b style="color:#1d4ed8">${esc(q.code)}</b> ${esc(q.customer?.code || '')} (${q.amount ? money(q.amount) : '0đ'})${x.pct ? ` <b style="color:#15803d">${x.pct}%</b>` : ''}</a>`)
+      .join(' ')}`;
+    let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
+    if (!box) {
+      box = document.createElement('div');
+      box.setAttribute('data-dg-hot', '1');
+      box.setAttribute('style', `${host.getAttribute('style') || ''};color:#9a3412;line-height:1.7;white-space:normal;cursor:default`);
+      box.className = host.className;
+      host.after(box);
+    }
+    host.style.display = 'none';
+    if (html !== topHotHtml || !box.innerHTML) {
+      topHotHtml = html;
+      box.innerHTML = html;
+    }
+  }
+  if (IS_TOP) {
+    setInterval(() => topHotBanner().catch(() => {}), 4000);
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest?.('a[data-dg-hotlink]');
+      if (!a || e.metaKey || e.ctrlKey) return;
+      e.preventDefault();
+      location.assign(a.getAttribute('href'));
+    });
+  }
+
   // Gắn nút "💲 Set giá" vào bình luận xin giá (luồng của báo giá Flexo đang mở)
   function injectPriceButtons() {
     if (!IS_TOP || !root) return;
