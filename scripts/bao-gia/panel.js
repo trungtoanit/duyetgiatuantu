@@ -1408,16 +1408,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="pdlg-v"><b>${pct0}%</b></div>
       <input type="range" min="5" max="50" step="1" value="${pct0}">
       <div class="pdlg-chips">${[20, 22, 23, 25, 27, 28, 30, 32, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-sum"></div>
       <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
       <div class="pdlg-step"></div>
       <div class="pdlg-btns"><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
     </div></div>`;
     root.append(box);
     const range = box.querySelector('input');
+    // Tổng mua giấy tấm / tổng thu về / chênh lệch (theo PO đã đọc) + ước tính theo % đang chọn
+    const fx = flexoInfo(q);
+    const sumEl = box.querySelector('.pdlg-sum');
+    const renderSum = () => {
+      if (!fx) return (sumEl.innerHTML = '<div class="muted">Chưa có số liệu giấy tấm (PO) của báo giá này – mở thẻ bên phải để tính.</div>');
+      const pct = Number(range.value);
+      const estBase = fx.best.total / (1 - pct / 100);
+      sumEl.innerHTML = `<div class="ps-grid">
+          <div class="ps-t"><span>Mua giấy tấm</span><b>${trM(fx.best.total)}</b><small>${esc(fx.best.code)}</small></div>
+          <div class="ps-t"><span>Thu về (BG Flexo)</span><b>${trM(fx.base)}</b><small>hiện tại</small></div>
+          <div class="ps-t ${fx.diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${fx.diff < 0 ? '−' : '+'}${trM(Math.abs(fx.diff))}</b><small>${fx.rest != null ? `${fx.rest}%` : 'PO > BG'}</small></div>
+        </div>
+        <div class="ps-est">Bán <b>${pct}%</b> → thu về ≈ <b>${trM(estBase)}</b>, chênh lệch ≈ <b class="pos">+${trM(estBase - fx.best.total)}</b> <span class="muted">(ước tính = giấy tấm ÷ (1 − ${pct}%))</span></div>`;
+    };
     const sync = () => {
       box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
       box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%`;
+      renderSum();
     };
+    renderSum();
     range.addEventListener('input', sync);
     // Lịch sử deal (cột trái): bấm % ở 1 dòng → dùng mức đó
     const histBody = box.querySelector('.ph-body');
@@ -3137,6 +3154,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .pdlg-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .pdlg-chips .act, .pdlg-btns .act { height: auto; padding: 4px 12px; }
     .pdlg-note { font-size: 12px; }
+    .ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .ps-t { border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 8px; display: grid; gap: 1px; background: #f8fafc; }
+    .ps-t span { font-size: 11px; color: #64748b; font-weight: 600; }
+    .ps-t b { font-size: 16px; font-weight: 800; color: #0f172a; }
+    .ps-t small { font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ps-t.pos { border-color: #bbf7d0; background: #f0fdf4; } .ps-t.pos b { color: #15803d; }
+    .ps-t.neg { border-color: #fecaca; background: #fef2f2; } .ps-t.neg b { color: #b91c1c; }
+    .ps-est { margin-top: 6px; font-size: 12px; }
+    .ps-est .pos { color: #15803d; }
     .pdlg-step { min-height: 18px; font-size: 12px; color: #4338ca; }
     .pdlg-btns { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
     .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eef2f7; font-size: 13px; display: grid; gap: 10px; }
