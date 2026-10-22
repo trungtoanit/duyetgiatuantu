@@ -1245,6 +1245,193 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     !fx || fx.mode !== FLEXO_MODE || (fx.missing?.length > 0 && Date.now() / 1000 - fx.at > 3600) || flexoAmountChanged(fx, q) ||
     (!!q && q.noSheetAt == null && (fx.at || 0) < SHEET_SINCE);
 
+  // ---------- 💲 Set giá nhanh cho báo giá Flexo ----------
+  // Bình luận NVKD xin giá ("Sếp cho em xin báo giá đơn này") → nút "💲 Set giá" cạnh "Trả lời".
+  // Chọn % bán → ngay trên trang: Lên PO → Giấy tấm → từng nhà cung cấp: kéo % Deal, bấm "Set deal cho BG"
+  // → đóng PO → bấm "Cập nhật" lưu báo giá → F5. Chỉ chạy khi quản lý bấm xác nhận.
+  const PRICE_ASK_RE = /xin\s*(lại\s*)?(báo\s*)?giá|cho\s*(em|chị|anh|e|c)\s*(xin\s*)?(lại\s*)?giá/i;
+  const visModalsTop = () => [...document.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
+  const waitFor = async (fn, ms = 8000, gap = 200) => {
+    for (let t = 0; t < ms; t += gap) {
+      const v = fn();
+      if (v) return v;
+      await sleep(gap);
+    }
+    return null;
+  };
+
+  // Kéo thanh "% Deal" (antd Slider) tới đúng giá trị: phím mũi tên trên tay kéo, không ăn thì bấm thẳng vào thanh
+  async function setDealSlider(modal, pct) {
+    const handle = modal.querySelector('.ant-slider-handle');
+    if (!handle) throw new Error('Không thấy thanh kéo "% Deal" trong PO.');
+    const val = () => Number(handle.getAttribute('aria-valuenow'));
+    const key = (k) => handle.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k, keyCode: k === 'ArrowRight' ? 39 : 37, which: k === 'ArrowRight' ? 39 : 37, bubbles: true, cancelable: true }));
+    for (let i = 0; i < 120 && val() !== pct; i++) {
+      const before = val();
+      key(before < pct ? 'ArrowRight' : 'ArrowLeft');
+      await sleep(40);
+      if (val() === before) break; // phím không có tác dụng → bấm vào thanh
+      if ((before < pct && val() > pct) || (before > pct && val() < pct)) break; // bước nhảy lớn, đã vượt
+    }
+    if (val() !== pct) {
+      const slider = handle.closest('.ant-slider');
+      const min = Number(handle.getAttribute('aria-valuemin') || 0);
+      const max = Number(handle.getAttribute('aria-valuemax') || 100);
+      const r = slider.getBoundingClientRect();
+      const x = r.left + (r.width * (pct - min)) / (max - min);
+      const y = r.top + r.height / 2;
+      for (const t of ['mousedown', 'mouseup', 'click']) slider.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
+      await sleep(200);
+    }
+    if (Math.abs(val() - pct) > 1) throw new Error(`Không kéo được % Deal tới ${pct}% (đang ${val()}%).`);
+  }
+
+  // Hộp xác nhận nhỏ (Popconfirm / Modal.confirm) sau khi bấm nút → bấm đồng ý
+  async function confirmIfAsked() {
+    await sleep(400);
+    const pop = [...document.querySelectorAll('.ant-popover:not(.ant-popover-hidden) .ant-popover-buttons, .ant-popconfirm-buttons, .ant-modal-confirm-btns')]
+      .find((x) => x.offsetParent);
+    const ok = pop && [...pop.querySelectorAll('button')].find((b) => /^(OK|Đồng ý|Có|Xác nhận|Yes)$/i.test(b.innerText.trim()) || b.classList.contains('ant-btn-primary'));
+    if (ok) {
+      ok.click();
+      await sleep(600);
+    }
+  }
+
+  async function runSetPrice(q, pct, step) {
+    step('Mở Lên PO → Giấy tấm…');
+    const poBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lên PO');
+    if (!poBtn) throw new Error('Không thấy nút "Lên PO" trên trang.');
+    for (const t of ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click']) poBtn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+    const item = await waitFor(() => [...document.querySelectorAll('.ant-dropdown .ant-dropdown-menu-item')].find((li) => li.innerText.trim() === 'Giấy tấm'), 4000);
+    if (!item) throw new Error('Không thấy mục "Giấy tấm" trong Lên PO.');
+    (item.querySelector('.ant-dropdown-menu-title-content > span') || item).click();
+    const modal = await waitFor(() => visModalsTop().find((m) => /Tạo PO cho báo giá/.test(m.innerText)), 10000);
+    if (!modal) throw new Error('Không mở được "Tạo PO cho báo giá".');
+    await sleep(1500);
+    const chips = [];
+    for (const b of modal.querySelectorAll('button.ant-btn')) {
+      const t = b.innerText.trim();
+      if (/^[A-Z][A-Z0-9_.&-]{1,12}$/.test(t) && t !== 'OUT' && !chips.some((c) => c.code === t)) chips.push({ code: t, btn: b });
+    }
+    const readTotal = () => Number((modal.innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
+    const done = [];
+    for (const [i, ch] of (chips.length ? chips : [null]).entries()) {
+      if (ch) {
+        step(`Nhà cung cấp ${ch.code} (${i + 1}/${chips.length}): chọn…`);
+        ch.btn.click();
+        // chờ PO của nhà này tải xong: "Tổng thanh toán" đứng yên 3 lần đọc
+        let last = -1;
+        let same = 0;
+        for (let k = 0; k < 50 && same < 2; k++) {
+          await sleep(400);
+          const t = readTotal();
+          same = t && t === last ? same + 1 : 0;
+          last = t;
+        }
+      }
+      step(`${ch ? `Nhà cung cấp ${ch.code}: ` : ''}kéo % Deal = ${pct}%…`);
+      await setDealSlider(modal, pct);
+      const setBtn = [...modal.querySelectorAll('button')].find((b) => /Set deal cho BG/i.test(b.innerText));
+      if (!setBtn) throw new Error('Không thấy nút "Set deal cho BG".');
+      step(`${ch ? `Nhà cung cấp ${ch.code}: ` : ''}bấm "Set deal cho BG"…`);
+      setBtn.click();
+      await confirmIfAsked();
+      await sleep(1500);
+      done.push(ch?.code || 'NCC');
+    }
+    step('Đóng PO, lưu báo giá…');
+    modal.querySelector('.ant-modal-close')?.click();
+    await sleep(800);
+    const saveBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Cập nhật');
+    if (!saveBtn) throw new Error('Đã set deal nhưng không thấy nút "Cập nhật" để lưu báo giá – hãy tự bấm Cập nhật.');
+    saveBtn.click();
+    await confirmIfAsked();
+    const ok = await waitFor(() => document.querySelector('.ant-message-success, .ant-notification-notice-success'), 10000, 250);
+    try {
+      localStorage.setItem('dgDealPct', String(pct));
+    } catch {}
+    step(ok ? `✅ Đã set ${pct}% cho ${done.join(', ')} và lưu báo giá – đang tải lại trang…` : 'Đã bấm Cập nhật – đang tải lại trang…');
+    await sleep(1200);
+    location.reload();
+  }
+
+  // Hộp chọn % (trong shadow root của bảng)
+  function openPriceDialog(q) {
+    root.querySelector('.pdlg')?.remove();
+    const pct0 = Number(lsGet('dgDealPct')) || 25;
+    const box = document.createElement('div');
+    box.className = 'pdlg';
+    box.innerHTML = `<div class="pdlg-card">
+      <div class="pdlg-h">💲 Set giá ${esc(q.code)} <span class="muted">– Flexo</span><button class="x" data-p="close">×</button></div>
+      <div class="pdlg-q">Bán bao nhiêu %?</div>
+      <div class="pdlg-v"><b>${pct0}%</b></div>
+      <input type="range" min="5" max="50" step="1" value="${pct0}">
+      <div class="pdlg-chips">${[20, 25, 30, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
+      <div class="pdlg-step"></div>
+      <div class="pdlg-btns"><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
+    </div>`;
+    root.append(box);
+    const range = box.querySelector('input');
+    const sync = () => {
+      box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
+      box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%`;
+    };
+    range.addEventListener('input', sync);
+    box.addEventListener('click', async (e) => {
+      const v = e.target.closest('[data-v]')?.dataset.v;
+      if (v) {
+        range.value = v;
+        return sync();
+      }
+      const act = e.target.closest('[data-p]')?.dataset.p;
+      if (act === 'close') return box.remove();
+      if (act !== 'go') return;
+      const pct = Number(range.value);
+      box.querySelectorAll('button, input').forEach((x) => (x.disabled = true));
+      const stepEl = box.querySelector('.pdlg-step');
+      const step = (t) => (stepEl.innerHTML = `<span class="spinner"></span> ${esc(t)}`);
+      try {
+        await runSetPrice(q, pct, step);
+      } catch (err) {
+        stepEl.innerHTML = `<span class="warnx">⚠️ ${esc(err.message)}</span>`;
+        box.querySelectorAll('button, input').forEach((x) => (x.disabled = false));
+      }
+    });
+  }
+
+  // Gắn nút "💲 Set giá" vào bình luận xin giá (luồng của báo giá Flexo đang mở)
+  function injectPriceButtons() {
+    if (!IS_TOP || !root) return;
+    const q = renderCtx.quotes?.[currentQuoteId()];
+    if (!q?.code || !(q.kinds || []).includes('flexo') || CLOSED.has(q.quoteStatus)) return;
+    for (const cm of document.querySelectorAll('.ant-comment')) {
+      const content = cm.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+      const actions = content?.querySelector(':scope > ul.ant-comment-actions');
+      if (!actions || actions.querySelector('.dg-setprice')) continue;
+      const text = content.querySelector('.ant-comment-content-detail')?.innerText || '';
+      if (!PRICE_ASK_RE.test(text)) continue;
+      // chỉ bình luận của NVKD (không gắn vào câu "E cho chị giá nhé" của chính quản lý)
+      const author = content.querySelector('.ant-comment-content-author-name')?.innerText.trim() || '';
+      if (author && author.startsWith(meName)) continue;
+      // chỉ luồng có nhãn mã của báo giá đang mở
+      let top = cm;
+      while (top.parentElement?.closest('.ant-comment')) top = top.parentElement.closest('.ant-comment');
+      const topContent = top.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+      if (![...(topContent?.querySelectorAll('.ant-tag') || [])].some((t) => t.textContent.trim() === q.code)) continue;
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="dg-setprice" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">💲 Set giá</span>';
+      li.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openPriceDialog(q);
+      });
+      actions.append(li);
+    }
+  }
+  if (IS_TOP) setInterval(() => injectPriceButtons(), 2000);
+
   async function readFlexoCost(f, q) {
     const doc = f.contentDocument;
     if (!doc) return;
@@ -2584,6 +2771,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-pct.good { color: #15803d; background: #dcfce7; } .hot-pct.mid { color: #a16207; background: #fef9c3; } .hot-pct.bad { color: #b91c1c; background: #fee2e2; }
     .hot-amt { font-weight: 800; color: #047857; font-size: 13px; }
     .hot-who { font-size: 11px; color: #64748b; }
+    /* 💲 Set giá */
+    .pdlg { position: fixed; inset: 0; z-index: 2147483647; background: rgba(15,23,42,.35); display: grid; place-items: center; }
+    .pdlg-card { width: min(380px, calc(100vw - 32px)); background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 50px rgba(15,23,42,.35); display: grid; gap: 10px; font-size: 13px; color: #1f2328; }
+    .pdlg-h { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 15px; }
+    .pdlg-h .x { margin-left: auto; }
+    .pdlg-q { font-weight: 600; }
+    .pdlg-v b { font-size: 34px; font-weight: 800; color: #15803d; }
+    .pdlg input[type=range] { width: 100%; accent-color: #16a34a; }
+    .pdlg-chips { display: flex; gap: 6px; }
+    .pdlg-note { font-size: 12px; }
+    .pdlg-step { min-height: 18px; font-size: 12px; color: #4338ca; }
+    .pdlg-btns { display: flex; justify-content: flex-end; gap: 8px; }
     .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eef2f7; font-size: 13px; display: grid; gap: 10px; }
     .side-q > * { margin: 0 !important; }
     /* Thông tin báo giá ở đầu thẻ */

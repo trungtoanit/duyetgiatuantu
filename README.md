@@ -62,6 +62,13 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### 💲 Set giá nhanh (báo giá Flexo)
+
+Trên trang báo giá Flexo, bình luận NVKD xin giá ("Sếp cho em xin báo giá đơn này") có nút **💲 Set giá** cạnh "Trả lời".
+Chọn % bán (thanh kéo, nút nhanh 20/25/30/35%) → extension làm ngay trên trang: **Lên PO → Giấy tấm** → với từng nhà
+cung cấp: kéo **% Deal**, bấm **Set deal cho BG** → đóng PO → bấm **Cập nhật** lưu báo giá → tải lại trang (F5).
+Đây là thao tác ghi vào CRM, chỉ chạy khi bấm xác nhận; dừng và báo lỗi nếu không tìm thấy nút/thanh kéo nào.
+
 ### ✨ Học từ mỗi lần gửi bình luận
 
 Mỗi lần bấm **Bình luận ngay** (câu hỏi viết sẵn) hoặc **Gửi bình luận** (gợi ý của Claude), extension lưu câu gợi ý gốc và
