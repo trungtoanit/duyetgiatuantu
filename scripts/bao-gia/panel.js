@@ -1760,8 +1760,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const q = renderCtx.quotes?.[qid] || { id: qid, code: document.title.match(/#(BG\d+)/)?.[1] };
     if (!q.code) return;
     // 💲 Set giá chỉ cho báo giá Flexo chưa chốt; 🖨 In báo giá → dán cho mọi báo giá
-    // Flexo (hoặc chưa rõ loại – báo giá mới chưa có dữ liệu) và chưa chốt
-    const canSet = (!q.kinds?.length || q.kinds.includes('flexo')) && !CLOSED.has(q.quoteStatus);
+    // Luôn hiện nút Set giá (loại hàng / tình trạng ghi nhận có thể chưa đúng); không có PO giấy tấm thì hộp Set giá tự báo
+    const canSet = true;
     // dữ liệu báo giá có thể tải sau → cập nhật ẩn/hiện nút Set giá đã gắn
     document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet ? '' : 'none'));
     // 💲 Set giá cạnh tiêu đề "Bình luận" (sau nút In báo giá)
