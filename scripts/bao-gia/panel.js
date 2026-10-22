@@ -3625,6 +3625,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     maybeAutoOpen();
     let saveTimer;
     root.querySelector('.side').addEventListener('click', onClick);
+    root.querySelector('.side').addEventListener(
+      'toggle',
+      (e) => {
+        if (e.target.matches?.('details.side-d')) lsSet('dgExplOpen', e.target.open ? '1' : '0');
+      },
+      true,
+    );
     // Thử giá Offset trong bảng Giải thích
     root.querySelector('.side').addEventListener('input', (e) => {
       const rg = e.target.closest?.('input.osim-range');
@@ -5086,7 +5093,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const busy = !!q && marginFetching.has(q.id);
     const oldFx = !!q && renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo, q);
     if (IS_TOP && q && ((kinds.includes('offset') && (offset == null || offsetStale(renderCtx.margins?.[q.code]))) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
-    const open = el.querySelector('details')?.open;
+    // Nhớ trạng thái bung / gập của khung Giải thích qua F5
+    const open = el.querySelector('details.side-d')?.open ?? lsGet('dgExplOpen') === '1';
     const collapsed = lsGet('dgSideCollapsed') === '1';
     el.hidden = false;
     el.classList.toggle('collapsed', collapsed);
