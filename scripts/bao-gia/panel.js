@@ -2352,7 +2352,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .it-code { font-weight: 800; font-size: 14px; }
     /* Cột mã khách hàng riêng: thẳng hàng giữa các dòng */
     .kh-occ { font-style: normal; display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: #64748b; color: #fff; font-size: 10px; font-weight: 800; vertical-align: middle; }
-    .it-cust .kh { margin-left: 0; font-size: 11px; padding: 0 7px; max-width: 100%; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+    .it-cust { display: flex; align-items: center; min-width: 0; } .it-cust .kh-occ { flex: none; }
+    .it-cust .kh { margin-left: 0; font-size: 11px; padding: 0 7px; max-width: 100%; min-width: 0; flex: 0 1 auto; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
     .it-no { text-align: right; color: #94a3b8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .it-main .kh, .it-main .knd, .it-main .tgt, .it-main .hip, .it-main .crd, .it-main .prm, .it-main .smp, .it-main .ctr, .it-main .nodep
       { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
