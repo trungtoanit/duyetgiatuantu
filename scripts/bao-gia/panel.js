@@ -1771,19 +1771,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // Câu mẫu đi kèm ảnh báo giá (chọn ngẫu nhiên, đổi xưng hô theo NVKD)
+  // Mặc định của bộ "Câu kèm ảnh báo giá" (sửa được trong tab 💬 Bộ câu hỏi). "Anh" = sếp tự xưng, {p} = cách gọi NVKD
   const PRICE_GIVE = [
-    'Anh cho em giá nhé',
-    'Anh duyệt giá này nhé',
-    'A tính giá này e báo khách nhé',
-    'A duyệt giá này nha em',
-    'A tính giá này em nhé',
+    'Anh cho {p} giá nhé',
+    'Anh duyệt giá này nhé {p}',
+    'Anh tính giá này {p} báo khách nhé',
+    'Anh duyệt giá này nha {p}',
+    'Anh tính giá này {p} nhé',
   ];
   function priceGiveText(q) {
     const p = addressFor(staffOf(q, renderCtx.comments?.[q?.id]), renderCtx.comments, renderCtx.quotes) || 'em';
-    let t = PRICE_GIVE[Math.floor(Math.random() * PRICE_GIVE.length)];
-    if (p === 'anh') t = t.replace(/^Anh\b/, 'Em').replace(/^A\b/, 'E'); // NVKD là "anh" → quản lý xưng "em"
-    if (p !== 'em') t = t.replace(/(^|\s)(em|e)(?=\s|$)/g, `$1${p}`);
-    return t;
+    const list = typeof qbank === 'function' ? qbank('priceGive') : PRICE_GIVE;
+    // fillP tự đổi xưng hô: gọi NVKD là "chị / anh" thì sếp xưng "em" (vd. "Em tính giá này chị báo khách nhé")
+    return fillP(list[Math.floor(Math.random() * list.length)], p);
   }
   const setTextarea = (ta, text) => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, text);
@@ -4172,6 +4172,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     { id: 'priceAsk', icon: '⏰', title: 'Quá 12 giờ chưa chốt', when: `Bình luận cuối đã quá ${FOLLOW_UP_HOURS} giờ (dưới ${MAX_FOLLOW_UP_DAYS} ngày), báo giá đã có giá, chưa chốt / chưa có đơn.`, def: PRICE_ASK },
     { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu hỏi của bộ 6 (khách hứa lên đơn), 7 (sếp đã cho giá), 9 (tái bản), 11 (quá 12 giờ chưa chốt) khi đã hơn 3 ngày chưa có phản hồi – vd. "35 ngày chưa có phản hồi, báo cáo lại nhé em." {d} = khoảng thời gian.', def: SILENT_LEAD },
     { id: 'reportBack', icon: '💤', title: 'Im lặng quá lâu / báo giá thất bại', when: `Bình luận cuối đã quá ${MAX_FOLLOW_UP_DAYS} ngày, hoặc báo giá Thất bại → chào lại khách.`, def: REPORT_BACK },
+    { id: 'priceGive', icon: '🖨️', title: 'Câu kèm ảnh báo giá (In báo giá → dán)', when: 'Bấm "🖨️ In báo giá → dán vào bình luận": câu viết kèm ảnh bảng báo giá (chọn ngẫu nhiên 1 câu). Không thuộc thứ tự ưu tiên câu hỏi.', def: PRICE_GIVE },
     { id: 'zalo', icon: '💬', title: 'Hỏi NVKD qua Zalo (tab Gợi ý chốt đơn)', when: 'Bấm 💬 ở 1 deal trong tab 🔥 Gợi ý chốt đơn – câu hỏi thăm đặt trước dòng deal (mỗi deal 1 lần, mỗi NVKD 1 tin / 30 phút).', def: ZALO_ASK },
   ];
   let QB = {}; // bản đã sửa (kv 'qbank')
@@ -6605,9 +6606,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const chat = lines
       .map((t) => `<div class="qr-b"><span class="qr-ava">👨‍💼</span><div class="qr-msg">${esc(selfFix(fillP(t, P, '5 ngày'), P))}</div></div>`)
       .join('');
-    const live = sel.id === 'zalo' || sel.id === 'silentLead' ? [] : (qaScanAll() || []).filter((x) => x.r.bank === sel.id).sort((a, b) => b.score - a.score);
-    const liveHtml = sel.id === 'zalo'
-      ? '<div class="muted">Bộ này dùng ở tab 🔥 Gợi ý chốt đơn (nút 💬 từng deal).</div>'
+    const live = sel.id === 'zalo' || sel.id === 'silentLead' || sel.id === 'priceGive' ? [] : (qaScanAll() || []).filter((x) => x.r.bank === sel.id).sort((a, b) => b.score - a.score);
+    const liveHtml = sel.id === 'zalo' || sel.id === 'priceGive'
+      ? `<div class="muted">${sel.id === 'zalo' ? 'Bộ này dùng ở tab 🔥 Gợi ý chốt đơn (nút 💬 từng deal).' : 'Bộ này dùng khi bấm 🖨️ In báo giá → dán vào bình luận.'}</div>`
       : sel.id === 'silentLead'
         ? '<div class="muted">Bộ này ghép phía trước câu hỏi của bộ 6, 7, 9, 11 khi đã hơn 3 ngày chưa có phản hồi (vd. &quot;35 ngày chưa có phản hồi, báo cáo lại nhé em.&quot;).</div>'
         : live.length
@@ -6620,7 +6621,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `<div class="qr"><div class="qr-h"><b>🔍 Review bộ câu hỏi</b>
         <span class="qr-ps">Gọi NVKD là:${['em', 'chị', 'anh'].map((x) => `<button class="qr-p${x === P ? ' on' : ''}" data-act="qa-p" data-p="${x}">${x}</button>`).join('')}</span></div>
       <div class="qr-cols"><div><div class="qa-lbl">💬 Tin nhắn sẽ hiện (${lines.length} câu)</div><div class="qr-chat">${chat}</div></div>
-        <div><div class="qa-lbl">📋 Báo giá đang khớp điều kiện (${sel.id === 'zalo' || sel.id === 'silentLead' ? '–' : live.length})</div>${liveHtml}</div></div></div>`;
+        <div><div class="qa-lbl">📋 Báo giá đang khớp điều kiện (${sel.id === 'zalo' || sel.id === 'silentLead' || sel.id === 'priceGive' ? '–' : live.length})</div>${liveHtml}</div></div></div>`;
   }
 
   function qaTab(admin) {
