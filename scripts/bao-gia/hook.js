@@ -40,9 +40,10 @@
     try {
       if (COLLECTOR_FRAME && f.contentWindow) f.contentWindow.print = () => {};
       const t = f.contentDocument?.body?.innerText || '';
-      const pct = t.match(/Đang bán\s*\((\d+(?:[.,]\d+)?)%\)/);
+      const pct = t.match(/Đang bán\s*\((-?\d+(?:[.,]\d+)?)%\)/);
+      const noPrice = !pct && /Đang bán\s*\(-?Infinity%\)/i.test(t); // báo giá chưa cho giá (giá 1 thùng 0đ)
       const code = t.match(/CHIẾT GIÁ\s*#?(BG\d+)/i);
-      if (!pct || !code || t === lastChiet) return;
+      if ((!pct && !noPrice) || !code || t === lastChiet) return;
       lastChiet = t;
       // Giá ở cột "Đang bán": lấy hàng "Giá 1 thùng" theo đúng vị trí cột
       let price = null;
@@ -57,10 +58,36 @@
           break;
         }
       }
+      // Bảng "Nguyên liệu": dòng Tổng → cột "1 thùng" (NVL 1 thùng) và "Thành tiền" (tổng NVL)
+      const vn = (x) => {
+        const m = String(x || '').replace(/[^\d,.-]/g, '');
+        return m ? Number(m.replace(/\./g, '').replace(',', '.')) || 0 : 0;
+      };
+      let nvlUnit = null;
+      let nvlTotal = null;
+      for (const tb of tables) {
+        const prev = tb.previousElementSibling?.innerText || tb.parentElement?.previousElementSibling?.innerText || '';
+        const rows = [...tb.rows];
+        const head = rows.find((r) => /Thành tiền/.test(r.innerText) && /Hạng mục/.test(r.innerText));
+        const sum = rows.find((r) => /^\s*Tổng/.test(r.cells[0]?.innerText || ''));
+        if (!head || !sum) continue;
+        if (!/Nguyên liệu/i.test(prev) && !rows.some((r) => /Giấy mặt|Giấy sóng/i.test(r.innerText))) continue;
+        // Dòng Tổng gộp ô đầu → lấy từ cuối: [..., 1 thùng, Thành tiền, Tỷ trọng]
+        const cells = [...sum.cells].map((c) => c.innerText.trim());
+        const money = cells.filter((x) => /đ\s*$/.test(x));
+        if (money.length >= 2) {
+          nvlUnit = vn(money[money.length - 2]);
+          nvlTotal = vn(money[money.length - 1]);
+        }
+        break;
+      }
       const val = (re) => (t.match(re)?.[1] || '').trim();
       emit('margin', {
         code: code[1].toUpperCase(),
-        pct: Number(pct[1].replace(',', '.')),
+        pct: pct ? Number(pct[1].replace(',', '.')) : null,
+        noPrice,
+        nvlUnit,
+        nvlTotal,
         price,
         spec: val(/Quy cách:\s*([^\n]+)/),
         qty: val(/Số lượng đặt:\s*([^\n]+)/),

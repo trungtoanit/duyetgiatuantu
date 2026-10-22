@@ -269,7 +269,7 @@
     })
     .catch(() => {});
 
-  const OFF_VER = 2; // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
+  const OFF_VER = 3; // 3: đọc thêm tổng Nguyên liệu + nhận bảng chiết giá 0đ // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
   const offsetStale = (m) => !Object.keys(m?.products || {}).length || m?.offVer !== OFF_VER;
   async function save({ kind, data }) {
     if (kind === 'debtUrl') {
@@ -339,7 +339,12 @@
       // Bản lưu cũ (khoá chỉ theo quy cách, offVer < 2) → bỏ, đọc lại từ đầu.
       if (cur.offVer !== OFF_VER) Object.assign(cur, { products: {}, offVer: OFF_VER });
       const spec = data.spec || 'sản phẩm';
-      cur.products[[spec, data.qty, data.price].filter(Boolean).join(' | ')] = { spec, pct: data.pct, price: data.price, qty: data.qty, reprint: data.reprint, at: data.at };
+      // Cùng quy cách + SL đọc lại (vd. đổi giá / về 0đ) → thay bản cũ, không giữ song song giá cũ
+      for (const [k, v] of Object.entries(cur.products)) if (v.spec === spec && String(v.qty) === String(data.qty)) delete cur.products[k];
+      cur.products[[spec, data.qty, data.price].filter(Boolean).join(' | ')] = {
+        spec, pct: data.pct, noPrice: !!data.noPrice, nvlUnit: data.nvlUnit ?? null, nvlTotal: data.nvlTotal ?? null,
+        price: data.price, qty: data.qty, reprint: data.reprint, at: data.at,
+      };
       cur.at = data.at;
       await kvMerge('margins', { [data.code]: cur });
     } else if (kind === 'ordersAll') {
@@ -3813,9 +3818,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
     const offs = Object.values(m.products || {});
+    const priced = offs.filter((x) => x.pct != null && !x.noPrice);
     return {
       flexo: flexoInfo(q),
-      offset: offs.length ? Math.min(...offs.map((x) => x.pct)) : null,
+      offset: priced.length ? Math.min(...priced.map((x) => x.pct)) : null,
+      offNoPrice: offs.length > 0 && !priced.length, // bảng chiết giá đang 0đ (chưa cho giá)
       offs: Object.entries(m.products || {}),
     };
   }
@@ -3825,8 +3832,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // (vd. BG26883: 10.900đ × 405 = 4,4 tr trong khi báo giá 47,4 tr).
   const numOf = (t) => Number(String(t || '').replace(/[^\d]/g, '')) || 0;
   function offsetDiff(q) {
-    const prods = Object.values(renderCtx.margins?.[q?.code]?.products || {});
+    const prods = Object.values(renderCtx.margins?.[q?.code]?.products || {}).filter((x) => x.pct != null && !x.noPrice);
     if (!prods.length) return null;
+    // Có tổng Nguyên liệu đọc thẳng từ bảng chiết giá → dùng số thật
+    if (prods.every((x) => x.nvlTotal > 0)) {
+      const sheetNvl = prods.reduce((a, x) => a + x.nvlTotal, 0);
+      const sheetVal = prods.reduce((a, x) => a + numOf(x.price) * numOf(x.qty), 0);
+      const amount = kindPart(q, 'offset', q?.amount);
+      const rows = prods.map((x) => ({ pct: x.pct, price: numOf(x.price), qty: numOf(x.qty), val: numOf(x.price) * numOf(x.qty), nvlUnit: x.nvlUnit, nvl: x.nvlTotal }));
+      const pct = sheetVal ? (1 - sheetNvl / sheetVal) * 100 : Math.min(...prods.map((x) => x.pct));
+      if (!amount) return { diff: sheetVal - sheetNvl, exact: true, sheet: true, rows, pct, nvlPre: sheetNvl, nvlPost: sheetNvl, vat: null, base: sheetVal };
+      const ratio = sheetVal ? amount / sheetVal : null;
+      const vat = ratio == null ? null : [0, 5, 8, 10].find((v) => Math.abs(ratio - (1 + v / 100)) <= 0.015) ?? null;
+      // SL trên bảng chiết giá khác đơn (không khớp VAT) → quy NVL theo tỉ lệ NVL ÷ giá của bảng
+      const nvlPost = vat != null ? sheetNvl * (1 + vat / 100) : sheetVal ? amount * (sheetNvl / sheetVal) : sheetNvl;
+      return { diff: amount - nvlPost, exact: vat != null, sheet: true, rows, pct, nvlPre: sheetNvl, nvlPost, vat, base: amount, part: amount !== q.amount };
+    }
     // Mỗi sản phẩm: NVL 1 thùng = giá 1 thùng × (1 − đang bán %) (vì đang bán % = 1 − NVL ÷ giá)
     const rows = prods.map((x) => {
       const price = numOf(x.price);
@@ -3856,7 +3877,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const r = (label, val, note = '', cls = '') => `<tr class="osteps${cls ? ` ${cls}` : ''}"><td>${label}</td><td></td><td>${val}</td><td class="num">${note}</td></tr>`;
     const pctTxt = `${Math.round(od.pct * 10) / 10}%`;
     const out = [];
-    if (od.exact) {
+    if (od.sheet) {
+      out.push(r('Tổng Nguyên liệu (đọc thẳng bảng chiết giá)', money(Math.round(od.nvlPre)), od.rows.map((x) => (x.nvlUnit ? `${money(x.nvlUnit)}/thùng` : '')).filter(Boolean).join(' · ')));
+      if (od.vat) out.push(r(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
+      else if (Math.round(od.nvlPost) !== Math.round(od.nvlPre)) out.push(r('NVL quy theo giá trị BG (SL bảng chiết giá khác đơn)', `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'theo tỉ lệ', 'warn-row'));
+    } else if (od.exact) {
       for (const x of od.rows) out.push(r(`NVL 1 thùng = ${money(x.price)} × (1 − ${x.pct}%)`, money(Math.round(x.nvlUnit)), `× ${x.qty.toLocaleString('vi-VN')}`));
       out.push(r('NVL trước VAT', money(Math.round(od.nvlPre))));
       out.push(r(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
@@ -4170,7 +4195,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
       ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>` : '') : ''}
-      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b>${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
+      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : marginParts(q).offNoPrice ? '<span class="warnx">⚠️ Chưa cho giá (bảng chiết giá 0đ)</span>' : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b>${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
       ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
