@@ -1407,7 +1407,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="pdlg-q">Bán bao nhiêu %?</div>
       <div class="pdlg-v"><b>${pct0}%</b></div>
       <input type="range" min="5" max="50" step="1" value="${pct0}">
-      <div class="pdlg-chips">${[20, 25, 30, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-chips">${[20, 22, 23, 25, 27, 28, 30, 32, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
       <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
       <div class="pdlg-step"></div>
       <div class="pdlg-btns"><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
@@ -3073,7 +3073,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .pdlg-q { font-weight: 600; }
     .pdlg-v b { font-size: 34px; font-weight: 800; color: #15803d; }
     .pdlg input[type=range] { width: 100%; accent-color: #16a34a; }
-    .pdlg-chips { display: flex; gap: 6px; align-items: center; }
+    .pdlg-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .pdlg-chips .act, .pdlg-btns .act { height: auto; padding: 4px 12px; }
     .pdlg-note { font-size: 12px; }
     .pdlg-step { min-height: 18px; font-size: 12px; color: #4338ca; }
