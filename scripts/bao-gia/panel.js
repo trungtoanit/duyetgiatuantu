@@ -339,8 +339,19 @@
       // Bản lưu cũ (khoá chỉ theo quy cách, offVer < 2) → bỏ, đọc lại từ đầu.
       if (cur.offVer !== OFF_VER) Object.assign(cur, { products: {}, offVer: OFF_VER }); // giữ cur.order (thứ tự sản phẩm)
       const spec = data.spec || 'sản phẩm';
+      // Bảng chiết giá đang mở trên trang báo giá mà giá 1 thùng KHÁC giá dòng sản phẩm đã lưu của báo giá
+      // → đang thử trong hộp "Tính giá offset" (chưa lưu) → không ghi đè số thật
+      if (IS_TOP && renderCtx.quotes?.[currentQuoteId()]?.code === data.code) {
+        const row = offRowFor(pageProductRows() || [], spec, data.qty);
+        const pr = String(data.price || '').replace(/[^\d]/g, '');
+        if (row && pr && !offNums(row).includes(pr)) {
+          cur.products[[spec, data.qty, data.price, 'draft'].join(' | ')] = { spec, pct: data.pct, price: data.price, qty: data.qty, nvlUnit: data.nvlUnit ?? null, nvlTotal: data.nvlTotal ?? null, draft: true, at: data.at };
+          await kvMerge('margins', { [data.code]: cur });
+          return;
+        }
+      }
       // Cùng quy cách + SL đọc lại (vd. đổi giá / về 0đ) → thay bản cũ, không giữ song song giá cũ
-      for (const [k, v] of Object.entries(cur.products)) if (v.spec === spec && String(v.qty) === String(data.qty)) delete cur.products[k];
+      for (const [k, v] of Object.entries(cur.products)) if (v.spec === spec && String(v.qty) === String(data.qty)) delete cur.products[k]; // gồm cả bản thử (draft)
       cur.products[[spec, data.qty, data.price].filter(Boolean).join(' | ')] = {
         spec, pct: data.pct, noPrice: !!data.noPrice, nvlUnit: data.nvlUnit ?? null, nvlTotal: data.nvlTotal ?? null,
         price: data.price, qty: data.qty, reprint: data.reprint, at: data.at,
@@ -4656,6 +4667,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Tóm tắt riêng từng loại: Flexo (còn lại sau giấy tấm) và Offset (đang bán %, thấp nhất trong các sản phẩm)
   // Sản phẩm Offset theo đúng thứ tự trên báo giá: khớp quy cách + SL với dòng sản phẩm đã ghi; chưa có thì theo lúc đọc
+  // So khớp 1 dòng sản phẩm trên trang với quy cách + SL (dùng chung)
+  const offNz = (x) => String(x || '').toLowerCase().replace(/[×✕*]/g, 'x').replace(/\s+/g, '');
+  const offNums = (t) => String(t).replace(/(\d)\.(?=\d{3}\b)/g, '$1').match(/\d+/g) || [];
+  function offRowFor(rows, spec, qty) {
+    const sp = offNz(spec);
+    const q = String(qty || '').replace(/[^\d]/g, '');
+    const has = (t) => {
+      if (!sp) return false;
+      if (offNz(t).includes(sp)) return true;
+      const sn = sp.match(/\d+/g) || [];
+      const rn = offNums(t);
+      return sn.length >= 2 && rn.some((_, k) => sn.every((v, j) => rn[k + j] === v));
+    };
+    return rows.find((t) => has(t) && (!q || offNums(t).includes(q))) || null;
+  }
   // Dòng sản phẩm của báo giá đang mở (đọc thẳng bảng sản phẩm trên trang) – ưu tiên hơn thứ tự đã lưu
   function pageProductRows() {
     if (!IS_TOP || !currentQuoteId()) return null;
@@ -4665,7 +4691,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return rows.length ? rows.map((tr) => tr.innerText.replace(/\s+/g, ' ').slice(0, 400)) : null;
   }
   function offEntries(m, code) {
-    const list = Object.entries(m?.products || {});
+    const list = Object.entries(m?.products || {}).filter(([, x]) => !x.draft); // bỏ bản thử trên ERP chưa lưu
     const live = code && renderCtx.quotes?.[currentQuoteId()]?.code === code ? pageProductRows() : null;
     const order = live || m?.order || [];
     if (live && code && state.ordDbg !== code) {
@@ -4771,7 +4797,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
-    const offs = Object.values(m.products || {});
+    const offs = Object.values(m.products || {}).filter((x) => !x.draft);
     const priced = offs.filter((x) => x.pct != null && !x.noPrice);
     // % Offset = (1 − NVL sau VAT ÷ giá trị BG phần Offset) × 100 – khớp với số NVL / chênh lệch hiện trên thẻ.
     // Chưa tính được NVL thì lấy "đang bán %" thấp nhất trong các sản phẩm.
