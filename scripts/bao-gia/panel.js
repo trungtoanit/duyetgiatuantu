@@ -1760,9 +1760,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const q = renderCtx.quotes?.[qid] || { id: qid, code: document.title.match(/#(BG\d+)/)?.[1] };
     if (!q.code) return;
     // 💲 Set giá chỉ cho báo giá Flexo chưa chốt; 🖨 In báo giá → dán cho mọi báo giá
-    const canSet = (q.kinds || []).includes('flexo') && !CLOSED.has(q.quoteStatus);
+    // Flexo (hoặc chưa rõ loại – báo giá mới chưa có dữ liệu) và chưa chốt
+    const canSet = (!q.kinds?.length || q.kinds.includes('flexo')) && !CLOSED.has(q.quoteStatus);
     // dữ liệu báo giá có thể tải sau → cập nhật ẩn/hiện nút Set giá đã gắn
-    document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet && !sp.parentElement.dataset.noask ? '' : 'none'));
+    document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet ? '' : 'none'));
+    // 💲 Set giá cạnh tiêu đề "Bình luận" (sau nút In báo giá)
+    const head = document.querySelector('.dg-printq');
+    if (head && !head.parentElement.querySelector('.dg-setprice-head')) {
+      const b = document.createElement('span');
+      b.className = 'dg-setprice-head';
+      b.textContent = '💲 Set giá';
+      b.title = 'Set giá cho báo giá Flexo: chọn % → Lên PO giấy tấm, kéo % Deal từng nhà cung cấp, lưu báo giá';
+      b.setAttribute('style', 'display:inline-block;margin-left:8px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:3px 12px');
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openPriceDialog(renderCtx.quotes?.[qid] || q);
+      });
+      head.after(b);
+    }
+    document.querySelectorAll('.dg-setprice-head').forEach((b) => (b.style.display = canSet ? 'inline-block' : 'none'));
     for (const one of document.querySelectorAll('.ant-comment')) {
       const content = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
       if (!content) continue;
@@ -1784,8 +1801,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const actions = ownActions || topContent?.querySelector(':scope > ul.ant-comment-actions');
       if (!actions || actions.querySelector('.dg-printq-reply')) continue;
       const li = document.createElement('li');
-      if (!canSet || !isAsk) li.style.display = 'none';
-      if (!isAsk) li.dataset.noask = '1';
+      if (!canSet) li.style.display = 'none';
       li.innerHTML = '<span class="dg-setprice" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">💲 Set giá</span>';
       li.addEventListener('click', (e) => {
         e.preventDefault();
