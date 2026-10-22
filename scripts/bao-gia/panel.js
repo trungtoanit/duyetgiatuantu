@@ -1700,6 +1700,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return r < 0 ? null : { l, t, r: r + 1, b: b + 1 };
   }
+  // Watermark chéo "TUAN TU PACKAGING" lặp khắp ảnh báo giá (mờ, không che chữ)
+  function drawWatermark(ctx, w, h) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const fs = Math.round(w / 16);
+    ctx.font = `900 ${fs}px Arial, Helvetica, sans-serif`;
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.07)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(-Math.PI / 6);
+    const text = 'TUAN TU PACKAGING';
+    const stepX = ctx.measureText(text).width + fs * 2;
+    const stepY = fs * 4;
+    const R = Math.hypot(w, h);
+    for (let y = -R; y <= R; y += stepY)
+      for (let x = -R + ((Math.round(y / stepY) % 2) * stepX) / 2; x <= R; x += stepX) ctx.fillText(text, x, y);
+    ctx.restore();
+  }
   async function docToPng(doc, scale = 2) {
     const body = doc.body;
     // Báo giá chỉ 1 dòng sản phẩm → chụp 100% (chữ to, dễ đọc); nhiều dòng → thu 80% cho vừa trang
@@ -1774,6 +1793,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.scale(scale, scale);
     ctx.drawImage(img, -cut.x, -cut.y);
+    drawWatermark(ctx, canvas.width, canvas.height);
     const png = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     return { png, blurred };
   }
