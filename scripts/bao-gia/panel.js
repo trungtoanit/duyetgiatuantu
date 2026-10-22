@@ -3074,7 +3074,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .osim-range { flex: 1; accent-color: #7c3aed; } .osim-rv { min-width: 120px; text-align: right; color: #7c2d12; }
     .osim-hint { font-size: 11.5px; color: #6d28d9; background: #f5f3ff; } .osim-reset { border: 1px solid #c4b5fd; background: #fff; color: #6d28d9; border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
     .osim-diff { font-size: 17px; font-weight: 900; } .osim-diff.neg { color: #b91c1c; }
-    .osim-dpct { font-size: 17px; font-weight: 900; color: #047857; }
+    .osim-dpct { font-size: 17px; font-weight: 900; color: #047857; padding: 2px 8px; border-radius: 8px; display: inline-block; }
+    .osim-dpct.lv-green { color: #047857; }
+    .osim-dpct.lv-blue { color: #1d4ed8; animation: dpBlue 2s ease-in-out infinite; }
+    .osim-dpct.lv-orange { color: #c2410c; animation: dpOrange 1.2s ease-in-out infinite; }
+    .osim-dpct.lv-red { color: #fff; animation: dpRed .7s ease-in-out infinite; }
+    @keyframes dpBlue { 0%, 100% { background: transparent; } 50% { background: #dbeafe; } }
+    @keyframes dpOrange { 0%, 100% { background: #fff7ed; } 50% { background: #fdba74; } }
+    @keyframes dpRed { 0%, 100% { background: #dc2626; } 50% { background: #fca5a5; color: #7f1d1d; } }
     .learn-hint { font-size: 12px; color: #6b21a8; margin-top: 4px; }
     .learn-use { border: 1px dashed #c4b5fd; background: #faf5ff; color: #6b21a8; border-radius: 8px; padding: 1px 8px; font: inherit; font-style: italic; cursor: pointer; text-align: left; }
     .learn-use:hover { background: #ede9fe; }
@@ -4707,7 +4714,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     set('.osim-bg', money(Math.round(bg)));
     set('.osim-diff', `${diff < 0 ? '−' : ''}${trM(Math.abs(diff))}`);
     tb.querySelectorAll('.osim-diff').forEach((e) => e.classList.toggle('neg', diff < 0));
-    set('.osim-dpct', bg ? `${Math.round((diff / bg) * 1000) / 10}%` : '–');
+    const dp = bg ? Math.round((diff / bg) * 1000) / 10 : null;
+    set('.osim-dpct', dp != null ? `${dp}%` : '–');
+    // Màu theo mức: ≤20% đỏ chớp mạnh · ≤30% cam chớp · ≤35% xanh dương chớp nhẹ · còn lại xanh lá
+    const lv = dp == null ? '' : dp <= 20 ? 'lv-red' : dp <= 30 ? 'lv-orange' : dp <= 35 ? 'lv-blue' : 'lv-green';
+    tb.querySelectorAll('.osim-dpct').forEach((e) => (e.className = `osim-dpct ${lv}`));
     // Tỷ lệ NVL / đơn giá hiện tại (trước VAT)
     let nv = 0;
     let pv = 0;
