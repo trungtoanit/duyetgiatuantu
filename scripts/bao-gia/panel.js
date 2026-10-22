@@ -1297,14 +1297,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return modal;
   }
   // Lịch sử deal của 1 báo giá: chưa có / cũ hơn 1 giờ → mở PO trong khung ẩn (chỉ đọc) để lấy
+  // Mở PO giấy tấm trong khung ẩn (chỉ đọc): đọc tổng PO từng nhà cung cấp (margins.flexo) + lịch sử deal
   async function fetchDealHist(q) {
-    let list = null;
     await loadInFrame(q.id, undefined, undefined, async (f) => {
-      const modal = await openPoGiayTam(f.contentDocument);
-      await waitFor(() => /LS thay đổi deal/i.test(modal.innerText), 6000, 300);
-      list = await saveDealHist(modal, q.code);
+      await readFlexoCost(f, q);
     });
-    return list;
+    renderCtx.margins = await kvGet('margins');
+    return (await kvGet('dealHist'))[q.code]?.list || null;
+  }
+  // Giấy tấm Flexo của 1 báo giá: tổng PO (chỉ NCC giấy của dòng Flexo) + thu về; dùng được cả khi BG còn 0đ
+  function flexoPaper(q) {
+    const fi = flexoInfo(q);
+    if (fi) return { paper: fi.best.total, code: fi.best.code, base: fi.base, diff: fi.diff, rest: fi.rest };
+    const fx = renderCtx.margins?.[q?.code]?.flexo;
+    if (!fx?.suppliers?.length) return null;
+    const fxSup = kindTotalsOf(q)?.flexoSup?.length ? kindTotalsOf(q).flexoSup : q?.kindSup?.flexo || [];
+    const own = fxSup.length ? fx.suppliers.filter((x) => fxSup.includes(x.code)) : [];
+    const sups = own.length ? own : fx.suppliers;
+    const paper = sups.reduce((a, x) => a + (x.total || 0), 0);
+    return { paper, code: sups.map((x) => x.code).join(' + '), base: 0, diff: -paper, rest: null };
   }
 
   // Kéo thanh "% Deal" (antd Slider) tới đúng giá trị: phím mũi tên trên tay kéo, không ăn thì bấm thẳng vào thanh
@@ -1416,18 +1427,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     root.append(box);
     const range = box.querySelector('input');
     // Tổng mua giấy tấm / tổng thu về / chênh lệch (theo PO đã đọc) + ước tính theo % đang chọn
-    const fx = flexoInfo(q);
     const sumEl = box.querySelector('.pdlg-sum');
+    let poLoading = true;
     const renderSum = () => {
-      if (!fx) return (sumEl.innerHTML = '<div class="muted">Chưa có số liệu giấy tấm (PO) của báo giá này – mở thẻ bên phải để tính.</div>');
+      const fx = flexoPaper(q);
+      if (!fx)
+        return (sumEl.innerHTML = poLoading
+          ? '<div class="muted"><span class="spinner"></span> Đang mở PO ẩn để đọc tổng giấy tấm…</div>'
+          : '<div class="muted">Không đọc được giấy tấm (PO) của báo giá này.</div>');
       const pct = Number(range.value);
-      const estBase = fx.best.total / (1 - pct / 100);
+      const estBase = fx.paper / (1 - pct / 100);
       sumEl.innerHTML = `<div class="ps-grid">
-          <div class="ps-t"><span>Mua giấy tấm</span><b>${trM(fx.best.total)}</b><small>${esc(fx.best.code)}</small></div>
-          <div class="ps-t"><span>Thu về (BG Flexo)</span><b>${trM(fx.base)}</b><small>hiện tại</small></div>
-          <div class="ps-t ${fx.diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${fx.diff < 0 ? '−' : '+'}${trM(Math.abs(fx.diff))}</b><small>${fx.rest != null ? `${fx.rest}%` : 'PO > BG'}</small></div>
+          <div class="ps-t"><span>Mua giấy tấm</span><b>${trM(fx.paper)}</b><small>${esc(fx.code)}</small></div>
+          <div class="ps-t"><span>Thu về (BG Flexo)</span><b>${fx.base ? trM(fx.base) : '0đ'}</b><small>${fx.base ? 'hiện tại' : 'chưa cho giá'}</small></div>
+          <div class="ps-t ${fx.diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${fx.diff < 0 ? '−' : '+'}${trM(Math.abs(fx.diff))}</b><small>${fx.rest != null ? `${fx.rest}%` : fx.base ? 'PO > BG' : 'hiện tại'}</small></div>
         </div>
-        <div class="ps-est">Bán <b>${pct}%</b> → thu về ≈ <b>${trM(estBase)}</b>, chênh lệch ≈ <b class="pos">+${trM(estBase - fx.best.total)}</b> <span class="muted">(ước tính = giấy tấm ÷ (1 − ${pct}%))</span></div>`;
+        <div class="ps-est">Bán <b>${pct}%</b> → thu về ≈ <b>${trM(estBase)}</b>, chênh lệch ≈ <b class="pos">+${trM(estBase - fx.paper)}</b> <span class="muted">(ước tính = giấy tấm ÷ (1 − ${pct}%))</span></div>`;
     };
     const sync = () => {
       box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
@@ -1451,7 +1466,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     kvGet('dealHist').then(async (all) => {
       const cached = all[q.code];
       if (cached) showHist(cached.list, `Lúc ${new Date(cached.at).toLocaleString('vi-VN')}`);
-      if (!cached || Date.now() - cached.at > 3600e3) {
+      const needPo = !flexoPaper(q);
+      if (!needPo) {
+        poLoading = false;
+        renderSum();
+      }
+      if (!cached || Date.now() - cached.at > 3600e3 || needPo) {
         if (!cached) histBody.innerHTML = '<span class="spinner"></span> Đang mở PO ẩn để đọc lịch sử…';
         try {
           const list = await fetchDealHist(q);
@@ -1460,6 +1480,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         } catch (err) {
           if (!cached) showHist(null, `Không đọc được: ${err.message}`);
         }
+        poLoading = false;
+        renderSum();
       }
     });
     box.addEventListener('click', async (e) => {
