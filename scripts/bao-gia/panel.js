@@ -1260,6 +1260,53 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return null;
   };
 
+  // Mục "LS thay đổi deal" trong modal Tạo PO:
+  // "10:03, 22/10/2026: Nguyễn Trung Toán thay đổi deal từ 25% thành 25% LT | LẬP THẮNG - #BG26936 (5.000 thùng…) - Giá trị 22.107.600đ"
+  const DEAL_LINE_RE = /^(\d{1,2}:\d{2}),\s*(\d{1,2}\/\d{1,2}\/\d{4}):\s*(.+?)\s+thay đổi deal từ\s*([\d.,]+)%\s*thành\s*([\d.,]+)%\s*(\S+)\s*\|\s*(.+?)\s+-\s+#(BG\d+)\s*(?:\((.*)\))?\s*-\s*Giá trị\s*([\d.]+)\s*đ/i;
+  function scrapeDealHist(modal) {
+    const txt = modal?.innerText || '';
+    const i = txt.search(/LS thay đổi deal/i);
+    if (i < 0) return null;
+    const lines = txt.slice(i).split('\n').map((l) => l.trim()).filter(Boolean);
+    const out = [];
+    for (const l of lines) {
+      const m = l.match(DEAL_LINE_RE);
+      if (!m) continue;
+      out.push({ time: m[1], date: m[2], by: m[3], from: Number(m[4].replace(',', '.')), to: Number(m[5].replace(',', '.')), sup: m[6], supName: m[7].trim(), code: m[8].toUpperCase(), name: (m[9] || '').trim(), value: Number(m[10].replace(/\./g, '')) });
+    }
+    return out;
+  }
+  async function saveDealHist(modal, code) {
+    const list = code && scrapeDealHist(modal);
+    if (!list) return null;
+    await kvMerge('dealHist', { [code]: { at: Date.now(), list } }).catch(() => {});
+    return list;
+  }
+  // Mở "Lên PO → Giấy tấm" trong 1 document (trang hoặc khung ẩn) → trả về modal "Tạo PO cho báo giá"
+  async function openPoGiayTam(doc) {
+    const vis = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
+    const poBtn = [...doc.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lên PO');
+    if (!poBtn) throw new Error('Không thấy nút "Lên PO" trên trang.');
+    for (const t of ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click']) poBtn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+    const item = await waitFor(() => [...doc.querySelectorAll('.ant-dropdown .ant-dropdown-menu-item')].find((li) => li.innerText.trim() === 'Giấy tấm'), 4000);
+    if (!item) throw new Error('Không thấy mục "Giấy tấm" trong Lên PO.');
+    (item.querySelector('.ant-dropdown-menu-title-content > span') || item).click();
+    const modal = await waitFor(() => vis().find((m) => /Tạo PO cho báo giá/.test(m.innerText)), 10000);
+    if (!modal) throw new Error('Không mở được "Tạo PO cho báo giá".');
+    await sleep(1500);
+    return modal;
+  }
+  // Lịch sử deal của 1 báo giá: chưa có / cũ hơn 1 giờ → mở PO trong khung ẩn (chỉ đọc) để lấy
+  async function fetchDealHist(q) {
+    let list = null;
+    await loadInFrame(q.id, undefined, undefined, async (f) => {
+      const modal = await openPoGiayTam(f.contentDocument);
+      await waitFor(() => /LS thay đổi deal/i.test(modal.innerText), 6000, 300);
+      list = await saveDealHist(modal, q.code);
+    });
+    return list;
+  }
+
   // Kéo thanh "% Deal" (antd Slider) tới đúng giá trị: phím mũi tên trên tay kéo, không ăn thì bấm thẳng vào thanh
   async function setDealSlider(modal, pct) {
     const handle = modal.querySelector('.ant-slider-handle');
@@ -1300,15 +1347,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   async function runSetPrice(q, pct, step) {
     step('Mở Lên PO → Giấy tấm…');
-    const poBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lên PO');
-    if (!poBtn) throw new Error('Không thấy nút "Lên PO" trên trang.');
-    for (const t of ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click']) poBtn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
-    const item = await waitFor(() => [...document.querySelectorAll('.ant-dropdown .ant-dropdown-menu-item')].find((li) => li.innerText.trim() === 'Giấy tấm'), 4000);
-    if (!item) throw new Error('Không thấy mục "Giấy tấm" trong Lên PO.');
-    (item.querySelector('.ant-dropdown-menu-title-content > span') || item).click();
-    const modal = await waitFor(() => visModalsTop().find((m) => /Tạo PO cho báo giá/.test(m.innerText)), 10000);
-    if (!modal) throw new Error('Không mở được "Tạo PO cho báo giá".');
-    await sleep(1500);
+    const modal = await openPoGiayTam(document);
+    saveDealHist(modal, q.code);
     const chips = [];
     for (const b of modal.querySelectorAll('button.ant-btn')) {
       const t = b.innerText.trim();
@@ -1362,7 +1402,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const pct0 = Number(lsGet('dgDealPct')) || 25;
     const box = document.createElement('div');
     box.className = 'pdlg';
-    box.innerHTML = `<div class="pdlg-card">
+    box.innerHTML = `<div class="pdlg-wrap"><div class="pdlg-hist"><div class="ph-h">📜 Lịch sử thay đổi deal</div><div class="ph-body muted">Đang tải…</div></div><div class="pdlg-card">
       <div class="pdlg-h">💲 Set giá ${esc(q.code)} <span class="muted">– Flexo</span><button class="x" data-p="close">×</button></div>
       <div class="pdlg-q">Bán bao nhiêu %?</div>
       <div class="pdlg-v"><b>${pct0}%</b></div>
@@ -1371,7 +1411,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
       <div class="pdlg-step"></div>
       <div class="pdlg-btns"><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
-    </div>`;
+    </div></div>`;
     root.append(box);
     const range = box.querySelector('input');
     const sync = () => {
@@ -1379,6 +1419,32 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%`;
     };
     range.addEventListener('input', sync);
+    // Lịch sử deal (cột trái): bấm % ở 1 dòng → dùng mức đó
+    const histBody = box.querySelector('.ph-body');
+    const showHist = (list, note = '') => {
+      if (!list?.length) return (histBody.innerHTML = `<span class="muted">${note || 'Chưa có lịch sử thay đổi deal.'}</span>`);
+      histBody.innerHTML = `${note ? `<div class="muted ph-note">${esc(note)}</div>` : ''}${list
+        .slice(0, 30)
+        .map((x) => `<div class="ph-row${x.code === q.code ? ' me' : ''}">
+          <div class="ph-top"><span class="ph-date">${esc(x.time)} ${esc(x.date)}</span><span class="ph-sup" title="${esc(x.supName)}">${esc(x.sup)}</span>
+            <button class="ph-pct" data-v="${x.to}" title="Dùng mức ${x.to}%">${x.from}% → <b>${x.to}%</b></button></div>
+          <div class="ph-bg"><b>#${esc(x.code)}</b> ${esc(x.name)} · <b>${money(x.value)}</b></div></div>`)
+        .join('')}`;
+    };
+    kvGet('dealHist').then(async (all) => {
+      const cached = all[q.code];
+      if (cached) showHist(cached.list, `Lúc ${new Date(cached.at).toLocaleString('vi-VN')}`);
+      if (!cached || Date.now() - cached.at > 3600e3) {
+        if (!cached) histBody.innerHTML = '<span class="spinner"></span> Đang mở PO ẩn để đọc lịch sử…';
+        try {
+          const list = await fetchDealHist(q);
+          if (list) showHist(list, 'Vừa cập nhật');
+          else if (!cached) showHist(null, 'Không đọc được lịch sử deal.');
+        } catch (err) {
+          if (!cached) showHist(null, `Không đọc được: ${err.message}`);
+        }
+      }
+    });
     box.addEventListener('click', async (e) => {
       const v = e.target.closest('[data-v]')?.dataset.v;
       if (v) {
@@ -1614,6 +1680,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     if (!modal) return;
     await sleep(1200);
+    saveDealHist(modal, q?.code);
     const readTotal = () => Number((modal.innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
     const chips = [];
     for (const b of modal.querySelectorAll('button.ant-btn')) {
@@ -2932,6 +2999,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-who { font-size: 11px; color: #64748b; }
     /* 💲 Set giá */
     .pdlg { position: fixed; inset: 0; z-index: 2147483647; background: rgba(15,23,42,.35); display: grid; place-items: center; }
+    .pdlg-wrap { display: flex; gap: 12px; align-items: stretch; max-width: calc(100vw - 32px); max-height: calc(100vh - 40px); }
+    .pdlg-hist { width: min(560px, calc(100vw - 440px)); background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 20px 50px rgba(15,23,42,.35); overflow: auto; font-size: 12px; }
+    .ph-h { font-weight: 800; font-size: 14px; margin-bottom: 8px; }
+    .ph-note { margin-bottom: 6px; }
+    .ph-row { border: 1px solid #eef2f7; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
+    .ph-row.me { border-color: #86efac; background: #f0fdf4; }
+    .ph-top { display: flex; align-items: center; gap: 8px; }
+    .ph-date { color: #64748b; font-variant-numeric: tabular-nums; }
+    .ph-sup { font-weight: 700; color: #1d4ed8; }
+    .ph-pct { margin-left: auto; border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; border-radius: 999px; padding: 0 8px; cursor: pointer; font: inherit; }
+    .ph-pct:hover { background: #16a34a; color: #fff; }
+    .ph-bg { margin-top: 2px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    @media (max-width: 900px) { .pdlg-wrap { flex-direction: column-reverse; overflow: auto; } .pdlg-hist { width: auto; } }
     .pdlg-card { width: min(380px, calc(100vw - 32px)); background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 50px rgba(15,23,42,.35); display: grid; gap: 10px; font-size: 13px; color: #1f2328; }
     .pdlg-h { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 15px; }
     .pdlg-h .x { margin-left: auto; }
