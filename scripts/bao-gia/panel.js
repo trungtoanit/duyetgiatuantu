@@ -1706,7 +1706,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const fs = Math.round(w / 16);
     ctx.font = `900 ${fs}px Arial, Helvetica, sans-serif`;
-    ctx.fillStyle = 'rgba(220, 38, 38, 0.07)';
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.045)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.translate(w / 2, h / 2);
