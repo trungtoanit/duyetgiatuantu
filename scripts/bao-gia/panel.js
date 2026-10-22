@@ -4702,18 +4702,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Tính lại bảng khi thử giá (chạy trực tiếp trên DOM, không vẽ lại thẻ)
   function osimCalc(tb) {
     if (!tb) return;
-    const vat = Number(tb.dataset.vat) || 0;
-    const nvlPost = Number(tb.dataset.nvlpost) || 0;
+    // k = giá trị BG ÷ tổng bảng chiết giá (≈ 1 + VAT) → quy mọi số về giá trị BG; % = 1 − NVL ÷ thành tiền (cùng 1 công thức với thanh kéo)
+    const k = Number(tb.dataset.k) || 1;
     let sumTT = 0;
+    let nvlSum = 0;
     for (const tr of tb.querySelectorAll('tr.osim-r')) {
       const inp = tr.querySelector('input.osim');
       if (!inp) {
         sumTT += Number(tr.dataset.tt) || 0;
+        nvlSum += Number(tr.dataset.nvl) || 0;
         continue;
       }
       const price = numOf(inp.value);
       const tt = price * Number(inp.dataset.qty);
       sumTT += tt;
+      nvlSum += Number(inp.dataset.nvl) || 0;
       tr.querySelector('.osim-tt').textContent = tt ? money(tt) : '–';
       const pc = tr.querySelector('.osim-pct');
       const pct = tt ? Math.round((1 - Number(inp.dataset.nvl) / tt) * 1000) / 10 : null;
@@ -4721,14 +4724,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       pc.className = `osim-pct ${pct != null ? pctCls(pct) : ''}`;
       inp.classList.toggle('chg', price !== Number(inp.dataset.orig));
     }
-    const bg = sumTT * (1 + vat / 100);
-    const diff = bg - nvlPost;
+    const bg = sumTT * k;
+    const diff = (sumTT - nvlSum) * k;
     const set = (sel, v) => tb.querySelectorAll(sel).forEach((e) => (e.textContent = v));
     set('.osim-sumtt', money(Math.round(sumTT)));
     set('.osim-bg', money(Math.round(bg)));
     set('.osim-diff', `${diff < 0 ? '−' : ''}${trM(Math.abs(diff))}`);
     tb.querySelectorAll('.osim-diff').forEach((e) => e.classList.toggle('neg', diff < 0));
-    const dp = bg ? Math.round((diff / bg) * 1000) / 10 : null;
+    const dp = sumTT ? Math.round((1 - nvlSum / sumTT) * 1000) / 10 : null;
     set('.osim-dpct', dp != null ? `${dp}%` : '–');
     // Màu theo mức: ≤20% đỏ chớp mạnh · ≤30% cam chớp · ≤35% xanh dương chớp nhẹ · còn lại xanh lá
     const lv = dp == null ? '' : dp <= 20 ? 'lv-red' : dp <= 30 ? 'lv-orange' : dp <= 35 ? 'lv-blue' : 'lv-green';
@@ -4740,8 +4743,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       nv += Number(ip.dataset.nvl);
       pv += numOf(ip.value) * Number(ip.dataset.qty);
     }
-    const ratio = pv ? Math.round((nv / pv) * 1000) / 10 : null;
-    const sell = ratio != null ? Math.round((100 - ratio) * 10) / 10 : null;
+    const sell = dp;
+    const ratio = sell != null ? Math.round((100 - sell) * 10) / 10 : null;
     set('.osim-rv', ratio != null ? `bán ${sell}% · NVL ${ratio}%` : '');
     const rg = tb.querySelector('input.osim-range');
     if (rg && sell != null && root.activeElement !== rg && !rg.matches(':active')) rg.value = sell;
@@ -5203,7 +5206,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const priceTd = canSim
         ? `<td><input class="osim${pv !== p0 ? ' chg' : ''}" inputmode="numeric" data-code="${esc(q.code)}" data-key="${esc(key)}" data-qty="${qty}" data-nvl="${x.nvlTotal}" data-orig="${p0}" value="${pv.toLocaleString('vi-VN')}" title="Sửa giá 1 thùng để thử – giá gốc ${money(p0)}"></td>`
         : `<td>${esc(x.price || '')}</td>`;
-      return `<tr class="osim-r"${canSim ? '' : ` data-tt="${p0 * qty}"`}><td>Offset · ${esc(x.spec || key)}</td><td>${esc(x.qty || '')}</td>${priceTd}${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}${nvlCol ? `<td class="num"><span class="osim-tt">${tt ? money(tt) : '–'}</span></td>` : ''}<td class="num"><b class="osim-pct ${pct != null ? pctCls(pct) : ''}">${pct ?? '–'}${pct != null ? '%' : ''}</b></td></tr>`;
+      return `<tr class="osim-r"${canSim ? '' : ` data-tt="${p0 * qty}" data-nvl="${x.nvlTotal || 0}"`}><td>Offset · ${esc(x.spec || key)}</td><td>${esc(x.qty || '')}</td>${priceTd}${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}${nvlCol ? `<td class="num"><span class="osim-tt">${tt ? money(tt) : '–'}</span></td>` : ''}<td class="num"><b class="osim-pct ${pct != null ? pctCls(pct) : ''}">${pct ?? '–'}${pct != null ? '%' : ''}</b></td></tr>`;
     }).join('') +
       (od ? offsetSteps(q, od, nvlCol) : '');
     const fxRows = fx
@@ -5218,7 +5221,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá (${money(fx.base)}) <b>${trM(-fx.diff)}</b> – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
-      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-vat="${od.vat || 0}" data-nvlpost="${Math.round(od.nvlPost)}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint"><div class="osim-sl">🎚️ % bán (kéo phải = bán cao hơn): <span class="osim-rw"><span class="osim-bub"></span><input type="range" class="osim-range" data-code="${esc(q.code)}" min="5" max="70" step="0.5" value="${(() => {
+      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-k="${(() => { const sv = od.rows.reduce((a, x) => a + (x.val || 0), 0); return sv ? od.base / sv : 1; })()}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint"><div class="osim-sl">🎚️ % bán (kéo phải = bán cao hơn): <span class="osim-rw"><span class="osim-bub"></span><input type="range" class="osim-range" data-code="${esc(q.code)}" min="5" max="70" step="0.5" value="${(() => {
         const rows = offs.map(([k, x]) => ({ n: x.nvlTotal, p: (simV[k] ?? numOf(x.price)) * numOf(x.qty) })).filter((r) => r.n && r.p);
         const a = rows.reduce((t, r) => t + r.n, 0);
         const b2 = rows.reduce((t, r) => t + r.p, 0);
