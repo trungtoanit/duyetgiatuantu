@@ -1450,7 +1450,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       renderSum();
     };
     renderSum();
-    range.addEventListener('input', sync);
+    // Tính lại khi kéo: nghe nhiều sự kiện + dò giá trị định kỳ (bộ gõ / trang có thể chặn sự kiện "input")
+    let lastV = range.value;
+    const onMove = () => {
+      if (range.value === lastV) return;
+      lastV = range.value;
+      sync();
+    };
+    for (const ev of ['input', 'change', 'pointermove', 'pointerup', 'mousemove', 'mouseup', 'keyup', 'touchmove']) range.addEventListener(ev, onMove);
+    const poll = setInterval(() => (box.isConnected ? onMove() : clearInterval(poll)), 120);
     // Lịch sử deal (cột trái): bấm % ở 1 dòng → dùng mức đó
     const histBody = box.querySelector('.ph-body');
     const showHist = (list, note = '') => {
