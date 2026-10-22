@@ -1716,20 +1716,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const canSet = (q.kinds || []).includes('flexo') && !CLOSED.has(q.quoteStatus);
     // dữ liệu báo giá có thể tải sau → cập nhật ẩn/hiện nút Set giá đã gắn
     document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet ? '' : 'none'));
-    for (const cm of document.querySelectorAll('.ant-comment')) {
-      const content = cm.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
-      const actions = content?.querySelector(':scope > ul.ant-comment-actions');
-      if (!actions || actions.querySelector('.dg-printq-reply')) continue;
+    for (const one of document.querySelectorAll('.ant-comment')) {
+      const content = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+      if (!content) continue;
       const text = content.querySelector('.ant-comment-content-detail')?.innerText || '';
       if (!PRICE_ASK_RE.test(text)) continue;
       // chỉ bình luận của NVKD (không gắn vào câu "E cho chị giá nhé" của chính quản lý)
       const author = content.querySelector('.ant-comment-content-author-name')?.innerText.trim() || '';
       if (author && author.startsWith(meName)) continue;
       // chỉ luồng có nhãn mã của báo giá đang mở
-      let top = cm;
+      let top = one;
       while (top.parentElement?.closest('.ant-comment')) top = top.parentElement.closest('.ant-comment');
       const topContent = top.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
       if (![...(topContent?.querySelectorAll('.ant-tag') || [])].some((t) => t.textContent.trim() === q.code)) continue;
+      // Câu trả lời trong luồng không có hàng "Trả lời" riêng → gắn nút vào hàng "Trả lời" của bình luận gốc
+      const ownActions = content.querySelector(':scope > ul.ant-comment-actions');
+      const cm = ownActions ? one : top;
+      const actions = ownActions || topContent?.querySelector(':scope > ul.ant-comment-actions');
+      if (!actions || actions.querySelector('.dg-printq-reply')) continue;
       const li = document.createElement('li');
       if (!canSet) li.style.display = 'none';
       li.innerHTML = '<span class="dg-setprice" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">💲 Set giá</span>';
