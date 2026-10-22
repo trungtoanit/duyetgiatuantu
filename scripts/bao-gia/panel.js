@@ -1249,7 +1249,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Bình luận NVKD xin giá ("Sếp cho em xin báo giá đơn này") → nút "💲 Set giá" cạnh "Trả lời".
   // Chọn % bán → ngay trên trang: Lên PO → Giấy tấm → từng nhà cung cấp: kéo % Deal, bấm "Set deal cho BG"
   // → đóng PO → bấm "Cập nhật" lưu báo giá → F5. Chỉ chạy khi quản lý bấm xác nhận.
-  const PRICE_ASK_RE = /xin\s*(lại\s*)?(báo\s*)?giá|cho\s*(em|chị|anh|e|c)\s*(xin\s*)?(lại\s*)?giá/i;
+  const PRICE_ASK_RE = /xin\s*(lại\s*)?(báo\s*|đơn\s*)?giá|cho\s*(em|chị|anh|e|c)\s*(xin\s*)?(lại\s*)?(đơn\s*)?giá/i;
   const visModalsTop = () => [...document.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
   const waitFor = async (fn, ms = 8000, gap = 200) => {
     for (let t = 0; t < ms; t += gap) {
@@ -1715,15 +1715,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // 💲 Set giá chỉ cho báo giá Flexo chưa chốt; 🖨 In báo giá → dán cho mọi báo giá
     const canSet = (q.kinds || []).includes('flexo') && !CLOSED.has(q.quoteStatus);
     // dữ liệu báo giá có thể tải sau → cập nhật ẩn/hiện nút Set giá đã gắn
-    document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet ? '' : 'none'));
+    document.querySelectorAll('.dg-setprice').forEach((sp) => (sp.parentElement.style.display = canSet && !sp.parentElement.dataset.noask ? '' : 'none'));
     for (const one of document.querySelectorAll('.ant-comment')) {
       const content = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
       if (!content) continue;
       const text = content.querySelector('.ant-comment-content-detail')?.innerText || '';
-      if (!PRICE_ASK_RE.test(text)) continue;
-      // chỉ bình luận của NVKD (không gắn vào câu "E cho chị giá nhé" của chính quản lý)
       const author = content.querySelector('.ant-comment-content-author-name')?.innerText.trim() || '';
-      if (author && author.startsWith(meName)) continue;
+      // Câu xin giá của NVKD (không tính câu "E cho chị giá nhé" của chính quản lý) → có thêm nút Set giá
+      const isAsk = PRICE_ASK_RE.test(text) && !(author && author.startsWith(meName));
+      const isRoot = !one.parentElement?.closest('.ant-comment');
+      // Nút In báo giá → dán: mọi bình luận gốc của báo giá đang mở + mọi câu xin giá
+      if (!isAsk && !isRoot) continue;
       // chỉ luồng có nhãn mã của báo giá đang mở
       let top = one;
       while (top.parentElement?.closest('.ant-comment')) top = top.parentElement.closest('.ant-comment');
@@ -1735,7 +1737,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const actions = ownActions || topContent?.querySelector(':scope > ul.ant-comment-actions');
       if (!actions || actions.querySelector('.dg-printq-reply')) continue;
       const li = document.createElement('li');
-      if (!canSet) li.style.display = 'none';
+      if (!canSet || !isAsk) li.style.display = 'none';
+      if (!isAsk) li.dataset.noask = '1';
       li.innerHTML = '<span class="dg-setprice" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">💲 Set giá</span>';
       li.addEventListener('click', (e) => {
         e.preventDefault();
