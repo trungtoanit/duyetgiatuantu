@@ -3070,6 +3070,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .nvl-u { display: block; font-size: 10.5px; color: #94a3b8; font-weight: 400; } .nvl-sum td { background: #fff7ed; }
     .osim { width: 78px; border: 1px dashed #a78bfa; background: #fff; border-radius: 6px; padding: 2px 6px; font: inherit; font-weight: 700; text-align: right; color: #4c1d95; }
     .osim:focus { outline: none; border-style: solid; box-shadow: 0 0 0 2px rgba(139,92,246,.2); } .osim.chg { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    .osim-rw { position: relative; flex: 1; display: flex; padding-top: 22px; }
+    .osim-rw .osim-range { flex: 1; }
+    .osim-bub { position: absolute; top: 0; transform: translateX(-50%); background: #7c3aed; color: #fff; font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 6px; white-space: nowrap; pointer-events: none; }
+    .osim-bub::after { content: ''; position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); border: 4px solid transparent; border-top-color: #7c3aed; border-bottom: 0; }
     .osim-sl { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-weight: 700; color: #4c1d95; }
     .osim-range { flex: 1; accent-color: #7c3aed; } .osim-rv { min-width: 120px; text-align: right; color: #7c2d12; }
     .osim-hint { font-size: 11.5px; color: #6d28d9; background: #f5f3ff; } .osim-reset { border: 1px solid #c4b5fd; background: #fff; color: #6d28d9; border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
@@ -3661,6 +3665,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
         state.offSim[rg.dataset.code] = sv;
         osimCalc(tb);
+        osimBubble(rg, Number(rg.value));
         return;
       }
       const inp = e.target.closest?.('input.osim');
@@ -4685,6 +4690,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     for (const w of withPos) if (String(w[0][1].qty || '')) w[1] = pos(w[0]);
     return withPos.sort((a, b) => a[1] - b[1] || (a[0][1].at || 0) - (b[0][1].at || 0)).map((w) => w[0]);
   }
+  // Số % nổi trên đầu nút kéo
+  function osimBubble(rg, val) {
+    const bub = rg?.parentElement?.querySelector('.osim-bub');
+    if (!bub) return;
+    const v = val ?? Number(rg.value);
+    const t = (Number(rg.value) - Number(rg.min)) / (Number(rg.max) - Number(rg.min));
+    bub.textContent = `${Math.round(v * 10) / 10}%`;
+    bub.style.left = `calc(${t * 100}% + ${(0.5 - t) * 18}px)`; // bù độ rộng nút kéo (~18px)
+  }
   // Tính lại bảng khi thử giá (chạy trực tiếp trên DOM, không vẽ lại thẻ)
   function osimCalc(tb) {
     if (!tb) return;
@@ -4731,6 +4745,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     set('.osim-rv', ratio != null ? `bán ${sell}% · NVL ${ratio}%` : '');
     const rg = tb.querySelector('input.osim-range');
     if (rg && sell != null && root.activeElement !== rg && !rg.matches(':active')) rg.value = sell;
+    osimBubble(rg, sell);
   }
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
@@ -5203,12 +5218,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá (${money(fx.base)}) <b>${trM(-fx.diff)}</b> – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
-      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-vat="${od.vat || 0}" data-nvlpost="${Math.round(od.nvlPost)}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint"><div class="osim-sl">🎚️ % bán (kéo phải = bán cao hơn): <input type="range" class="osim-range" data-code="${esc(q.code)}" min="5" max="70" step="0.5" value="${(() => {
+      ${offRows || fxRows ? `<table${sim ? ` class="osim-t" data-code="${esc(q.code)}" data-vat="${od.vat || 0}" data-nvlpost="${Math.round(od.nvlPost)}"` : ''}><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th><th class="num">Thành tiền</th>' : ''}<th class="num">%</th></tr>${offRows}${sim ? `<tr><td colspan="6" class="osim-hint"><div class="osim-sl">🎚️ % bán (kéo phải = bán cao hơn): <span class="osim-rw"><span class="osim-bub"></span><input type="range" class="osim-range" data-code="${esc(q.code)}" min="5" max="70" step="0.5" value="${(() => {
         const rows = offs.map(([k, x]) => ({ n: x.nvlTotal, p: (simV[k] ?? numOf(x.price)) * numOf(x.qty) })).filter((r) => r.n && r.p);
         const a = rows.reduce((t, r) => t + r.n, 0);
         const b2 = rows.reduce((t, r) => t + r.p, 0);
         return b2 ? Math.round((1 - a / b2) * 200) / 2 : 40; // % bán = 1 − NVL ÷ đơn giá
-      })()}"><b class="osim-rv"></b></div>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
+      })()}"></span><b class="osim-rv"></b></div>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
       ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
   };
