@@ -1567,6 +1567,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     col.append(img);
     return true;
   }
+  // Khung xác nhận duyệt giá dưới "Trưởng Phòng": người duyệt, đơn vị, ngày giờ.
+  // Chỉ là xác nhận nội bộ – KHÔNG giả dạng chữ ký số (không có dấu "chữ ký hợp lệ" / chứng thư).
+  const APPROVE_ORG = 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ';
+  function addApproval(root0) {
+    const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng Phòng$/i.test(e.textContent.trim()));
+    if (!label) return false;
+    const doc = root0.ownerDocument;
+    const now = new Date();
+    const when = now.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const box = doc.createElement('div');
+    box.setAttribute('style', 'display:inline-block;margin-top:4px;padding:4px 8px;border:1px solid #94a3b8;border-radius:4px;font-size:10px;line-height:1.35;text-align:left;color:#334155;background:#f8fafc;white-space:normal;max-width:230px;');
+    const line = (t, b = false) => {
+      const d = doc.createElement('div');
+      if (b) d.setAttribute('style', 'font-weight:700;color:#0f172a;');
+      d.textContent = t;
+      return d;
+    };
+    box.append(line('Đã duyệt giá', true), line(`Người duyệt: ${meName}`), line(`Đơn vị: ${APPROVE_ORG}`), line(`Ngày duyệt: ${when}`));
+    const wrap = doc.createElement('div');
+    wrap.setAttribute('style', 'text-align:center;');
+    wrap.append(box);
+    (label.closest('td, th') || label.parentElement).append(wrap);
+    return true;
+  }
   const blobToDataUrl = (b) => new Promise((res) => {
     const r = new FileReader();
     r.onload = () => res(r.result);
@@ -1601,6 +1625,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
     addSignature(clone);
+    addApproval(clone);
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {
       try {
