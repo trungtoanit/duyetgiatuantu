@@ -3080,6 +3080,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .osim-diff { font-size: 17px; font-weight: 900; } .osim-diff.neg { color: #b91c1c; }
     .osim-dpct { font-size: 17px; font-weight: 900; color: #047857; padding: 2px 8px; border-radius: 8px; display: inline-block; }
     .osim-dpct.lv-green { color: #047857; }
+    .mt-v .osim-top.osim-dpct { font-size: 30px; padding: 2px 10px; margin-left: -10px; }
     .osim-dpct.lv-blue { color: #1d4ed8; animation: dpBlue 2s ease-in-out infinite; }
     .osim-dpct.lv-orange { color: #c2410c; animation: dpOrange 1.2s ease-in-out infinite; }
     .osim-dpct.lv-red { color: #fff; animation: dpRed .7s ease-in-out infinite; }
@@ -4736,6 +4737,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Màu theo mức: ≤20% đỏ chớp mạnh · ≤30% cam chớp · ≤35% xanh dương chớp nhẹ · còn lại xanh lá
     const lv = dp == null ? '' : dp <= 20 ? 'lv-red' : dp <= 30 ? 'lv-orange' : dp <= 35 ? 'lv-blue' : 'lv-green';
     tb.querySelectorAll('.osim-dpct').forEach((e) => (e.className = `osim-dpct ${lv}`));
+    // Ô Offset lớn phía trên thẻ: cùng số %, cùng màu / hiệu ứng, cùng số chênh lệch
+    const side = tb.closest('.side');
+    const top = side?.querySelector('.osim-top');
+    if (top && dp != null) {
+      top.textContent = `${dp}%`;
+      top.className = `osim-top osim-dpct ${lv}`;
+    }
+    const topDiff = side?.querySelector('.osim-topdiff');
+    if (topDiff) topDiff.textContent = `${diff < 0 ? '−' : '+'}${trM(Math.abs(diff))}`;
     // Tỷ lệ NVL / đơn giá hiện tại (trước VAT)
     let nv = 0;
     let pv = 0;
@@ -5162,7 +5172,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
       ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>` : '') : ''}
-      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : marginParts(q).offNoPrice ? '<span class="warnx">⚠️ Chưa cho giá (bảng chiết giá 0đ)</span>' : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b>${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
+      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="osim-top ${pctCls(offset)}">${offset}%</b>` : marginParts(q).offNoPrice ? '<span class="warnx">⚠️ Chưa cho giá (bảng chiết giá 0đ)</span>' : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b class="osim-topdiff">${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
       ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
