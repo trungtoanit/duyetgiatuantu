@@ -1628,6 +1628,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function addApproval(root0) {
     const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng Phòng$/i.test(e.textContent.trim()));
     if (!label) return false;
+    label.textContent = 'Ban lãnh đạo'; // chức danh ở cột duyệt
     const doc = root0.ownerDocument;
     const now = new Date();
     const when = now.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
