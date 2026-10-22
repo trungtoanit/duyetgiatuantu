@@ -35,6 +35,43 @@
     window.focus = () => {};
     document.addEventListener('focusin', (e) => e.target?.blur?.(), true);
   }
+  // In báo giá để chụp hình (panel.js phát "dg:printCapture"): chặn hộp thoại in trong 25 giây.
+  // CRM vẽ báo giá vào iframe#printWindow rồi gọi iframe.contentWindow.print() → bọc getter contentWindow
+  // để vá print() của khung trước khi CRM kịp gọi; window.print của trang cũng được chặn.
+  let captureUntil = 0;
+  const muted = () => Date.now() < captureUntil;
+  const mute = (w) => {
+    try {
+      if (w && !w.__dgMuted) {
+        const orig = w.print;
+        w.print = function () {
+          if (muted()) return;
+          return orig.apply(this, arguments);
+        };
+        w.__dgMuted = true;
+      }
+    } catch {}
+  };
+  if (!COLLECTOR_FRAME) {
+    mute(window);
+    const cw = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    if (cw?.get) {
+      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+        configurable: true,
+        enumerable: cw.enumerable,
+        get() {
+          const w = cw.get.call(this);
+          if (muted()) mute(w);
+          return w;
+        },
+      });
+    }
+    document.addEventListener('dg:printCapture', () => {
+      captureUntil = Date.now() + 25000;
+      const f = document.getElementById('printWindow');
+      if (f) mute(f.contentWindow);
+    });
+  }
   let lastChiet = '';
   function readChiet(f) {
     try {

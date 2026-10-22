@@ -1401,6 +1401,165 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     });
   }
 
+  // ---------- 🖨 In báo giá → chụp hình → dán vào ô bình luận ----------
+  // Bấm nút "In" của CRM (hook.js chặn hộp thoại in), đợi iframe#printWindow có "BẢNG BÁO GIÁ",
+  // dựng lại thành ảnh PNG (SVG foreignObject), làm mờ SĐT khách, rồi dán vào ô bình luận như Ctrl+V.
+  const PHONE_RE = /(\+?84|0)[\d.\s-]{8,13}\d/g;
+  function blurCustomerPhones(root0) {
+    const walker = root0.ownerDocument.createTreeWalker(root0, NodeFilter.SHOW_TEXT);
+    const hits = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!PHONE_RE.test(n.nodeValue)) continue;
+      PHONE_RE.lastIndex = 0;
+      // chỉ dòng SĐT của khách ("SDT:" / "SĐT:"), không làm mờ "Điện thoại: … (Mr Thịnh)" của công ty
+      const line = (n.parentElement?.closest('p, div, td, tr, li') || n.parentElement)?.textContent || '';
+      if (/S[ĐD]T\s*:/i.test(line) && !/Điện thoại/i.test(line)) hits.push(n);
+    }
+    for (const n of hits) {
+      const doc = n.ownerDocument;
+      const frag = doc.createDocumentFragment();
+      let last = 0;
+      n.nodeValue.replace(PHONE_RE, (m, _a, i) => {
+        frag.append(doc.createTextNode(n.nodeValue.slice(last, i)));
+        const sp = doc.createElement('span');
+        sp.setAttribute('style', 'filter:blur(6px);background:#cbd5e1;color:#64748b;border-radius:4px');
+        sp.textContent = m;
+        frag.append(sp);
+        last = i + m.length;
+        return m;
+      });
+      frag.append(doc.createTextNode(n.nodeValue.slice(last)));
+      n.replaceWith(frag);
+    }
+    return hits.length;
+  }
+  const blobToDataUrl = (b) => new Promise((res) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.readAsDataURL(b);
+  });
+  async function docToPng(doc, scale = 2) {
+    const body = doc.body;
+    const width = Math.max(body.scrollWidth, doc.documentElement.scrollWidth, 794);
+    const height = Math.max(body.scrollHeight, doc.documentElement.scrollHeight);
+    const clone = body.cloneNode(true);
+    clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
+    const blurred = blurCustomerPhones(clone);
+    // ảnh (logo…) → data URL để canvas không bị "bẩn"
+    for (const img of clone.querySelectorAll('img')) {
+      try {
+        const src = img.getAttribute('src');
+        if (src && !src.startsWith('data:')) img.setAttribute('src', await blobToDataUrl(await (await fetch(new URL(src, doc.baseURI))).blob()));
+      } catch {
+        img.remove();
+      }
+    }
+    const css = [...doc.styleSheets]
+      .map((ss) => {
+        try {
+          return [...ss.cssRules].map((r) => r.cssText).join('\n');
+        } catch {
+          return '';
+        }
+      })
+      .join('\n');
+    const wrap = document.createElement('div');
+    wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    // giữ kiểu của <body> khung in (phông chữ, lề…) – body không được chép sang ảnh
+    const bcs = getComputedStyle(body);
+    wrap.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${width}px;background:#fff;box-sizing:border-box;`);
+    if (body.className) wrap.setAttribute('class', body.className);
+    const st = document.createElement('style');
+    st.textContent = `${css}\n@page{margin:0} body{margin:0}`;
+    wrap.append(st, ...clone.childNodes);
+    const xhtml = new XMLSerializer().serializeToString(wrap);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
+    const img = new Image();
+    // data: URL (không dùng blob:) – Chrome không "làm bẩn" canvas với SVG foreignObject dạng data URL
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0);
+    const png = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    return { png, blurred };
+  }
+
+  // Dán ảnh vào ô bình luận mới như Ctrl+V (CRM tự tải ảnh lên); đồng thời chép ảnh vào clipboard
+  async function pasteImageToComment(png, name) {
+    const ta = findCommentBox();
+    if (!ta) throw new Error('Không thấy ô bình luận.');
+    ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    ta.focus();
+    const file = new File([png], name, { type: 'image/png' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    } catch {}
+  }
+
+  async function printQuoteToComment(btn) {
+    const q = renderCtx.quotes?.[currentQuoteId()];
+    const label = btn.textContent;
+    const show = (t) => (btn.textContent = t);
+    try {
+      const inBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'In');
+      if (!inBtn) throw new Error('Không thấy nút "In" của CRM.');
+      const f0 = document.getElementById('printWindow');
+      const before = f0?.contentDocument?.body?.innerHTML || '';
+      document.dispatchEvent(new CustomEvent('dg:printCapture')); // hook.js chặn hộp thoại in
+      show('⏳ Đang in…');
+      inBtn.click();
+      // CRM có thể mở hộp chọn mẫu in → bấm nút "In" trong hộp đó
+      await sleep(700);
+      const dlg = visModalsTop().find((m) => [...m.querySelectorAll('button')].some((b) => /^In$/.test(b.innerText.trim())));
+      if (dlg) [...dlg.querySelectorAll('button')].find((b) => /^In$/.test(b.innerText.trim())).click();
+      const doc = await waitFor(() => {
+        const d = document.getElementById('printWindow')?.contentDocument;
+        const html = d?.body?.innerHTML || '';
+        return html && html !== before && /BẢNG BÁO GIÁ/i.test(d.body.innerText) ? d : null;
+      }, 15000, 300);
+      if (!doc) throw new Error('CRM chưa dựng bảng báo giá để in (không thấy "BẢNG BÁO GIÁ").');
+      await sleep(800); // chờ ảnh / font trong khung in
+      show('📸 Đang chụp…');
+      const { png, blurred } = await docToPng(doc);
+      show('📋 Đang dán…');
+      await pasteImageToComment(png, `bao-gia-${q?.code || currentQuoteId()}.png`);
+      show(blurred ? '✅ Đã dán (đã làm mờ SĐT)' : '✅ Đã dán – không thấy SĐT để làm mờ');
+    } catch (e) {
+      show(`⚠️ ${e.message}`);
+    }
+    setTimeout(() => show(label), 5000);
+  }
+
+  // Nút "🖨 In báo giá" cạnh tiêu đề "Bình luận" trên trang báo giá
+  function injectPrintButton() {
+    if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-printq')) return;
+    const h = [...document.querySelectorAll('h1, h2, h3, h4, h5, div, span')].find(
+      (e) => e.children.length === 0 && e.textContent.trim() === 'Bình luận' && !e.closest('.ant-tabs-tab, button, .ant-comment') && e.getBoundingClientRect().height >= 18,
+    );
+    if (!h) return;
+    const b = document.createElement('span');
+    b.className = 'dg-printq';
+    b.textContent = '🖨 In báo giá → dán vào bình luận';
+    b.title = 'In báo giá (không mở hộp thoại in), chụp thành ảnh, làm mờ SĐT khách rồi dán vào ô bình luận';
+    b.setAttribute('style', 'display:inline-block;margin-left:12px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:999px;padding:3px 12px');
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!b.textContent.startsWith('⏳') && !b.textContent.startsWith('📸')) printQuoteToComment(b);
+    });
+    h.append(b);
+  }
+  if (IS_TOP) setInterval(() => injectPrintButton(), 2000);
+
   // Gắn nút "💲 Set giá" vào bình luận xin giá (luồng của báo giá Flexo đang mở)
   function injectPriceButtons() {
     if (!IS_TOP || !root) return;
