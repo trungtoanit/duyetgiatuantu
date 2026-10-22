@@ -3070,6 +3070,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .nvl-u { display: block; font-size: 10.5px; color: #94a3b8; font-weight: 400; } .nvl-sum td { background: #fff7ed; }
     .osim { width: 78px; border: 1px dashed #a78bfa; background: #fff; border-radius: 6px; padding: 2px 6px; font: inherit; font-weight: 700; text-align: right; color: #4c1d95; }
     .osim:focus { outline: none; border-style: solid; box-shadow: 0 0 0 2px rgba(139,92,246,.2); } .osim.chg { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    .osim-rw { --lc: #7c3aed; } .osim-rw.lv-green { --lc: #059669; } .osim-rw.lv-blue { --lc: #2563eb; } .osim-rw.lv-orange { --lc: #ea580c; } .osim-rw.lv-red { --lc: #dc2626; }
+    .osim-rw .osim-range { accent-color: var(--lc) !important; }
+    .osim-rw .osim-bub { background: var(--lc) !important; } .osim-rw .osim-bub::after { border-top-color: var(--lc) !important; }
+    .osim-rw.lv-red .osim-bub { animation: bubRed .7s ease-in-out infinite; } .osim-rw.lv-orange .osim-bub { animation: bubOrange 1.2s ease-in-out infinite; } .osim-rw.lv-blue .osim-bub { animation: bubBlue 2s ease-in-out infinite; }
+    @keyframes bubRed { 0%, 100% { transform: translateX(-50%) scale(1); filter: none; } 50% { transform: translateX(-50%) scale(1.15); filter: brightness(1.3); } }
+    @keyframes bubOrange { 0%, 100% { filter: none; } 50% { filter: brightness(1.25); } }
+    @keyframes bubBlue { 0%, 100% { opacity: 1; } 50% { opacity: .75; } }
     .osim-rw { position: relative; flex: 1; display: flex; padding-top: 22px; }
     .osim-rw .osim-range { flex: 1; }
     .osim-bub { position: absolute; top: 0; transform: translateX(-50%); background: #7c3aed; color: #fff; font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 6px; white-space: nowrap; pointer-events: none; }
@@ -3666,7 +3673,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
         state.offSim[rg.dataset.code] = sv;
         osimCalc(tb);
-        osimBubble(rg, Number(rg.value));
         return;
       }
       const inp = e.target.closest?.('input.osim');
@@ -4759,6 +4765,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const rg = tb.querySelector('input.osim-range');
     if (rg && sell != null && root.activeElement !== rg && !rg.matches(':active')) rg.value = sell;
     osimBubble(rg, sell);
+    // Thanh kéo + số nổi cùng màu / hiệu ứng với ô % (đỏ / cam / xanh dương / xanh lá)
+    const rw = rg?.closest('.osim-rw');
+    if (rw) rw.className = `osim-rw ${lv}`;
   }
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
