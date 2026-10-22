@@ -4669,12 +4669,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Các bước tính chênh lệch Offset (bảng Giải thích): NVL 1 thùng → NVL trước VAT → NVL sau VAT → BG − NVL
   function offsetSteps(q, od, nvlCol = false) {
     const r = (label, val, note = '', cls = '', nvl = '') =>
-      `<tr class="osteps${cls ? ` ${cls}` : ''}"><td>${label}</td><td></td><td>${val}</td>${nvlCol ? `<td class="num">${nvl}</td>` : ''}<td class="num">${note}</td></tr>`;
+      `<tr class="osteps${cls ? ` ${cls}` : ''}"><td>${label}</td><td></td><td>${nvlCol ? '' : val}</td>${nvlCol ? `<td class="num">${val}</td><td class="num">${nvl}</td>` : ''}<td class="num">${note}</td></tr>`;
     const pctTxt = `${Math.round(od.pct * 10) / 10}%`;
     const out = [];
     if (od.sheet) {
       out.push(nvlCol
-        ? r('<b>Tổng Nguyên liệu</b> (bảng chiết giá)', '', '', 'nvl-sum', `<b>${money(Math.round(od.nvlPre))}</b>`)
+        ? r('<b>Tổng</b> (bảng chiết giá, trước VAT)', `<b>${money(Math.round(od.rows.reduce((a, x) => a + (x.val || 0), 0)))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPre))}</b>`)
         : r('Tổng Nguyên liệu (đọc thẳng bảng chiết giá)', money(Math.round(od.nvlPre)), od.rows.map((x) => (x.nvlUnit ? `${money(x.nvlUnit)}/thùng` : '')).filter(Boolean).join(' · ')));
       if (od.vat) out.push(r(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
       else if (Math.round(od.nvlPost) !== Math.round(od.nvlPre)) out.push(r('NVL quy theo giá trị BG (SL bảng chiết giá khác đơn)', `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'theo tỉ lệ', 'warn-row'));
@@ -4687,7 +4687,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     out.push(r(`${od.part ? 'Thành tiền phần Offset' : 'Giá trị BG'}${od.vat ? ` (đã gồm VAT ${od.vat}%)` : ''}`, money(Math.round(od.base))));
     out.push(r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', `<b class="pos">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`, pctTxt));
-    if (!od.exact) out.push(`<tr><td colspan="${nvlCol ? 5 : 4}" class="muted">Tổng trên bảng chiết giá (giá × SL) không khớp giá trị BG theo mức VAT 0/5/8/10% → ước tính theo đang bán %.</td></tr>`);
+    if (!od.exact) out.push(`<tr><td colspan="${nvlCol ? 6 : 4}" class="muted">Tổng trên bảng chiết giá (giá × SL) không khớp giá trị BG theo mức VAT 0/5/8/10% → ước tính theo đang bán %.</td></tr>`);
     return out.join('');
   }
   // Dòng % ở cột phải danh sách: 🟦 Flexo X% · 🟪 Offset Y%
@@ -5036,7 +5036,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const od = offs.length ? offsetDiff(q) : null;
     // Có tổng Nguyên liệu từng sản phẩm (đọc thẳng bảng chiết giá) → thêm cột "Nguyên liệu"
     const nvlCol = offs.some(([, x]) => x.nvlTotal > 0);
-    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(x.spec || spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td>${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}<td class="num"><b>${x.pct ?? '–'}${x.pct != null ? '%' : ''}</b></td></tr>`).join('') +
+    const offRows = offs.map(([spec, x]) => `<tr><td>Offset · ${esc(x.spec || spec)}</td><td>${esc(x.qty || '')}</td><td>${esc(x.price || '')}</td>${nvlCol ? `<td class="num">${numOf(x.price) && numOf(x.qty) ? money(numOf(x.price) * numOf(x.qty)) : '–'}</td>` : ''}${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}<td class="num"><b>${x.pct ?? '–'}${x.pct != null ? '%' : ''}</b></td></tr>`).join('') +
       (od ? offsetSteps(q, od, nvlCol) : '');
     const fxRows = fx
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
@@ -5050,7 +5050,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ? `<span class="warnx">⚠️ Tổng PO giấy tấm (${money(fx.best.total)}) lớn hơn giá trị báo giá (${money(fx.base)}) <b>${trM(-fx.diff)}</b> – thường do số lượng tấm tối thiểu (MOQ) của nhà cung cấp hoặc đơn nhỏ; không tính % cho trường hợp này, cần xem tay.</span>`
         : `Tổng giấy tấm ${esc(fx.best.code)} = ${money(fx.best.total)} chiếm <b>${fx.cost}%</b> → còn lại <b>${fx.rest}%</b> (chênh lệch <b>${trM(fx.diff)}</b>).`}
         ${fx.missing.length ? `<span class="warnx">⚠️ Chưa đọc được PO của ${esc(fx.missing.join(', '))} (tải quá chậm) – tổng giấy tấm đang thiếu nhà này.</span>` : ''}</div>` : ''}
-      ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Nguyên liệu</th>' : ''}<th class="num">%</th></tr>${offRows}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
+      ${offRows || fxRows ? `<table><tr><th>Hạng mục</th><th>SL / NCC</th><th>Giá / Tổng PO</th>${nvlCol ? '<th class="num">Thành tiền</th><th class="num">Nguyên liệu</th>' : ''}<th class="num">%</th></tr>${offRows}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
       ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
   };
