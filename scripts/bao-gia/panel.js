@@ -4626,21 +4626,34 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Tóm tắt riêng từng loại: Flexo (còn lại sau giấy tấm) và Offset (đang bán %, thấp nhất trong các sản phẩm)
   // Sản phẩm Offset theo đúng thứ tự trên báo giá: khớp quy cách + SL với dòng sản phẩm đã ghi; chưa có thì theo lúc đọc
-  function offEntries(m) {
+  // Dòng sản phẩm của báo giá đang mở (đọc thẳng bảng sản phẩm trên trang) – ưu tiên hơn thứ tự đã lưu
+  function pageProductRows() {
+    if (!IS_TOP || !currentQuoteId()) return null;
+    const table = [...document.querySelectorAll('.ant-table')].find((t) => [...t.querySelectorAll('th')].some((th) => th.innerText.trim() === 'Số lượng'));
+    if (!table) return null;
+    const rows = [...table.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim());
+    return rows.length ? rows.map((tr) => tr.innerText.replace(/\s+/g, ' ').slice(0, 400)) : null;
+  }
+  function offEntries(m, code) {
     const list = Object.entries(m?.products || {});
-    const order = m?.order || [];
-    const digits = (x) => String(x || '').replace(/[^\d]/g, '');
+    const live = code && renderCtx.quotes?.[currentQuoteId()]?.code === code ? pageProductRows() : null;
+    const order = live || m?.order || [];
+    // Chuẩn hoá: bỏ khoảng trắng, "×"/"X" → "x"; số lượng so theo từng số trong dòng (bỏ dấu chấm nghìn)
+    const nz = (x) => String(x || '').toLowerCase().replace(/[×✕*]/g, 'x').replace(/\s+/g, '');
+    const nums = (t) => (String(t).replace(/(\d)\.(?=\d{3}\b)/g, '$1').match(/\d+/g) || []);
+    const used = new Set();
     const pos = ([, x]) => {
-      const spec = String(x.spec || '').replace(/\s+/g, '').toLowerCase();
-      const qty = digits(x.qty);
-      const i = order.findIndex((t) => {
-        const tt = t.replace(/\s+/g, '').toLowerCase();
-        return spec && tt.includes(spec) && (!qty || digits(t).includes(qty));
-      });
-      const j = i >= 0 ? i : order.findIndex((t) => spec && t.replace(/\s+/g, '').toLowerCase().includes(spec));
-      return j >= 0 ? j : 999;
+      const spec = nz(x.spec);
+      const qty = String(x.qty || '').replace(/[^\d]/g, '');
+      let i = order.findIndex((t, k) => !used.has(k) && spec && nz(t).includes(spec) && (!qty || nums(t).includes(qty)));
+      if (i < 0) i = order.findIndex((t, k) => !used.has(k) && spec && nz(t).includes(spec));
+      if (i >= 0) used.add(i);
+      return i >= 0 ? i : 999;
     };
-    return list.sort((a, b) => pos(a) - pos(b) || (a[1].at || 0) - (b[1].at || 0));
+    // Tính vị trí theo thứ tự ổn định (khớp đúng SL trước)
+    const withPos = list.map((e) => [e, 999]);
+    for (const w of withPos) if (String(w[0][1].qty || '')) w[1] = pos(w[0]);
+    return withPos.sort((a, b) => a[1] - b[1] || (a[0][1].at || 0) - (b[0][1].at || 0)).map((w) => w[0]);
   }
   // Tính lại bảng khi thử giá (chạy trực tiếp trên DOM, không vẽ lại thẻ)
   function osimCalc(tb) {
@@ -4699,7 +4712,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       flexo: flexoInfo(q),
       offset,
       offNoPrice: offs.length > 0 && !priced.length, // bảng chiết giá đang 0đ (chưa cho giá)
-      offs: offEntries(m),
+      offs: offEntries(m, q?.code),
     };
   }
   // Chênh lệch Offset (tiền lời trên NVL) = giá trị báo giá × đang bán %.
@@ -4708,7 +4721,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // (vd. BG26883: 10.900đ × 405 = 4,4 tr trong khi báo giá 47,4 tr).
   const numOf = (t) => Number(String(t || '').replace(/[^\d]/g, '')) || 0;
   function offsetDiff(q) {
-    const prods = offEntries(renderCtx.margins?.[q?.code]).map(([, x]) => x).filter((x) => x.pct != null && !x.noPrice);
+    const prods = offEntries(renderCtx.margins?.[q?.code], q?.code).map(([, x]) => x).filter((x) => x.pct != null && !x.noPrice);
     if (!prods.length) return null;
     // Có tổng Nguyên liệu đọc thẳng từ bảng chiết giá → dùng số thật
     if (prods.every((x) => x.nvlTotal > 0)) {
@@ -5111,7 +5124,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const kinds = q.kinds || (q.offset ? ['offset'] : []);
     if (!kinds.length) return '';
     const m = renderCtx.margins?.[q.code] || {};
-    const offs = offEntries(m);
+    const offs = offEntries(m, q?.code);
     const fx = flexoInfo(q);
     const needOff = kinds.includes('offset') && offsetStale(m);
     const needFx = kinds.includes('flexo') && q.amount && (!fx || flexoStale(m.flexo, q));
