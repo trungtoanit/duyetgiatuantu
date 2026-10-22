@@ -4676,8 +4676,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       out.push(nvlCol
         ? r('<b>Tổng</b> (bảng chiết giá, trước VAT)', `<b>${money(Math.round(od.rows.reduce((a, x) => a + (x.val || 0), 0)))}</b>`, '', 'nvl-sum', `<b>${money(Math.round(od.nvlPre))}</b>`)
         : r('Tổng Nguyên liệu (đọc thẳng bảng chiết giá)', money(Math.round(od.nvlPre)), od.rows.map((x) => (x.nvlUnit ? `${money(x.nvlUnit)}/thùng` : '')).filter(Boolean).join(' · ')));
-      if (od.vat) out.push(r(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
-      else if (Math.round(od.nvlPost) !== Math.round(od.nvlPre)) out.push(r('NVL quy theo giá trị BG (SL bảng chiết giá khác đơn)', `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'theo tỉ lệ', 'warn-row'));
+      // Có cột Nguyên liệu → số NVL nằm đúng cột đó
+      const nv = (label, v, note, cls = '') => (nvlCol ? r(label, '', note, cls, v) : r(label, v, note, cls));
+      if (od.vat) out.push(nv(`NVL sau VAT (${od.vat}%)`, `<b>${money(Math.round(od.nvlPost))}</b>`, `× ${1 + od.vat / 100}`));
+      else if (Math.round(od.nvlPost) !== Math.round(od.nvlPre)) out.push(nv('NVL quy theo giá trị BG (SL bảng chiết giá khác đơn)', `<b>≈${money(Math.round(od.nvlPost))}</b>`, 'theo tỉ lệ', 'warn-row'));
     } else if (od.exact) {
       for (const x of od.rows) out.push(r(`NVL 1 thùng = ${money(x.price)} × (1 − ${x.pct}%)`, money(Math.round(x.nvlUnit)), `× ${x.qty.toLocaleString('vi-VN')}`));
       out.push(r('NVL trước VAT', money(Math.round(od.nvlPre))));
