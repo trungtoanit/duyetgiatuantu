@@ -1505,44 +1505,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     r.readAsDataURL(b);
   });
   // Ảnh khổ A4 đứng: 794 × 1123 px (96 dpi), lề như trang in; nội dung dài hơn 1 trang thì ảnh cao thêm
-  // Ảnh khổ A4 đứng, lề mỏng: dàn bảng báo giá ở bề ngang A4 (794px), đo khung bao phần nội dung thật
-  // (chữ, bảng, ảnh, đường kẻ) rồi cắt sát, chừa lề A4.m; giữ tỉ lệ A4 (cao ≥ rộng × 1,414)
-  const A4 = { w: 794, ratio: 1.4142, m: 14 };
-  function contentBox(doc) {
-    const view = doc.defaultView;
-    let l = Infinity, t = Infinity, r = 0, b = 0;
-    for (const e of doc.body.querySelectorAll('*')) {
-      const ownText = [...e.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim());
-      if (!ownText && !/^(IMG|HR|TD|TH|SVG|CANVAS)$/i.test(e.tagName)) continue;
-      const rc = e.getBoundingClientRect();
-      if (!rc.width || !rc.height || view.getComputedStyle(e).visibility === 'hidden') continue;
-      l = Math.min(l, rc.left); t = Math.min(t, rc.top); r = Math.max(r, rc.right); b = Math.max(b, rc.bottom);
+  // Ảnh khổ A4 đứng, zoom 80%: nội dung dàn trên bề ngang A4 ÷ 0,8 rồi thu 80% (vừa khổ A4 như khi in "Scale 80%").
+  // Vẽ lên khung rộng dư, dò điểm ảnh để tìm đúng vùng có nội dung (không phụ thuộc số đo bố cục) rồi cắt sát,
+  // chừa lề mỏng đều hai bên; giữ tỉ lệ A4 (cao ≥ rộng × 1,414).
+  const A4 = { w: 794, ratio: 1.4142, m: 16, zoom: 0.8 };
+  // Vùng có nội dung (điểm ảnh không trắng) của 1 canvas
+  function inkBox(ctx, w, h) {
+    const d = ctx.getImageData(0, 0, w, h).data;
+    let l = w, t = h, r = -1, b = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const k = (y * w + x) * 4;
+        if (d[k + 3] > 10 && (d[k] < 240 || d[k + 1] < 240 || d[k + 2] < 240)) {
+          if (x < l) l = x;
+          if (x > r) r = x;
+          if (y < t) t = y;
+          if (y > b) b = y;
+        }
+      }
     }
-    const sx = view.scrollX || 0, sy = view.scrollY || 0;
-    return l === Infinity ? null : { l: l + sx, t: t + sy, r: r + sx, b: b + sy };
+    return r < 0 ? null : { l, t, r: r + 1, b: b + 1 };
   }
   async function docToPng(doc, scale = 2) {
     const body = doc.body;
-    // Tạm cho khung in rộng đúng 1 trang A4 để nội dung dàn trang như khi in
-    const frame = doc.defaultView?.frameElement;
-    const saved = frame && { w: frame.style.width, h: frame.style.height, minW: frame.style.minWidth };
-    if (frame) {
-      frame.style.minWidth = '0';
-      frame.style.width = `${A4.w}px`;
-      frame.style.height = `${Math.round(A4.w * A4.ratio)}px`;
-      await sleep(250);
-    }
-    const width = A4.w; // bề ngang dàn trang (giống khung in)
-    const box = contentBox(doc) || { l: 0, t: 0, r: width, b: Math.round(width * A4.ratio) };
-    // mẫu in có thể rộng hơn 1 trang (nội dung tràn sang phải) → vùng vẽ phủ tới mép phải thật của nội dung
-    const drawW = Math.ceil(Math.max(width, box.r + A4.m, doc.documentElement.scrollWidth, body.scrollWidth));
-    const height = Math.ceil(box.b + A4.m); // chiều cao bản dựng (đủ tới đáy nội dung)
-    // vùng cắt: khung nội dung + lề mỏng
-    const cut = { x: Math.max(0, box.l - A4.m), y: Math.max(0, box.t - A4.m) };
-    cut.w = Math.ceil(box.r + A4.m) - cut.x;
-    cut.h = Math.max(Math.round(cut.w * A4.ratio), height - cut.y);
+    const layoutW = Math.round(A4.w / A4.zoom); // bề ngang dàn trang trước khi thu 80%
     const clone = body.cloneNode(true);
-    if (frame) Object.assign(frame.style, { width: saved.w, height: saved.h, minWidth: saved.minW });
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
@@ -1566,21 +1553,38 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       })
       .join('\n');
-    const wrap = document.createElement('div');
-    wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    // giữ kiểu của <body> khung in (phông chữ, lề…) – body không được chép sang ảnh
     const bcs = getComputedStyle(body);
-    wrap.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${width}px;min-height:${height}px;margin:0;padding:${bcs.marginTop} ${bcs.marginRight} ${bcs.marginBottom} ${bcs.marginLeft};background:#fff;box-sizing:border-box;`);
-    if (body.className) wrap.setAttribute('class', body.className);
+    const inner = document.createElement('div');
+    inner.setAttribute('style', `${body.getAttribute('style') || ''};font-family:${bcs.fontFamily};font-size:${bcs.fontSize};color:${bcs.color};width:${layoutW}px;margin:0;padding:${bcs.marginTop} ${bcs.marginRight} ${bcs.marginBottom} ${bcs.marginLeft};background:#fff;box-sizing:border-box;`);
+    if (body.className) inner.setAttribute('class', body.className);
     const st = document.createElement('style');
     st.textContent = `${css}\n@page{margin:0} body{margin:0}`;
-    wrap.append(st, ...clone.childNodes);
-    const xhtml = new XMLSerializer().serializeToString(wrap);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${drawW}" height="${height}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
+    inner.append(st, ...clone.childNodes);
+    const wrap = document.createElement('div');
+    wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    wrap.setAttribute('style', `zoom:${A4.zoom};background:#fff;display:inline-block;`);
+    wrap.append(inner);
+    // khung vẽ rộng / cao dư để không cắt mất gì
+    const drawW = Math.ceil(layoutW * 1.6);
+    const drawH = Math.min(9000, Math.ceil(Math.max(1600, (body.scrollHeight || 1200) * 1.6 + 600)));
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${drawW}" height="${drawH}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(wrap)}</foreignObject></svg>`;
     const img = new Image();
     // data: URL (không dùng blob:) – Chrome không "làm bẩn" canvas với SVG foreignObject dạng data URL
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     await img.decode();
+    // 1) vẽ tỉ lệ 1:1 để dò vùng có nội dung
+    const probe = document.createElement('canvas');
+    probe.width = drawW;
+    probe.height = drawH;
+    const pctx = probe.getContext('2d', { willReadFrequently: true });
+    pctx.fillStyle = '#fff';
+    pctx.fillRect(0, 0, drawW, drawH);
+    pctx.drawImage(img, 0, 0);
+    const ink = inkBox(pctx, drawW, drawH) || { l: 0, t: 0, r: A4.w, b: Math.round(A4.w * A4.ratio) };
+    // 2) cắt sát + lề mỏng đều, tỉ lệ A4 đứng
+    const cut = { x: Math.max(0, ink.l - A4.m), y: Math.max(0, ink.t - A4.m) };
+    cut.w = ink.r + A4.m - cut.x;
+    cut.h = Math.max(Math.round(cut.w * A4.ratio), ink.b + A4.m - cut.y);
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(cut.w * scale);
     canvas.height = Math.round(cut.h * scale);
@@ -1588,7 +1592,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.scale(scale, scale);
-    ctx.drawImage(img, -cut.x, -cut.y); // cắt sát nội dung, lề mỏng
+    ctx.drawImage(img, -cut.x, -cut.y);
     const png = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     return { png, blurred };
   }
