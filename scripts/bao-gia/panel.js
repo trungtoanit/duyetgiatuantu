@@ -1557,8 +1557,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // Dán ảnh vào ô bình luận mới như Ctrl+V (CRM tự tải ảnh lên); đồng thời chép ảnh vào clipboard
-  async function pasteImageToComment(png, name) {
-    const ta = findCommentBox();
+  async function pasteImageToComment(png, name, getBox = async () => findCommentBox()) {
+    const ta = await getBox();
     if (!ta) throw new Error('Không thấy ô bình luận.');
     ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
     ta.focus();
@@ -1571,7 +1571,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     } catch {}
   }
 
-  async function printQuoteToComment(btn) {
+  async function printQuoteToComment(btn, getBox) {
     const q = renderCtx.quotes?.[currentQuoteId()];
     const label = btn.textContent;
     const show = (t) => (btn.textContent = t);
@@ -1597,7 +1597,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       show('📸 Đang chụp…');
       const { png, blurred } = await docToPng(doc);
       show('📋 Đang dán…');
-      await pasteImageToComment(png, `bao-gia-${q?.code || currentQuoteId()}.png`);
+      await pasteImageToComment(png, `bao-gia-${q?.code || currentQuoteId()}.png`, getBox);
       show(blurred ? '✅ Đã dán (đã làm mờ SĐT)' : '✅ Đã dán – không thấy SĐT để làm mờ');
     } catch (e) {
       show(`⚠️ ${e.message}`);
@@ -1667,6 +1667,29 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         openPriceDialog(q);
       });
       actions.append(li);
+      // 🖨 In báo giá → dán ảnh vào ô "Trả lời" của chính bình luận này (tự mở ô trả lời nếu chưa mở)
+      const li2 = document.createElement('li');
+      const pb = document.createElement('span');
+      pb.className = 'dg-printq-reply';
+      pb.textContent = '🖨 In báo giá → dán';
+      pb.title = 'In báo giá, chụp ảnh (làm mờ SĐT khách) rồi dán vào ô trả lời của bình luận này';
+      pb.setAttribute('style', 'cursor:pointer;color:#fff;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px');
+      const replyBox = async () => {
+        let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
+        if (!ta) {
+          const reply = [...actions.querySelectorAll('*')].reverse().find((x) => x.textContent.trim() === 'Trả lời');
+          reply?.click();
+          ta = await waitFor(() => cm.querySelector('textarea'), 3000, 100);
+        }
+        return ta || findCommentBox();
+      };
+      pb.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!/^[⏳📸📋]/u.test(pb.textContent)) printQuoteToComment(pb, replyBox);
+      });
+      li2.append(pb);
+      actions.append(li2);
     }
   }
   if (IS_TOP) setInterval(() => injectPriceButtons(), 2000);
@@ -3013,8 +3036,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .hot-who { font-size: 11px; color: #64748b; }
     /* 💲 Set giá */
     .pdlg { position: fixed; inset: 0; z-index: 2147483647; background: rgba(15,23,42,.35); display: grid; place-items: center; }
-    .pdlg-wrap { display: flex; gap: 12px; align-items: stretch; max-width: calc(100vw - 32px); max-height: calc(100vh - 40px); }
-    .pdlg-hist { width: min(560px, calc(100vw - 440px)); background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 20px 50px rgba(15,23,42,.35); overflow: auto; font-size: 12px; }
+    .pdlg-wrap { display: flex; gap: 12px; align-items: flex-start; max-width: calc(100vw - 32px); max-height: calc(100vh - 40px); }
+    .pdlg-hist { width: min(560px, calc(100vw - 440px)); max-height: calc(100vh - 40px); background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 20px 50px rgba(15,23,42,.35); overflow: auto; font-size: 12px; }
     .ph-h { font-weight: 800; font-size: 14px; margin-bottom: 8px; }
     .ph-note { margin-bottom: 6px; }
     .ph-row { border: 1px solid #eef2f7; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
@@ -3026,16 +3049,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .ph-pct:hover { background: #16a34a; color: #fff; }
     .ph-bg { margin-top: 2px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     @media (max-width: 900px) { .pdlg-wrap { flex-direction: column-reverse; overflow: auto; } .pdlg-hist { width: auto; } }
-    .pdlg-card { width: min(380px, calc(100vw - 32px)); background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 50px rgba(15,23,42,.35); display: grid; gap: 10px; font-size: 13px; color: #1f2328; }
+    .pdlg-card { flex: none; width: min(380px, calc(100vw - 32px)); background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 50px rgba(15,23,42,.35); display: grid; gap: 10px; align-content: start; align-self: flex-start; font-size: 13px; color: #1f2328; }
     .pdlg-h { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 15px; }
     .pdlg-h .x { margin-left: auto; }
     .pdlg-q { font-weight: 600; }
     .pdlg-v b { font-size: 34px; font-weight: 800; color: #15803d; }
     .pdlg input[type=range] { width: 100%; accent-color: #16a34a; }
-    .pdlg-chips { display: flex; gap: 6px; }
+    .pdlg-chips { display: flex; gap: 6px; align-items: center; }
+    .pdlg-chips .act, .pdlg-btns .act { height: auto; padding: 4px 12px; }
     .pdlg-note { font-size: 12px; }
     .pdlg-step { min-height: 18px; font-size: 12px; color: #4338ca; }
-    .pdlg-btns { display: flex; justify-content: flex-end; gap: 8px; }
+    .pdlg-btns { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
     .side-q { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eef2f7; font-size: 13px; display: grid; gap: 10px; }
     .side-q > * { margin: 0 !important; }
     /* Thông tin báo giá ở đầu thẻ */
