@@ -1545,6 +1545,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return hits.length;
   }
+  // Chữ ký dưới "Trưởng bộ phận (Ký và ghi rõ họ tên)": đặt nổi trong khoảng trống ký tên, không đẩy lệch bố cục
+  function addSignature(root0) {
+    const sig = globalThis.DG_SIGNATURE;
+    if (!sig) return false;
+    const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng bộ phận$/i.test(e.textContent.trim()));
+    if (!label) return false;
+    // khối của cột ký: ô bảng chứa nhãn, hoặc thẻ cha chứa cả "(Ký và ghi rõ họ tên)"
+    let col = label.closest('td, th');
+    if (!col) {
+      col = label.parentElement;
+      while (col && col !== root0 && !/Ký và ghi rõ/i.test(col.textContent)) col = col.parentElement;
+      col = col && col !== root0 ? col : label.parentElement;
+    }
+    const doc = root0.ownerDocument;
+    const img = doc.createElement('img');
+    img.setAttribute('src', sig);
+    img.setAttribute('style', 'position:absolute;left:50%;top:100%;transform:translateX(-50%);height:64px;width:auto;margin-top:2px;pointer-events:none;');
+    const pos = (col.getAttribute('style') || '');
+    col.setAttribute('style', `${pos};position:relative;`);
+    col.append(img);
+    return true;
+  }
   const blobToDataUrl = (b) => new Promise((res) => {
     const r = new FileReader();
     r.onload = () => res(r.result);
@@ -1578,6 +1600,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
+    addSignature(clone);
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {
       try {

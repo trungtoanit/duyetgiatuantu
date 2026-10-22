@@ -16,6 +16,7 @@
     {
       "id": "bao-gia-panel",
       "files": [
+        "bao-gia/signature.js",
         "bao-gia/panel.js"
       ],
       "matches": [
