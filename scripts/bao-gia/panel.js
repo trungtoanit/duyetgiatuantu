@@ -1532,12 +1532,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       frame.style.height = `${Math.round(A4.w * A4.ratio)}px`;
       await sleep(250);
     }
-    const width = A4.w;
+    const width = A4.w; // bề ngang dàn trang (giống khung in)
     const box = contentBox(doc) || { l: 0, t: 0, r: width, b: Math.round(width * A4.ratio) };
+    // mẫu in có thể rộng hơn 1 trang (nội dung tràn sang phải) → vùng vẽ phủ tới mép phải thật của nội dung
+    const drawW = Math.ceil(Math.max(width, box.r + A4.m, doc.documentElement.scrollWidth, body.scrollWidth));
     const height = Math.ceil(box.b + A4.m); // chiều cao bản dựng (đủ tới đáy nội dung)
     // vùng cắt: khung nội dung + lề mỏng
     const cut = { x: Math.max(0, box.l - A4.m), y: Math.max(0, box.t - A4.m) };
-    cut.w = Math.min(width, box.r + A4.m) - cut.x;
+    cut.w = Math.ceil(box.r + A4.m) - cut.x;
     cut.h = Math.max(Math.round(cut.w * A4.ratio), height - cut.y);
     const clone = body.cloneNode(true);
     if (frame) Object.assign(frame.style, { width: saved.w, height: saved.h, minWidth: saved.minW });
@@ -1574,7 +1576,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     st.textContent = `${css}\n@page{margin:0} body{margin:0}`;
     wrap.append(st, ...clone.childNodes);
     const xhtml = new XMLSerializer().serializeToString(wrap);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${drawW}" height="${height}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
     const img = new Image();
     // data: URL (không dùng blob:) – Chrome không "làm bẩn" canvas với SVG foreignObject dạng data URL
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
