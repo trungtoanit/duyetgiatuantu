@@ -1546,9 +1546,64 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return hits.length;
   }
   // Chữ ký dưới "Trưởng bộ phận (Ký và ghi rõ họ tên)": đặt nổi trong khoảng trống ký tên, không đẩy lệch bố cục
-  function addSignature(root0) {
-    const sig = globalThis.DG_SIGNATURE;
+  // Chữ ký "mực thật", mỗi lần in khác nhau ±3%: xoay, co giãn, nghiêng, lệch nhẹ; tô lại màu mực xanh bút bi,
+  // độ đậm nhạt không đều + viền loang nhẹ như mực thấm giấy
+  async function inkSignature(src) {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const r = (a) => (Math.random() * 2 - 1) * a; // ngẫu nhiên trong ±a
+    const S = 2; // vẽ gấp đôi cho nét mịn
+    const pad = 0.12; // chừa lề cho phần xoay / nghiêng
+    const w = Math.round(img.width * (1 + 2 * pad) * S);
+    const h = Math.round(img.height * (1 + 2 * pad) * S);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.translate(w / 2 + r(3 * S), h / 2 + r(2 * S));
+    ctx.rotate((r(3) * Math.PI) / 180); // xoay ±3°
+    ctx.transform(1, r(0.02), r(0.03), 1, 0, 0); // nghiêng nhẹ
+    ctx.scale(S * (1 + r(0.03)), S * (1 + r(0.03))); // co giãn ±3%
+    ctx.filter = 'blur(0.35px)'; // mực thấm giấy
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.filter = 'none';
+    // tô lại màu mực + đậm nhạt không đều
+    const ink = [22 + r(8), 42 + r(10), 128 + r(16)]; // xanh mực bút bi
+    const d = ctx.getImageData(0, 0, w, h);
+    const px = d.data;
+    let seed = Math.random() * 1000;
+    for (let i = 0; i < px.length; i += 4) {
+      const a = px[i + 3];
+      if (!a) continue;
+      // ảnh gốc nền trắng: độ mực = độ tối của điểm (nền trắng → trong suốt)
+      const lum = (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255;
+      const strength = Math.max(0, Math.min(1, (0.97 - lum) / 0.6));
+      if (strength <= 0) {
+        px[i + 3] = 0;
+        continue;
+      }
+      seed = (seed * 9301 + 49297) % 233280; // nhiễu nhanh
+      const n = seed / 233280;
+      const dens = 0.8 + 0.2 * n; // đậm nhạt theo điểm như mực bút bi
+      px[i] = ink[0] * (0.9 + 0.2 * n);
+      px[i + 1] = ink[1] * (0.9 + 0.2 * n);
+      px[i + 2] = ink[2] * (0.92 + 0.12 * n);
+      px[i + 3] = Math.min(255, a * Math.pow(strength, 0.8) * dens * 1.1);
+    }
+    ctx.putImageData(d, 0, 0);
+    return { src: c.toDataURL('image/png'), height: Math.round((h / S) * (64 / img.height) ) };
+  }
+
+  async function addSignature(root0) {
+    let sig = globalThis.DG_SIGNATURE;
     if (!sig) return false;
+    let sigH = 64;
+    try {
+      const ink = await inkSignature(sig);
+      sig = ink.src;
+      sigH = ink.height; // giữ cỡ nét như bản gốc (64px) dù canvas có lề
+    } catch {}
     const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng bộ phận$/i.test(e.textContent.trim()));
     if (!label) return false;
     // khối của cột ký: ô bảng chứa nhãn, hoặc thẻ cha chứa cả "(Ký và ghi rõ họ tên)"
@@ -1561,7 +1616,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const doc = root0.ownerDocument;
     const img = doc.createElement('img');
     img.setAttribute('src', sig);
-    img.setAttribute('style', 'position:absolute;left:50%;top:100%;transform:translateX(-50%);height:64px;width:auto;margin-top:2px;pointer-events:none;');
+    img.setAttribute('style', `position:absolute;left:50%;top:100%;transform:translateX(-50%);height:${sigH}px;width:auto;margin-top:-6px;pointer-events:none;`);
     const pos = (col.getAttribute('style') || '');
     col.setAttribute('style', `${pos};position:relative;`);
     col.append(img);
@@ -1624,7 +1679,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
-    addSignature(clone);
+    await addSignature(clone);
     addApproval(clone);
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {
