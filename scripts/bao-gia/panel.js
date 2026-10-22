@@ -1978,6 +1978,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         document.head.append(st);
       }
     }
+    // Ẩn luôn khung nhắc bên phải ("Toán ơi! Hãy kết nối…") → băng gợi ý trải dài cả 2 bên
+    if (!box.dataset.wide) {
+      const hr = host.getBoundingClientRect();
+      const right = [...document.querySelectorAll('body *')]
+        .filter((e) => {
+          if (e.closest('#dg-root, [data-dg-hot]') || e.contains(host) || e.contains(box)) return false;
+          const r = e.getBoundingClientRect();
+          return r.top < 260 && r.height > 20 && r.left >= hr.right - 2 && /ơi!\s*Hãy/i.test(e.innerText || '');
+        })
+        .sort((a, b) => b.getBoundingClientRect().width * b.getBoundingClientRect().height - a.getBoundingClientRect().width * a.getBoundingClientRect().height)
+        .find((e) => e.getBoundingClientRect().width < window.innerWidth * 0.6);
+      if (right) {
+        const rr = right.getBoundingClientRect();
+        box.style.width = `${Math.round(rr.right - hr.left)}px`;
+        right.setAttribute('data-dg-hidden', '1');
+        box.dataset.wide = '1';
+      }
+    }
+    document.querySelectorAll('[data-dg-hidden]').forEach((e) => (e.style.display = 'none'));
     host.style.display = 'none';
     if (html !== topHotHtml || !box.innerHTML) {
       topHotHtml = html;
