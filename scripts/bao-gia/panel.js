@@ -1608,10 +1608,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Nút "🖨 In báo giá" cạnh tiêu đề "Bình luận" trên trang báo giá
   function injectPrintButton() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-printq')) return;
-    const h = [...document.querySelectorAll('h1, h2, h3, h4, h5, div, span')].find(
-      (e) => e.children.length === 0 && e.textContent.trim() === 'Bình luận' && !e.closest('.ant-tabs-tab, button, .ant-comment') && e.getBoundingClientRect().height >= 18,
+    // Tiêu đề "Bình luận" phía trên ô nhập (không phải tab, không phải nút gửi) – CRM dùng thẻ nào cũng nhận
+    const box = findCommentBox();
+    const cands = [...document.querySelectorAll('body *')].filter(
+      (e) => e.childElementCount === 0 && e.textContent.trim() === 'Bình luận' && !e.closest('.ant-tabs-tab, .ant-tabs-nav, button, .ant-btn, .ant-comment, #dg-root') && e.getClientRects().length,
     );
-    if (!h) return;
+    // gần ô nhập bình luận nhất (nằm phía trên ô nhập)
+    const h = box
+      ? cands.filter((e) => e.getBoundingClientRect().top <= box.getBoundingClientRect().top).sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top)[0]
+      : cands[0];
+    if (!h && !box) return;
     const b = document.createElement('span');
     b.className = 'dg-printq';
     b.textContent = '🖨 In báo giá → dán vào bình luận';
@@ -1622,7 +1628,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       e.stopPropagation();
       if (!b.textContent.startsWith('⏳') && !b.textContent.startsWith('📸')) printQuoteToComment(b);
     });
-    h.append(b);
+    if (h) h.append(b);
+    else {
+      // không thấy tiêu đề → đặt nút ngay trên ô nhập bình luận
+      const holder = document.createElement('div');
+      holder.setAttribute('style', 'margin:0 0 6px');
+      holder.append(b);
+      const anchor = box.closest('.ant-comment, .ant-form-item, .ant-row') || box.parentElement;
+      anchor.parentElement.insertBefore(holder, anchor);
+    }
   }
   if (IS_TOP) setInterval(() => injectPrintButton(), 2000);
 
