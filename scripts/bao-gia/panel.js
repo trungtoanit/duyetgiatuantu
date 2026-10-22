@@ -3403,6 +3403,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     .side-btn.recalc-btn { margin-left: auto; width: auto; padding: 0 8px; font-weight: 700; color: #4338ca; }
     .side-btn.recalc-btn + .side-btn { margin-left: 4px; }
     .side-btn { margin-left: auto; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; width: 24px; height: 22px; cursor: pointer; font-size: 12px; line-height: 1; }
+    /* Nút thu gọn / mở thẻ: to, có chữ, dễ bấm */
+    .side-btn.side-tg { width: auto; height: 32px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 800; color: #4338ca; background: #eef2ff; border-color: #c7d2fe; white-space: nowrap; flex: none; }
+    .side-btn.side-tg:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .side.collapsed .side-btn.side-tg { height: 30px; background: #6366f1; color: #fff; border-color: #6366f1; }
     .side.collapsed { width: auto; padding: 8px 10px; }
     .side.collapsed .side-h { margin-bottom: 0; }
     /* Thẻ thu gọn: thật nổi bật – nền gradient, viền màu chạy, vòng sáng lan ra, lắc nhẹ mỗi vài giây */
@@ -5096,7 +5100,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       el.hidden = false;
       el.classList.toggle('collapsed', col);
       setSideHtml(el, `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>🔁 Bàn giao khách hàng <span class="ho-n">${hoN}</span>
-        <button class="side-btn" data-side="toggle" title="${col ? 'Mở rộng' : 'Thu gọn'}">${col ? '▸' : '▾'}</button></div>${col ? '' : ho}`);
+        <button class="side-btn side-tg" data-side="toggle" title="${col ? 'Mở rộng thẻ' : 'Thu gọn thẻ'}">${col ? '▾ Mở' : '▴ Thu gọn'}</button></div>${col ? '' : ho}`);
       placeSide(el);
       return;
     }
@@ -5115,7 +5119,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       kinds.includes('offset') ? `🟪 ${offset != null ? `<b class="${pctCls(offset)}">${offset}%</b>` : '–'}` : '',
     ].filter(Boolean).join(' · ');
     const header = `<div class="side-h" title="Kéo để di chuyển · bấm đúp để về vị trí mặc định"><span class="side-grip">⠿</span>📊 ${esc(q?.code || `#${qid}`)}${collapsed ? '' : `${custTag(q)}${q?.quoteStatus ? `<span class="st-pill">${esc(statusLabel(q.quoteStatus))}</span>` : ''}`}${busy ? ' <span class="spinner"></span>' : ''}
-      ${collapsed ? `<span class="side-mini">${mini}</span>${hoN ? ` <span class="ho-n" title="Bàn giao khách hàng cần xử lý">🔁 ${hoN}</span>` : ''}` : ''}${collapsed ? '' : `<button class="side-btn recalc-btn" data-side="recalc" title="Tính lại giá: đọc lại bảng chiết giá / PO giấy tấm">${busy ? '<span class="spinner"></span>' : '↻'}</button>`}<button class="side-btn" data-side="toggle" title="${collapsed ? 'Mở rộng' : 'Thu gọn'}">${collapsed ? '▸' : '▾'}</button></div>`;
+      ${collapsed ? `<span class="side-mini">${mini}</span>${hoN ? ` <span class="ho-n" title="Bàn giao khách hàng cần xử lý">🔁 ${hoN}</span>` : ''}` : ''}${collapsed ? '' : `<button class="side-btn recalc-btn" data-side="recalc" title="Tính lại giá: đọc lại bảng chiết giá / PO giấy tấm">${busy ? '<span class="spinner"></span>' : '↻'}</button>`}<button class="side-btn side-tg" data-side="toggle" title="${collapsed ? 'Mở rộng thẻ' : 'Thu gọn thẻ'}">${collapsed ? '▾ Mở' : '▴ Thu gọn'}</button></div>`;
     if (collapsed) {
       setSideHtml(el, header);
       placeSide(el);
