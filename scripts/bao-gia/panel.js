@@ -1788,6 +1788,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // Câu xin giá của NVKD (không tính câu "E cho chị giá nhé" của chính quản lý) → có thêm nút Set giá
       const isAsk = PRICE_ASK_RE.test(text) && !(author && author.startsWith(meName));
       const isRoot = !one.parentElement?.closest('.ant-comment');
+      // Dòng thông báo hệ thống ("… đã tạo báo giá #BG… giá trị …", "… lên đơn hàng với giá trị …") → không gắn nút
+      if (/đã tạo báo giá\s*#?BG\d+|lên đơn hàng với giá trị/i.test(text)) continue;
       // Nút In báo giá → dán: mọi bình luận gốc của báo giá đang mở + mọi câu xin giá
       if (!isAsk && !isRoot) continue;
       // chỉ luồng có nhãn mã của báo giá đang mở
