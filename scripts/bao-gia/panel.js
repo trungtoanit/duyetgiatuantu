@@ -1948,17 +1948,35 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .filter(({ x, q }) => q && !done[x.id] && !CLOSED.has(q.quoteStatus) && !q.hasOrder)
       .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
-    // Giữ đúng kiểu chữ của CRM: "1. TÊN (số tiền)   2. …" – chỉ thay nội dung
-    const html = items
-      .map(({ q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink title="Gợi ý chốt đơn · ${esc(q.name || '')}" style="color:inherit;text-decoration:none">${i + 1}. ${esc(q.code)} - ${esc(q.customer?.name || q.customer?.code || '')} (${q.amount ? money(q.amount) : '0đ'})</a>`)
-      .join('&nbsp;&nbsp;&nbsp;');
+    // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b></div><div class="dgh-l">${items
+      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em>${x.pct ? `<u>${x.pct}%</u>` : ''}</a>`)
+      .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
     if (!box) {
       box = document.createElement('div');
       box.setAttribute('data-dg-hot', '1');
-      box.setAttribute('style', host.getAttribute('style') || '');
-      box.className = host.className;
+      // Chiếm đúng chỗ băng cũ (cùng bề rộng / co giãn), tự trang trí
+      const cs = getComputedStyle(host);
+      const w = host.getBoundingClientRect().width;
+      box.setAttribute('style', `flex:${cs.flex};width:${w ? `${Math.round(w)}px` : 'auto'};max-width:100%;margin:${cs.margin};align-self:stretch;min-width:0;box-sizing:border-box`);
       host.after(box);
+      if (!document.getElementById('dgh-css')) {
+        const st = document.createElement('style');
+        st.id = 'dgh-css';
+        st.textContent = `[data-dg-hot]{background:linear-gradient(135deg,#fffbeb,#fff7ed);border:1px solid #fcd34d;border-radius:10px;padding:5px 8px;font-family:inherit;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+[data-dg-hot] .dgh-t{font-size:11px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.3px}
+[data-dg-hot] .dgh-t b{background:#ea580c;color:#fff;border-radius:999px;padding:0 6px;margin-left:3px}
+[data-dg-hot] .dgh-l{display:flex;flex-wrap:wrap;gap:3px 5px;max-height:62px;overflow-y:auto}
+[data-dg-hot] .dgh-i{display:inline-flex;align-items:center;gap:4px;font-size:11px;line-height:18px;padding:0 7px 0 3px;border-radius:999px;background:#fff;border:1px solid #fde68a;color:#334155;text-decoration:none;white-space:nowrap;max-width:260px}
+[data-dg-hot] .dgh-i:hover{border-color:#f97316;box-shadow:0 1px 4px rgba(249,115,22,.25)}
+[data-dg-hot] .dgh-i i{font-style:normal;font-size:10px;font-weight:800;color:#fff;background:#f97316;border-radius:999px;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center}
+[data-dg-hot] .dgh-i b{color:#1d4ed8;font-weight:800}
+[data-dg-hot] .dgh-i span{overflow:hidden;text-overflow:ellipsis;color:#475569}
+[data-dg-hot] .dgh-i em{font-style:normal;font-weight:800;color:#047857}
+[data-dg-hot] .dgh-i u{text-decoration:none;font-weight:800;color:#c2410c}`;
+        document.head.append(st);
+      }
     }
     host.style.display = 'none';
     if (html !== topHotHtml || !box.innerHTML) {
