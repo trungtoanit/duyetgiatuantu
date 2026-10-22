@@ -1589,6 +1589,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     } catch {}
   }
 
+  // Câu mẫu đi kèm ảnh báo giá (chọn ngẫu nhiên, đổi xưng hô theo NVKD)
+  const PRICE_GIVE = [
+    'Anh cho em giá nhé',
+    'Anh duyệt giá này nhé',
+    'A tính giá này e báo khách nhé',
+    'A duyệt giá này nha em',
+    'A tính giá này em nhé',
+  ];
+  function priceGiveText(q) {
+    const p = addressFor(staffOf(q, renderCtx.comments?.[q?.id]), renderCtx.comments, renderCtx.quotes) || 'em';
+    let t = PRICE_GIVE[Math.floor(Math.random() * PRICE_GIVE.length)];
+    if (p === 'anh') t = t.replace(/^Anh\b/, 'Em').replace(/^A\b/, 'E'); // NVKD là "anh" → quản lý xưng "em"
+    if (p !== 'em') t = t.replace(/(^|\s)(em|e)(?=\s|$)/g, `$1${p}`);
+    return t;
+  }
+  const setTextarea = (ta, text) => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, text);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
   async function printQuoteToComment(btn, getBox) {
     const q = renderCtx.quotes?.[currentQuoteId()];
     const label = btn.textContent;
@@ -1616,6 +1636,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const { png, blurred } = await docToPng(doc);
       show('📋 Đang dán…');
       await pasteImageToComment(png, `bao-gia-${q?.code || currentQuoteId()}.png`, getBox);
+      // kèm câu mẫu nếu ô đang trống
+      const ta = await (getBox || (async () => findCommentBox()))();
+      if (ta && !ta.value.trim()) setTextarea(ta, priceGiveText(q));
       show(blurred ? '✅ Đã dán (đã làm mờ SĐT)' : '✅ Đã dán – không thấy SĐT để làm mờ');
     } catch (e) {
       show(`⚠️ ${e.message}`);
