@@ -4645,15 +4645,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const list = Object.entries(m?.products || {});
     const live = code && renderCtx.quotes?.[currentQuoteId()]?.code === code ? pageProductRows() : null;
     const order = live || m?.order || [];
+    if (live && code && state.ordDbg !== code) {
+      state.ordDbg = code;
+      call({ type: 'remote.push', ns: 'dbg', patch: { [`order-${code}`]: { at: Date.now(), live, specs: list.map(([, x]) => [x.spec, x.qty]) } } }).catch(() => {});
+    }
     // Chuẩn hoá: bỏ khoảng trắng, "×"/"X" → "x"; số lượng so theo từng số trong dòng (bỏ dấu chấm nghìn)
     const nz = (x) => String(x || '').toLowerCase().replace(/[×✕*]/g, 'x').replace(/\s+/g, '');
     const nums = (t) => (String(t).replace(/(\d)\.(?=\d{3}\b)/g, '$1').match(/\d+/g) || []);
     const used = new Set();
+    // Quy cách có thể nằm ở các ô riêng (245 | 155 | 37) → so theo dãy số liên tiếp
+    const hasSpec = (t, spec) => {
+      if (!spec) return false;
+      if (nz(t).includes(spec)) return true;
+      const sn = spec.match(/\d+/g) || [];
+      const rn = nums(t);
+      return sn.length >= 2 && rn.some((_, k) => sn.every((v, j) => rn[k + j] === v));
+    };
     const pos = ([, x]) => {
       const spec = nz(x.spec);
       const qty = String(x.qty || '').replace(/[^\d]/g, '');
-      let i = order.findIndex((t, k) => !used.has(k) && spec && nz(t).includes(spec) && (!qty || nums(t).includes(qty)));
-      if (i < 0) i = order.findIndex((t, k) => !used.has(k) && spec && nz(t).includes(spec));
+      let i = order.findIndex((t, k) => !used.has(k) && hasSpec(t, spec) && (!qty || nums(t).includes(qty)));
+      if (i < 0) i = order.findIndex((t, k) => !used.has(k) && hasSpec(t, spec));
       if (i >= 0) used.add(i);
       return i >= 0 ? i : 999;
     };
