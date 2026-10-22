@@ -1702,7 +1702,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   async function docToPng(doc, scale = 2) {
     const body = doc.body;
-    const layoutW = Math.round(A4.w / A4.zoom); // bề ngang dàn trang trước khi thu 80%
+    // Báo giá chỉ 1 dòng sản phẩm → chụp 100% (chữ to, dễ đọc); nhiều dòng → thu 80% cho vừa trang
+    const prodRows = [...doc.querySelectorAll('table')]
+      .filter((t) => /SẢN PHẨM/i.test(t.innerText) && /THÀNH TIỀN/i.test(t.innerText))
+      .flatMap((t) => [...t.rows].filter((r) => /^\s*\d+\s*$/.test(r.cells[0]?.innerText || '')));
+    const zoom = prodRows.length <= 1 ? 1 : A4.zoom;
+    const layoutW = Math.round(A4.w / zoom); // bề ngang dàn trang trước khi thu
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
@@ -1738,7 +1743,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     inner.append(st, ...clone.childNodes);
     const wrap = document.createElement('div');
     wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    wrap.setAttribute('style', `zoom:${A4.zoom};background:#fff;display:inline-block;`);
+    wrap.setAttribute('style', `zoom:${zoom};background:#fff;display:inline-block;`);
     wrap.append(inner);
     // khung vẽ rộng / cao dư để không cắt mất gì
     const drawW = Math.ceil(layoutW * 1.6);
