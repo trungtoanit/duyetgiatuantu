@@ -2156,6 +2156,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           });
           await sleep(COLLECT.gapMs);
         }
+        // Kiểm tra lại tình trạng: báo giá đang hiện trong danh sách mà lâu chưa mở lại trang chi tiết
+        // (danh sách ERP chỉ đọc vài trang đầu → báo giá cũ đã Thành công / có đơn vẫn nằm lại). Mở ngầm trang chi tiết
+        // để cập nhật tình trạng + mã đơn Misa; mỗi lượt tối đa 8 báo giá, mỗi báo giá 3 ngày kiểm 1 lần.
+        const chk = await kvGet('quoteCheck');
+        const recheck = feasibleList(q3, c3, o3)
+          .map(({ q }) => q)
+          .filter((q) => q?.id && !CLOSED.has(q.quoteStatus) && !q.hasOrder && Date.now() - (chk[q.id] || 0) > 3 * 86400e3)
+          .sort((a, b) => (chk[a.id] || 0) - (chk[b.id] || 0) || (a.createdAt || 0) - (b.createdAt || 0))
+          .slice(0, 8);
+        for (const q of recheck) {
+          if (!force && !(await getSettings()).auto) break;
+          collect.current = `${q.code} · kiểm tình trạng`;
+          progress();
+          await loadInFrame(q.id);
+          await kvMerge('quoteCheck', { [q.id]: Date.now() });
+          await sleep(COLLECT.gapMs);
+        }
       }
       // Hết báo giá chưa thu thập → kết thúc chế độ toàn bộ
       if (full && !queue.length) {
