@@ -2030,16 +2030,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!host) return;
       host.setAttribute('data-dg-hotbar', '1');
     }
-    const [hot, done] = await Promise.all([kvGet('aiHot'), kvGet('aiHotDone')]);
+    const [hot, done, pin] = await Promise.all([kvGet('aiHot'), kvGet('aiHotDone'), kvGet('hotPinned')]);
     const quotes = renderCtx.quotes || (await kvGet('quotes'));
-    const items = (hot.latest?.items || [])
+    // gộp báo giá quản lý tự thêm (📌, giữ tới khi lên đơn) vào kết quả AI
+    const aiItems = hot.latest?.items || [];
+    const aiIds = new Set(aiItems.map((x) => x.id));
+    const pinned = Object.entries(pin || {}).filter(([, v]) => v && !v.off).map(([id]) => Number(id));
+    const pinSet = new Set(pinned);
+    const all = [...aiItems.map((x) => ({ ...x, pinned: pinSet.has(x.id) })), ...pinned.filter((id) => !aiIds.has(id)).map((id) => ({ id, pinned: true }))];
+    const items = all
       .map((x) => ({ x, q: quotes[x.id] }))
-      .filter(({ x, q }) => q && !done[x.id] && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !cancelInfo(renderCtx.comments?.[x.id]))
+      .filter(({ x, q }) => q && (x.pinned || !done[x.id]) && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !hasOrderFull(q, renderCtx.comments?.[x.id]) && !cancelInfo(renderCtx.comments?.[x.id]))
       .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
     // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
     const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b></div><div class="dgh-l">${items
-      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
+      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
     if (!box) {
