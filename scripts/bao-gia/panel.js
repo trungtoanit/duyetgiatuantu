@@ -2025,52 +2025,42 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   };
   function styleQuoteStatus() {
     if (!IS_TOP || !currentQuoteId()) return;
+    document.querySelectorAll('.dg-sti').forEach((e) => e.remove()); // bỏ biểu tượng chèn kiểu cũ
     const lbl = [...document.querySelectorAll('label, span, div')].find((e) => e.childElementCount === 0 && e.textContent.trim() === 'Tình trạng báo giá' && !e.closest('#dg-root'));
     if (!lbl) return;
-    let box = lbl.parentElement;
-    for (let k = 0; k < 4 && box && ![...box.querySelectorAll('*')].some((e) => e.textContent.trim() === 'Thất bại'); k++) box = box.parentElement;
+    let scope = lbl.parentElement;
+    for (let k = 0; k < 5 && scope && ![...scope.querySelectorAll('*')].some((e) => e.childElementCount === 0 && e.textContent.trim() === 'Thất bại'); k++) scope = scope.parentElement;
+    if (!scope) return;
+    // Chữ của từng nút (phần tử lá có đúng tên tình trạng)
+    const leaves = [...scope.querySelectorAll('*')].filter((e) => e.childElementCount === 0 && ST_LOOK[e.textContent.replace(/[✓✔]/g, '').trim()]);
+    if (leaves.length < 4) return;
+    // Khung chung nhỏ nhất chứa tất cả nút; mỗi nút = con trực tiếp của khung đó
+    let box = leaves[0].parentElement;
+    while (box && !leaves.every((l) => box.contains(l))) box = box.parentElement;
     if (!box) return;
-    if (!document.getElementById('dg-st-css')) {
+    if (!document.getElementById('dg-st-css2')) {
+      document.getElementById('dg-st-css')?.remove();
       const st = document.createElement('style');
-      st.id = 'dg-st-css';
-      st.textContent = `[data-dg-st]{display:inline-flex !important;align-items:center;justify-content:center;gap:6px;height:34px !important;padding:0 14px !important;margin:0 !important;border-radius:999px !important;font-size:13px !important;font-weight:700 !important;border:1.5px solid var(--c) !important;color:var(--c) !important;background:color-mix(in srgb,var(--c) 8%,#fff) !important;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1 !important;opacity:1 !important}
-[data-dg-st]:hover{background:color-mix(in srgb,var(--c) 18%,#fff) !important;transform:translateY(-1px);box-shadow:0 3px 10px color-mix(in srgb,var(--c) 25%,transparent)}
-[data-dg-st][data-on="1"]{background:var(--c) !important;color:#fff !important;box-shadow:0 4px 14px color-mix(in srgb,var(--c) 45%,transparent);transform:scale(1.04)}
-[data-dg-st] .dg-sti{font-size:14px}
-[data-dg-stbox]{display:grid !important;grid-template-columns:repeat(4,minmax(0,max-content));gap:8px !important;margin-top:6px}`;
+      st.id = 'dg-st-css2';
+      st.textContent = `[data-dg-stbox]{display:flex !important;flex-wrap:wrap !important;gap:8px !important;margin-top:6px}
+[data-dg-st]{position:static !important;display:inline-flex !important;align-items:center;gap:6px;width:auto !important;min-width:0 !important;height:32px !important;padding:0 14px !important;margin:0 !important;border-radius:999px !important;font-size:13px !important;font-weight:700 !important;border:1.5px solid var(--c) !important;color:var(--c) !important;background:color-mix(in srgb,var(--c) 8%,#fff) !important;cursor:pointer;transition:background .15s, box-shadow .15s;white-space:nowrap;line-height:1 !important;opacity:1 !important;box-sizing:border-box}
+[data-dg-st]::before{content:attr(data-dg-ic);font-size:14px}
+[data-dg-st] *{color:inherit !important;background:transparent !important;border:0 !important;padding:0 !important;margin:0 !important;font-weight:inherit !important}
+[data-dg-st]:hover{background:color-mix(in srgb,var(--c) 18%,#fff) !important;box-shadow:0 3px 10px color-mix(in srgb,var(--c) 25%,transparent)}
+[data-dg-st][data-on="1"]{background:var(--c) !important;color:#fff !important;box-shadow:0 4px 14px color-mix(in srgb,var(--c) 45%,transparent)}`;
       document.head.append(st);
     }
-    const btns = [];
-    for (const e of box.querySelectorAll('*')) {
-      const t = e.textContent.replace(/[✓✔]/g, '').trim();
-      if (!ST_LOOK[t]) continue;
-      // phần tử ngoài cùng của nút có đúng chữ đó (không phải tiêu đề)
-      let b = e;
-      while (b.parentElement && b.parentElement !== box && b.parentElement.textContent.replace(/[✓✔]/g, '').trim() === t) b = b.parentElement;
-      if (!btns.includes(b)) btns.push(b);
-    }
-    if (btns.length < 4) return;
-    const parent = btns[0].parentElement;
-    if (btns.every((b) => b.parentElement === parent)) parent.setAttribute('data-dg-stbox', '1');
-    for (const b of btns) {
-      const t = b.textContent.replace(/[✓✔]/g, '').trim();
+    box.setAttribute('data-dg-stbox', '1');
+    for (const l of leaves) {
+      let b = l;
+      while (b.parentElement && b.parentElement !== box) b = b.parentElement;
+      const t = l.textContent.replace(/[✓✔]/g, '').trim();
       const [ic, col] = ST_LOOK[t];
-      const cs = getComputedStyle(b);
-      const on =
-        /✓|✔/.test(b.textContent) ||
-        !!b.querySelector('.anticon-check, svg') ||
-        /checked|active|selected/.test(b.className) ||
-        (b.dataset.on === '1' && !b.dataset.dgChecked);
+      const on = /✓|✔/.test(b.textContent) || !!b.querySelector('.anticon-check') || /checked|active|selected/.test(b.className + ' ' + (b.firstElementChild?.className || ''));
       b.setAttribute('data-dg-st', t);
+      b.setAttribute('data-dg-ic', ic);
       b.style.setProperty('--c', col);
-      if (b.dataset.on !== (on ? '1' : '0')) b.dataset.on = on ? '1' : '0';
-      if (!b.querySelector('.dg-sti')) {
-        const i = document.createElement('span');
-        i.className = 'dg-sti';
-        i.textContent = ic;
-        b.prepend(i);
-      }
-      void cs;
+      b.dataset.on = on ? '1' : '0';
     }
   }
   if (IS_TOP) setInterval(() => {
