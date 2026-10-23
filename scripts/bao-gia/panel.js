@@ -878,6 +878,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return p?.querySelector('textarea:not(#privateNote)') || null;
   }
 
+  // Câu hỏi gợi ý trên thẻ bên phải → điền sẵn vào ô bình luận của CRM (chỉ khi ô đang trống; xoá đi thì không điền lại)
+  const autoFilled = {};
+  function autofillComment() {
+    if (!IS_TOP) return;
+    const qid = currentQuoteId();
+    const qc = qid && quickCtx[qid];
+    if (!qc?.text) return;
+    const box = findCommentBox();
+    if (!box || document.activeElement === box) return;
+    const key = `${qid}|${qc.text}`;
+    if (autoFilled[qid] === key) return;
+    if (box.value.trim() && box.value.trim() !== (autoFilled[`${qid}:last`] || '')) return; // người dùng đang gõ nội dung khác
+    autoFilled[qid] = key;
+    autoFilled[`${qid}:last`] = qc.text;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, qc.text);
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  setInterval(() => {
+    try {
+      autofillComment();
+    } catch {}
+  }, 1500);
   // Chỉ điền nội dung, KHÔNG tự bấm gửi – người dùng xem lại rồi tự bấm "Bình luận".
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -5252,7 +5274,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Sếp tự xưng trong câu mẫu là "anh"; gọi NVKD là "chị" / "anh" (người lớn hơn) thì sếp xưng "em"
   const selfAdj = (t, p) =>
     p === 'chị' || p === 'anh' ? t.replace(/(^|[^\p{L}{])anh(?![\p{L}}])/gu, '$1em').replace(/(^|[^\p{L}{])Anh(?![\p{L}}])/gu, '$1Em') : t;
-  const fillP = (t, p, d = '') => selfAdj(t, p).replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
+  // Biến dính liền chữ (vd. "chưa{p}") → thêm khoảng trắng cho tự nhiên
+  const varSpace = (t) => String(t).replace(/(\p{L})\{([pPdsS])\}/gu, '$1 {$2}').replace(/\{([pPdsS])\}(\p{L})/gu, '{$1} $2');
+  const fillP = (t, p, d = '') => selfAdj(varSpace(t), p).replaceAll('{p}', p).replaceAll('{P}', p.charAt(0).toUpperCase() + p.slice(1)).replaceAll('{d}', d);
   // "anh" trong mẫu là quản lý tự xưng; nếu NVKD được gọi là "anh" thì quản lý xưng "em"
   const selfFix = (t) => t; // xưng hô của sếp đã xử lý trong fillP (selfAdj)
 
@@ -7637,7 +7661,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       else n.childNodes.forEach(walk);
     };
     el.childNodes.forEach(walk);
-    return out.replace(/\s+/g, ' ').trim();
+    return varSpace(out).replace(/\s+/g, ' ').trim();
   };
   const qeRenumber = (box) => box?.querySelectorAll('.qe-row').forEach((r, k) => (r.querySelector('.qe-no').textContent = k + 1));
   // Gõ tới đâu tự lưu tới đó (chờ 0,8 giây sau lần gõ cuối) – lưu cả bộ, áp dụng mọi máy
