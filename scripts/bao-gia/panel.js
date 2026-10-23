@@ -2026,7 +2026,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const el = document.createElement('style');
     el.id = 'dg-tagcol-css';
-    el.textContent = css + 'th[data-dg-tagcol],td[data-dg-tagcol]{white-space:normal;width:280px !important;max-width:280px !important;min-width:180px} [data-dg-tagcol] span{margin:1px 3px 1px 0 !important;font-size:11px !important;padding:0 7px !important;display:inline-block}';
+    el.textContent = css + 'th[data-dg-tagcol],td[data-dg-tagcol]{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:280px !important;max-width:280px !important;min-width:180px} [data-dg-tagcol] span{margin:1px 3px 1px 0 !important;font-size:11px !important;padding:0 7px !important;display:inline-block}';
     document.head.append(el);
   }
   // Bộ lọc nhãn trên trang danh sách CRM (lọc các dòng đang hiện của trang)
@@ -2114,7 +2114,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
         if (td.dataset.k !== `${code}|${html.length}`) {
           td.dataset.k = `${code}|${html.length}`;
-          td.innerHTML = html;
+          // 1 dòng, dài quá thì "…"; rê chuột vào ô thấy đủ các nhãn
+          td.innerHTML = html.replace(/\stitle="[^"]*"/g, '');
+          const tpl = document.createElement('div');
+          tpl.innerHTML = html;
+          td.title = [...tpl.children].map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
         }
         // Cột "Khách hàng": chỉ hiện mã khách, rê chuột thấy tên đầy đủ
         if (khIdx >= 0 && q?.customer?.code) {
