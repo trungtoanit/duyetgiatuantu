@@ -893,11 +893,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const typing = [...document.querySelectorAll('textarea')].some((t) => !t.closest('#dg-root') && (document.activeElement === t || t.value.trim()));
     if (typing && !autoFilled[`${qid}:last`]) return;
     if (document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
-    autoFilled[`${qid}:tried`] = true;
     const code = renderCtx.quotes?.[qid]?.code;
+    // Báo giá đã có luồng bình luận → BẮT BUỘC trả lời vào luồng (bấm "Trả lời"); chưa hiện luồng thì chờ lượt sau
+    const hasThread = !!renderCtx.comments?.[qid]?.threads?.some((t) => !/đã tạo báo giá/i.test(t.text || ''));
     autoBusy = true;
     try {
-      const ta = (code && (await openReplyBox(code))) || findCommentBox();
+      let ta = code ? await openReplyBox(code) : null;
+      if (!ta && hasThread) {
+        autoFilled[`${qid}:wait`] = (autoFilled[`${qid}:wait`] || 0) + 1;
+        if (autoFilled[`${qid}:wait`] < 20) return; // thử lại ~30 giây
+      }
+      autoFilled[`${qid}:tried`] = true;
+      ta = ta || findCommentBox();
       if (!ta || document.activeElement === ta) return;
       const last = autoFilled[`${qid}:last`] || '';
       if (ta.value.trim() && ta.value.trim() !== last) return; // người dùng đang gõ nội dung khác
