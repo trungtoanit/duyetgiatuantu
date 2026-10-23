@@ -2029,6 +2029,45 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     el.textContent = css + '[data-dg-tagcol]{white-space:normal} [data-dg-tagcol] span{margin:1px 3px 1px 0 !important;font-size:11px !important;padding:0 7px !important;display:inline-block}';
     document.head.append(el);
   }
+  // Bộ lọc nhãn trên trang danh sách CRM (lọc các dòng đang hiện của trang)
+  const CRM_F = [
+    ['prio', '🔥', 'Ưu tiên', '#ea580c', (q, c) => renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c)],
+    ['flexo', '🟦', 'Flexo', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
+    ['offset', '🟪', 'Offset', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
+    ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
+    ['tgt', '💲', 'Khách cho giá', '#2563eb', (q, c) => targetPriceInfo(c)],
+    ['promise', '🤝', 'Hứa lên đơn', '#d97706', (q, c) => promiseInfo(q, c)],
+    ['contract', '📝', 'Hợp đồng', '#0284c7', (q, c) => contractInfo(c)],
+    ['sample', '✂️', 'Cắt mẫu', '#db2777', (q, c) => sampleInfo(c)],
+    ['high', '💸', 'Giá cao', '#ea580c', (q, c) => highPriceInfo(c)],
+    ['credit', '🧾', 'Xin công nợ', '#0d9488', (q, c) => creditInfo(c)],
+    ['nodep', '🚫', 'Chưa cọc', '#dc2626', (q, c) => noDepositInfo(c)],
+    ['nosheet', '😡', 'Chưa có giá GT', '#dc2626', (q) => q.noSheet],
+    ['zero', '⚠️', 'Chưa cho giá', '#dc2626', (q) => noPrice(q)],
+  ];
+  function crmFilterBar(wrap, counts, total) {
+    const sel = lsGet('dgCrmF') || '';
+    let bar = document.getElementById('dg-crmf');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'dg-crmf';
+      bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;font-size:12px');
+      bar.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-f]');
+        if (!b) return;
+        lsSet('dgCrmF', lsGet('dgCrmF') === b.dataset.f ? '' : b.dataset.f);
+        crmListTags();
+      });
+      (wrap.closest('.ant-table-wrapper') || wrap).before(bar);
+    }
+    const html = `<b style="color:#475569;margin-right:4px">🏷️ Lọc nhãn:</b>${CRM_F.filter(([k]) => counts[k] || sel === k)
+      .map(([k, ic, label, col]) => `<span data-f="${k}" style="cursor:pointer;border-radius:999px;padding:2px 10px;font-weight:700;border:1px solid ${col}55;${sel === k ? `background:${col};color:#fff` : `background:${col}12;color:${col}`}">${ic} ${label} <b>${counts[k] || 0}</b></span>`)
+      .join('')}${sel ? '<span data-f="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc</span>' : ''}<span style="color:#94a3b8;margin-left:auto">lọc trong ${total} dòng của trang này</span>`;
+    if (bar.dataset.h !== html) {
+      bar.dataset.h = html;
+      bar.innerHTML = html;
+    }
+  }
   function crmListTags() {
     if (!IS_TOP || !root || !/^\/bao-gia\/?$/.test(location.pathname) || !renderCtx.quotes) return;
     crmTagCss();
@@ -2053,6 +2092,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       }
       const pos = [...wrap.querySelectorAll('thead th')].findIndex((th) => th.hasAttribute('data-dg-tagcol'));
+      const sel = lsGet('dgCrmF') || '';
+      const selF = CRM_F.find((f) => f[0] === sel)?.[4];
+      const counts = {};
+      let total = 0;
       for (const tr of wrap.querySelectorAll('tbody tr')) {
         if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
         const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
@@ -2072,7 +2115,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           td.dataset.k = `${code}|${html.length}`;
           td.innerHTML = html;
         }
+        total++;
+        let match = !selF;
+        if (q)
+          for (const [k, , , , fn] of CRM_F) {
+            let v = false;
+            try {
+              v = !!fn(q, c);
+            } catch {}
+            if (v) counts[k] = (counts[k] || 0) + 1;
+            if (k === sel && v) match = true;
+          }
+        tr.style.display = match ? '' : 'none';
       }
+      crmFilterBar(wrap, counts, total);
     }
   }
   if (IS_TOP) setInterval(() => {
