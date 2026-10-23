@@ -2026,7 +2026,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const el = document.createElement('style');
     el.id = 'dg-tagcol-css';
-    el.textContent = css + '[data-dg-tagcol]{white-space:normal} [data-dg-tagcol] span{margin:1px 3px 1px 0 !important;font-size:11px !important;padding:0 7px !important;display:inline-block}';
+    el.textContent = css + 'th[data-dg-tagcol],td[data-dg-tagcol]{white-space:normal;width:280px !important;max-width:280px !important;min-width:180px} [data-dg-tagcol] span{margin:1px 3px 1px 0 !important;font-size:11px !important;padding:0 7px !important;display:inline-block}';
     document.head.append(el);
   }
   // Bộ lọc nhãn trên trang danh sách CRM (lọc các dòng đang hiện của trang)
@@ -2087,7 +2087,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           const cols = cg.querySelectorAll('col');
           const col = document.createElement('col');
           col.setAttribute('data-dg-tagcol', '1');
-          col.style.width = '190px';
+          col.style.width = '280px';
           (cols[idx] || cols[cols.length - 1])?.before(col);
         }
       }
