@@ -1899,17 +1899,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     input.dispatchEvent(new Event('change', { bubbles: true }));
     input.blur(); // InputNumber của antd chốt giá trị khi rời ô
   }
+  // Ô có thể chỉ là chữ cho tới khi bấm vào (ô sửa nhanh) → bấm vào ô để mở ô nhập rồi mới điền
+  async function nudgeCell(cell, pct) {
+    let input = cell.querySelector('input');
+    if (!input) {
+      const target = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent) && !e.closest('.dg-nudge')) || cell;
+      for (const t of ['mousedown', 'mouseup', 'click', 'dblclick']) target.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+      input = await waitFor(() => cell.querySelector('input'), 1500, 100);
+    }
+    if (input) nudgePrice(input, pct);
+  }
   function injectPriceNudges() {
     if (!IS_TOP || !currentQuoteId()) return;
     for (const t of document.querySelectorAll('.ant-table')) {
       const heads = [...t.querySelectorAll('thead th')];
-      const idx = heads.findIndex((th) => th.innerText.trim() === 'Giá thực bán');
+      const idx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
       if (idx < 0) continue;
       for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
         if (tr.classList.contains('ant-table-measure-row')) continue;
         const cell = tr.cells[idx];
-        const input = cell?.querySelector('input');
-        if (!input || cell.querySelector('.dg-nudge')) continue;
+        if (!cell || cell.querySelector('.dg-nudge') || !/\d/.test(cell.innerText + (cell.querySelector('input')?.value || ''))) continue;
         const box = document.createElement('div');
         box.className = 'dg-nudge';
         box.setAttribute('style', 'display:flex;gap:4px;justify-content:flex-end;margin-top:4px;');
@@ -1922,7 +1931,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           b.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            nudgePrice(cell.querySelector('input') || input, pct);
+            nudgeCell(cell, pct);
           });
           box.append(b);
         }
