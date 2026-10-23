@@ -880,26 +880,37 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // Câu hỏi gợi ý trên thẻ bên phải → điền sẵn vào ô bình luận của CRM (chỉ khi ô đang trống; xoá đi thì không điền lại)
   const autoFilled = {};
-  function autofillComment() {
-    if (!IS_TOP) return;
+  let autoBusy = false;
+  // Điền vào ô TRẢ LỜI của luồng báo giá đang mở (luồng có nhãn đúng mã báo giá); chưa có luồng thì ô bình luận mới
+  async function autofillComment() {
+    if (!IS_TOP || autoBusy) return;
     const qid = currentQuoteId();
     const qc = qid && quickCtx[qid];
     if (!qc?.text) return;
-    const box = findCommentBox();
-    if (!box || document.activeElement === box) return;
     const key = `${qid}|${qc.text}`;
     if (autoFilled[qid] === key) return;
-    if (box.value.trim() && box.value.trim() !== (autoFilled[`${qid}:last`] || '')) return; // người dùng đang gõ nội dung khác
-    autoFilled[qid] = key;
-    autoFilled[`${qid}:last`] = qc.text;
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, qc.text);
-    box.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  setInterval(() => {
+    const code = renderCtx.quotes?.[qid]?.code;
+    autoBusy = true;
     try {
-      autofillComment();
-    } catch {}
-  }, 1500);
+      const ta = (code && (await openReplyBox(code))) || findCommentBox();
+      if (!ta || document.activeElement === ta) return;
+      const last = autoFilled[`${qid}:last`] || '';
+      if (ta.value.trim() && ta.value.trim() !== last) return; // người dùng đang gõ nội dung khác
+      // ô bình luận mới ở trên cùng đã điền từ bản trước → xoá đi (giờ điền vào luồng của báo giá)
+      const top = findCommentBox();
+      if (top && top !== ta && last && top.value.trim() === last) {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(top, '');
+        top.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      autoFilled[qid] = key;
+      autoFilled[`${qid}:last`] = qc.text;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, qc.text);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    } finally {
+      autoBusy = false;
+    }
+  }
+  setInterval(() => autofillComment().catch(() => {}), 1500);
   // Chỉ điền nội dung, KHÔNG tự bấm gửi – người dùng xem lại rồi tự bấm "Bình luận".
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
