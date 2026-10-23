@@ -2053,6 +2053,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       bar = document.createElement('div');
       bar.id = 'dg-crmf';
       bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;font-size:12px');
+      const st0 = document.createElement('style');
+      st0.textContent = '#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}';
+      bar.append(st0);
       bar.addEventListener('click', (e) => {
         const st = e.target.closest('[data-s]');
         if (st) {
@@ -2075,7 +2078,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         .join('')}${selS ? '<span data-s="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc NVKD</span>' : ''}</div>`;
     if (bar.dataset.h !== html) {
       bar.dataset.h = html;
-      bar.innerHTML = html;
+      bar.innerHTML = `<style>#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}</style>${html}`;
     }
   }
   function crmListTags() {
