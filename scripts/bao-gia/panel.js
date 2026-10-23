@@ -2052,7 +2052,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'dg-crmf';
-      bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;padding:6px 8px;font-size:12px;position:sticky;top:0;z-index:20;background:#f5f7fb;border-bottom:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(15,23,42,.06)');
+      bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;padding:6px 8px;font-size:12px;position:relative;z-index:20;background:#f5f7fb;will-change:transform;border-bottom:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(15,23,42,.06)');
       const st0 = document.createElement('style');
       st0.textContent = '#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}';
       bar.append(st0);
@@ -2154,6 +2154,48 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const myInp = bar.querySelector('input[type="search"]');
     if (srcInput && document.activeElement !== myInp && myInp.value !== srcInput.value) myInp.value = srcInput.value;
   }
+  // Giữ thanh lọc + tiêu đề bảng cố định khi cuộn (dịch bằng transform – chạy được cả khi trang cuộn trong khung riêng)
+  let stickRaf = 0;
+  function crmStick() {
+    stickRaf = 0;
+    const bar = document.getElementById('dg-crmf');
+    if (!bar || !bar.isConnected) return;
+    const wrap = bar.nextElementSibling?.querySelector?.('.ant-table') || document.querySelector('.ant-table');
+    const thead = wrap?.querySelector('thead');
+    const tbody = wrap?.querySelector('tbody');
+    const cur = (el) => Number(el.dataset.dgTy || 0);
+    const set = (el, y) => {
+      el.dataset.dgTy = y;
+      el.style.transform = y ? `translateY(${y}px)` : '';
+    };
+    const barTop = bar.getBoundingClientRect().top - cur(bar);
+    const barH = bar.offsetHeight;
+    const bottom = (tbody || wrap || bar).getBoundingClientRect().bottom;
+    const by = Math.max(0, Math.min(-barTop, bottom - cur(bar) - barH - 60 - barTop));
+    set(bar, Math.round(by));
+    if (thead) {
+      const ths = [...thead.querySelectorAll('th')];
+      const th0 = ths[0];
+      if (th0) {
+        const hTop = th0.getBoundingClientRect().top - cur(th0);
+        const hy = Math.max(0, Math.min(barH - hTop + (by ? 0 : barTop < 0 ? 0 : 0), bottom - 40 - hTop));
+        const y = barTop < 0 ? Math.round(hy) : 0;
+        for (const th of ths) {
+          set(th, y);
+          th.style.position = 'relative';
+          th.style.zIndex = y ? '19' : '';
+          if (y && !th.style.background) th.style.background = '#fafafa';
+        }
+      }
+    }
+  }
+  const stickReq = () => {
+    if (!stickRaf) stickRaf = requestAnimationFrame(crmStick);
+  };
+  if (IS_TOP) {
+    window.addEventListener('scroll', stickReq, true);
+    window.addEventListener('resize', stickReq);
+  }
   function crmListTags() {
     if (!IS_TOP || !root || !/^\/bao-gia\/?$/.test(location.pathname) || !renderCtx.quotes) return;
     try {
@@ -2246,6 +2288,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         tr.style.display = match ? '' : 'none';
       }
       crmFilterBar(wrap, counts, total, staffN);
+      stickReq();
       // Cột "Số tiền" in đậm
       {
         const ths = [...wrap.querySelectorAll('thead th')];
