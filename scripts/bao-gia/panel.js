@@ -2096,12 +2096,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!pag) return;
     let bar = document.getElementById('dg-crmsearch');
     if (!bar) {
-      bar = document.createElement('span');
+      bar = document.createElement('li'); // nằm trong thanh phân trang (cùng hàng, bên phải "Page")
       bar.id = 'dg-crmsearch';
-      bar.setAttribute('style', 'display:inline-flex;align-items:center;gap:14px;margin-left:16px;vertical-align:middle');
+      bar.setAttribute('style', 'display:inline-flex;align-items:center;gap:14px;margin-left:16px;vertical-align:middle;list-style:none');
       bar.innerHTML = `<span style="position:relative;display:inline-flex;align-items:center"><input type="search" placeholder="🔍 Tìm kiếm báo giá…" style="width:240px;height:32px;border:1px solid #d9d9d9;border-radius:6px;padding:0 10px;font:inherit;font-size:14px;outline:none"></span>
         <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;white-space:nowrap"><input type="checkbox" style="width:16px;height:16px;cursor:pointer"> Chỉ lấy của Tuấn Tú</label>`;
-      pag.after(bar);
+      pag.append(bar);
       const inp = bar.querySelector('input[type="search"]');
       const chk = bar.querySelector('input[type="checkbox"]');
       const push = (enter) => {
@@ -2131,6 +2131,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         if (src && src.checked !== chk.checked) src.click();
       });
     }
+    if (bar.parentElement !== pag) pag.append(bar);
     bar._src = srcInput;
     bar._chk = srcCheck;
     const myChk = bar.querySelector('input[type="checkbox"]');
