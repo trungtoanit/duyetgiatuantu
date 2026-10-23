@@ -194,7 +194,19 @@
     else if (q.amount) add(10 + Math.min(10, Math.round(Math.log10(Math.max(1, q.amount / 1e6)) * 5)));
     if (highPriceInfo(c)) add(-15, 'chê giá cao');
     if (noDepositInfo(c)) add(-10, 'chưa cọc');
+    if (cancelInfo(c)) add(-1000, 'khách hủy đơn');
     return { score, reasons };
+  }
+  // Bình luận có "hủy đơn / huỷ đơn (rồi)" → khách đã hủy, không gợi ý chốt nữa
+  const CANCEL_RE = /(?<![\p{L}])h(ủy|uỷ|ủ|uy)\s*(cái\s*)?đơn/iu;
+  function cancelInfo(c) {
+    let hit = null;
+    const walk = (t) => {
+      if (CANCEL_RE.test((t.text || '').normalize('NFC')) && (!hit || t.createdAt > hit.createdAt)) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit;
   }
   // Sắp xếp y như danh sách Báo giá trên ERP (vị trí ghi lại khi ERP tải danh sách); chưa có vị trí → cuối.
   // Có thể chuyển sang xếp theo điểm (lưu trong localStorage).
@@ -1945,7 +1957,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const quotes = renderCtx.quotes || (await kvGet('quotes'));
     const items = (hot.latest?.items || [])
       .map((x) => ({ x, q: quotes[x.id] }))
-      .filter(({ x, q }) => q && !done[x.id] && !CLOSED.has(q.quoteStatus) && !q.hasOrder)
+      .filter(({ x, q }) => q && !done[x.id] && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !cancelInfo(renderCtx.comments?.[x.id]))
       .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
     // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
@@ -6589,7 +6601,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
-        const hotN = (hotData?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !hotDone[x.id]).length;
+        const hotN = (hotData?.items || []).filter((x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !hotDone[x.id] && !cancelInfo(renderCtx.comments?.[x.id])).length;
         renderCtx.custHidden = Object.fromEntries(Object.entries(await kvGet('custHidden')).filter(([, v]) => v && !v.off));
         const cust = custRows(quotes, renderCtx.orders);
         const barRaw = `<div class="bigtabs">
@@ -7648,7 +7660,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
     // Ẩn: đã chốt / thất bại, đã lên đơn (CRM ghi "lên đơn hàng", mã đơn Misa, hoặc có trong lịch sử mua hàng của khách), đã bấm ✓
     const items = (hot?.items || []).filter(
-      (x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !done[x.id],
+      (x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !done[x.id] && !cancelInfo(renderCtx.comments?.[x.id]),
     );
     const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
     const hotSum = items.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0); // tổng tiền các báo giá đang gợi ý
