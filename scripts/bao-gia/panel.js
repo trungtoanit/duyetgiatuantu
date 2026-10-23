@@ -6523,7 +6523,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     {
       const hl = (await kvGet('aiHot')).latest;
       const hd = await kvGet('aiHotDone');
-      renderCtx.hotSet = new Set((hl?.items || []).filter((x) => !hd[x.id]).map((x) => x.id));
+      const pin = await kvGet('hotPinned'); // báo giá thêm tay vào gợi ý chốt đơn (📌)
+      renderCtx.hotSet = new Set([...(hl?.items || []).filter((x) => !hd[x.id]).map((x) => x.id), ...Object.keys(pin || {}).filter((id) => pin[id] && !pin[id].off && !hd[id]).map(Number)]);
     }
     const FILTERS = {
       prio: ({ q, c }) => !!q && renderCtx.hotSet.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c),
