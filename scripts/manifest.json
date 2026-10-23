@@ -49,6 +49,7 @@
     "debtMeta",
     "debts",
     "files",
+    "hotPinned",
     "notifRead",
     "notifs",
     "perms",

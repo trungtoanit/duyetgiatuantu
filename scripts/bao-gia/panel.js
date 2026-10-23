@@ -2102,6 +2102,67 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     });
   }
 
+  // ---------- 🔥 Thêm báo giá đang mở vào "Gợi ý chốt đơn" ----------
+  function lightStyle() {
+    if (document.getElementById('dg-light-style')) return;
+    const st = document.createElement('style');
+    st.id = 'dg-light-style';
+    st.textContent = `
+      @keyframes dgHotShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+      @keyframes dgHotGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,.55); transform: scale(1); } 50% { box-shadow: 0 0 0 7px rgba(249,115,22,0); transform: scale(1.04); } }
+      @keyframes dgHotFlame { 0%, 100% { transform: rotate(-8deg) scale(1); } 50% { transform: rotate(8deg) scale(1.18); } }
+      .dg-hotpin { display:inline-flex; align-items:center; gap:5px; margin-left:8px; vertical-align:middle; cursor:pointer; font-size:12.5px; font-weight:800; border-radius:999px; padding:3px 12px; color:#fff;
+        background: linear-gradient(90deg,#f97316,#ef4444,#f59e0b,#f97316); background-size: 200% 100%; animation: dgHotShimmer 2.2s linear infinite, dgHotGlow 1.6s ease-in-out infinite; transition: filter .15s; }
+      .dg-hotpin:hover { filter: brightness(1.08); animation-play-state: paused; }
+      .dg-hotpin .fl { display:inline-block; animation: dgHotFlame .9s ease-in-out infinite; }
+      .dg-hotpin.on { animation: none; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; cursor: default; }
+      .dg-hotpin.on .fl { animation: none; }
+      .dg-hotpin.busy { opacity: .7; cursor: wait; }
+      @media (prefers-reduced-motion: reduce) { .dg-hotpin, .dg-hotpin .fl { animation: none; } }`;
+    document.head.append(st);
+  }
+  function hotHas(qid) {
+    const pin = renderCtx.hotPinned?.[qid];
+    if (pin && !pin.off) return 'pin';
+    return (renderCtx.aiHot?.items || []).some((x) => x.id === qid) ? 'ai' : null;
+  }
+  function injectHotPin(qid, q) {
+    const anchor = document.querySelector('.dg-signtg') || document.querySelector('.dg-setprice-head') || document.querySelector('.dg-printq');
+    if (!anchor) return;
+    lightStyle();
+    let b = document.querySelector('.dg-hotpin');
+    const paint = () => {
+      const has = hotHas(qid);
+      if (b.dataset.st === String(has)) return; // không vẽ lại → hiệu ứng không bị khởi động lại
+      b.dataset.st = String(has);
+      b.classList.toggle('on', !!has);
+      b.innerHTML = has ? `✓ Đã có trong gợi ý chốt đơn${has === 'pin' ? ' 📌' : ''}` : '<span class="fl">🔥</span> Thêm vào gợi ý chốt đơn';
+      b.title = has
+        ? has === 'pin' ? 'Đã thêm tay – giữ trong Gợi ý chốt đơn tới khi lên đơn' : 'AI đã chọn báo giá này trong Gợi ý chốt đơn'
+        : 'Thêm báo giá này vào tab "Gợi ý chốt đơn" – giữ tới khi lên đơn, AI phân tích lại vẫn giữ';
+    };
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'dg-hotpin';
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (hotHas(qid) || b.classList.contains('busy')) return;
+        b.classList.add('busy');
+        try {
+          const cur = renderCtx.quotes?.[qid] || q;
+          await kvMerge('hotPinned', { [qid]: { code: cur.code, at: Date.now(), by: meName } });
+          renderCtx.hotPinned = await kvGet('hotPinned');
+        } finally {
+          b.classList.remove('busy');
+          paint();
+        }
+      });
+      anchor.after(b);
+    }
+    paint();
+  }
+
   // Gắn nút "💲 Set giá" vào bình luận xin giá (luồng của báo giá Flexo đang mở)
   function injectPriceButtons() {
     if (!IS_TOP || !root) return;
@@ -2131,6 +2192,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       head.after(b);
     }
     document.querySelectorAll('.dg-setprice-head').forEach((b) => (b.style.display = canSet ? 'inline-block' : 'none'));
+    injectHotPin(qid, q);
     for (const one of document.querySelectorAll('.ant-comment')) {
       const content = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
       if (!content) continue;
@@ -6398,7 +6460,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // Thẻ cố định bên phải trang báo giá: báo giá đang mở (câu hỏi gợi ý, % Flexo/Offset, mua hàng, đánh giá)
     avatars = avatarIndex(quotes);
     quickLearn = await kvGet('quickLearn');
-    renderCtx = { comments, quotes, collected, orders: dedupOrders(await kvGet('orders'), quotes), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    renderCtx = { hotPinned: await kvGet('hotPinned'), aiHot: (await kvGet('aiHot')).latest, comments, quotes, collected, orders: dedupOrders(await kvGet('orders'), quotes), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
     const all = Object.values(quotes);
     const btn = (act, key, label, busyLabel, attrs = '') =>
       `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
@@ -7500,7 +7562,7 @@ Không markdown, không giải thích ngoài JSON.`;
           .map((x) => {
             const q = quotes[x.id];
             return `<div class="dl-hot-item"><a class="dl-code" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">${esc(q.code)}</a>${custTag(q)}
-              <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="hot-pct ${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</span>
+              <span class="dl-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="hot-pct ${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct != null ? `${x.pct}%` : '📌'}</span>
               <span class="dl-amt">${q.amount ? money(q.amount) : ''}</span>
               <div class="dl-hot-body">💡 ${esc(x.why)}${x.missing?.length ? `<div class="hot-miss"><b>🧩 Còn thiếu:</b>${x.missing.map((m) => `<i>${esc(m)}</i>`).join('')}</div>` : ''}
                 ${x.steps?.length ? `<div class="hot-steps">${x.steps.map((st, k) => `<span class="hot-step"><em>${k + 1}</em>${esc(st)}</span>`).join('')}</div>` : `<div class="hot-next">👉 ${esc(x.next)}</div>`}</div></div>`;
@@ -7579,15 +7641,27 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       const [quotes, comments, orders] = await Promise.all([kvGet('quotes'), kvGet('comments'), kvGet('orders')]);
       const live = Object.fromEntries(Object.entries(quotes).filter(([, q]) => q?.quoteStatus !== 'REJECT'));
       const done = await kvGet('aiHotDone');
-      const cands = feasibleList(live, comments, orders)
+      let cands = feasibleList(live, comments, orders)
         .filter(({ q }) => !(done[q.id] && Date.now() - done[q.id].at < 7 * 86400e3)) // đã xử lý trong 7 ngày → không đưa vào lại
         .sort((a, b) => b.f.score - a.f.score)
         .slice(0, HOT.candidates);
+      // Báo giá quản lý tự thêm vào gợi ý chốt đơn: luôn đưa cho AI xét (chưa lên đơn)
+      const pin = await kvGet('hotPinned');
+      const have = new Set(cands.map(({ q }) => q.id));
+      const extra = Object.entries(pin)
+        .filter(([id, v]) => v && !v.off && quotes[id] && !have.has(Number(id)) && !hasOrderFull(quotes[id], comments[id]) && !CLOSED.has(quotes[id].quoteStatus))
+        .map(([id]) => {
+          const q = quotes[id];
+          const c = comments[id] || { id: q.id, code: q.code, threads: [] };
+          return { q, c, last: lastComment(c), f: feasibility(q, c, orders) };
+        });
+      cands = [...extra, ...cands];
+      const pinCodes = new Set(Object.entries(pin).filter(([id, v]) => v && !v.off && quotes[id]).map(([id]) => quotes[id].code));
       if (!cands.length) throw new Error('Chưa có báo giá khả thi nào để phân tích.');
       const blocks = cands.map(({ q, c, f }) => {
         const os = orderSummary(orders?.[q.customer?.id]);
         return [
-          `### ${q.code} – "${q.name || ''}"`,
+          `### ${q.code} – "${q.name || ''}"${pinCodes.has(q.code) ? ' [📌 QUẢN LÝ CHỌN – bắt buộc có trong kết quả]' : ''}`,
           `Khách: ${q.customer?.name || '?'} | NVKD: ${staffOf(q, c) || '?'} | Số tiền: ${money(q.amount) || '?'} | Tình trạng: ${statusLabel(q.quoteStatus)} | Tạo: ${fmtTime(q.createdAt)}`,
           `Điểm khả thi (tự chấm): ${f.score} – ${f.reasons.join(', ') || '-'}${os ? ` | Khách đã mua ${os.count} đơn (12 tháng: ${os.year})` : ''}`,
           'Bình luận gần nhất:',
@@ -7736,8 +7810,18 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const busy = state.busy.has('hot');
     // Dòng đã bấm ✓ hoàn thành (ở bất kỳ máy nào – kv 'aiHotDone' đồng bộ) thì ẩn
     // Ẩn: đã chốt / thất bại, đã lên đơn (CRM ghi "lên đơn hàng", mã đơn Misa, hoặc có trong lịch sử mua hàng của khách), đã bấm ✓
-    const items = (hot?.items || []).filter(
-      (x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && !done[x.id] && !cancelInfo(renderCtx.comments?.[x.id]),
+    // Báo giá quản lý tự thêm (kv 'hotPinned', đồng bộ): luôn có trong danh sách tới khi lên đơn; AI không chọn thì vẫn hiện (📌)
+    const pinned = Object.entries(renderCtx.hotPinned || {}).filter(([, v]) => v && !v.off).map(([id, v]) => ({ id: Number(id), code: v.code }));
+    const pinIds = new Set(pinned.map((p) => p.id));
+    const aiIds = new Set((hot?.items || []).map((x) => x.id));
+    const merged = [
+      ...(hot?.items || []).map((x) => (pinIds.has(x.id) ? { ...x, pinned: true } : x)),
+      ...pinned
+        .filter((p) => !aiIds.has(p.id))
+        .map((p) => ({ id: p.id, code: p.code, pct: null, why: '📌 Quản lý thêm vào gợi ý chốt đơn – AI đánh giá ở lần phân tích sau', next: 'Theo dõi sát và kéo đơn về', missing: [], steps: [], pinned: true })),
+    ];
+    const items = merged.filter(
+      (x) => quotes[x.id] && !CLOSED.has(quotes[x.id].quoteStatus) && !hasOrderFull(quotes[x.id], renderCtx.comments?.[x.id]) && (x.pinned || !done[x.id]) && !cancelInfo(renderCtx.comments?.[x.id]),
     );
     const doneN = (hot?.items || []).filter((x) => done[x.id]).length;
     const hotSum = items.reduce((a, x) => a + (Number(quotes[x.id]?.amount) || 0), 0); // tổng tiền các báo giá đang gợi ý
@@ -7832,7 +7916,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
               : j?.status === 'error' ? `Lỗi: ${j.error} – bấm để thử lại` : `Hỏi ${who || 'NVKD'} deal này qua Zalo`;
             return who ? `<button class="zl-one${sent ? ' done' : wait ? ' wait' : ''}" data-act="zalo-send" data-who="${esc(who)}" data-qid="${x.id}" title="${esc(tip)}" ${sent || run || wait ? 'disabled' : ''}>${ic}</button>` : '';
           })() : ''}
-          <span class="hot-side"><span class="hot-r1"><span class="hot-pct ${cls}">${x.pct}%</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span></span><span class="hot-r2">${(() => { const v = diffVal(q); return v != null ? `<span class="hot-dv${v < 0 ? ' neg' : ''}" title="Chênh lệch">📈 ${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>` : q.noSheet ? '<span class="hot-dv neg">😡 Chưa có giá GT</span>' : ''; })()}<span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></span></a>`;
+          <span class="hot-side"><span class="hot-r1"><span class="hot-pct ${cls}">${x.pct != null ? `${x.pct}%` : '📌'}</span><span class="hot-amt">${q.amount ? money(q.amount) : ''}</span></span><span class="hot-r2">${(() => { const v = diffVal(q); return v != null ? `<span class="hot-dv${v < 0 ? ' neg' : ''}" title="Chênh lệch">📈 ${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>` : q.noSheet ? '<span class="hot-dv neg">😡 Chưa có giá GT</span>' : ''; })()}<span class="hot-who">${esc(shortName(staffOf(q, renderCtx.comments[q.id])) || '')}</span></span></span></a>`;
       })
       .join('');
     const collapsed = !inTab && lsGet('dgHotCollapsed') === '1';
