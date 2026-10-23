@@ -2376,7 +2376,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       // Ẩn cột "Giai đoạn cơ hội", "Nguồn khách"
       const allTh = [...wrap.querySelectorAll('thead th')];
-      for (const gi of allTh.map((th, i) => (/^(Giai đoạn cơ hội|Nguồn khách)$/.test(th.innerText.trim()) ? i : -1)).filter((i) => i >= 0)) {
+      for (const gi of allTh.map((th, i) => (/^(Giai đoạn cơ hội|Nguồn khách|Ngày kỳ vọng)$/.test(th.innerText.trim()) ? i : -1)).filter((i) => i >= 0)) {
         allTh[gi].style.display = 'none';
         for (const tr of wrap.querySelectorAll('tbody tr')) if (tr.cells[gi]) tr.cells[gi].style.display = 'none';
         for (const cg of wrap.querySelectorAll('colgroup')) {
