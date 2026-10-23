@@ -2092,6 +2092,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       }
       const pos = [...wrap.querySelectorAll('thead th')].findIndex((th) => th.hasAttribute('data-dg-tagcol'));
+      const khIdx = [...wrap.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-dg-tagcol')).findIndex((th) => th.innerText.trim() === 'Khách hàng');
       const sel = lsGet('dgCrmF') || '';
       const selF = CRM_F.find((f) => f[0] === sel)?.[4];
       const counts = {};
@@ -2114,6 +2115,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         if (td.dataset.k !== `${code}|${html.length}`) {
           td.dataset.k = `${code}|${html.length}`;
           td.innerHTML = html;
+        }
+        // Cột "Khách hàng": chỉ hiện mã khách, rê chuột thấy tên đầy đủ
+        if (khIdx >= 0 && q?.customer?.code) {
+          const cell = [...tr.cells].filter((x) => !x.hasAttribute('data-dg-tagcol'))[khIdx];
+          if (cell) {
+            const full = q.customer.name || '';
+            const leaf = [...cell.querySelectorAll('*')].find((e) => !e.hasAttribute('data-dg-kh') && e.childElementCount === 0 && e.textContent.trim() && full && e.textContent.trim() === full.trim());
+            if (leaf) leaf.style.display = 'none';
+            let sp = cell.querySelector('[data-dg-kh]');
+            if (!sp) {
+              sp = document.createElement('span');
+              sp.setAttribute('data-dg-kh', '1');
+              sp.setAttribute('style', 'font-weight:700;color:#b45309;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:0 6px;font-size:12px;cursor:help;white-space:nowrap');
+              (leaf || cell.firstChild)?.before ? (leaf || cell.firstElementChild || cell).before(sp) : cell.prepend(sp);
+            }
+            if (sp.textContent !== q.customer.code) sp.textContent = q.customer.code;
+            sp.title = full;
+          }
         }
         total++;
         let match = !selF;
