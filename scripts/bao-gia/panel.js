@@ -2070,10 +2070,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function detailPageCss() {
     const on = IS_TOP && !!currentQuoteId();
     document.documentElement.toggleAttribute('data-dg-detail', on);
-    if (!on || document.getElementById('dg-detail-css2')) return;
+    if (!on || document.getElementById('dg-detail-css3')) return;
     document.getElementById('dg-detail-css')?.remove();
+    document.getElementById('dg-detail-css2')?.remove();
     const st = document.createElement('style');
-    st.id = 'dg-detail-css2';
+    st.id = 'dg-detail-css3';
     const R = 'html[data-dg-detail]';
     // Gọn: ô nhập thấp, khoảng cách nhỏ, nhãn sát ô – trang ngắn lại
     st.textContent = `
@@ -2089,6 +2090,11 @@ ${R} .ant-select-single .ant-select-selection-search-input{height:28px !importan
 ${R} .ant-input:focus, ${R} .ant-input-focused, ${R} .ant-input-affix-wrapper-focused, ${R} .ant-picker-focused, ${R} .ant-select-focused .ant-select-selector{border-color:#3b82f6 !important;box-shadow:0 0 0 2px rgba(59,130,246,.15) !important}
 ${R} .ant-btn{border-radius:6px !important;font-weight:600 !important;box-shadow:none !important}
 ${R} .ant-btn:not(.ant-btn-sm){height:30px !important;padding:0 12px !important}
+${R} .ant-btn-primary:not([disabled]){background:#2563eb !important;border-color:#2563eb !important;color:#fff !important}
+${R} .ant-btn-primary:not([disabled]) *{color:#fff !important}
+${R} .ant-btn-primary:not([disabled]):hover{background:#1d4ed8 !important}
+${R} .ant-btn[disabled], ${R} .ant-btn[disabled]:hover{background:#f1f5f9 !important;border-color:#e2e8f0 !important;color:#94a3b8 !important;cursor:not-allowed}
+${R} .ant-btn[disabled] *{color:#94a3b8 !important}
 ${R} .ant-alert{border-radius:8px !important;padding:6px 12px !important;margin-bottom:8px !important}
 ${R} .ant-tabs-nav{margin-bottom:8px !important}
 ${R} .ant-tabs-tab{padding:6px 0 !important;font-weight:600 !important}
