@@ -2148,6 +2148,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         tr.style.display = match ? '' : 'none';
       }
       crmFilterBar(wrap, counts, total);
+      // Cột "Số tiền" in đậm
+      {
+        const ths = [...wrap.querySelectorAll('thead th')];
+        const si = ths.findIndex((th) => th.innerText.trim() === 'Số tiền');
+        if (si >= 0) for (const tr of wrap.querySelectorAll('tbody tr')) if (tr.cells[si]) tr.cells[si].style.fontWeight = '800';
+      }
       // Ẩn cột "Giai đoạn cơ hội"
       const allTh = [...wrap.querySelectorAll('thead th')];
       const gi = allTh.findIndex((th) => th.innerText.trim() === 'Giai đoạn cơ hội');
