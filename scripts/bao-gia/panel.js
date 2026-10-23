@@ -2224,6 +2224,39 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           sp.title = `Tổng ${n} báo giá đang hiện: ${money(sum)}`;
         }
       }
+      // Cột "Sale": tên gọn (3 chữ → chữ cuối, 4 chữ trở lên → 2 chữ cuối), rê chuột thấy tên đầy đủ
+      {
+        const ths = [...wrap.querySelectorAll('thead th')];
+        const si = ths.findIndex((th) => /^(Sale|NVKD)$/i.test(th.innerText.trim()));
+        if (si >= 0)
+          for (const tr of wrap.querySelectorAll('tbody tr')) {
+            const cell = tr.cells[si];
+            if (!cell) continue;
+            for (const leaf of cell.querySelectorAll('*')) {
+              if (leaf.childElementCount || leaf.hasAttribute('data-dg-sn')) continue;
+              const full = leaf.textContent.trim();
+              const w = full.split(/\s+/);
+              if (w.length < 3 || /\d/.test(full)) continue;
+              leaf.style.display = 'none';
+              let sp = leaf.previousElementSibling?.hasAttribute?.('data-dg-sn') ? leaf.previousElementSibling : null;
+              if (!sp) {
+                sp = document.createElement('span');
+                sp.setAttribute('data-dg-sn', '1');
+                leaf.before(sp);
+              }
+              const short = w.slice(w.length >= 4 ? -2 : -1).join(' ');
+              if (sp.textContent !== short) sp.textContent = short;
+              sp.title = full;
+            }
+            // ô chỉ có chữ (không bọc thẻ)
+            if (!cell.querySelector('*') && cell.textContent.trim().split(/\s+/).length >= 3) {
+              const full = cell.textContent.trim();
+              const w = full.split(/\s+/);
+              cell.title = full;
+              cell.textContent = w.slice(w.length >= 4 ? -2 : -1).join(' ');
+            }
+          }
+      }
       // Ẩn cột "Giai đoạn cơ hội"
       const allTh = [...wrap.querySelectorAll('thead th')];
       const gi = allTh.findIndex((th) => th.innerText.trim() === 'Giai đoạn cơ hội');
