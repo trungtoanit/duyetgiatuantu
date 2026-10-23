@@ -2342,7 +2342,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['flexo', '🟦', 'Flexo', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
     ['offset', '🟪', 'Offset', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
     ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
-    ['tgt', '💲', 'Khách cho giá', '#2563eb', (q, c) => targetPriceInfo(c)],
+    ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['promise', '🤝', 'Hứa lên đơn', '#d97706', (q, c) => promiseInfo(q, c)],
     ['contract', '📝', 'Hợp đồng', '#0284c7', (q, c) => contractInfo(c)],
     ['sample', '✂️', 'Cắt mẫu', '#db2777', (q, c) => sampleInfo(c)],
@@ -3500,7 +3500,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .side .quick-row { flex-direction: column; align-items: stretch; gap: 8px; }
     .side .quick-row .act { align-self: flex-end; }
     .quick-text:focus { outline: 2px solid #fcd34d; border-style: solid; }
-    .tgt { margin-left: 6px; display: inline-block; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 999px;
+    .tgt { margin-left: 6px; display: inline-block; background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     button.chipbtn { cursor: pointer; font: inherit; font-size: 13px; }
     .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 8px; }
@@ -7332,7 +7332,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           ['prio', 'orange', '🔥', 'Ưu tiên', cnt(FILTERS.prio)],
         ]],
         ['Tín hiệu khách', [
-          ['tgt', 'blue', '💲', 'Khách cho giá', cnt(FILTERS.tgt)],
+          ['tgt', 'green', '💲', 'Khách cho giá', cnt(FILTERS.tgt)],
           ['promise', 'amber', '🤝', 'Hứa lên đơn', cnt(FILTERS.promise)],
           ['bossok', 'green', '✅', 'Lấy đơn', cnt(FILTERS.bossok)],
           ['contract', 'sky', '📝', 'Hợp đồng', cnt(FILTERS.contract)],
