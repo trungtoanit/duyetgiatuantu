@@ -2070,11 +2070,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function detailPageCss() {
     const on = IS_TOP && !!currentQuoteId();
     document.documentElement.toggleAttribute('data-dg-detail', on);
-    if (!on || document.getElementById('dg-detail-css3')) return;
-    document.getElementById('dg-detail-css')?.remove();
-    document.getElementById('dg-detail-css2')?.remove();
+    if (!on || document.getElementById('dg-detail-css4')) return;
+    ['dg-detail-css', 'dg-detail-css2', 'dg-detail-css3'].forEach((id) => document.getElementById(id)?.remove());
     const st = document.createElement('style');
-    st.id = 'dg-detail-css3';
+    st.id = 'dg-detail-css4';
     const R = 'html[data-dg-detail]';
     // Gọn: ô nhập thấp, khoảng cách nhỏ, nhãn sát ô – trang ngắn lại
     st.textContent = `
@@ -2100,7 +2099,11 @@ ${R} .ant-tabs-nav{margin-bottom:8px !important}
 ${R} .ant-tabs-tab{padding:6px 0 !important;font-weight:600 !important}
 ${R} .ant-divider{margin:8px 0 !important}
 ${R} .ant-row{row-gap:0 !important}
-${R} textarea.ant-input{border-radius:8px !important}`;
+${R} textarea.ant-input{border-radius:8px !important}
+${R} .ant-table-body{max-height:none !important;overflow-y:visible !important}
+${R} .ant-table-thead > tr > th, ${R} .ant-table-tbody > tr > td{padding:4px 6px !important;font-size:12px !important;line-height:1.35 !important}
+${R} .ant-table-thead > tr > th{font-weight:700 !important;color:#475569 !important;background:#f8fafc !important}
+${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant-input-number, ${R} .ant-table-tbody > tr > td .ant-select-selector{height:26px !important;font-size:12px !important}`;
     document.head.append(st);
   }
   if (IS_TOP) setInterval(() => {
