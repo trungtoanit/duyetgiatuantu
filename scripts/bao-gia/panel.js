@@ -2278,6 +2278,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
             }
             if (sp.textContent !== q.customer.code) sp.textContent = q.customer.code;
             sp.title = full;
+            // Đậm / mờ theo dòng đã đọc / chưa đọc của CRM (dòng chưa đọc in đậm)
+            const ref = [...tr.cells].find((x) => !x.hasAttribute('data-dg-tagcol') && x !== cell && (x.innerText || '').trim());
+            const unread = ref ? Number(getComputedStyle(ref.querySelector('a, span, div') || ref).fontWeight) >= 600 : q.isRead === false;
+            const want = unread ? '1' : '0';
+            if (sp.dataset.u !== want) {
+              sp.dataset.u = want;
+              sp.style.opacity = unread ? '1' : '0.55';
+              sp.style.fontWeight = unread ? '800' : '500';
+            }
           }
         }
         total++;
