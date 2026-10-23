@@ -2094,6 +2094,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     row.style.setProperty('display', 'none', 'important');
     const pag = [...document.querySelectorAll('.ant-pagination')].find((p) => !p.closest('#dg-root') && p.getClientRects().length);
     if (!pag) return;
+    // Bỏ khoảng trống còn lại: các khung bọc chỉ chứa hàng ô lọc (giờ rỗng) cũng ẩn; khung rỗng nằm giữa tabs và phân trang cũng ẩn
+    let el = row;
+    while (el.parentElement && !el.parentElement.contains(pag) && !(el.parentElement.innerText || '').trim()) {
+      el = el.parentElement;
+      el.style.setProperty('display', 'none', 'important');
+    }
+    for (const sib of el.parentElement ? [...el.parentElement.children] : []) {
+      if (sib === el || sib.contains(pag) || sib.querySelector('input, button, .ant-tabs')) continue;
+      if (!(sib.innerText || '').trim() && sib.getBoundingClientRect().height > 0 && sib.getBoundingClientRect().top > row.parentElement.getBoundingClientRect().top - 200)
+        sib.style.setProperty('display', 'none', 'important');
+    }
+    if (el.parentElement) {
+      el.parentElement.style.setProperty('row-gap', '0', 'important');
+      el.parentElement.style.setProperty('gap', '0', 'important');
+    }
     let bar = document.getElementById('dg-crmsearch');
     if (!bar) {
       bar = document.createElement('li'); // nằm trong thanh phân trang (cùng hàng, bên phải "Page")
