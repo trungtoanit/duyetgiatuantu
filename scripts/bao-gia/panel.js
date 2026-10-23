@@ -5173,6 +5173,25 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     'Khách này đang lấy hàng bên nào {p}?',
     'Tình hình khách này sao rồi {p}, có cơ hội báo giá không?',
   ];
+  // Đề xuất thử cho thu mua 1% (khi chưa thấy nhắc % cho thu mua)
+  const BUYER_PCT_ASK = [
+    'Thử đề xuất cho thu mua 1% xem phản ứng thế nào {p}?',
+    '{P} thử chào thu mua hoa hồng 1% xem bên đó phản ứng sao nhé.',
+    'Khách chưa chốt thì {p} thử gợi ý cho thu mua 1% xem sao?',
+    'Thu mua bên này đã có % chưa {p}? Nếu chưa thử đề xuất 1% xem phản ứng thế nào.',
+  ];
+  // Bình luận / tên cơ hội đã nhắc % hoa hồng cho thu mua chưa
+  const BUYER_PCT_RE = /hoa\s*hồng|(^|[^\p{L}])hh\s*\d|chi\s*(hh|hoa|\d+\s*%)|%\s*(cho\s*)?(thu\s*mua|tm|người\s*mua|mua\s*hàng)|(thu\s*mua|người\s*mua)\s*\d+(?:[.,]\d+)?\s*%|chiết\s*khấu|ck\s*\d/iu;
+  function buyerPctInfo(q, c) {
+    if (BUYER_PCT_RE.test(q?.name || '')) return true;
+    let hit = false;
+    const walk = (t) => {
+      if (BUYER_PCT_RE.test(t.text || '')) hit = true;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit;
+  }
   // Hỏi thăm 1 deal qua Zalo
   // Số phút còn phải chờ trước khi soạn tin mới cho 1 NVKD (mỗi người 1 tin / 30 phút; tin đang chờ gửi cũng tính)
   const ZALO_GAP = 30 * 60e3;
@@ -5215,6 +5234,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     { id: 'connect', icon: '🔌', title: 'Báo giá chưa có Flexo / Offset (kết nối khách)', when: 'Bảng sản phẩm chưa có dòng Flexo hay Offset nào, báo giá tạo hơn 24 giờ (hỏi cả khi báo giá 0đ).', def: CONNECT_ASK },
     { id: 'reprint', icon: '🔁', title: 'Đơn tái bản', when: 'Sản phẩm đã có mã (tái bản), báo giá đã có giá, chưa có đơn.', def: ['Khách xuống đơn tái bản chưa {p}?'] },
     { id: 'offsetGap', icon: '🟪', title: 'Khách chưa dùng Offset', when: 'Khách chưa từng có báo giá Offset, báo giá gần nhất đã quá 30 ngày, sếp chưa hỏi về offset trong luồng.', def: ['Khách hàng này có dùng offset không {p}?'] },
+    { id: 'buyerPct', icon: '🤝', title: 'Thử cho thu mua 1%', when: `Báo giá đã có giá, quá ${FOLLOW_UP_HOURS} giờ chưa chốt, trong bình luận / tên cơ hội chưa nhắc % hoa hồng cho thu mua (hh, hoa hồng, chi %, % thu mua…) → đề xuất NVKD thử cho thu mua 1% xem phản ứng.`, def: BUYER_PCT_ASK },
     { id: 'priceAsk', icon: '⏰', title: 'Quá 12 giờ chưa chốt', when: `Bình luận cuối đã quá ${FOLLOW_UP_HOURS} giờ (dưới ${MAX_FOLLOW_UP_DAYS} ngày), báo giá đã có giá, chưa chốt / chưa có đơn.`, def: PRICE_ASK },
     { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu hỏi của bộ 6 (khách hứa lên đơn), 7 (sếp đã cho giá), 9 (tái bản), 11 (quá 12 giờ chưa chốt) khi đã hơn 3 ngày chưa có phản hồi – vd. "35 ngày chưa có phản hồi, báo cáo lại nhé em." {d} = khoảng thời gian.', def: SILENT_LEAD },
     { id: 'reportBack', icon: '💤', title: 'Im lặng quá lâu / báo giá thất bại', when: `Bình luận cuối đã quá ${MAX_FOLLOW_UP_DAYS} ngày, hoặc báo giá Thất bại → chào lại khách.`, def: REPORT_BACK },
@@ -5416,6 +5436,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (q.isReprint) return { bank: 'reprint', icon: '🔁', why: 'Đơn tái bản', text: lead + selfFix(fillP(pickFor(qbank('reprint'), q.id, qSalt(q)), p), p) };
     // Khách chưa từng có báo giá Offset và đã lâu không có báo giá mới → hỏi khách có dùng offset không
     if (mode && offsetGap(q, c)) return { bank: 'offsetGap', icon: '🟪', why: 'Khách chưa có báo giá Offset, lâu chưa báo giá mới', text: selfFix(fillP(pickFor(qbank('offsetGap'), q.id, qSalt(q)), p), p) };
+    // Báo giá đang treo mà trong bình luận chưa nhắc % (hoa hồng) cho thu mua → đề xuất thử cho thu mua 1%
+    if (mode === 'hoiNhanh' && !buyerPctInfo(q, c)) {
+      return { bank: 'buyerPct', icon: '🤝', why: 'Chưa thấy % cho thu mua – thử đề xuất 1%', text: lead + selfFix(fillP(pickFor(qbank('buyerPct'), q.id, qSalt(q)), p), p) };
+    }
     if (mode === 'hoiNhanh') {
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
       const lead2 = silentLead(q, h, p, salt);
@@ -7686,7 +7710,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
 
   // Duyệt mọi báo giá: báo giá nào đang cần hỏi NVKD, bằng bộ câu nào, câu gì + điểm ưu tiên (tính lại tối đa 2 phút / lần)
-  const QA_WEIGHT = { bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
+  const QA_WEIGHT = { buyerPct: 48, bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
   const QA_GAP = 4 * 3600e3; // 1 báo giá không xuất hiện lại trong 4 giờ sau khi đã hỏi
   // Mở tab lần đầu: lấy kết quả đã lưu trên máy để hiện ngay (đánh dấu cũ → vẫn tính lại ngầm)
   async function qaHydrate() {
