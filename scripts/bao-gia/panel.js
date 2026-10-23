@@ -2154,6 +2154,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const myInp = bar.querySelector('input[type="search"]');
     if (srcInput && document.activeElement !== myInp && myInp.value !== srcInput.value) myInp.value = srcInput.value;
   }
+  // Ảnh đại diện NVKD (dùng ngoài bảng của extension – style viết thẳng)
+  const avaInline = (name, size = 22) => {
+    const url = avatarUrl(avatars[name]);
+    const ini = (name || '?').split(/\s+/).slice(-1)[0].slice(0, 1).toUpperCase();
+    const base = `width:${size}px;height:${size}px;border-radius:50%;flex:none;`;
+    return url
+      ? `<img src="${esc(url)}" alt="" style="${base}object-fit:cover">`
+      : `<span style="${base}display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:11px;font-weight:800">${esc(ini)}</span>`;
+  };
   // Giữ thanh lọc + tiêu đề bảng cố định khi cuộn (dịch bằng transform – chạy được cả khi trang cuộn trong khung riêng)
   let stickRaf = 0;
   function crmStick() {
@@ -2339,15 +2348,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
                 leaf.before(sp);
               }
               const short = w.slice(w.length >= 4 ? -2 : -1).join(' ');
-              if (sp.textContent !== short) sp.textContent = short;
+              const h = `${avaInline(full)}${esc(short)}`;
+              if (sp.dataset.h !== h) {
+                sp.dataset.h = h;
+                sp.innerHTML = h;
+                sp.style.cssText = 'display:inline-flex;align-items:center;gap:6px;white-space:nowrap';
+              }
               sp.title = full;
             }
             // ô chỉ có chữ (không bọc thẻ)
-            if (!cell.querySelector('*') && cell.textContent.trim().split(/\s+/).length >= 3) {
+            if (!cell.querySelector('*') && cell.textContent.trim().split(/\s+/).length >= 2) {
               const full = cell.textContent.trim();
               const w = full.split(/\s+/);
               cell.title = full;
-              cell.textContent = w.slice(w.length >= 4 ? -2 : -1).join(' ');
+              cell.innerHTML = `<span data-dg-sn="1" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">${avaInline(full)}${esc(w.length >= 3 ? w.slice(w.length >= 4 ? -2 : -1).join(' ') : full)}</span>`;
             }
           }
       }
