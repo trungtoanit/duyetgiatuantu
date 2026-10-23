@@ -2066,8 +2066,40 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       b.dataset.on = on ? '1' : '0';
     }
   }
+  // Trang chi tiết báo giá: chuẩn hoá giao diện (ô nhập, nút, nhãn, khoảng cách, bo góc) cho hài hoà
+  function detailPageCss() {
+    const on = IS_TOP && !!currentQuoteId();
+    document.documentElement.toggleAttribute('data-dg-detail', on);
+    if (!on || document.getElementById('dg-detail-css')) return;
+    const st = document.createElement('style');
+    st.id = 'dg-detail-css';
+    const R = 'html[data-dg-detail]';
+    st.textContent = `
+${R} body{font-size:13px}
+${R} .ant-form-item-label > label, ${R} .ant-form-item-label label{font-size:12.5px !important;font-weight:600 !important;color:#475569 !important}
+${R} .ant-input, ${R} .ant-input-affix-wrapper, ${R} .ant-picker, ${R} .ant-input-number{border-radius:8px !important;border-color:#e2e8f0 !important;font-size:13px !important}
+${R} .ant-input:not(textarea), ${R} .ant-input-affix-wrapper, ${R} .ant-picker, ${R} .ant-input-number{min-height:34px}
+${R} .ant-select:not(.ant-select-customize-input) .ant-select-selector{border-radius:8px !important;border-color:#e2e8f0 !important;min-height:34px !important;font-size:13px !important;align-items:center}
+${R} .ant-input:hover, ${R} .ant-input-affix-wrapper:hover, ${R} .ant-picker:hover, ${R} .ant-select:hover .ant-select-selector{border-color:#93c5fd !important}
+${R} .ant-input:focus, ${R} .ant-input-focused, ${R} .ant-input-affix-wrapper-focused, ${R} .ant-picker-focused, ${R} .ant-select-focused .ant-select-selector{border-color:#3b82f6 !important;box-shadow:0 0 0 3px rgba(59,130,246,.15) !important}
+${R} .ant-input-disabled, ${R} .ant-select-disabled .ant-select-selector, ${R} .ant-picker-disabled{background:#f8fafc !important;color:#334155 !important}
+${R} .ant-btn{border-radius:8px !important;font-weight:600 !important;height:32px;box-shadow:none !important}
+${R} .ant-btn-primary{background:linear-gradient(180deg,#3b82f6,#2563eb) !important;border-color:#2563eb !important}
+${R} .ant-btn-primary:hover{filter:brightness(1.08)}
+${R} .ant-alert{border-radius:10px !important}
+${R} .ant-form-item{margin-bottom:14px !important}
+${R} .ant-tabs-tab{font-weight:600 !important}
+${R} .ant-tabs-ink-bar{height:3px !important;border-radius:3px}
+${R} .ant-card, ${R} .ant-collapse{border-radius:12px !important}
+${R} .ant-comment-content-detail, ${R} .ant-comment .ant-comment-content-detail > div{border-radius:10px !important}
+${R} .ant-tag{border-radius:6px !important}
+${R} .ant-divider{margin:14px 0 !important}
+${R} textarea.ant-input{border-radius:10px !important}`;
+    document.head.append(st);
+  }
   if (IS_TOP) setInterval(() => {
     try {
+      detailPageCss();
       styleQuoteStatus();
     } catch {}
   }, 1500);
