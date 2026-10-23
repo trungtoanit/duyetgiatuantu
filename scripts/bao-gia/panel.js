@@ -1950,7 +1950,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
     // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
     const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b></div><div class="dgh-l">${items
-      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em>${x.pct ? `<u>${x.pct}%</u>` : ''}</a>`)
+      .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
     if (!box) {
