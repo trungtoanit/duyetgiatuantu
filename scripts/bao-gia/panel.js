@@ -2045,14 +2045,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ['nosheet', '😡', 'Chưa có giá GT', '#dc2626', (q) => q.noSheet],
     ['zero', '⚠️', 'Chưa cho giá', '#dc2626', (q) => noPrice(q)],
   ];
-  function crmFilterBar(wrap, counts, total) {
+  function crmFilterBar(wrap, counts, total, staffN = {}) {
     const sel = lsGet('dgCrmF') || '';
+    const selS = lsGet('dgCrmS') || '';
     let bar = document.getElementById('dg-crmf');
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'dg-crmf';
       bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;font-size:12px');
       bar.addEventListener('click', (e) => {
+        const st = e.target.closest('[data-s]');
+        if (st) {
+          lsSet('dgCrmS', lsGet('dgCrmS') === st.dataset.s ? '' : st.dataset.s);
+          return crmListTags();
+        }
         const b = e.target.closest('[data-f]');
         if (!b) return;
         lsSet('dgCrmF', lsGet('dgCrmF') === b.dataset.f ? '' : b.dataset.f);
@@ -2062,7 +2068,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const html = `<b style="color:#475569;margin-right:4px">🏷️ Lọc nhãn:</b>${CRM_F.filter(([k]) => counts[k] || sel === k)
       .map(([k, ic, label, col]) => `<span data-f="${k}" style="cursor:pointer;border-radius:999px;padding:2px 10px;font-weight:700;border:1px solid ${col}55;${sel === k ? `background:${col};color:#fff` : `background:${col}12;color:${col}`}">${ic} ${label} <b>${counts[k] || 0}</b></span>`)
-      .join('')}${sel ? '<span data-f="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc</span>' : ''}<span style="color:#94a3b8;margin-left:auto">lọc trong ${total} dòng của trang này</span>`;
+      .join('')}${sel ? '<span data-f="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc</span>' : ''}<span style="color:#94a3b8;margin-left:auto">lọc trong ${total} dòng của trang này</span>
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;margin-right:4px">👤 NVKD:</b>${Object.entries(staffN)
+        .sort((a, b) => b[1] - a[1])
+        .map(([n, k]) => `<span data-s="${esc(n)}" title="${esc(n)}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 10px 1px 2px;font-weight:700;border:1px solid ${selS === n ? '#1e293b' : '#e2e8f0'};${selS === n ? 'background:#1e293b;color:#fff' : 'background:#fff;color:#334155'}">${avatarHtml(n, 18)}${esc(shortName(n))} <b style="opacity:.7">${k}</b></span>`)
+        .join('')}${selS ? '<span data-s="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc NVKD</span>' : ''}</div>`;
     if (bar.dataset.h !== html) {
       bar.dataset.h = html;
       bar.innerHTML = html;
@@ -2096,6 +2106,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const sel = lsGet('dgCrmF') || '';
       const selF = CRM_F.find((f) => f[0] === sel)?.[4];
       const counts = {};
+      const staffN = {};
+      const selS = lsGet('dgCrmS') || '';
       let total = 0;
       for (const tr of wrap.querySelectorAll('tbody tr')) {
         if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
@@ -2149,9 +2161,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
             if (v) counts[k] = (counts[k] || 0) + 1;
             if (k === sel && v) match = true;
           }
+        const who = q ? staffOf(q, c) : '';
+        if (who && !isExcluded(who)) staffN[who] = (staffN[who] || 0) + 1;
+        if (selS && who !== selS) match = false;
         tr.style.display = match ? '' : 'none';
       }
-      crmFilterBar(wrap, counts, total);
+      crmFilterBar(wrap, counts, total, staffN);
       // Cột "Số tiền" in đậm
       {
         const ths = [...wrap.querySelectorAll('thead th')];
