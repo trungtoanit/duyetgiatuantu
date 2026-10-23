@@ -2110,13 +2110,15 @@ ${R} textarea.ant-input{border-radius:10px !important}`;
     return [...document.querySelectorAll('img')].filter((im) => {
       if (im.closest('#dg-root, #dg-lb, [data-dg-hot]')) return false;
       const r = im.getBoundingClientRect();
-      if (r.width < 60 || r.height < 40) return false; // bỏ avatar / icon
+      // bỏ avatar / icon: ảnh nhỏ, ảnh tròn, ảnh trong khung avatar
+      if (r.width < 40 || r.height < 16) return false;
+      if (im.closest('.ant-avatar, [class*="avatar"], [class*="Avatar"]') || getComputedStyle(im).borderRadius === '50%') return false;
       const href = im.closest('a')?.href || '';
       return IMG_EXT.test(im.currentSrc || im.src) || IMG_EXT.test(href) || /vultrobjects|\/uploads?\//i.test(im.src);
     });
   }
-  function openLightbox(start) {
-    const list = pageImages();
+  function openLightbox(start, only) {
+    const list = only || pageImages();
     let i = Math.max(0, list.indexOf(start));
     const srcOf = (im) => {
       const href = im.closest('a')?.href || '';
@@ -2245,9 +2247,22 @@ ${R} textarea.ant-input{border-radius:10px !important}`;
     document.addEventListener(
       'click',
       (e) => {
-        const im = e.target.closest?.('img');
-        if (!im || e.metaKey || e.ctrlKey || e.button) return;
-        if (!pageImages().includes(im)) return;
+        if (e.metaKey || e.ctrlKey || e.button) return;
+        let im = e.target.closest?.('img');
+        // Bấm chữ tên ảnh (vd. "image.png") → mở ảnh tương ứng
+        const a = e.target.closest?.('a[href]');
+        if (!im && a && (IMG_EXT.test(a.getAttribute('href') || '') || IMG_EXT.test(a.textContent.trim()))) {
+          const imgs = pageImages();
+          im = a.querySelector('img') || imgs.find((x) => x.closest('a') === a) || imgs.find((x) => a.parentElement?.contains(x));
+          if (!im && IMG_EXT.test(a.href)) {
+            e.preventDefault();
+            e.stopPropagation();
+            const tmp = document.createElement('img');
+            tmp.src = a.href;
+            return openLightbox(tmp, [tmp]);
+          }
+        }
+        if (!im || !pageImages().includes(im)) return;
         e.preventDefault();
         e.stopPropagation();
         openLightbox(im);
