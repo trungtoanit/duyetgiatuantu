@@ -6519,7 +6519,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const cut = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : t || '');
     // Tổng doanh thu (số tiền báo giá) của một danh sách
     // Bấm nhãn trên tiêu đề để lọc danh sách: 'tgt' = khách cho giá, 'zero' = chưa cho giá
+    // Deal đang nằm trong 🔥 Gợi ý chốt đơn (dùng cho nhãn "🔥 Ưu tiên" và bộ lọc "Ưu tiên")
+    {
+      const hl = (await kvGet('aiHot')).latest;
+      const hd = await kvGet('aiHotDone');
+      renderCtx.hotSet = new Set((hl?.items || []).filter((x) => !hd[x.id]).map((x) => x.id));
+    }
     const FILTERS = {
+      prio: ({ q, c }) => !!q && renderCtx.hotSet.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c),
       tgt: ({ c }) => targetPriceInfo(c),
       zero: ({ q }) => noPrice(q),
       nodep: ({ c }) => noDepositInfo(c),
@@ -6576,6 +6583,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           ['feaUnread', 'green', '🎯', 'Khả thi & chưa đọc', cnt(FILTERS.feaUnread)],
           ['nocmt', 'slate', '📭', 'Chưa có bình luận', cnt(FILTERS.nocmt)],
           ['zero', 'red', '⚠️', 'Chưa cho giá', cnt(FILTERS.zero)],
+          ['prio', 'orange', '🔥', 'Ưu tiên', cnt(FILTERS.prio)],
         ]],
         ['Tín hiệu khách', [
           ['tgt', 'blue', '💲', 'Khách cho giá', cnt(FILTERS.tgt)],
