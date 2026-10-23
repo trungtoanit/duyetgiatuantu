@@ -2081,8 +2081,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       bar.innerHTML = `<style>#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}</style>${html}`;
     }
   }
+  // Hàng ô lọc của CRM (Tìm kiếm / Nhân viên / Nổi bật / Số lớp / Loại SP / Chỉ lấy của Tuấn Tú / Mở hàng loạt) → gọn lại
+  function crmCompactFilters() {
+    const lbl = [...document.querySelectorAll('label, span, div')].find((e) => e.childElementCount === 0 && e.textContent.trim() === 'Số lớp' && !e.closest('#dg-root, .ant-table'));
+    if (!lbl) return;
+    let row = lbl;
+    while (row && !(row.innerText || '').includes('Mở hàng loạt')) row = row.parentElement;
+    if (!row || row.dataset.dgCompact) return;
+    row.dataset.dgCompact = '1';
+    row.style.setProperty('display', 'flex', 'important');
+    row.style.setProperty('flex-wrap', 'wrap', 'important');
+    row.style.setProperty('align-items', 'flex-end', 'important');
+    row.style.setProperty('gap', '10px', 'important');
+    for (const ch of row.children) {
+      const t = (ch.innerText || '').trim();
+      const w = /Tìm kiếm/.test(t) ? 200 : /Nhân viên/.test(t) ? 170 : /Số lớp|Loại SP/.test(t) ? 100 : null;
+      ch.style.setProperty('flex', '0 0 auto', 'important');
+      ch.style.setProperty('max-width', 'none', 'important');
+      ch.style.setProperty('padding', '0', 'important');
+      ch.style.setProperty('width', w ? `${w}px` : 'auto', 'important');
+      ch.querySelectorAll('.ant-select, .ant-input-affix-wrapper, .ant-input').forEach((x) => x.style.setProperty('width', '100%', 'important'));
+    }
+  }
   function crmListTags() {
     if (!IS_TOP || !root || !/^\/bao-gia\/?$/.test(location.pathname) || !renderCtx.quotes) return;
+    try {
+      crmCompactFilters();
+    } catch {}
     crmTagCss();
     const byCode = renderCtx.byCode && renderCtx.byCodeSrc === renderCtx.quotes ? renderCtx.byCode : (renderCtx.byCode = Object.fromEntries(Object.values(renderCtx.quotes).map((q) => [q.code, q])));
     renderCtx.byCodeSrc = renderCtx.quotes;
