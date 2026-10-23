@@ -2012,6 +2012,77 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPrintButton(), 2000);
 
+  // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
+  function crmTagCss() {
+    if (document.getElementById('dg-tagcol-css') || !root) return;
+    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|dl-hotbadge)([.:][\w-]+)*\s*$/;
+    let css = '';
+    for (const st of root.querySelectorAll('style')) {
+      for (const r of st.sheet?.cssRules || []) {
+        if (r.type === 7) css += r.cssText + '\n'; // @keyframes
+        else if (r.selectorText && r.selectorText.split(',').every((x) => ok.test(x)))
+          css += `${r.selectorText.split(',').map((x) => `[data-dg-tagcol] ${x.trim().replace(/^\.it-main\s+/, '')}`).join(',')}{${r.style.cssText}}\n`;
+      }
+    }
+    const el = document.createElement('style');
+    el.id = 'dg-tagcol-css';
+    el.textContent = css + '[data-dg-tagcol]{white-space:normal} [data-dg-tagcol] span{margin:1px 3px 1px 0 !important;font-size:11px !important;padding:0 7px !important;display:inline-block}';
+    document.head.append(el);
+  }
+  function crmListTags() {
+    if (!IS_TOP || !root || !/^\/bao-gia\/?$/.test(location.pathname) || !renderCtx.quotes) return;
+    crmTagCss();
+    const byCode = renderCtx.byCode && renderCtx.byCodeSrc === renderCtx.quotes ? renderCtx.byCode : (renderCtx.byCode = Object.fromEntries(Object.values(renderCtx.quotes).map((q) => [q.code, q])));
+    renderCtx.byCodeSrc = renderCtx.quotes;
+    for (const wrap of document.querySelectorAll('.ant-table')) {
+      const head = [...wrap.querySelectorAll('thead th')];
+      const idx = head.findIndex((th) => th.innerText.trim() === 'Tên cơ hội');
+      if (idx < 0) continue;
+      if (!wrap.querySelector('th[data-dg-tagcol]')) {
+        const th = document.createElement('th');
+        th.className = head[idx].className;
+        th.setAttribute('data-dg-tagcol', '1');
+        th.textContent = 'Nhãn';
+        head[idx].before(th);
+        for (const cg of wrap.querySelectorAll('colgroup')) {
+          const cols = cg.querySelectorAll('col');
+          const col = document.createElement('col');
+          col.setAttribute('data-dg-tagcol', '1');
+          col.style.width = '190px';
+          (cols[idx] || cols[cols.length - 1])?.before(col);
+        }
+      }
+      const pos = [...wrap.querySelectorAll('thead th')].findIndex((th) => th.hasAttribute('data-dg-tagcol'));
+      for (const tr of wrap.querySelectorAll('tbody tr')) {
+        if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
+        const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
+        let td = tr.querySelector(':scope > td[data-dg-tagcol]');
+        if (!td) {
+          td = document.createElement('td');
+          td.className = tr.cells[0]?.className || '';
+          td.setAttribute('data-dg-tagcol', '1');
+          const ref = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-tagcol'))[pos];
+          ref ? ref.before(td) : tr.append(td);
+        }
+        const q = code && byCode[code];
+        const c = q && renderCtx.comments?.[q.id];
+        const hot = q && renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c);
+        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
+        if (td.dataset.k !== `${code}|${html.length}`) {
+          td.dataset.k = `${code}|${html.length}`;
+          td.innerHTML = html;
+        }
+      }
+    }
+  }
+  if (IS_TOP) setInterval(() => {
+    try {
+      crmListTags();
+    } catch (e) {
+      console.warn('[DG] tagcol', e);
+    }
+  }, 1500);
+
   // ---------- Băng vàng đầu trang CRM ("1. CÔNG TY … (xxđ) 2. …") → thay bằng danh sách 🔥 Gợi ý chốt đơn ----------
   // Ẩn nội dung gốc của CRM và chèn danh sách deal ưu tiên (bấm để mở báo giá). NVKD chỉ thấy deal của mình.
   let topHotHtml = '';
@@ -6467,6 +6538,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     avatars = avatarIndex(quotes);
     quickLearn = await kvGet('quickLearn');
     renderCtx = { hotPinned: await kvGet('hotPinned'), aiHot: (await kvGet('aiHot')).latest, comments, quotes, collected, orders: dedupOrders(await kvGet('orders'), quotes), margins: await kvGet('margins'), quickSent: await kvGet('quickSent'), quickDraft: await kvGet('quickDraft') };
+    {
+      const hd = await kvGet('aiHotDone');
+      const pin = renderCtx.hotPinned || {};
+      renderCtx.hotSet = new Set([...(renderCtx.aiHot?.items || []).filter((x) => !hd[x.id]).map((x) => x.id), ...Object.keys(pin).filter((id) => pin[id] && !pin[id].off && !hd[id]).map(Number)]);
+    }
     const all = Object.values(quotes);
     const btn = (act, key, label, busyLabel, attrs = '') =>
       `<button class="act" data-act="${act}" ${attrs} ${state.busy.has(key) ? 'disabled' : ''}>${state.busy.has(key) ? busyLabel : label}</button>`;
