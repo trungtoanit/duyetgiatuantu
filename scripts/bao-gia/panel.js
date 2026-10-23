@@ -2318,8 +2318,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
             const cell = tr.cells[si];
             if (!cell || tr.classList.contains('ant-table-measure-row')) continue;
             cell.style.fontWeight = '800';
+            // Số tiền 0 → nhãn "⚠️ Chưa cho giá" giống extension
+            const raw = [...cell.childNodes].filter((n) => !(n.nodeType === 1 && n.hasAttribute('data-dg-np'))).map((n) => n.textContent).join('');
+            const zero = !(Number(String(raw).replace(/[^\d]/g, '')) || 0) && /BG\d{3,}/.test(tr.innerText);
+            let np = cell.querySelector('[data-dg-np]');
+            if (zero && !np) {
+              np = document.createElement('span');
+              np.setAttribute('data-dg-np', '1');
+              np.textContent = '⚠️ Chưa cho giá';
+              np.setAttribute('style', 'display:inline-block;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:0 8px;font-size:11.5px;font-weight:800;white-space:nowrap');
+              cell.prepend(np);
+            }
+            if (np) np.style.display = zero ? 'inline-block' : 'none';
+            for (const n of cell.children) if (!n.hasAttribute('data-dg-np')) n.style.display = zero ? 'none' : '';
+            if (zero) {
+              for (const n of cell.childNodes) if (n.nodeType === 3 && n.textContent.trim()) n.textContent = '';
+            }
             if (tr.style.display === 'none') continue;
-            const v = Number(String(cell.innerText).replace(/[^\d]/g, '')) || 0;
+            const v = Number(String(raw).replace(/[^\d]/g, '')) || 0;
             sum += v;
             n++;
           }
