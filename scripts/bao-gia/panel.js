@@ -2052,7 +2052,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'dg-crmf';
-      bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;font-size:12px');
+      bar.setAttribute('style', 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0;padding:6px 8px;font-size:12px;position:sticky;top:0;z-index:20;background:#f5f7fb;border-bottom:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(15,23,42,.06)');
       const st0 = document.createElement('style');
       st0.textContent = '#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}';
       bar.append(st0);
@@ -2249,7 +2249,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // Cột "Số tiền" in đậm
       {
         const ths = [...wrap.querySelectorAll('thead th')];
-        const si = ths.findIndex((th) => th.innerText.trim() === 'Số tiền');
+        const si = ths.findIndex((th) => /^Số tiền/.test(th.innerText.trim()));
         if (si >= 0) {
           let sum = 0;
           let n = 0;
