@@ -2081,32 +2081,62 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       bar.innerHTML = `<style>#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}</style>${html}`;
     }
   }
-  // Hàng ô lọc của CRM (Tìm kiếm / Nhân viên / Nổi bật / Số lớp / Loại SP / Chỉ lấy của Tuấn Tú / Mở hàng loạt) → gọn lại
+  // Hàng ô lọc của CRM: ẩn cả hàng; ô "Tìm kiếm" + "Chỉ lấy của Tuấn Tú" làm lại cạnh thanh phân trang
+  // (ô của mình gõ → chuyển sang ô gốc của CRM, nên CRM vẫn tự tìm như cũ)
   function crmCompactFilters() {
     const lbl = [...document.querySelectorAll('label, span, div')].find((e) => e.childElementCount === 0 && e.textContent.trim() === 'Số lớp' && !e.closest('#dg-root, .ant-table'));
     if (!lbl) return;
     let row = lbl;
     while (row && !(row.innerText || '').includes('Mở hàng loạt')) row = row.parentElement;
-    if (!row || row.dataset.dgCompact) return;
-    row.dataset.dgCompact = '1';
-    row.style.setProperty('display', 'flex', 'important');
-    row.style.setProperty('flex-wrap', 'wrap', 'important');
-    row.style.setProperty('align-items', 'flex-end', 'important');
-    row.style.setProperty('gap', '10px', 'important');
-    for (const ch of row.children) {
-      const t = (ch.innerText || '').trim();
-      // Chỉ giữ "Tìm kiếm" và "Chỉ lấy của Tuấn Tú"; các ô khác ẩn (lọc NVKD / nhãn đã có thanh lọc riêng)
-      if (!/Tìm kiếm|Chỉ lấy của Tuấn Tú/.test(t)) {
-        ch.style.setProperty('display', 'none', 'important');
-        continue;
-      }
-      const w = /Tìm kiếm/.test(t) ? 240 : null;
-      ch.style.setProperty('flex', '0 0 auto', 'important');
-      ch.style.setProperty('max-width', 'none', 'important');
-      ch.style.setProperty('padding', '0', 'important');
-      ch.style.setProperty('width', w ? `${w}px` : 'auto', 'important');
-      ch.querySelectorAll('.ant-select, .ant-input-affix-wrapper, .ant-input').forEach((x) => x.style.setProperty('width', '100%', 'important'));
+    if (!row) return;
+    const srcInput = [...row.querySelectorAll('input')].find((x) => /tìm kiếm/i.test(x.placeholder || ''));
+    const srcCheck = row.querySelector('input[type="checkbox"]');
+    row.style.setProperty('display', 'none', 'important');
+    const pag = [...document.querySelectorAll('.ant-pagination')].find((p) => !p.closest('#dg-root') && p.getClientRects().length);
+    if (!pag) return;
+    let bar = document.getElementById('dg-crmsearch');
+    if (!bar) {
+      bar = document.createElement('span');
+      bar.id = 'dg-crmsearch';
+      bar.setAttribute('style', 'display:inline-flex;align-items:center;gap:14px;margin-left:16px;vertical-align:middle');
+      bar.innerHTML = `<span style="position:relative;display:inline-flex;align-items:center"><input type="search" placeholder="🔍 Tìm kiếm báo giá…" style="width:240px;height:32px;border:1px solid #d9d9d9;border-radius:6px;padding:0 10px;font:inherit;font-size:14px;outline:none"></span>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;white-space:nowrap"><input type="checkbox" style="width:16px;height:16px;cursor:pointer"> Chỉ lấy của Tuấn Tú</label>`;
+      pag.after(bar);
+      const inp = bar.querySelector('input[type="search"]');
+      const chk = bar.querySelector('input[type="checkbox"]');
+      const push = (enter) => {
+        const src = document.getElementById('dg-crmsearch')?._src;
+        if (!src) return;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(src, inp.value);
+        src.dispatchEvent(new Event('input', { bubbles: true }));
+        src.dispatchEvent(new Event('change', { bubbles: true }));
+        if (enter) {
+          for (const t of ['keydown', 'keypress', 'keyup']) src.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+          src.closest('.ant-input-affix-wrapper, .ant-input-search, .ant-input-group-wrapper')?.querySelector('.anticon-search, .ant-input-search-button, .ant-input-suffix')?.click();
+        }
+      };
+      let tm;
+      inp.addEventListener('input', () => {
+        clearTimeout(tm);
+        tm = setTimeout(() => push(true), 500);
+      });
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          clearTimeout(tm);
+          push(true);
+        }
+      });
+      chk.addEventListener('change', () => {
+        const src = document.getElementById('dg-crmsearch')?._chk;
+        if (src && src.checked !== chk.checked) src.click();
+      });
     }
+    bar._src = srcInput;
+    bar._chk = srcCheck;
+    const myChk = bar.querySelector('input[type="checkbox"]');
+    if (srcCheck && myChk.checked !== srcCheck.checked) myChk.checked = srcCheck.checked;
+    const myInp = bar.querySelector('input[type="search"]');
+    if (srcInput && document.activeElement !== myInp && myInp.value !== srcInput.value) myInp.value = srcInput.value;
   }
   function crmListTags() {
     if (!IS_TOP || !root || !/^\/bao-gia\/?$/.test(location.pathname) || !renderCtx.quotes) return;
