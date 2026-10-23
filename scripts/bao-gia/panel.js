@@ -2199,7 +2199,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       {
         const ths = [...wrap.querySelectorAll('thead th')];
         const si = ths.findIndex((th) => th.innerText.trim() === 'Số tiền');
-        if (si >= 0) for (const tr of wrap.querySelectorAll('tbody tr')) if (tr.cells[si]) tr.cells[si].style.fontWeight = '800';
+        if (si >= 0) {
+          let sum = 0;
+          let n = 0;
+          for (const tr of wrap.querySelectorAll('tbody tr')) {
+            const cell = tr.cells[si];
+            if (!cell || tr.classList.contains('ant-table-measure-row')) continue;
+            cell.style.fontWeight = '800';
+            if (tr.style.display === 'none') continue;
+            const v = Number(String(cell.innerText).replace(/[^\d]/g, '')) || 0;
+            sum += v;
+            n++;
+          }
+          // Tổng tiền các dòng đang hiện (theo bộ lọc) ngay trên tiêu đề cột
+          let sp = ths[si].querySelector('[data-dg-sum]');
+          if (!sp) {
+            sp = document.createElement('div');
+            sp.setAttribute('data-dg-sum', '1');
+            sp.setAttribute('style', 'font-size:12px;font-weight:800;color:#047857;background:#dcfce7;border-radius:6px;padding:0 6px;margin-top:2px;display:inline-block;white-space:nowrap');
+            ths[si].append(sp);
+          }
+          const txt = `Σ ${moneyShortG(sum) || '0đ'}`;
+          if (sp.textContent !== txt) sp.textContent = txt;
+          sp.title = `Tổng ${n} báo giá đang hiện: ${money(sum)}`;
+        }
       }
       // Ẩn cột "Giai đoạn cơ hội"
       const allTh = [...wrap.querySelectorAll('thead th')];
