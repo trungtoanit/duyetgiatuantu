@@ -2625,7 +2625,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             if (zero && !np) {
               np = document.createElement('span');
               np.setAttribute('data-dg-np', '1');
-              np.textContent = '⚠️ Chưa cho giá';
+              np.innerHTML = '<i class="dg-hurry">⏰</i> Chưa cho giá';
+              if (!document.getElementById('dg-np-css')) {
+                const st = document.createElement('style');
+                st.id = 'dg-np-css';
+                st.textContent = `[data-dg-np]{animation:dgNpPulse 1.4s ease-in-out infinite}
+[data-dg-np] .dg-hurry{font-style:normal;display:inline-block;animation:dgHurry 1s ease-in-out infinite;transform-origin:50% 60%}
+@keyframes dgHurry{0%,100%{transform:rotate(0)}10%{transform:rotate(-18deg)}20%{transform:rotate(16deg)}30%{transform:rotate(-12deg)}40%{transform:rotate(8deg)}50%{transform:rotate(0)}}
+@keyframes dgNpPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}`;
+                document.head.append(st);
+              }
               np.setAttribute('style', 'display:inline-block;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:0 8px;font-size:11.5px;font-weight:800;white-space:nowrap');
               cell.prepend(np);
             }
