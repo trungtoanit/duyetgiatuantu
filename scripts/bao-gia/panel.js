@@ -1884,6 +1884,54 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   const signOn = () => lsGet('dgSignOn') !== '0'; // mặc định có ký tên
+  // ---------- ±1% giá thực bán (bảng sản phẩm của báo giá) ----------
+  // Mỗi dòng: nút −1% / +1% dưới ô "Giá thực bán" → điền giá mới như gõ tay (CRM tự tính lại thành tiền).
+  // Không tự lưu: quản lý xem lại rồi bấm "Cập nhật".
+  function nudgePrice(input, pct) {
+    const raw = String(input.value || '');
+    const n = Number(raw.replace(/[^\d]/g, ''));
+    if (!n) return;
+    const next = Math.max(0, Math.round(n * (1 + pct / 100)));
+    const text = /[.,]/.test(raw) ? next.toLocaleString('vi-VN') : String(next);
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.blur(); // InputNumber của antd chốt giá trị khi rời ô
+  }
+  function injectPriceNudges() {
+    if (!IS_TOP || !currentQuoteId()) return;
+    for (const t of document.querySelectorAll('.ant-table')) {
+      const heads = [...t.querySelectorAll('thead th')];
+      const idx = heads.findIndex((th) => th.innerText.trim() === 'Giá thực bán');
+      if (idx < 0) continue;
+      for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+        if (tr.classList.contains('ant-table-measure-row')) continue;
+        const cell = tr.cells[idx];
+        const input = cell?.querySelector('input');
+        if (!input || cell.querySelector('.dg-nudge')) continue;
+        const box = document.createElement('div');
+        box.className = 'dg-nudge';
+        box.setAttribute('style', 'display:flex;gap:4px;justify-content:flex-end;margin-top:4px;');
+        for (const [label, pct, bg] of [['−1%', -1, '#fee2e2;color:#b91c1c;border-color:#fecaca'], ['+1%', 1, '#dcfce7;color:#15803d;border-color:#bbf7d0']]) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = label;
+          b.title = `${pct > 0 ? 'Tăng' : 'Giảm'} 1% giá thực bán (chưa lưu – bấm Cập nhật để lưu)`;
+          b.setAttribute('style', `cursor:pointer;font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;border:1px solid;background:${bg};`);
+          b.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            nudgePrice(cell.querySelector('input') || input, pct);
+          });
+          box.append(b);
+        }
+        cell.append(box);
+      }
+    }
+  }
+  if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
+
   // Nút "🖨 In báo giá" cạnh tiêu đề "Bình luận" trên trang báo giá
   function injectPrintButton() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-printq')) return;
