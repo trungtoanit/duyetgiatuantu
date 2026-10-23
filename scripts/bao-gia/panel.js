@@ -2095,7 +2095,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     row.style.setProperty('gap', '10px', 'important');
     for (const ch of row.children) {
       const t = (ch.innerText || '').trim();
-      const w = /Tìm kiếm/.test(t) ? 200 : /Nhân viên/.test(t) ? 170 : /Số lớp|Loại SP/.test(t) ? 100 : null;
+      // Chỉ giữ "Tìm kiếm" và "Chỉ lấy của Tuấn Tú"; các ô khác ẩn (lọc NVKD / nhãn đã có thanh lọc riêng)
+      if (!/Tìm kiếm|Chỉ lấy của Tuấn Tú/.test(t)) {
+        ch.style.setProperty('display', 'none', 'important');
+        continue;
+      }
+      const w = /Tìm kiếm/.test(t) ? 240 : null;
       ch.style.setProperty('flex', '0 0 auto', 'important');
       ch.style.setProperty('max-width', 'none', 'important');
       ch.style.setProperty('padding', '0', 'important');
