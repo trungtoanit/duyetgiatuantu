@@ -1734,11 +1734,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   async function docToPng(doc, scale = 2) {
     const body = doc.body;
-    // Báo giá chỉ 1 dòng sản phẩm → chụp 100% (chữ to, dễ đọc); nhiều dòng → thu 80% cho vừa trang
+    // Báo giá chỉ 1 dòng sản phẩm → chụp 90%; nhiều dòng → thu 80% cho vừa trang
     const prodRows = [...doc.querySelectorAll('table')]
       .filter((t) => /SẢN PHẨM/i.test(t.innerText) && /THÀNH TIỀN/i.test(t.innerText))
       .flatMap((t) => [...t.rows].filter((r) => /^\s*\d+\s*$/.test(r.cells[0]?.innerText || '')));
-    const zoom = prodRows.length <= 1 ? 1 : A4.zoom;
+    const zoom = prodRows.length <= 1 ? 0.9 : A4.zoom; // 1 dòng: 90% (100% chữ quá to, xuống dòng nhiều)
     const layoutW = Math.round(A4.w / zoom); // bề ngang dàn trang trước khi thu
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
