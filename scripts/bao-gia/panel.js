@@ -888,7 +888,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const qc = qid && quickCtx[qid];
     if (!qc?.text) return;
     const key = `${qid}|${qc.text}`;
-    if (autoFilled[qid] === key) return;
+    if (autoFilled[qid] === key || autoFilled[`${qid}:tried`]) return; // mỗi lần mở báo giá chỉ điền 1 lần
+    // Người dùng đang gõ trong bất kỳ ô bình luận / trả lời nào → không đụng vào
+    const typing = [...document.querySelectorAll('textarea')].some((t) => !t.closest('#dg-root') && (document.activeElement === t || t.value.trim()));
+    if (typing && !autoFilled[`${qid}:last`]) return;
+    if (document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    autoFilled[`${qid}:tried`] = true;
     const code = renderCtx.quotes?.[qid]?.code;
     autoBusy = true;
     try {
@@ -926,10 +931,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const actions = content.querySelector(':scope > ul.ant-comment-actions');
       const reply = actions && [...actions.querySelectorAll('*')].reverse().find((x) => x.textContent.trim() === 'Trả lời');
       if (!reply) continue; // vd. dòng hệ thống "đã tạo báo giá" không có nút Trả lời
-      let ta = c.querySelector('.ant-comment-nested textarea');
+      // Ô trả lời đã mở sẵn (ở bất kỳ đâu trong luồng) → dùng luôn, KHÔNG bấm "Trả lời" lần nữa (bấm lại sẽ đóng ô, mất chữ)
+      const findTa = () => c.querySelector('.ant-comment-nested textarea') || c.querySelector(':scope textarea');
+      let ta = findTa();
       if (!ta) {
         reply.click();
-        for (let i = 0; i < 30 && !(ta = c.querySelector('.ant-comment-nested textarea')); i++) await sleep(100);
+        for (let i = 0; i < 30 && !(ta = findTa()); i++) await sleep(100);
       }
       if (ta) return ta;
     }
