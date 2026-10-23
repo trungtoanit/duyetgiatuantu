@@ -2012,6 +2012,157 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPrintButton(), 2000);
 
+  // ---------- Bấm ảnh trong bình luận → xem ảnh dạng modal (phóng to, kéo, xoay, tải, chuyển ảnh) ----------
+  const IMG_EXT = /\.(png|jpe?g|webp|gif|bmp)(\?|#|$)/i;
+  function pageImages() {
+    return [...document.querySelectorAll('img')].filter((im) => {
+      if (im.closest('#dg-root, #dg-lb, [data-dg-hot]')) return false;
+      const r = im.getBoundingClientRect();
+      if (r.width < 60 || r.height < 40) return false; // bỏ avatar / icon
+      const href = im.closest('a')?.href || '';
+      return IMG_EXT.test(im.currentSrc || im.src) || IMG_EXT.test(href) || /vultrobjects|\/uploads?\//i.test(im.src);
+    });
+  }
+  function openLightbox(start) {
+    const list = pageImages();
+    let i = Math.max(0, list.indexOf(start));
+    const srcOf = (im) => {
+      const href = im.closest('a')?.href || '';
+      return IMG_EXT.test(href) ? href : im.currentSrc || im.src;
+    };
+    document.getElementById('dg-lb')?.remove();
+    const lb = document.createElement('div');
+    lb.id = 'dg-lb';
+    lb.innerHTML = `<style>
+      #dg-lb{position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.92);display:flex;flex-direction:column;animation:dgLbIn .18s ease;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+      @keyframes dgLbIn{from{opacity:0}to{opacity:1}}
+      #dg-lb .lb-top{display:flex;align-items:center;gap:8px;padding:10px 16px;color:#e2e8f0;font-size:13px}
+      #dg-lb .lb-top b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #dg-lb button,#dg-lb a.btn{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;border-radius:8px;height:34px;min-width:34px;padding:0 10px;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+      #dg-lb button:hover,#dg-lb a.btn:hover{background:rgba(255,255,255,.2)}
+      #dg-lb .lb-stage{flex:1;position:relative;overflow:hidden;cursor:grab}
+      #dg-lb .lb-stage.drag{cursor:grabbing}
+      #dg-lb .lb-img{position:absolute;left:50%;top:50%;max-width:none;transform-origin:center;box-shadow:0 20px 60px rgba(0,0,0,.5);background:#fff;user-select:none;-webkit-user-drag:none;transition:transform .12s ease}
+      #dg-lb .lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;font-size:22px}
+      #dg-lb .lb-prev{left:16px} #dg-lb .lb-next{right:16px}
+      #dg-lb .lb-pct{min-width:54px;text-align:center}
+    </style>
+    <div class="lb-top"><b class="lb-name"></b><span class="lb-cnt"></span>
+      <button data-a="out" title="Thu nhỏ (−)">－</button><span class="lb-pct"></span><button data-a="in" title="Phóng to (+)">＋</button>
+      <button data-a="fit" title="Vừa màn hình (0)">⤢ Vừa</button><button data-a="one" title="Kích thước thật (1)">1:1</button>
+      <button data-a="rot" title="Xoay (R)">⟳</button><a class="btn lb-open" target="_blank" rel="noopener" title="Mở ảnh ở tab mới">↗</a><a class="btn lb-dl" title="Tải ảnh">⬇</a>
+      <button data-a="close" title="Đóng (Esc)">✕</button></div>
+    <div class="lb-stage"><img class="lb-img" alt=""><button class="lb-nav lb-prev" data-a="prev" title="Ảnh trước (←)">‹</button><button class="lb-nav lb-next" data-a="next" title="Ảnh sau (→)">›</button></div>`;
+    document.body.append(lb);
+    const img = lb.querySelector('.lb-img');
+    const stage = lb.querySelector('.lb-stage');
+    let z = 1, x = 0, y = 0, rot = 0, fitZ = 1;
+    const apply = () => {
+      img.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${rot}deg) scale(${z})`;
+      lb.querySelector('.lb-pct').textContent = `${Math.round(z * 100)}%`;
+    };
+    const fit = () => {
+      const sw = stage.clientWidth - 40, sh = stage.clientHeight - 40;
+      const iw = rot % 180 ? img.naturalHeight : img.naturalWidth, ih = rot % 180 ? img.naturalWidth : img.naturalHeight;
+      fitZ = Math.min(1, sw / (iw || 1), sh / (ih || 1));
+      z = fitZ; x = 0; y = 0;
+      apply();
+    };
+    const show = () => {
+      const im = list[i];
+      const src = srcOf(im);
+      img.style.transition = 'none';
+      img.onload = () => {
+        fit();
+        requestAnimationFrame(() => (img.style.transition = ''));
+      };
+      img.src = src;
+      const name = decodeURIComponent((src.split('/').pop() || '').split('?')[0]);
+      lb.querySelector('.lb-name').textContent = name;
+      lb.querySelector('.lb-cnt').textContent = list.length > 1 ? `${i + 1} / ${list.length}` : '';
+      lb.querySelector('.lb-open').href = src;
+      const dl = lb.querySelector('.lb-dl');
+      dl.href = src;
+      dl.setAttribute('download', name || 'anh.png');
+      lb.querySelectorAll('.lb-nav').forEach((b) => (b.style.display = list.length > 1 ? '' : 'none'));
+    };
+    const zoomAt = (nz, cx = 0, cy = 0) => {
+      nz = Math.max(0.1, Math.min(8, nz));
+      x = cx - ((cx - x) * nz) / z;
+      y = cy - ((cy - y) * nz) / z;
+      z = nz;
+      apply();
+    };
+    const close = () => {
+      lb.remove();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const act = (a) => {
+      if (a === 'close') close();
+      else if (a === 'in') zoomAt(z * 1.25);
+      else if (a === 'out') zoomAt(z / 1.25);
+      else if (a === 'fit') fit();
+      else if (a === 'one') { z = 1; x = 0; y = 0; apply(); }
+      else if (a === 'rot') { rot = (rot + 90) % 360; fit(); }
+      else if (a === 'prev') { i = (i - 1 + list.length) % list.length; rot = 0; show(); }
+      else if (a === 'next') { i = (i + 1) % list.length; rot = 0; show(); }
+    };
+    lb.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-a]');
+      if (b) return act(b.dataset.a);
+      if (e.target === stage) close(); // bấm nền tối → đóng
+    });
+    const onKey = (e) => {
+      const k = { Escape: 'close', ArrowLeft: 'prev', ArrowRight: 'next', '+': 'in', '=': 'in', '-': 'out', '0': 'fit', '1': 'one', r: 'rot', R: 'rot' }[e.key];
+      if (k) {
+        e.preventDefault();
+        e.stopPropagation();
+        act(k);
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    stage.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const r = stage.getBoundingClientRect();
+      zoomAt(z * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
+    }, { passive: false });
+    let drag = null;
+    stage.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-a]')) return;
+      drag = { sx: e.clientX, sy: e.clientY, x, y, moved: false };
+      stage.classList.add('drag');
+      img.style.transition = 'none';
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      x = drag.x + e.clientX - drag.sx;
+      y = drag.y + e.clientY - drag.sy;
+      drag.moved = true;
+      apply();
+    });
+    window.addEventListener('pointerup', () => {
+      if (!drag) return;
+      stage.classList.remove('drag');
+      img.style.transition = '';
+      drag = null;
+    });
+    img.addEventListener('dblclick', () => (z > fitZ * 1.05 ? fit() : zoomAt(Math.max(1, fitZ * 2.5))));
+    show();
+  }
+  if (IS_TOP)
+    document.addEventListener(
+      'click',
+      (e) => {
+        const im = e.target.closest?.('img');
+        if (!im || e.metaKey || e.ctrlKey || e.button) return;
+        if (!pageImages().includes(im)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openLightbox(im);
+      },
+      true,
+    );
+
   // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
   function crmTagCss() {
     if (document.getElementById('dg-tagcol-css') || !root) return;
