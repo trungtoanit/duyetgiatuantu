@@ -2070,31 +2070,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   function detailPageCss() {
     const on = IS_TOP && !!currentQuoteId();
     document.documentElement.toggleAttribute('data-dg-detail', on);
-    if (!on || document.getElementById('dg-detail-css')) return;
+    if (!on || document.getElementById('dg-detail-css2')) return;
+    document.getElementById('dg-detail-css')?.remove();
     const st = document.createElement('style');
-    st.id = 'dg-detail-css';
+    st.id = 'dg-detail-css2';
     const R = 'html[data-dg-detail]';
+    // Gọn: ô nhập thấp, khoảng cách nhỏ, nhãn sát ô – trang ngắn lại
     st.textContent = `
-${R} body{font-size:13px}
-${R} .ant-form-item-label > label, ${R} .ant-form-item-label label{font-size:12.5px !important;font-weight:600 !important;color:#475569 !important}
-${R} .ant-input, ${R} .ant-input-affix-wrapper, ${R} .ant-picker, ${R} .ant-input-number{border-radius:8px !important;border-color:#e2e8f0 !important;font-size:13px !important}
-${R} .ant-input:not(textarea), ${R} .ant-input-affix-wrapper, ${R} .ant-picker, ${R} .ant-input-number{min-height:34px}
-${R} .ant-select:not(.ant-select-customize-input) .ant-select-selector{border-radius:8px !important;border-color:#e2e8f0 !important;min-height:34px !important;font-size:13px !important;align-items:center}
-${R} .ant-input:hover, ${R} .ant-input-affix-wrapper:hover, ${R} .ant-picker:hover, ${R} .ant-select:hover .ant-select-selector{border-color:#93c5fd !important}
-${R} .ant-input:focus, ${R} .ant-input-focused, ${R} .ant-input-affix-wrapper-focused, ${R} .ant-picker-focused, ${R} .ant-select-focused .ant-select-selector{border-color:#3b82f6 !important;box-shadow:0 0 0 3px rgba(59,130,246,.15) !important}
-${R} .ant-input-disabled, ${R} .ant-select-disabled .ant-select-selector, ${R} .ant-picker-disabled{background:#f8fafc !important;color:#334155 !important}
-${R} .ant-btn{border-radius:8px !important;font-weight:600 !important;height:32px;box-shadow:none !important}
-${R} .ant-btn-primary{background:linear-gradient(180deg,#3b82f6,#2563eb) !important;border-color:#2563eb !important}
-${R} .ant-btn-primary:hover{filter:brightness(1.08)}
-${R} .ant-alert{border-radius:10px !important}
-${R} .ant-form-item{margin-bottom:14px !important}
-${R} .ant-tabs-tab{font-weight:600 !important}
-${R} .ant-tabs-ink-bar{height:3px !important;border-radius:3px}
-${R} .ant-card, ${R} .ant-collapse{border-radius:12px !important}
-${R} .ant-comment-content-detail, ${R} .ant-comment .ant-comment-content-detail > div{border-radius:10px !important}
-${R} .ant-tag{border-radius:6px !important}
-${R} .ant-divider{margin:14px 0 !important}
-${R} textarea.ant-input{border-radius:10px !important}`;
+${R} .ant-form-item{margin-bottom:8px !important}
+${R} .ant-form-item-label{padding-bottom:2px !important;line-height:1.3 !important}
+${R} .ant-form-item-label > label, ${R} .ant-form-item-label label{font-size:12px !important;font-weight:600 !important;color:#475569 !important;height:auto !important}
+${R} .ant-input, ${R} .ant-input-affix-wrapper, ${R} .ant-picker, ${R} .ant-input-number{border-radius:6px !important;border-color:#e2e8f0 !important;font-size:13px !important}
+${R} .ant-input:not(textarea), ${R} .ant-input-affix-wrapper, ${R} .ant-picker, ${R} .ant-input-number{height:30px !important;padding-top:2px !important;padding-bottom:2px !important}
+${R} .ant-input-affix-wrapper > .ant-input{height:auto !important}
+${R} .ant-select-single:not(.ant-select-customize-input) .ant-select-selector{height:30px !important;border-radius:6px !important;border-color:#e2e8f0 !important;font-size:13px !important}
+${R} .ant-select-single .ant-select-selector .ant-select-selection-item, ${R} .ant-select-single .ant-select-selector .ant-select-selection-placeholder{line-height:28px !important}
+${R} .ant-select-single .ant-select-selection-search-input{height:28px !important}
+${R} .ant-input:focus, ${R} .ant-input-focused, ${R} .ant-input-affix-wrapper-focused, ${R} .ant-picker-focused, ${R} .ant-select-focused .ant-select-selector{border-color:#3b82f6 !important;box-shadow:0 0 0 2px rgba(59,130,246,.15) !important}
+${R} .ant-btn{border-radius:6px !important;font-weight:600 !important;box-shadow:none !important}
+${R} .ant-btn:not(.ant-btn-sm){height:30px !important;padding:0 12px !important}
+${R} .ant-alert{border-radius:8px !important;padding:6px 12px !important;margin-bottom:8px !important}
+${R} .ant-tabs-nav{margin-bottom:8px !important}
+${R} .ant-tabs-tab{padding:6px 0 !important;font-weight:600 !important}
+${R} .ant-divider{margin:8px 0 !important}
+${R} .ant-row{row-gap:0 !important}
+${R} textarea.ant-input{border-radius:8px !important}`;
     document.head.append(st);
   }
   if (IS_TOP) setInterval(() => {
