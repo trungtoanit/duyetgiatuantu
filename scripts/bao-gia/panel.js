@@ -1909,34 +1909,54 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     if (input) nudgePrice(input, pct);
   }
+  // Nút −1% / +1% ở tiêu đề cột "Giá thực bán": áp dụng cho TẤT CẢ các dòng của báo giá (lần lượt từng dòng)
+  let nudging = false;
+  async function nudgeAll(t, idx, pct, btns) {
+    if (nudging) return;
+    nudging = true;
+    btns.forEach((b) => (b.disabled = true));
+    try {
+      const rows = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row'));
+      for (const tr of rows) {
+        const cell = tr.cells[idx];
+        if (!cell || !/\d/.test(cell.innerText + (cell.querySelector('input')?.value || ''))) continue;
+        await nudgeCell(cell, pct);
+        await sleep(150);
+      }
+    } finally {
+      nudging = false;
+      btns.forEach((b) => (b.disabled = false));
+    }
+  }
   function injectPriceNudges() {
     if (!IS_TOP || !currentQuoteId()) return;
     for (const t of document.querySelectorAll('.ant-table')) {
       const heads = [...t.querySelectorAll('thead th')];
       const idx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
       if (idx < 0) continue;
-      for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
-        if (tr.classList.contains('ant-table-measure-row')) continue;
-        const cell = tr.cells[idx];
-        if (!cell || cell.querySelector('.dg-nudge') || !/\d/.test(cell.innerText + (cell.querySelector('input')?.value || ''))) continue;
-        const box = document.createElement('div');
-        box.className = 'dg-nudge';
-        box.setAttribute('style', 'display:flex;gap:4px;justify-content:flex-end;margin-top:4px;');
-        for (const [label, pct, bg] of [['−1%', -1, '#fee2e2;color:#b91c1c;border-color:#fecaca'], ['+1%', 1, '#dcfce7;color:#15803d;border-color:#bbf7d0']]) {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.textContent = label;
-          b.title = `${pct > 0 ? 'Tăng' : 'Giảm'} 1% giá thực bán (chưa lưu – bấm Cập nhật để lưu)`;
-          b.setAttribute('style', `cursor:pointer;font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;border:1px solid;background:${bg};`);
-          b.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            nudgeCell(cell, pct);
-          });
-          box.append(b);
-        }
-        cell.append(box);
+      const th = heads[idx];
+      if (th.querySelector('.dg-nudge-head')) continue;
+      const box = document.createElement('span');
+      box.className = 'dg-nudge-head';
+      box.setAttribute('style', 'display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle;');
+      const btns = [];
+      for (const [label, pct, bg] of [['−1%', -1, '#fee2e2;color:#b91c1c;border-color:#fecaca'], ['+1%', 1, '#dcfce7;color:#15803d;border-color:#bbf7d0']]) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.title = `${pct > 0 ? 'Tăng' : 'Giảm'} 1% giá thực bán của TẤT CẢ các dòng (chưa lưu – bấm Cập nhật để lưu)`;
+        b.setAttribute('style', `cursor:pointer;font-size:11px;font-weight:700;padding:0 6px;border-radius:999px;border:1px solid;background:${bg};line-height:18px;`);
+        // không để bấm nút làm bảng sắp xếp theo cột
+        for (const ev of ['mousedown', 'mouseup', 'pointerdown']) b.addEventListener(ev, (e) => e.stopPropagation());
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          nudgeAll(t, idx, pct, btns);
+        });
+        btns.push(b);
+        box.append(b);
       }
+      th.append(box);
     }
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
