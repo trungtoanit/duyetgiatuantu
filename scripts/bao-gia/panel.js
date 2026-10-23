@@ -2038,16 +2038,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     let box = leaves[0].parentElement;
     while (box && !leaves.every((l) => box.contains(l))) box = box.parentElement;
     if (!box) return;
-    if (!document.getElementById('dg-st-css2')) {
+    if (!document.getElementById('dg-st-css3')) {
       document.getElementById('dg-st-css')?.remove();
+      document.getElementById('dg-st-css2')?.remove();
       const st = document.createElement('style');
-      st.id = 'dg-st-css2';
-      st.textContent = `[data-dg-stbox]{display:flex !important;flex-wrap:wrap !important;gap:8px !important;margin-top:6px}
-[data-dg-st]{position:static !important;display:inline-flex !important;align-items:center;gap:6px;width:auto !important;min-width:0 !important;height:32px !important;padding:0 14px !important;margin:0 !important;border-radius:999px !important;font-size:13px !important;font-weight:700 !important;border:1.5px solid var(--c) !important;color:var(--c) !important;background:color-mix(in srgb,var(--c) 8%,#fff) !important;cursor:pointer;transition:background .15s, box-shadow .15s;white-space:nowrap;line-height:1 !important;opacity:1 !important;box-sizing:border-box}
-[data-dg-st]::before{content:attr(data-dg-ic);font-size:14px}
-[data-dg-st] *{color:inherit !important;background:transparent !important;border:0 !important;padding:0 !important;margin:0 !important;font-weight:inherit !important}
-[data-dg-st]:hover{background:color-mix(in srgb,var(--c) 18%,#fff) !important;box-shadow:0 3px 10px color-mix(in srgb,var(--c) 25%,transparent)}
-[data-dg-st][data-on="1"]{background:var(--c) !important;color:#fff !important;box-shadow:0 4px 14px color-mix(in srgb,var(--c) 45%,transparent)}`;
+      st.id = 'dg-st-css3';
+      st.textContent = `[data-dg-stbox]{display:flex !important;flex-wrap:wrap !important;gap:5px !important;margin-top:4px}
+[data-dg-st]{position:static !important;display:inline-flex !important;align-items:center;gap:4px;width:auto !important;min-width:0 !important;height:24px !important;padding:0 9px !important;margin:0 !important;border-radius:6px !important;font-size:12px !important;font-weight:600 !important;border:1px solid color-mix(in srgb,var(--c) 45%,#fff) !important;color:var(--c) !important;background:#fff !important;cursor:pointer;transition:background .12s;white-space:nowrap;line-height:1 !important;opacity:1 !important;box-sizing:border-box}
+[data-dg-st] *{color:inherit !important;background:transparent !important;border:0 !important;padding:0 !important;margin:0 !important;font-weight:inherit !important;font-size:inherit !important}
+[data-dg-st] .anticon{display:none !important}
+[data-dg-st]:hover{background:color-mix(in srgb,var(--c) 10%,#fff) !important}
+[data-dg-st][data-on="1"]{background:var(--c) !important;border-color:var(--c) !important;color:#fff !important;font-weight:700 !important}
+[data-dg-st][data-on="1"]::before{content:'✓';font-weight:900}`;
       document.head.append(st);
     }
     box.setAttribute('data-dg-stbox', '1');
@@ -2056,9 +2058,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       while (b.parentElement && b.parentElement !== box) b = b.parentElement;
       const t = l.textContent.replace(/[✓✔]/g, '').trim();
       const [ic, col] = ST_LOOK[t];
-      const on = /✓|✔/.test(b.textContent) || !!b.querySelector('.anticon-check') || /checked|active|selected/.test(b.className + ' ' + (b.firstElementChild?.className || ''));
+      const on = /✓|✔/.test(b.textContent) || !!b.querySelector('.anticon, [class*="checked"], [class*="active"]') || /checked|active|selected/.test(String(b.className));
       b.setAttribute('data-dg-st', t);
-      b.setAttribute('data-dg-ic', ic);
+      b.removeAttribute('data-dg-ic');
+      void ic;
       b.style.setProperty('--c', col);
       b.dataset.on = on ? '1' : '0';
     }
