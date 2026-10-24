@@ -5951,8 +5951,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Bình luận / tên cơ hội đã nhắc % hoa hồng cho thu mua chưa
   const BUYER_PCT_RE = /hoa\s*hồng|(^|[^\p{L}])hh\s*\d|chi\s*(hh|hoa|\d+\s*%)|%\s*(cho\s*)?(thu\s*mua|tm|người\s*mua|mua\s*hàng)|(thu\s*mua|người\s*mua)\s*\d+(?:[.,]\d+)?\s*%|chiết\s*khấu|ck\s*\d/iu;
   // % / tiền cho thu mua đọc từ tên cơ hội + bình luận: "hh 2%", "hoa hồng 2%", "chi 500đ", "thu mua 1%", "ck 3%"
-  const BUYER_VAL_RE = /(?:hoa\s*hồng|(?<![\p{L}])hh|chi(?:\s*(?:hh|hoa\s*hồng))?|cho\s*thu\s*mua|thu\s*mua|(?<![\p{L}])tm|chiết\s*khấu|(?<![\p{L}])ck)(?:\s*(?:thu\s*mua|tm))?\s*[:=(]?\s*(\d+(?:[.,]\d+)?)\s*(%|đ|k|ngàn|nghìn|vnđ)/iu;
-  const BUYER_VAL_RE2 = /(\d+(?:[.,]\d+)?)\s*(%|đ|k)\s*(?:\/\s*[\p{L}]+\s*)?(?:cho\s*)?(?:thu\s*mua|người\s*mua|(?<![\p{L}])tm(?![\p{L}]))/iu;
+  const BUYER_VAL_RE = /(?:hoa\s*hồng|(?<![\p{L}])hh|chi(?:\s*(?:hh|hoa\s*hồng))?|cho\s*thu\s*mua|thu\s*mua|(?<![\p{L}])tm|chiết\s*khấu|(?<![\p{L}])ck)(?:\s*(?:thu\s*mua|tm))?(?:\s*cho\s*(?:khách(?:\s*hàng)?|(?<![\p{L}])kh(?![\p{L}])|bên\s*(?:khách|mua)))?\s*[:=(]?\s*(\d+(?:[.,]\d+)?)\s*(%|đ|k|ngàn|nghìn|vnđ)/iu;
+  const BUYER_VAL_RE2 = /(\d+(?:[.,]\d+)?)\s*(%|đ|k)\s*(?:\/\s*[\p{L}]+\s*)?(?:cho\s*)?(?:thu\s*mua|người\s*mua|(?<![\p{L}])tm(?![\p{L}])|khách(?:\s*hàng)?(?![\p{L}]))/iu;
   function buyerHit(q, c) {
     const pick = (text) => {
       const m = String(text || '').match(BUYER_VAL_RE) || String(text || '').match(BUYER_VAL_RE2);
