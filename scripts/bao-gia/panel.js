@@ -3158,50 +3158,101 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   setInterval(() => {
     if (IS_TOP) saveDayOrders(document, location.pathname).catch(() => {});
   }, 5000);
-  // Ở trang Báo giá: 10 phút / lần mở ngầm trang Danh sách đơn (đường dẫn học được khi đã từng mở) để cập nhật đơn hôm nay
+  // Luồng riêng: 5 phút / lần mở ngầm /misa-order/list (tab "Mới" + "Hoàn thành", đọc tới khi qua ngày đang xem, tối đa 6 trang/tab)
+  // Chỉ 1 tab CRM chạy (khoá localStorage)
   let dayOrdersBusy = false;
-  async function refreshDayOrders() {
-    if (!IS_TOP || dayOrdersBusy || !/^\/bao-gia\/?$/.test(location.pathname)) return;
+  const loadDayState = async () => {
     const all = await kvGet('dayOrders');
     state.dayOrders = Object.fromEntries(Object.entries(all).filter(([k2, o]) => k2 !== '_src' && o));
-    const src = all._src;
-    if (!src?.path || Date.now() - src.at < 10 * 60e3) return;
+    return all;
+  };
+  const tabLock = (key, ms) => {
+    const v = JSON.parse(lsGet(key) || 'null');
+    if (v && v.tab !== TAB_ID && Date.now() - v.at < ms) return false;
+    lsSet(key, JSON.stringify({ tab: TAB_ID, at: Date.now() }));
+    return true;
+  };
+  async function refreshDayOrders(force = false) {
+    if (!IS_TOP || dayOrdersBusy || !MY_ADMIN) return;
+    const all = await loadDayState();
+    if (!force && Date.now() - (all._src?.at || 0) < 5 * 60e3) return;
+    if (!tabLock('dgDayOrdLock', 90e3)) return;
     dayOrdersBusy = true;
     const f = document.createElement('iframe');
     f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
     f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
-    f.src = src.path;
+    f.src = '/misa-order/list';
     document.documentElement.append(f);
-    try {
+    const doc = () => f.contentDocument;
+    const firstDh = () => (doc()?.querySelector('.ant-table-tbody')?.innerText.match(/DH\d{5,}/) || [])[0] || '';
+    const waitChange = async (prev) => {
       for (let i = 0; i < 40; i++) {
-        await sleep(750);
-        let ok = false;
-        try {
-          ok = await saveDayOrders(f.contentDocument, src.path);
-        } catch {}
-        if (ok) break;
+        await sleep(400);
+        const d = firstDh();
+        if (d && d !== prev) return true;
+      }
+      return false;
+    };
+    const got = {};
+    try {
+      for (let i = 0; i < 60 && !scrapeDayOrders(doc() || document.createElement('div')); i++) await sleep(500);
+      const [d0] = kpiDayRange();
+      const stopAt = Math.min(d0, Date.now() - 86400e3) - 3600e3;
+      for (const tabName of ['Mới', 'Hoàn thành']) {
+        const tab = [...(doc()?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+/g, '').trim() === tabName);
+        if (tab && !tab.classList.contains('ant-tabs-tab-active')) {
+          const prev = firstDh();
+          (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+          await waitChange(prev);
+          await sleep(800);
+        }
+        for (let page = 1; page <= 6; page++) {
+          if (page > 1) {
+            const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
+            if (!li) break;
+            const prev = firstDh();
+            li.click();
+            if (!(await waitChange(prev))) break;
+            await sleep(600);
+          }
+          const rows = scrapeDayOrders(doc()) || {};
+          Object.assign(got, rows);
+          const oldest = Math.min(...Object.values(rows).map((o) => o.at));
+          if (!Number.isFinite(oldest) || oldest < stopAt) break;
+        }
+      }
+      if (Object.keys(got).length) {
+        const keepFrom = Date.now() - 62 * 86400e3;
+        const patch = { ...Object.fromEntries(Object.entries(got).filter(([, o]) => o.at >= keepFrom)), _src: { path: '/misa-order/list', at: Date.now() } };
+        for (const [k2, o] of Object.entries(all)) if (k2 !== '_src' && o && !(o.at >= keepFrom)) patch[k2] = null;
+        await kvMerge('dayOrders', patch).catch(() => {});
       }
     } finally {
       f.remove();
       dayOrdersBusy = false;
     }
-    const all2 = await kvGet('dayOrders');
-    state.dayOrders = Object.fromEntries(Object.entries(all2).filter(([k2, o]) => k2 !== '_src' && o));
+    await loadDayState();
   }
+  setTimeout(() => refreshDayOrders().catch(() => {}), 5000);
+  setInterval(() => refreshDayOrders().catch(() => {}), 60000);
   // Đơn (ngày đang xem) chưa có chênh lệch → mở ngầm báo giá để tính (mỗi lượt tối đa 2 báo giá, 1 báo giá thử lại sau 3 giờ)
   let dayDiffBusy = false;
   async function fillDayDiffs() {
-    if (!IS_TOP || dayDiffBusy || collect.running || !/^\/bao-gia\/?$/.test(location.pathname) || !state.dayOrders) return;
+    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || collect.running || !MY_ADMIN || !state.dayOrders) return;
     const [d0, d1] = kpiDayRange();
     const tried = JSON.parse(lsGet('dgDayDiffTry') || '{}');
     const byCode = renderCtx.byCode || {};
     const need = Object.values(state.dayOrders)
-      .filter((o) => o?.bg && o.at >= d0 && o.at < d1 && !o.cancel && Date.now() - (tried[o.bg] || 0) > 3 * 3600e3)
+      .filter((o) => o?.bg && !o.cancel && Date.now() - (tried[o.bg] || 0) > 3 * 3600e3)
       .filter((o) => {
         const q = byCode[o.bg];
         return q ? diffVal(q) == null && !q.noSheet : !!o.qid;
       })
-      .slice(0, 2);
+      // ngày đang xem trước, rồi đơn mới nhất
+      .sort((a, b) => (b.at >= d0 && b.at < d1) - (a.at >= d0 && a.at < d1) || b.at - a.at)
+      .slice(0, 3);
+    if (need.length && !tabLock('dgDayDiffLock', 120e3)) return;
     if (!need.length) return;
     dayDiffBusy = true;
     try {
@@ -3244,8 +3295,6 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const d0 = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3 - (state.kpiDay || 0) * 86400e3;
     return [d0, d0 + 86400e3];
   };
-  setTimeout(() => refreshDayOrders().catch(() => {}), 4000);
-  setInterval(() => refreshDayOrders().catch(() => {}), 30000);
   // 3 ô số liệu cạnh hàng tab trạng thái: Số đơn · Doanh thu · Tổng chênh lệch (theo các dòng đang hiện)
   function crmKpiTiles(wrap, k) {
     const nav = [...document.querySelectorAll('.ant-tabs-nav')].find((x) => /Tất cả/.test(x.innerText) && /Thành công|Chờ xin giá/.test(x.innerText));
@@ -3264,6 +3313,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const d = Number(b.dataset.dgKd);
         state.kpiDay = d === 0 ? 0 : Math.max(0, Math.min(60, (state.kpiDay || 0) + d));
         crmKpiTiles(null, {});
+        // ngày cũ chưa có đơn nào trong dữ liệu → đọc thêm trang Danh sách đơn tới ngày đó
+        const [a0, a1] = kpiDayRange();
+        if (!Object.values(state.dayOrders || {}).some((o) => o.at >= a0 && o.at < a1)) refreshDayOrders(true).then(() => crmKpiTiles(null, {})).catch(() => {});
         fillDayDiffs().catch(() => {});
       });
     }
