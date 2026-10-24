@@ -3021,8 +3021,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const groups = [...by].map(([who, cs]) => [who, cs.sort((a, b) => b.amt - a.amt)]).sort((a, b) => b[1].reduce((t, c) => t + c.amt, 0) - a[1].reduce((t, c) => t + c.amt, 0));
     const val = (a) => (a ? `${Math.max(1, Math.round(a / 1e6)).toLocaleString('vi-VN')}tr` : 'chưa cho giá'); // vd. 87tr
     const head = 'Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
-    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n');
-    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('')}`;
+    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n\n'); // mỗi NVKD cách 1 dòng trống
+    const html = `<div>${esc(head)}</div><div><br></div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('<div><br></div>')}`;
     return { text, html, n: byCust.size, groups, head, val };
   }
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
@@ -3129,8 +3129,38 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return `${h ? `${h}:` : ''}${String(m).padStart(h ? 2 : 1, '0')}:${String(sec).padStart(2, '0')}`;
   };
   // Đồng hồ đếm ngược cạnh nút 📣 (cập nhật mỗi giây)
-  setInterval(() => {
+  let teamPolling = false;
+  setInterval(async () => {
+    // Đang có tin nhắc vừa bấm → hiện kết quả gửi Zalo ngay trong ô đồng hồ (giữ 10 phút)
+    const tj = state.teamJob;
+    if (tj && Date.now() - tj.at < 10 * 60e3) {
+      if (!teamPolling && !['sent', 'error'].includes(tj.status)) {
+        teamPolling = true;
+        try {
+          const j = (await kvGet('zaloJobs'))[tj.id];
+          if (j) Object.assign(tj, { status: j.status, error: j.error, doneAt: j.doneAt });
+        } catch {} finally {
+          teamPolling = false;
+        }
+      }
+      const hm = (t) => new Date(t || Date.now()).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const [cls, lab, val, tip] =
+        tj.status === 'sent' ? ['ok', '✅ Đã gửi', hm(tj.doneAt), 'Đã gửi tin nhắc vào nhóm Zalo'] :
+        tj.status === 'error' ? ['err', '❌ Lỗi', (tj.error || '').slice(0, 40), tj.error || ''] :
+        tj.status === 'sending' ? ['run', '📨 Đang gửi', '…', 'Tab Zalo đang dán & gửi tin'] :
+        Date.now() - tj.at > 60e3 ? ['err', '⚠️ Zalo chưa nhận', '', 'Tab Zalo chưa nhận việc – mở/F5 tab chat.zalo.me'] : ['run', '⏳ Chờ Zalo', '…', 'Đang chờ tab Zalo nhận việc'];
+      document.querySelectorAll('[data-dg-cd]').forEach((e) => {
+        e.className = `dgh-cd res ${cls}`;
+        e.title = tip;
+        e.innerHTML = `${lab} <b>${esc(val)}</b>`;
+      });
+      return;
+    }
     document.querySelectorAll('[data-dg-cd]').forEach((e) => {
+      if (e.classList.contains('res')) {
+        e.className = 'dgh-cd';
+        e.innerHTML = '⏳ ca tới <b></b>';
+      }
       let left = Number(e.dataset.dgCd) - Date.now();
       if (left <= 0) {
         // tới giờ ca mới → chuyển sang đếm ca kế tiếp + hiện hộp nhắc (nếu ca này chưa gửi)
@@ -3162,7 +3192,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
-    keep[`${Date.now()}-team`] = { draft: false, slot: teamSlot() || '', n: buildTeamMsg().n, to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
+    const jobId = `${Date.now()}-team`;
+    state.teamJob = { id: jobId, at: Date.now() };
+    keep[jobId] = { draft: false, slot: teamSlot() || '', n: buildTeamMsg().n, to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     try {
       await navigator.clipboard.writeText(text);
@@ -3274,6 +3306,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 [data-dg-hot] .dgh-cd b{background:none!important;color:#1d4ed8!important;padding:0!important;margin:0!important}
 [data-dg-hot] .dgh-cd.urge{color:#b91c1c;border-color:#fecaca;background:#fef2f2}
 [data-dg-hot] .dgh-cd.urge b{color:#dc2626!important}
+[data-dg-hot] .dgh-cd.ok{color:#15803d;border-color:#86efac;background:#f0fdf4}
+[data-dg-hot] .dgh-cd.ok b{color:#15803d!important}
+[data-dg-hot] .dgh-cd.err{color:#b91c1c;border-color:#fecaca;background:#fef2f2;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+[data-dg-hot] .dgh-cd.err b{color:#b91c1c!important;font-weight:600}
+[data-dg-hot] .dgh-cd.run{color:#1d4ed8;border-color:#bfdbfe;background:#eff6ff;animation:dgUrgeGlow 1.2s ease-in-out infinite}
 [data-dg-hot] .dgh-cd.soon{animation:dgUrgeGlow 1.2s ease-in-out infinite}
 [data-dg-hot] .dgh-team.urge{font-size:13px;padding:4px 16px;background:linear-gradient(90deg,#ef4444,#f97316);box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:dgUrgeShake .9s ease-in-out infinite, dgUrgeGlow 1.2s ease-in-out infinite}
 @keyframes dgUrgeShake{0%,100%{transform:translate(0,0) rotate(0)}10%{transform:translate(-3px,1px) rotate(-6deg)}20%{transform:translate(3px,-1px) rotate(6deg)}30%{transform:translate(-3px,1px) rotate(-6deg)}40%{transform:translate(3px,-1px) rotate(6deg)}50%{transform:translate(-2px,0) rotate(-4deg)}60%{transform:translate(2px,0) rotate(4deg)}70%,100%{transform:none}}
