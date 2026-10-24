@@ -3128,14 +3128,35 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       box.setAttribute('style', 'display:flex;gap:10px;align-items:center;margin-left:16px;flex:none');
       nav.append(box);
     }
+    // Đơn lên HÔM NAY (giờ VN): đơn Misa có ngày tạo hôm nay + báo giá vừa thấy "Mã đơn hàng Misa" hôm nay
+    const vn0 = (() => {
+      const vn = new Date(Date.now() + 7 * 3600e3);
+      return (Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3) / 1000;
+    })();
+    const byCode = renderCtx.byCode || {};
+    const today = new Map(); // khoá đơn → { code BG, total, q }
+    for (const od of Object.values(renderCtx.orders || {}))
+      for (const o of od?.orders || []) if ((o.at || 0) >= vn0) today.set(`o${o.id}`, { bg: o.quote, dh: o.code, total: Number(o.total) || 0, q: o.quote ? byCode[o.quote] : null });
+    for (const q of Object.values(renderCtx.quotes || {}))
+      if (q?.orderSeenAt >= vn0 && ![...today.values()].some((x) => x.bg === q.code)) today.set(`q${q.id}`, { bg: q.code, dh: q.orderCode, total: Number(q.amount) || 0, q });
+    const list = [...today.values()];
+    k = { n: list.length, sum: list.reduce((t, x) => t + x.total, 0), dsum: 0, dn: 0 };
+    for (const x of list) {
+      const v = x.q ? diffVal(x.q) : null;
+      if (v != null) {
+        k.dsum += v;
+        k.dn++;
+      }
+    }
+    const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const tile = (ic, lab, val, fg, bg, bd, tip) =>
       `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:112px;padding:5px 14px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
         <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
     const html =
-      tile('📄', 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', 'Số báo giá đang hiện (theo bộ lọc)') +
-      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Tổng Số tiền các báo giá đang hiện: ${money(k.sum || 0)}`) +
-      tile('📈', 'Tổng chênh lệch', k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch ${k.dn || 0} báo giá đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
+      tile('📄', 'Đơn hôm nay', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
+      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu (trước VAT) các đơn lên hôm nay: ${money(k.sum || 0)}`) +
+      tile('📈', 'Tổng chênh lệch', k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
     if (box.dataset.h !== html) {
       box.dataset.h = html;
       box.innerHTML = html;
