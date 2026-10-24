@@ -3110,6 +3110,28 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (dow === 0) return null;
     return `${vn.toISOString().slice(0, 10)}-${vn.getUTCHours() < 12 ? 'sang' : 'chieu'}`;
   }
+  // Mốc ca nhắc tiếp theo (giờ VN): đang sáng → 12:00 hôm nay, đang chiều/CN → 8:00 ngày làm việc kế tiếp
+  function teamNextAt() {
+    const vn = new Date(Date.now() + 7 * 3600e3);
+    const day0 = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3;
+    if (vn.getUTCDay() !== 0 && vn.getUTCHours() < 12) return day0 + 12 * 3600e3;
+    let d = day0 + 24 * 3600e3;
+    if (new Date(d + 7 * 3600e3).getUTCDay() === 0) d += 24 * 3600e3;
+    return d + 8 * 3600e3;
+  }
+  const fmtCd = (ms) => {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+    return `${h ? `${h}:` : ''}${String(m).padStart(h ? 2 : 1, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+  // Đồng hồ đếm ngược cạnh nút 📣 (cập nhật mỗi giây)
+  setInterval(() => {
+    document.querySelectorAll('[data-dg-cd]').forEach((e) => {
+      const left = Number(e.dataset.dgCd) - Date.now();
+      e.querySelector('b').textContent = fmtCd(left);
+      e.classList.toggle('soon', left < 15 * 60e3);
+    });
+  }, 1000);
   async function teamRemind(btn, asImage = false) {
     if (!(state.teamItems || []).length) return;
     // chuyển sang tab Zalo ngay lúc bấm: có tab "dg-zalo" thì đưa lên trước, chưa có thì mở mới
@@ -3217,7 +3239,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // Ca này chưa gửi nhắc cả đội → nút to + rung lắc
     const slotNow = teamSlot();
     const urge = MY_ADMIN && slotNow && !(await kvGet('teamRemind'))[slotNow];
-    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b>${MY_ADMIN ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button>` : ''}</div><div class="dgh-l">${items
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b>${MY_ADMIN ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
       .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
@@ -3238,6 +3260,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 [data-dg-hot] .dgh-t{display:flex;align-items:center;gap:6px}
 [data-dg-hot] .dgh-team{margin-left:auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;text-transform:none;letter-spacing:0;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed);border-radius:999px;padding:1px 10px}
 [data-dg-hot] .dgh-team:hover{filter:brightness(1.1)}
+[data-dg-hot] .dgh-cd{font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;color:#475569;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+[data-dg-hot] .dgh-cd b{background:none!important;color:#1d4ed8!important;padding:0!important;margin:0!important}
+[data-dg-hot] .dgh-cd.urge{color:#b91c1c;border-color:#fecaca;background:#fef2f2}
+[data-dg-hot] .dgh-cd.urge b{color:#dc2626!important}
+[data-dg-hot] .dgh-cd.soon{animation:dgUrgeGlow 1.2s ease-in-out infinite}
 [data-dg-hot] .dgh-team.urge{font-size:13px;padding:4px 16px;background:linear-gradient(90deg,#ef4444,#f97316);box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:dgUrgeShake .9s ease-in-out infinite, dgUrgeGlow 1.2s ease-in-out infinite}
 @keyframes dgUrgeShake{0%,100%{transform:translate(0,0) rotate(0)}10%{transform:translate(-3px,1px) rotate(-6deg)}20%{transform:translate(3px,-1px) rotate(6deg)}30%{transform:translate(-3px,1px) rotate(-6deg)}40%{transform:translate(3px,-1px) rotate(6deg)}50%{transform:translate(-2px,0) rotate(-4deg)}60%{transform:translate(2px,0) rotate(4deg)}70%,100%{transform:none}}
 @keyframes dgUrgeGlow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
