@@ -3028,22 +3028,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
   async function drawTeamImage() {
     const { groups, val } = buildTeamMsg();
-    const W = 1100, P = 36, S = 2;
+    const W = 760, P = 20, S = 3; // khổ dọc vừa màn điện thoại, độ nét x3 (Zalo hiện rõ)
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d');
     const font = (w, px) => `${w} ${px}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
     // đo chiều cao trước
     const lay = [];
-    let y = 20; // chỉ các thẻ NVKD (không tiêu đề)
+    let y = 16; // chỉ các thẻ NVKD (không tiêu đề)
     for (const [who, cs] of groups) {
-      ctx.font = font(700, 20);
+      ctx.font = font(700, 24);
       let x = P + 24, rows = 1;
       const chips = cs.map((cu) => {
         const t1 = cu.code, t2 = ` ${val(cu.amt)}`;
-        ctx.font = font(800, 20);
+        ctx.font = font(800, 24);
         const w1 = ctx.measureText(t1).width;
-        ctx.font = font(600, 18);
-        const w = w1 + ctx.measureText(t2).width + 28;
+        ctx.font = font(700, 22);
+        const w = w1 + ctx.measureText(t2).width + 32;
         if (x + w > W - P - 24) {
           x = P + 24;
           rows++;
@@ -3052,9 +3052,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         x += w + 10;
         return r;
       });
-      const h = 64 + rows * 44 + 14;
+      const h = 78 + rows * 52 + 16;
       lay.push({ who, cs, chips, y, h });
-      y += h + 16;
+      y += h + 14;
     }
     const H = y + 4;
     c.width = W * S;
@@ -3075,29 +3075,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ctx.fill();
       const tot = L.cs.reduce((t, cu) => t + cu.amt, 0);
       ctx.fillStyle = '#1d4ed8';
-      ctx.font = font(800, 24);
-      ctx.fillText(shortName(L.who), P + 24, L.y + 40);
+      ctx.font = font(800, 32);
+      ctx.fillText(shortName(L.who), P + 24, L.y + 48);
       const nw = ctx.measureText(shortName(L.who)).width;
       ctx.fillStyle = '#64748b';
-      ctx.font = font(600, 18);
-      ctx.fillText(`${L.cs.length} khách`, P + 24 + nw + 14, L.y + 40);
+      ctx.font = font(600, 22);
+      ctx.fillText(`${L.cs.length} khách`, P + 24 + nw + 14, L.y + 48);
       ctx.fillStyle = '#047857';
-      ctx.font = font(800, 22);
+      ctx.font = font(800, 28);
       const tt = `Σ ${val(tot)}`;
-      ctx.fillText(tt, W - P - 24 - ctx.measureText(tt).width, L.y + 40);
+      ctx.fillText(tt, W - P - 24 - ctx.measureText(tt).width, L.y + 48);
       for (const ch of L.chips) {
-        const cy = L.y + 62 + ch.row * 44;
+        const cy = L.y + 72 + ch.row * 52;
         ctx.fillStyle = ch.zero ? '#fef2f2' : '#eff6ff';
-        rr(ch.x, cy, ch.w, 34, 17);
+        rr(ch.x, cy, ch.w, 42, 21);
         ctx.fill();
+        ctx.lineWidth = 1.5;
         ctx.strokeStyle = ch.zero ? '#fecaca' : '#bfdbfe';
         ctx.stroke();
         ctx.fillStyle = '#0f172a';
-        ctx.font = font(800, 20);
-        ctx.fillText(ch.t1, ch.x + 14, cy + 24);
+        ctx.font = font(800, 24);
+        ctx.fillText(ch.t1, ch.x + 16, cy + 30);
         ctx.fillStyle = ch.zero ? '#b91c1c' : '#047857';
-        ctx.font = font(600, 18);
-        ctx.fillText(ch.t2, ch.x + 14 + ch.w1, cy + 24);
+        ctx.font = font(700, 22);
+        ctx.fillText(ch.t2, ch.x + 16 + ch.w1, cy + 30);
       }
     }
     return c.toDataURL('image/png');
