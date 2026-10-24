@@ -282,7 +282,11 @@
     .catch(() => {});
 
   const OFF_VER = 3; // 3: đọc thêm tổng Nguyên liệu + nhận bảng chiết giá 0đ // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
-  const offsetStale = (m) => !Object.keys(m?.products || {}).length || m?.offVer !== OFF_VER;
+  // Đọc lại khi: chưa có / đổi cách lưu / giá trị báo giá đổi so với lúc đọc chiết giá (sửa đơn giá rồi Cập nhật)
+  const offsetStale = (m, q) =>
+    !Object.keys(m?.products || {}).length ||
+    m?.offVer !== OFF_VER ||
+    (!!q?.amount && (!m?.amountAt || Math.abs(m.amountAt - q.amount) / q.amount > 0.005));
   async function save({ kind, data }) {
     if (kind === 'debtUrl') {
       const k = String(data.url).replace(/^https?:\/\/[^/]+/, '').replace(/[?#].*$/, '').slice(0, 150) || 'x';
@@ -1298,6 +1302,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         await sleep(2500); // hook.js đọc bảng chiết giá
       }
       await closeModals();
+    }
+    // Ghi giá trị báo giá lúc đọc chiết giá → giá trị đổi (sửa đơn giá) thì tự đọc lại
+    if (code) {
+      await sleep(800);
+      const qq = Object.values(await kvGet('quotes')).find((x) => x?.code === code);
+      const all = await kvGet('margins');
+      if (qq?.amount && all[code]) await kvMerge('margins', { [code]: { ...all[code], amountAt: qq.amount } });
     }
   }
 
@@ -3385,7 +3396,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         collect.current = q.code;
         progress();
         const mg = (await kvGet('margins'))[q.code];
-        const needOffset = q.offset && offsetStale(mg);
+        const needOffset = q.offset && offsetStale(mg, q);
         const needFlexo = (q.kinds || []).includes('flexo') && q.amount && flexoStale(mg?.flexo, q);
         await loadInFrame(q.id, undefined, undefined, needOffset || needFlexo
           ? async (f) => {
@@ -3420,7 +3431,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           .filter(({ q }) => {
             const k = q.kinds || (q.offset ? ['offset'] : []);
             const mg = m3[q.code] || {};
-            return (k.includes('offset') && offsetStale(mg)) || (k.includes('flexo') && q.amount && flexoStale(mg.flexo, q));
+            return (k.includes('offset') && offsetStale(mg, q)) || (k.includes('flexo') && q.amount && flexoStale(mg.flexo, q));
           })
           .slice(0, 10);
         for (const { q } of missing) {
@@ -6519,7 +6530,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const { flexo, offset } = marginParts(q);
     const busy = !!q && marginFetching.has(q.id);
     const oldFx = !!q && renderCtx.margins?.[q.code]?.flexo && flexoStale(renderCtx.margins[q.code].flexo, q);
-    if (IS_TOP && q && ((kinds.includes('offset') && (offset == null || offsetStale(renderCtx.margins?.[q.code]))) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
+    if (IS_TOP && q && ((kinds.includes('offset') && (offset == null || offsetStale(renderCtx.margins?.[q.code], q))) || (kinds.includes('flexo') && q.amount && (!flexo || oldFx)))) setTimeout(() => fetchMarginNow(q), 0);
     // Nhớ trạng thái bung / gập của khung Giải thích qua F5
     const open = el.querySelector('details.side-d')?.open ?? lsGet('dgExplOpen') === '1';
     const collapsed = lsGet('dgSideCollapsed') === '1';
@@ -6561,7 +6572,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const m = renderCtx.margins?.[q.code] || {};
     const offs = offEntries(m, q?.code);
     const fx = flexoInfo(q);
-    const needOff = kinds.includes('offset') && offsetStale(m);
+    const needOff = kinds.includes('offset') && offsetStale(m, q);
     const needFx = kinds.includes('flexo') && q.amount && (!fx || flexoStale(m.flexo, q));
     if (IS_TOP && (needOff || needFx)) setTimeout(() => fetchMarginNow(q), 0);
     const pct = marginOf(q);
