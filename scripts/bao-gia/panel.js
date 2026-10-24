@@ -2146,14 +2146,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (th.querySelector('.dg-nudge-head')) continue;
       const box = document.createElement('span');
       box.className = 'dg-nudge-head';
-      box.setAttribute('style', 'display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle;');
+      // nằm riêng 1 hàng dưới chữ "Giá thực bán", các nút không bị bẻ chữ
+      box.setAttribute('style', 'display:flex;flex-wrap:wrap;justify-content:center;gap:3px;margin-top:3px;');
+      if (!document.getElementById('dg-nudge-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-nudge-css';
+        st.textContent = `.dg-nudge-head button{all:unset;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;white-space:nowrap!important;height:20px!important;min-width:0!important;width:auto!important;padding:0 7px!important;border-radius:999px!important;border:1px solid!important;font-size:11px!important;font-weight:800!important;line-height:1!important;cursor:pointer!important;writing-mode:horizontal-tb!important;word-break:keep-all!important;transition:filter .15s,transform .1s}
+.dg-nudge-head button:hover{filter:brightness(.95)}.dg-nudge-head button:active{transform:scale(.94)}
+.dg-nudge-head button:disabled{opacity:.5!important;cursor:wait!important}
+.dg-nudge-head .m{background:#fee2e2!important;color:#b91c1c!important;border-color:#fecaca!important}
+.dg-nudge-head .p{background:#dcfce7!important;color:#15803d!important;border-color:#bbf7d0!important}
+.dg-nudge-head .d{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}
+.dg-nudge-head .g{background:#fffbeb!important;color:#b45309!important;border-color:#fde68a!important}`;
+        document.head.append(st);
+      }
       const btns = [];
       for (const [label, pct, bg] of [['−1%', -1, '#fee2e2;color:#b91c1c;border-color:#fecaca'], ['+1%', 1, '#dcfce7;color:#15803d;border-color:#bbf7d0']]) {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
         b.title = `${pct > 0 ? 'Tăng' : 'Giảm'} 1% giá thực bán của TẤT CẢ các dòng (chưa lưu – bấm Cập nhật để lưu)`;
-        b.setAttribute('style', `cursor:pointer;font-size:11px;font-weight:700;padding:0 6px;border-radius:999px;border:1px solid;background:${bg};line-height:18px;`);
+        b.className = pct > 0 ? 'p' : 'm';
         // không để bấm nút làm bảng sắp xếp theo cột
         for (const ev of ['mousedown', 'mouseup', 'pointerdown']) b.addEventListener(ev, (e) => e.stopPropagation());
         b.addEventListener('click', (e) => {
@@ -2169,7 +2182,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       plus.type = 'button';
       plus.textContent = '＋đ';
       plus.title = 'Cộng thêm số tiền vào giá thực bán của TẤT CẢ các dòng (chưa lưu – bấm Cập nhật để lưu)';
-      plus.setAttribute('style', 'cursor:pointer;font-size:11px;font-weight:800;padding:0 7px;border-radius:999px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;line-height:18px;');
+      plus.className = 'd';
       for (const ev of ['mousedown', 'mouseup', 'pointerdown']) plus.addEventListener(ev, (e) => e.stopPropagation());
       plus.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2182,7 +2195,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       last.type = 'button';
       last.textContent = '⟲ Gần nhất';
       last.title = 'Áp "Giá gần nhất" vào giá thực bán của các dòng (dòng chưa có giá gần nhất giữ nguyên) – chưa lưu, bấm Cập nhật để lưu';
-      last.setAttribute('style', 'cursor:pointer;font-size:11px;font-weight:800;padding:0 7px;border-radius:999px;border:1px solid #fde68a;background:#fffbeb;color:#b45309;line-height:18px;white-space:nowrap;');
+      last.className = 'g';
       for (const ev of ['mousedown', 'mouseup', 'pointerdown']) last.addEventListener(ev, (e) => e.stopPropagation());
       last.addEventListener('click', async (e) => {
         e.preventDefault();
