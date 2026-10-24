@@ -3239,18 +3239,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Đơn (ngày đang xem) chưa có chênh lệch → mở ngầm báo giá để tính (mỗi lượt tối đa 2 báo giá, 1 báo giá thử lại sau 3 giờ)
   let dayDiffBusy = false;
   async function fillDayDiffs() {
-    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || collect.running || !MY_ADMIN || !state.dayOrders) return;
+    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || collect.running || !MY_ADMIN || (!state.dayOrders && !state.misaNeed?.length)) return;
     const [d0, d1] = kpiDayRange();
     const tried = JSON.parse(lsGet('dgDayDiffTry') || '{}');
     const byCode = renderCtx.byCode || {};
-    const need = Object.values(state.dayOrders)
-      .filter((o) => o?.bg && !o.cancel && Date.now() - (tried[o.bg] || 0) > 3 * 3600e3)
+    const need = [...(state.misaNeed || []), ...Object.values(state.dayOrders || {})]
+      .filter((o, i, arr) => o?.bg && !o.cancel && Date.now() - (tried[o.bg] || 0) > 3 * 3600e3 && arr.findIndex((x) => x?.bg === o.bg) === i)
       .filter((o) => {
         const q = byCode[o.bg];
-        return q ? diffVal(q) == null && !q.noSheet : !!o.qid;
+        return q ? diffVal(q) == null && !q.noSheet && !(q.amount === 0 && q.kinds?.length) : !!o.qid;
       })
       // ngày đang xem trước, rồi đơn mới nhất
-      .sort((a, b) => (b.at >= d0 && b.at < d1) - (a.at >= d0 && a.at < d1) || b.at - a.at)
+      .sort((a, b) => (b.at > 1e12) - (a.at > 1e12) || (b.at >= d0 && b.at < d1) - (a.at >= d0 && a.at < d1) || b.at - a.at)
       .slice(0, 3);
     if (need.length && !tabLock('dgDayDiffLock', 120e3)) return;
     if (!need.length) return;
@@ -3268,8 +3268,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         }
         const k = q.kinds || (q.offset ? ['offset'] : []);
         const mg = (await kvGet('margins'))[q.code] || {};
-        const needOff = k.includes('offset') && offsetStale(mg, q);
-        const needFx = k.includes('flexo') && q.amount && flexoStale(mg.flexo, q);
+        // đã tới đây là chưa ra chênh lệch → đọc lại dù số cũ chưa "quá hạn"
+        const needOff = k.includes('offset') && (offsetStale(mg, q) || diffVal(q) == null);
+        const needFx = k.includes('flexo') && q.amount && (flexoStale(mg.flexo, q) || diffVal(q) == null);
         if (!needOff && !needFx && !k.length) {
           // chưa biết loại → mở lại để đọc tổng theo loại rồi thử tính cả hai
           await loadInFrame(q.id, undefined, undefined, async (f) => {
@@ -3360,6 +3361,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const [fg, bg] = v < 0 ? ['#b91c1c', '#fee2e2'] : v < 5e6 ? ['#7e22ce', '#f3e8ff'] : v < 10e6 ? ['#c2410c', '#ffedd5'] : v < 30e6 ? ['#2563eb', '#dbeafe'] : v < 50e6 ? ['#1e3a8a', '#c7d2fe'] : ['#15803d', '#dcfce7'];
       return `<span style="display:inline-block;font-weight:800;color:${fg};background:${bg};border-radius:999px;padding:0 8px;white-space:nowrap;font-variant-numeric:tabular-nums">${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>`;
     }
+    if (q && q.amount === 0 && q.kinds?.length) return '<span style="color:#94a3b8" title="Báo giá chưa cho giá (0đ) – chưa tính được chênh lệch">–</span>';
     if (wait || (q && (q.kinds?.length || q.offset))) return '<span style="color:#d97706" title="Đang đọc ngầm báo giá để tính chênh lệch">⏳</span>';
     return '';
   }
@@ -3368,8 +3370,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!IS_TOP || !/^\/misa-order\/list/.test(location.pathname) || !renderCtx.quotes) return;
     const byCode = renderCtx.byCode && renderCtx.byCodeSrc === renderCtx.quotes ? renderCtx.byCode : (renderCtx.byCode = Object.fromEntries(Object.values(renderCtx.quotes).map((q) => [q.code, q])));
     renderCtx.byCodeSrc = renderCtx.quotes;
+    const need = [];
     for (const wrap of document.querySelectorAll('.ant-table')) {
-      const ths = [...wrap.querySelectorAll('thead th')];
+      const ths = [...wrap.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-dg-diffcol'));
       const ti = ths.findIndex((th) => th.innerText.trim().startsWith('Tổng tiền'));
       if (ti < 0 || !ths.some((th) => th.innerText.trim() === 'Báo giá')) continue;
       let dth = wrap.querySelector('th[data-dg-diffcol]');
@@ -3406,14 +3409,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (own[ti].rowSpan > 1 && td.rowSpan !== own[ti].rowSpan) td.rowSpan = own[ti].rowSpan;
         const bg = (tr.innerText.match(/BG\d{3,}/) || [])[0];
         const q = bg && byCode[bg];
-        const h = bg ? diffPill(q, !q) : '';
+        const v0 = q && !q.noSheet ? diffVal(q) : null;
+        const h = bg ? diffPill(q, v0 == null) : '';
+        // chưa có chênh lệch → đưa vào hàng đợi đọc ngầm
+        if (bg && v0 == null && !q?.noSheet && !(q?.amount === 0 && q?.kinds?.length)) {
+          const qid = q?.id || Number([...tr.querySelectorAll('a[href]')].map((a) => a.getAttribute('href').match(/\/(?:bao-gia|co-hoi)\/(?:update|view)\/(\d+)/)?.[1]).find(Boolean)) || null;
+          need.push({ bg, qid, at: Date.now() + 1e12 }); // ưu tiên hơn đơn trong ngày
+        }
         if (td.dataset.h !== h) {
           td.dataset.h = h;
           td.innerHTML = h;
         }
-        const v = q && !q.noSheet ? diffVal(q) : null;
-        if (v != null) {
-          sum += v;
+        if (v0 != null) {
+          sum += v0;
           n++;
         }
       }
@@ -3426,6 +3434,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ds.title = `Tổng chênh lệch ${n} đơn trên trang (đã tính được)`;
       }
     }
+    state.misaNeed = need;
   }
   if (IS_TOP) setInterval(() => {
     try {
