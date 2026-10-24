@@ -290,6 +290,25 @@
     // Bật chế độ "Định dạng tin nhắn" (nút A✎ trên thanh công cụ) để giữ chữ đậm / màu khi dán
     const fmt = await enableFormat();
     tr(`định dạng: ${fmt}`);
+    // Gửi dạng hình: dán ảnh PNG (như Ctrl+V ảnh) – Zalo mở khung xem trước ảnh
+    if (job.image) {
+      const blob = await (await fetch(job.image)).blob();
+      const file = new File([blob], 'nhac-ca-doi.png', { type: 'image/png' });
+      const el = chatInput() || input;
+      el.focus();
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      tr('đã dán ảnh');
+      await sleep(1500);
+      if (job.draft) return setStatus(id, { ...job, image: null, status: 'sent', drafted: true, doneAt: Date.now(), via: used });
+      // tự gửi: bấm nút gửi trong khung xem trước ảnh nếu có, không thì Enter
+      const sendBtn = [...document.querySelectorAll('[data-translate-inner="STR_SEND"], [title="Gửi"], button')].find((b) => visible(b) && /^Gửi$/i.test((b.innerText || '').trim()));
+      if (sendBtn) sendBtn.click();
+      else pressSend(el);
+      await sleep(1500);
+      return setStatus(id, { ...job, image: null, status: 'sent', doneAt: Date.now(), via: used });
+    }
     const how = await pasteText(chatInput() || input, job.text, job.html, tr);
     const rich = document.querySelector('#richInput');
     const edn = chatInput();

@@ -3023,7 +3023,95 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const head = 'Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
     const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n');
     const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('')}`;
-    return { text, html, n: byCust.size };
+    return { text, html, n: byCust.size, groups, head, val };
+  }
+  // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
+  async function drawTeamImage() {
+    const { groups, head, val } = buildTeamMsg();
+    const W = 1100, P = 36, S = 2;
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+    const font = (w, px) => `${w} ${px}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+    // đo chiều cao trước
+    const lay = [];
+    let y = 150;
+    for (const [who, cs] of groups) {
+      ctx.font = font(700, 20);
+      let x = P + 24, rows = 1;
+      const chips = cs.map((cu) => {
+        const t1 = cu.code, t2 = ` ${val(cu.amt)}`;
+        ctx.font = font(800, 20);
+        const w1 = ctx.measureText(t1).width;
+        ctx.font = font(600, 18);
+        const w = w1 + ctx.measureText(t2).width + 28;
+        if (x + w > W - P - 24) {
+          x = P + 24;
+          rows++;
+        }
+        const r = { t1, t2, x, row: rows - 1, w, w1, zero: !cu.amt };
+        x += w + 10;
+        return r;
+      });
+      const h = 64 + rows * 44 + 14;
+      lay.push({ who, cs, chips, y, h });
+      y += h + 16;
+    }
+    const H = y + 30;
+    c.width = W * S;
+    c.height = H * S;
+    ctx.scale(S, S);
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(0, 0, W, H);
+    const gr = ctx.createLinearGradient(0, 0, W, 0);
+    gr.addColorStop(0, '#0068ff');
+    gr.addColorStop(1, '#7c3aed');
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, W, 120);
+    ctx.fillStyle = '#fff';
+    ctx.font = font(800, 30);
+    ctx.fillText('📣 NHẮC CẢ ĐỘI KÉO ĐƠN VỀ', P, 52);
+    ctx.font = font(500, 18);
+    const vn = new Date(Date.now() + 7 * 3600e3);
+    ctx.fillText(`${head}  ·  ${vn.toISOString().slice(0, 10).split('-').reverse().join('/')}`, P, 92);
+    const rr = (x, yy, w, h, r) => {
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(x, yy, w, h, r) : ctx.rect(x, yy, w, h);
+    };
+    for (const L of lay) {
+      ctx.fillStyle = '#fff';
+      rr(P, L.y, W - P * 2, L.h, 16);
+      ctx.fill();
+      ctx.fillStyle = '#1d4ed8';
+      rr(P, L.y, 8, L.h, 4);
+      ctx.fill();
+      const tot = L.cs.reduce((t, cu) => t + cu.amt, 0);
+      ctx.fillStyle = '#1d4ed8';
+      ctx.font = font(800, 24);
+      ctx.fillText(shortName(L.who), P + 24, L.y + 40);
+      const nw = ctx.measureText(shortName(L.who)).width;
+      ctx.fillStyle = '#64748b';
+      ctx.font = font(600, 18);
+      ctx.fillText(`${L.cs.length} khách`, P + 24 + nw + 14, L.y + 40);
+      ctx.fillStyle = '#047857';
+      ctx.font = font(800, 22);
+      const tt = `Σ ${val(tot)}`;
+      ctx.fillText(tt, W - P - 24 - ctx.measureText(tt).width, L.y + 40);
+      for (const ch of L.chips) {
+        const cy = L.y + 62 + ch.row * 44;
+        ctx.fillStyle = ch.zero ? '#fef2f2' : '#eff6ff';
+        rr(ch.x, cy, ch.w, 34, 17);
+        ctx.fill();
+        ctx.strokeStyle = ch.zero ? '#fecaca' : '#bfdbfe';
+        ctx.stroke();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = font(800, 20);
+        ctx.fillText(ch.t1, ch.x + 14, cy + 24);
+        ctx.fillStyle = ch.zero ? '#b91c1c' : '#047857';
+        ctx.font = font(600, 18);
+        ctx.fillText(ch.t2, ch.x + 14 + ch.w1, cy + 24);
+      }
+    }
+    return c.toDataURL('image/png');
   }
   // Ca nhắc: sáng (trước 12h) / chiều (từ 12h), thứ 2 → thứ 7 (giờ VN)
   function teamSlot() {
@@ -3032,16 +3120,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (dow === 0) return null;
     return `${vn.toISOString().slice(0, 10)}-${vn.getUTCHours() < 12 ? 'sang' : 'chieu'}`;
   }
-  async function teamRemind(btn) {
+  async function teamRemind(btn, asImage = false) {
     if (!(state.teamItems || []).length) return;
     // mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ)
     const zal = renderCtx.zaloAlive;
     if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
     const { text, html } = buildTeamMsg();
+    const image = asImage ? await drawTeamImage() : null;
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
-    keep[`${Date.now()}-team`] = { draft: lsGet('dgZaloDraft') !== '0', to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, status: 'pending', at: Date.now(), team: true };
+    keep[`${Date.now()}-team`] = { draft: lsGet('dgZaloDraft') !== '0', to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, status: 'pending', at: Date.now(), team: true };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     try {
       await navigator.clipboard.writeText(text);
@@ -3067,16 +3156,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     m.innerHTML = `<div style="position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;animation:dgLbIn .2s ease">
       <div style="background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.35);width:min(760px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px">
         <div style="padding:16px 20px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px"><span style="font-size:26px">📣</span><div><b style="font-size:17px">Nhắc cả đội kéo đơn về${slot === 'cn' ? '' : ` – ca ${slot.endsWith('sang') ? 'sáng' : 'chiều'}`}</b><div style="opacity:.85;font-size:12px">${n} khách đang trong Gợi ý chốt đơn · gửi vào nhóm Zalo “${esc(TEAM_GROUP)}”</div></div></div>
-        <div style="padding:14px 20px;overflow:auto;line-height:1.7;background:#f8fafc">${html}</div>
+        <div style="padding:14px 20px;overflow:auto;background:#f1f5f9;display:grid;gap:10px">
+          <div style="color:#334155;font-weight:600">${esc(buildTeamMsg().head)}</div>
+          ${buildTeamMsg().groups.map(([who, cs]) => {
+            const v = buildTeamMsg().val;
+            const tot = cs.reduce((t, c) => t + c.amt, 0);
+            return `<div style="background:#fff;border-radius:12px;border-left:5px solid #1d4ed8;padding:10px 14px;box-shadow:0 1px 3px rgba(15,23,42,.06)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="color:#1d4ed8;font-size:16px">${esc(shortName(who))}</b><span style="color:#64748b;font-size:12px">${cs.length} khách</span><b style="margin-left:auto;color:#047857">Σ ${esc(v(tot))}</b></div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">${cs.map((c) => `<span style="border-radius:999px;padding:2px 10px;font-size:13px;background:${c.amt ? '#eff6ff' : '#fef2f2'};border:1px solid ${c.amt ? '#bfdbfe' : '#fecaca'}"><b>${esc(c.code)}</b> <span style="color:${c.amt ? '#047857' : '#b91c1c'};font-weight:600">${esc(v(c.amt))}</span></span>`).join('')}</div></div>`;
+          }).join('')}
+        </div>
         <div style="padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0">
           <button data-a="later" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:8px 16px;font-weight:600">Để sau</button>
-          <button data-a="send" style="cursor:pointer;border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:8px 20px;font-weight:800">📣 Gửi vào nhóm Zalo</button></div>
+          <button data-a="sendimg" style="cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:8px;padding:8px 16px;font-weight:800">🖼️ Gửi dạng hình</button>
+          <button data-a="send" style="cursor:pointer;border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:8px 20px;font-weight:800">📣 Gửi dạng chữ</button></div>
       </div></div>`;
     document.body.append(m);
     m.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'later' || e.target === m.firstElementChild) m.remove();
       if (a === 'send') teamRemind(null);
+      if (a === 'sendimg') teamRemind(null, true);
     });
   }
   if (IS_TOP) setInterval(() => teamRemindPopup().catch(() => {}), 20000);
