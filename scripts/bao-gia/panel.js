@@ -3200,7 +3200,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     try {
       for (let i = 0; i < 60 && !scrapeDayOrders(doc() || document.createElement('div')); i++) await sleep(500);
       const [d0] = kpiDayRange();
-      const stopAt = Math.min(d0, Date.now() - 86400e3) - 3600e3;
+      const dv = new Date(d0 + 7 * 3600e3);
+      const mStart = Date.UTC(dv.getUTCFullYear(), dv.getUTCMonth(), 1) - 7 * 3600e3; // đọc đủ cả tháng (ô chênh lệch tháng)
+      const stopAt = Math.min(d0, mStart, Date.now() - 86400e3) - 3600e3;
       for (const tabName of ['Mới', 'Hoàn thành']) {
         const tab = [...(doc()?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+/g, '').trim() === tabName);
         if (tab && !tab.classList.contains('ant-tabs-tab-active')) {
@@ -3209,7 +3211,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           await waitChange(prev);
           await sleep(800);
         }
-        for (let page = 1; page <= 6; page++) {
+        for (let page = 1; page <= 12; page++) {
           if (page > 1) {
             const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
             if (!li) break;
@@ -3345,6 +3347,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         k.dn++;
       }
     }
+    // Tháng của ngày đang xem: tổng chênh lệch các đơn từ ngày 1 tới hết ngày đang xem
+    const mvn = new Date(vn0 + 7 * 3600e3);
+    const m0 = Date.UTC(mvn.getUTCFullYear(), mvn.getUTCMonth(), 1) - 7 * 3600e3;
+    const mList = Object.values(state.dayOrders || {}).filter((o) => o?.at >= m0 && o.at < vn1 && !o.cancel);
+    let mSum = 0;
+    let mDn = 0;
+    let mRev = 0;
+    for (const o of mList) {
+      mRev += o.total || 0;
+      const q = o.bg ? byCode[o.bg] : null;
+      const v = q && !q.noSheet ? diffVal(q) : null;
+      if (v != null) {
+        mSum += v;
+        mDn++;
+      }
+    }
+    const mMiss = mList.length - mDn;
     const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total || 0)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const tile = (ic, lab, val, fg, bg, bd, tip) =>
@@ -3358,7 +3377,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
-      tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span style="color:#d97706" title="Đang đọc ngầm để tính">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
+      tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span style="color:#d97706" title="Đang đọc ngầm để tính">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
+      tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span style="color:#d97706" title="Đang đọc ngầm để tính">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`);
     if (box.dataset.h !== html) {
       box.dataset.h = html;
       box.innerHTML = html;
