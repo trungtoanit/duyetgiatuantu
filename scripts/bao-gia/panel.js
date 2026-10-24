@@ -3015,8 +3015,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     const groups = [...by].sort((a, b) => b[1].length - a[1].length);
     const head = '📣 Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
-    const text = [head, ...groups.map(([who, cs]) => `👤 ${shortName(who)} (${cs.length}): ${cs.join(', ')}`)].join('\n');
-    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div>👤 <b>${esc(shortName(who))}</b> (${cs.length}): ${cs.map((c) => `<b>${esc(c)}</b>`).join(', ')}</div>`).join('')}`;
+    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.join(', ')}`)].join('\n');
+    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b>${esc(shortName(who))}</b> (${cs.length}): ${cs.map((c) => `<b>${esc(c)}</b>`).join(', ')}</div>`).join('')}`;
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
