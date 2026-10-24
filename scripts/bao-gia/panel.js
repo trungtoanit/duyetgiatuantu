@@ -2997,6 +2997,37 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }, 1500);
 
+  // 📣 Nhắc cả đội: gom deal gợi ý chốt đơn theo NVKD (chỉ mã khách) → việc gửi Zalo vào nhóm "Sale Nội Bộ - Tuấn Tú"
+  const TEAM_GROUP = 'Sale Nội Bộ - Tuấn Tú';
+  async function teamRemind(btn) {
+    const items = state.teamItems || [];
+    if (!items.length) return;
+    // mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ)
+    const zal = renderCtx.zaloAlive;
+    if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
+    const by = new Map();
+    for (const { q } of items) {
+      const who = staffOf(q, renderCtx.comments?.[q.id]) || 'Chưa rõ NVKD';
+      if (isExcluded(who)) continue;
+      const code = q.customer?.code || shortCompany(q.customer?.name || '') || q.code;
+      if (!by.has(who)) by.set(who, []);
+      if (!by.get(who).includes(code)) by.get(who).push(code);
+    }
+    const groups = [...by].sort((a, b) => b[1].length - a[1].length);
+    const head = '📣 Cả đội xem lại các khách này và kéo đơn về nhé:';
+    const text = [head, ...groups.map(([who, cs]) => `👤 ${shortName(who)} (${cs.length}): ${cs.join(', ')}`)].join('\n');
+    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div>👤 <b>${esc(shortName(who))}</b> (${cs.length}): ${cs.map((c) => `<b>${esc(c)}</b>`).join(', ')}</div>`).join('')}`;
+    const names = await kvGet('zaloNames');
+    const old = await kvGet('zaloJobs');
+    const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+    keep[`${Date.now()}-team`] = { draft: lsGet('dgZaloDraft') !== '0', to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, status: 'pending', at: Date.now(), team: true };
+    await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {}
+    btn.textContent = '✅ Đã soạn – mở Zalo';
+    setTimeout(() => (btn.textContent = '📣 Nhắc cả đội'), 4000);
+  }
   // ---------- Băng vàng đầu trang CRM ("1. CÔNG TY … (xxđ) 2. …") → thay bằng danh sách 🔥 Gợi ý chốt đơn ----------
   // Ẩn nội dung gốc của CRM và chèn danh sách deal ưu tiên (bấm để mở báo giá). NVKD chỉ thấy deal của mình.
   let topHotHtml = '';
@@ -3029,7 +3060,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
     // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
-    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b></div><div class="dgh-l">${items
+    state.teamItems = items;
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b>${MY_ADMIN ? '<button class="dgh-team" data-dg-team title="Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội</button>' : ''}</div><div class="dgh-l">${items
       .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
@@ -3047,6 +3079,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         st.textContent = `[data-dg-hot]{background:linear-gradient(135deg,#fffbeb,#fff7ed);border:1px solid #fcd34d;border-radius:10px;padding:5px 8px;font-family:inherit;display:flex;flex-direction:column;gap:3px;overflow:hidden}
 [data-dg-hot] .dgh-t{font-size:10px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.3px}
 [data-dg-hot] .dgh-t b{background:#ea580c;color:#fff;border-radius:999px;padding:0 6px;margin-left:3px}
+[data-dg-hot] .dgh-t{display:flex;align-items:center;gap:6px}
+[data-dg-hot] .dgh-team{margin-left:auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;text-transform:none;letter-spacing:0;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed);border-radius:999px;padding:1px 10px}
+[data-dg-hot] .dgh-team:hover{filter:brightness(1.1)}
 [data-dg-hot] .dgh-l{display:flex;flex-wrap:wrap;gap:3px 5px;max-height:62px;overflow-y:auto}
 [data-dg-hot] .dgh-i{display:inline-flex;align-items:center;gap:3px;font-size:10px;line-height:16px;padding:0 6px 0 2px;border-radius:999px;background:#fff;border:1px solid #fde68a;color:#334155;text-decoration:none;white-space:nowrap;max-width:260px}
 [data-dg-hot] .dgh-i:hover{border-color:#f97316;box-shadow:0 1px 4px rgba(249,115,22,.25)}
@@ -3086,6 +3121,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   if (IS_TOP) {
     setInterval(() => topHotBanner().catch(() => {}), 4000);
     document.addEventListener('click', (e) => {
+      const tb = e.target.closest?.('[data-dg-team]');
+      if (tb) {
+        e.preventDefault();
+        e.stopPropagation();
+        return teamRemind(tb);
+      }
       const a = e.target.closest?.('a[data-dg-hotlink]');
       if (!a || e.metaKey || e.ctrlKey) return;
       e.preventDefault();
