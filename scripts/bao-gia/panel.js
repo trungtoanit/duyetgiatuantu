@@ -3512,6 +3512,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   const blinkLevel = (v) => (v >= 200e6 ? 4 : v >= 100e6 ? 3 : v >= 50e6 ? 2 : v >= 30e6 ? 1 : 0);
 
+  // Nhãn NEW xanh dương, nhấp nháy (nổi rõ cả khi dòng CRM đang mờ vì đã đọc)
+  function newCss() {
+    if (document.getElementById('dg-new-css')) return;
+    const st = document.createElement('style');
+    st.id = 'dg-new-css';
+    st.textContent = `
+      @keyframes dgNewPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(37,99,235,.65); transform: scale(1); } 50% { box-shadow: 0 0 0 5px rgba(37,99,235,0); transform: scale(1.08); } }
+      @keyframes dgNewShine { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+      .dg-new { display:inline-block; margin-right:5px; vertical-align:middle; padding:0 6px; border-radius:999px; font-size:9.5px; font-weight:900; letter-spacing:.5px; line-height:15px;
+        color:#fff; background: linear-gradient(90deg,#1d4ed8,#3b82f6,#06b6d4,#1d4ed8); background-size:200% 100%; opacity:1 !important; filter:none !important;
+        animation: dgNewPulse 1.2s ease-in-out infinite, dgNewShine 2s linear infinite; }
+      @media (prefers-reduced-motion: reduce) { .dg-new { animation: none; } }`;
+    document.head.append(st);
+  }
   // Danh sách Báo giá của CRM: báo giá tạo trong 7 ngày → badge 🆕 ở cột "Ngày tạo"
   function injectNewBadges() {
     if (!IS_TOP || !renderCtx.quotes) return;
@@ -3532,11 +3546,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const fresh = !!q?.createdAt && hoursSince(q.createdAt) < 7 * 24;
         const badge = cell.querySelector('.dg-new');
         if (fresh && !badge) {
+          newCss();
           const b = document.createElement('span');
           b.className = 'dg-new';
-          b.textContent = '🆕';
+          b.textContent = 'NEW';
           b.title = 'Báo giá mới tạo trong 7 ngày gần nhất';
-          b.setAttribute('style', 'margin-right:4px;font-size:12px;');
           cell.prepend(b);
         } else if (!fresh && badge) badge.remove();
       }
