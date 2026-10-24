@@ -3104,20 +3104,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return c.toDataURL('image/png');
   }
   // Ca nhắc: sáng (trước 12h) / chiều (từ 12h), thứ 2 → thứ 7 (giờ VN)
+  const TEAM_AM = 9; // ca sáng nhắc từ 9:00
+  const TEAM_PM = 14; // ca chiều nhắc từ 14:00
   function teamSlot() {
     const vn = new Date(Date.now() + 7 * 3600e3);
     const dow = vn.getUTCDay(); // 0 = CN
-    if (dow === 0) return null;
-    return `${vn.toISOString().slice(0, 10)}-${vn.getUTCHours() < 12 ? 'sang' : 'chieu'}`;
+    const hm = vn.getUTCHours() * 60 + vn.getUTCMinutes();
+    if (dow === 0 || hm < TEAM_AM * 60) return null; // chưa tới 9:00 → chưa vào ca
+    return `${vn.toISOString().slice(0, 10)}-${hm < TEAM_PM * 60 ? 'sang' : 'chieu'}`;
   }
-  // Mốc ca nhắc tiếp theo (giờ VN): đang sáng → 12:00 hôm nay, đang chiều/CN → 8:00 ngày làm việc kế tiếp
+  // Mốc ca nhắc tiếp theo (giờ VN): trước 9:00 → 9:00, trước 14:00 → 14:00, sau đó → 9:00 ngày làm việc kế tiếp (bỏ CN)
   function teamNextAt() {
-    const vn = new Date(Date.now() + 7 * 3600e3);
-    const day0 = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3;
-    if (vn.getUTCDay() !== 0 && vn.getUTCHours() < 12) return day0 + 12 * 3600e3;
-    let d = day0 + 24 * 3600e3;
+    const now = Date.now();
+    const vn = new Date(now + 7 * 3600e3);
+    let d = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3;
+    if (vn.getUTCDay() !== 0) for (const h of [TEAM_AM, TEAM_PM]) if (d + h * 3600e3 > now) return d + h * 3600e3;
+    d += 24 * 3600e3;
     if (new Date(d + 7 * 3600e3).getUTCDay() === 0) d += 24 * 3600e3;
-    return d + 8 * 3600e3;
+    return d + TEAM_AM * 3600e3;
   }
   const fmtCd = (ms) => {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -3127,7 +3131,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Đồng hồ đếm ngược cạnh nút 📣 (cập nhật mỗi giây)
   setInterval(() => {
     document.querySelectorAll('[data-dg-cd]').forEach((e) => {
-      const left = Number(e.dataset.dgCd) - Date.now();
+      let left = Number(e.dataset.dgCd) - Date.now();
+      if (left <= 0) {
+        // tới giờ ca mới → chuyển sang đếm ca kế tiếp + hiện hộp nhắc (nếu ca này chưa gửi)
+        e.dataset.dgCd = teamNextAt();
+        left = Number(e.dataset.dgCd) - Date.now();
+        if (MY_ADMIN) teamRemindPopup().catch?.(() => {});
+      }
       e.querySelector('b').textContent = fmtCd(left);
       e.classList.toggle('soon', left < 15 * 60e3);
     });
