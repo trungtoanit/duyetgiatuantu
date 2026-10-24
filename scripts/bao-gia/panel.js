@@ -3006,7 +3006,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const { q } of items) {
       const who = staffOf(q, renderCtx.comments?.[q.id]) || 'Chưa rõ NVKD';
       if (isExcluded(who)) continue;
-      const code = q.customer?.code || shortCompany(q.customer?.name || '') || q.code;
+      // mã khách cũng rút gọn (vd. "DƯỢC PHẨM MEDBOLIDE" → "MEDBOLIDE")
+      const code = shortCompany(q.customer?.code || '') || shortCompany(q.customer?.name || '') || q.code;
       const key = custKey(q) || code;
       const cur = byCust.get(key) || { who, code, amt: 0 };
       cur.amt += Number(q.amount) || 0;
