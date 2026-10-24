@@ -8406,14 +8406,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <div class="hint muted">Báo giá chưa chốt có điểm khả năng chốt đơn (🎯) + mọi báo giá chưa đọc (in đậm) trên CRM. Bấm “📬 chưa đọc” để chỉ xem báo giá chưa đọc.</div>
       ${merged.length
         ? `<div class="box unread">${listRows(merged, true)}</div>`
-        : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi hoặc chưa đọc.</div>'}
-      ${samples.length
-        ? `<h3>✂️ Cắt mẫu (${samples.length})${filterChip('sampleOrder', 'smp ok', `→ ${samplesOrdered} có đơn (${Math.round((samplesOrdered / samples.length) * 100)}%)`)}${filterChip('sampleNo', 'smp', `${samples.length - samplesOrdered} chưa có đơn`)}${state.filter ? ' <button class="act chipbtn" data-act="filter" data-f="">✕ Bỏ lọc</button>' : ''}</h3>
-          <div class="box unread">${listRows(samples)}</div>`
-        : ''}
-      ${silent.length
-        ? `<div class="sec-head"><h3>📭 Chưa có bình luận <span class="cnt">${silent.length}</span></h3><div class="sec-right">${totalBadge(silent)}</div></div><div class="hint muted">Báo giá đã mở xem mà NVKD chưa trao đổi gì – nên hỏi vì sao chưa có thông tin.</div><div class="box unread">${listRows(silent)}</div>`
-        : ''}`;
+        : '<div class="muted">Chưa có báo giá nào đủ tín hiệu khả thi hoặc chưa đọc.</div>'}`; // ✂️ Cắt mẫu / 📭 Chưa có bình luận: đã ẩn bảng riêng (vẫn lọc được bằng nút trên thanh lọc)
 
 
     const searchFocused = root.activeElement?.classList?.contains('dg-search');
