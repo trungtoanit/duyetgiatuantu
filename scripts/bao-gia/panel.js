@@ -2284,6 +2284,92 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
 
+  // Hộp "Tính giá carton" của CRM: trang trí lại (thẻ cho từng phần Quy cách / In / Khác, ô nhập bo tròn, bảng giá, cảnh báo, đơn giá nổi bật)
+  const CC_CSS = `
+.dg-cc .ant-modal-content{border-radius:16px!important;overflow:hidden;padding:0!important;box-shadow:0 24px 60px rgba(15,23,42,.28)!important}
+.dg-cc .ant-modal-header{margin:0!important;padding:14px 56px 12px 20px!important;background:linear-gradient(90deg,#eff6ff,#f5f3ff)!important;border-bottom:1px solid #e0e7ff!important}
+.dg-cc .ant-modal-title{font-size:14px!important;font-weight:600!important;color:#475569!important;line-height:1.45!important}
+.dg-cc .ant-modal-title b,.dg-cc .ant-modal-title strong,.dg-cc .ant-modal-title span{color:#1e3a8a!important}
+.dg-cc .ant-modal-close{top:12px!important}
+.dg-cc .ant-modal-body{background:#f1f5f9!important;padding:14px 16px 6px!important;max-height:calc(100vh - 190px);overflow-y:auto}
+.dg-cc .dg-cc-sec{background:#fff!important;border:1px solid #e2e8f0!important;border-radius:14px!important;padding:12px 14px 6px!important;margin:0 0 12px!important;box-shadow:0 1px 3px rgba(15,23,42,.05)!important;box-sizing:border-box}
+.dg-cc .dg-cc-h{display:flex!important;align-items:center;gap:8px;font-size:15px!important;font-weight:800!important;color:#0f172a!important;margin:0 0 10px!important;padding-bottom:8px;border-bottom:1px dashed #e2e8f0}
+.dg-cc .dg-cc-h::before{content:attr(data-ic);display:inline-grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--cc,#eef2ff);font-size:15px}
+.dg-cc label,.dg-cc .ant-form-item-label>label{font-size:12px!important;font-weight:600!important;color:#64748b!important}
+.dg-cc .ant-form-item{margin-bottom:10px!important}
+.dg-cc .ant-input,.dg-cc .ant-input-number,.dg-cc .ant-select-selector,.dg-cc .ant-picker,.dg-cc textarea{border-radius:9px!important;border-color:#dbe3ee!important;transition:border-color .15s,box-shadow .15s}
+.dg-cc .ant-input:hover,.dg-cc .ant-select:hover .ant-select-selector,.dg-cc textarea:hover{border-color:#93c5fd!important}
+.dg-cc .ant-input:focus,.dg-cc .ant-input-focused,.dg-cc .ant-select-focused .ant-select-selector,.dg-cc textarea:focus{border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
+.dg-cc .ant-input[disabled],.dg-cc .ant-input-disabled,.dg-cc .ant-select-disabled .ant-select-selector{background:#f8fafc!important;color:#334155!important}
+.dg-cc input:not([type=checkbox]):not([type=radio]){font-weight:600}
+.dg-cc .ant-checkbox-inner{border-radius:5px!important}
+.dg-cc .dg-cc-info{display:flex!important;flex-wrap:wrap;gap:4px 14px;background:linear-gradient(90deg,#f0f9ff,#eef2ff)!important;border:1px solid #dbeafe;border-radius:10px;padding:7px 12px!important;margin:4px 0 8px!important;font-size:12.5px!important;color:#1e3a8a!important;line-height:1.6!important}
+.dg-cc .dg-cc-img{max-height:150px!important;width:auto!important;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(15,23,42,.12))}
+.dg-cc .dg-cc-pt{border:1px solid #e2e8f0!important;border-radius:12px!important;overflow:hidden;border-collapse:separate!important;border-spacing:0!important;background:#fff}
+.dg-cc .dg-cc-pt th,.dg-cc .dg-cc-pt thead td{background:#f8fafc!important;color:#64748b!important;font-size:11.5px!important;font-weight:700!important;text-transform:uppercase;letter-spacing:.3px;padding:6px 14px!important;border-bottom:1px solid #e2e8f0!important}
+.dg-cc .dg-cc-pt td{padding:7px 14px!important;font-size:15px!important;font-weight:800!important;color:#0f172a;font-variant-numeric:tabular-nums}
+.dg-cc .dg-cc-warn{display:inline-flex!important;align-items:center;flex-wrap:wrap;gap:8px;background:#fef2f2!important;border:1px solid #fecaca;border-left:4px solid #ef4444;border-radius:10px;padding:7px 10px!important;margin:6px 0!important;font-size:12.5px!important;font-weight:600;color:#b91c1c!important}
+.dg-cc .dg-cc-warn .ant-btn,.dg-cc .dg-cc-warn button{border-radius:999px!important;height:28px!important;font-size:12.5px!important;font-weight:700!important;box-shadow:0 2px 8px rgba(37,99,235,.3)!important}
+.dg-cc .ant-modal-footer{margin:0!important;padding:10px 16px!important;background:#fff!important;border-top:1px solid #e2e8f0!important;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.dg-cc .ant-modal-footer .ant-btn{border-radius:10px!important;height:36px!important;font-weight:700!important;padding:0 16px!important}
+.dg-cc .ant-modal-footer .ant-btn-primary{box-shadow:0 4px 12px rgba(37,99,235,.28)!important}
+.dg-cc .dg-cc-price{display:inline-flex!important;align-items:baseline;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:5px 12px;font-size:13px!important;color:#475569!important;margin-right:6px}
+.dg-cc .dg-cc-price *{font-size:20px!important;font-weight:900!important}
+`;
+  const CC_SEC = { 'Quy cách': ['📐', '#e0f2fe'], In: ['🖨️', '#fce7f3'], Khác: ['⚙️', '#fef3c7'] };
+  function styleCartonModal() {
+    for (const m of document.querySelectorAll('.ant-modal')) {
+      const title = m.querySelector('.ant-modal-title');
+      if (!title || !/^\s*Tính giá carton/i.test(title.textContent)) continue;
+      if (!document.getElementById('dg-cc-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-cc-css';
+        st.textContent = CC_CSS;
+        document.head.append(st);
+      }
+      m.classList.add('dg-cc');
+      const body = m.querySelector('.ant-modal-body');
+      if (!body) continue;
+      // Tiêu đề từng phần (chữ to, đúng tên) → bọc phần đó thành 1 thẻ
+      const heads = [...body.querySelectorAll('*')].filter((e) => !e.children.length && CC_SEC[e.textContent.trim()] && parseFloat(getComputedStyle(e).fontSize) >= 15);
+      for (const h of heads) {
+        if (h.classList.contains('dg-cc-h')) continue;
+        const [ic, bg] = CC_SEC[h.textContent.trim()];
+        h.classList.add('dg-cc-h');
+        h.dataset.ic = ic;
+        h.style.setProperty('--cc', bg);
+        let sec = h;
+        while (sec.parentElement && sec.parentElement !== body && !heads.some((o) => o !== h && sec.parentElement.contains(o))) sec = sec.parentElement;
+        if (sec !== h) sec.classList.add('dg-cc-sec');
+      }
+      // Dòng thông số (Diện tích / Thể tích / NVL …)
+      for (const e of body.querySelectorAll('div, p, span')) {
+        if (e.classList.contains('dg-cc-info') || e.closest('.dg-cc-info')) continue;
+        const t = e.textContent;
+        if (/Diện tích:/.test(t) && /NVL:/.test(t) && t.length < 200 && ![...e.children].some((c) => /Diện tích:/.test(c.textContent) && /NVL:/.test(c.textContent))) e.classList.add('dg-cc-info');
+      }
+      // Ảnh minh hoạ thùng nhỏ lại
+      body.querySelectorAll('img').forEach((im) => im.naturalWidth > 200 && !im.closest('.ant-select, [class*="ban-in"]') && im.getBoundingClientRect().width > 160 && im.classList.add('dg-cc-img'));
+      // Bảng giá Hộp trơn / In KTS / In Flexo
+      body.querySelectorAll('table').forEach((tb) => /Hộp trơn|In KTS|In Flexo/i.test(tb.textContent) && tb.classList.add('dg-cc-pt'));
+      // Cảnh báo giá vốn
+      for (const e of body.querySelectorAll('div, span, p')) {
+        if (e.closest('.dg-cc-warn')) continue;
+        if (/^Giá vốn hiện tại cao hơn/i.test(e.textContent.trim()) && e.textContent.length < 220) {
+          const wrap = e.parentElement && /Đồng bộ/i.test(e.parentElement.textContent) && e.parentElement.textContent.length < 260 ? e.parentElement : e;
+          wrap.classList.add('dg-cc-warn');
+        }
+      }
+      // Đơn giá 1 thùng ở chân hộp
+      const foot = m.querySelector('.ant-modal-footer');
+      if (foot)
+        for (const e of foot.querySelectorAll('div, span')) {
+          if (/^Đơn giá 1 thùng/i.test(e.textContent.trim()) && e.textContent.length < 60 && ![...e.children].some((c) => /^Đơn giá 1 thùng/i.test(c.textContent.trim()))) e.classList.add('dg-cc-price');
+        }
+    }
+  }
+  if (IS_TOP) setInterval(styleCartonModal, 700);
+
   // Nút "🖨 In báo giá" cạnh tiêu đề "Bình luận" trên trang báo giá
   function injectPrintButton() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-printq')) return;
