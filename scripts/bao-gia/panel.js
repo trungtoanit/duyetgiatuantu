@@ -3366,7 +3366,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         document.head.append(st);
       }
       const list = missDiffList(scope);
-      box.querySelector('[data-st]').textContent = list.length ? `còn ${list.length} đơn` : '✅ đã tính xong';
+      const rev = list.reduce((t, o) => t + (o.total || 0), 0);
+      const fmt = (v) => (v >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
+      box.querySelector('[data-st]').innerHTML = list.length
+        ? `<span style="display:inline-flex;gap:6px;margin-left:6px"><span style="background:#fff;border:1px solid #fcd34d;border-radius:999px;padding:1px 10px;font-weight:800;color:#b45309">📄 ${list.length} đơn chưa tính</span><span style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:999px;padding:1px 10px;font-weight:800;color:#047857" title="${esc(money(rev))}">💰 ${fmt(rev)}</span></span>`
+        : '✅ đã tính xong';
       box.querySelector('[data-l]').innerHTML = list.length
         ? `<table style="width:100%;border-collapse:collapse;font-size:12.5px">${list
             .map((o) => {
