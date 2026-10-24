@@ -365,7 +365,7 @@
       // Cùng quy cách + SL đọc lại (vd. đổi giá / về 0đ) → thay bản cũ, không giữ song song giá cũ
       for (const [k, v] of Object.entries(cur.products)) if (v.spec === spec && String(v.qty) === String(data.qty)) delete cur.products[k]; // gồm cả bản thử (draft)
       cur.products[[spec, data.qty, data.price].filter(Boolean).join(' | ')] = {
-        spec, pct: data.pct, noPrice: !!data.noPrice, nvlUnit: data.nvlUnit ?? null, nvlTotal: data.nvlTotal ?? null,
+        spec, pct: data.pct, noPrice: !!data.noPrice, nvlUnit: data.nvlUnit ?? null, nvlTotal: data.nvlTotal ?? null, costUnit: data.costUnit ?? null,
         price: data.price, qty: data.qty, reprint: data.reprint, at: data.at,
       };
       cur.at = data.at;
@@ -1485,7 +1485,150 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // Hộp chọn % (trong shadow root của bảng)
+  // ---------- 💲 Set giá cho báo giá OFFSET ----------
+  // Mỗi dòng sản phẩm: mở "Tính giá offset" (bấm ô Số lượng) → Ctrl+Shift+G → bảng chiết giá; lấy giá vốn ở bảng "Giá bán"
+  // (ô cuối hàng tiêu đề, vd. 5.018đ). Giá mới = giá vốn ÷ (1 − % muốn bán). Điền vào "Giá thực bán" từng dòng rồi Cập nhật.
+  function pageProductTable() {
+    return [...document.querySelectorAll('.ant-table')].find((t) => [...t.querySelectorAll('thead th')].some((th) => /^Giá thực bán/i.test(th.innerText.trim())));
+  }
+  function offsetRowsForDialog(q) {
+    const t = pageProductTable();
+    if (!t) return [];
+    const heads = [...t.querySelectorAll('thead th')];
+    const pIdx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
+    const rows = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim());
+    const prods = Object.values(renderCtx.margins?.[q.code]?.products || {}).filter((x) => !x.draft);
+    const used = new Set();
+    return rows.map((tr, i) => {
+      const txt = tr.innerText.replace(/\s+/g, ' ');
+      const x = prods.find((p) => !used.has(p) && offRowFor([txt], p.spec, p.qty));
+      if (x) used.add(x);
+      const cell = tr.cells[pIdx];
+      const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
+      return { i, tr, cell, x, cur, offset: /offset/i.test(txt) || !!x, name: (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C[^,]*/i) || [x?.spec || `Dòng ${i + 1}`])[0] };
+    }).filter((r) => r.offset);
+  }
+  async function setCellPrice(cell, value) {
+    let input = cell.querySelector('input');
+    if (!input) {
+      const target = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent) && !e.closest('.dg-nudge')) || cell;
+      for (const t of ['mousedown', 'mouseup', 'click', 'dblclick']) target.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+      input = await waitFor(() => cell.querySelector('input'), 1500, 100);
+    }
+    if (!input) throw new Error('Không mở được ô "Giá thực bán" để điền giá.');
+    const raw = String(input.value || '');
+    const text = /[.,]/.test(raw) ? Math.round(value).toLocaleString('vi-VN') : String(Math.round(value));
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.blur();
+  }
+  function openOffsetPriceDialog(q) {
+    root.querySelector('.pdlg')?.remove();
+    const pct0 = Number(lsGet('dgOffPct')) || 35;
+    const box = document.createElement('div');
+    box.className = 'pdlg';
+    box.innerHTML = `<div class="pdlg-wrap"><div class="pdlg-card" style="width:min(720px,94vw)">
+      <div class="pdlg-h">💲 Set giá ${esc(q.code)} <span class="muted">– Offset</span><button class="x" data-p="close">×</button></div>
+      <div class="pdlg-q">Bán bao nhiêu %?</div>
+      <div class="pdlg-v"><b>${pct0}%</b></div>
+      <input type="range" min="5" max="60" step="1" value="${pct0}">
+      <div class="pdlg-chips">${[25, 30, 32, 35, 38, 40, 42, 45, 50].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-sum"></div>
+      <div class="muted pdlg-note">Giá mới = giá vốn (ô cuối bảng "Giá bán" của chiết giá) ÷ (1 − %). Bấm Set giá: điền "Giá thực bán" từng dòng Offset, lưu báo giá rồi tải lại trang.</div>
+      <div class="pdlg-step"></div>
+      <div class="pdlg-btns"><button class="act" data-p="read">↻ Đọc lại chiết giá</button><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
+    </div></div>`;
+    root.append(box);
+    const range = box.querySelector('input');
+    const sumEl = box.querySelector('.pdlg-sum');
+    let reading = false;
+    const render2 = () => {
+      const pct = Number(range.value);
+      const rows = offsetRowsForDialog(q);
+      if (!rows.length) return (sumEl.innerHTML = '<div class="muted">Không thấy dòng sản phẩm Offset trong bảng Hàng hóa.</div>');
+      sumEl.innerHTML = `<table class="osp"><tr><th>Sản phẩm</th><th class="num">SL</th><th class="num">Giá vốn</th><th class="num">Giá hiện tại</th><th class="num">Giá mới (${pct}%)</th></tr>${rows
+        .map((r) => {
+          const cost = r.x?.costUnit;
+          const np = cost ? Math.ceil(cost / (1 - pct / 100)) : null;
+          return `<tr><td>${esc(r.name)}</td><td class="num">${esc(r.x?.qty || '')}</td><td class="num">${cost ? money(cost) : reading ? '<span class="spinner"></span>' : '<span class="warnx">chưa đọc</span>'}</td><td class="num">${r.cur ? money(r.cur) : '0đ'}</td><td class="num"><b class="pos">${np ? money(np) : '–'}</b></td></tr>`;
+        })
+        .join('')}</table>`;
+    };
+    const sync = () => {
+      box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
+      box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%`;
+      render2();
+    };
+    let lastV = range.value;
+    const poll = setInterval(() => {
+      if (!box.isConnected) return clearInterval(poll);
+      if (range.value !== lastV) {
+        lastV = range.value;
+        sync();
+      }
+    }, 120);
+    const readNow = async () => {
+      reading = true;
+      render2();
+      try {
+        await loadInFrame(q.id, undefined, undefined, async (f) => readOffsetMargins(f, q.code));
+        renderCtx.margins = await kvGet('margins');
+      } finally {
+        reading = false;
+        render2();
+      }
+    };
+    render2();
+    // Chưa có giá vốn dòng nào → tự đọc chiết giá (khung ẩn, không bật hộp thoại in)
+    if (offsetRowsForDialog(q).some((r) => !r.x?.costUnit)) readNow().catch(() => {});
+    box.addEventListener('click', async (e) => {
+      const v = e.target.closest('[data-v]')?.dataset.v;
+      if (v) {
+        range.value = v;
+        return sync();
+      }
+      const act = e.target.closest('[data-p]')?.dataset.p;
+      if (act === 'close') return box.remove();
+      if (act === 'read') return readNow().catch(() => {});
+      if (act !== 'go') return;
+      const pct = Number(range.value);
+      const stepEl = box.querySelector('.pdlg-step');
+      const step = (t) => (stepEl.innerHTML = `<span class="spinner"></span> ${esc(t)}`);
+      const rows = offsetRowsForDialog(q);
+      const miss = rows.filter((r) => !r.x?.costUnit);
+      if (miss.length) return (stepEl.innerHTML = `<span class="warnx">⚠️ Chưa có giá vốn của ${miss.length} dòng – bấm "↻ Đọc lại chiết giá".</span>`);
+      box.querySelectorAll('button, input').forEach((x) => (x.disabled = true));
+      try {
+        for (const r of rows) {
+          step(`Điền giá dòng ${r.i + 1}…`);
+          await setCellPrice(r.cell, Math.ceil(r.x.costUnit / (1 - pct / 100)));
+          await sleep(300);
+        }
+        try {
+          localStorage.setItem('dgOffPct', String(pct));
+        } catch {}
+        step('Lưu báo giá…');
+        const saveBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Cập nhật');
+        if (!saveBtn) throw new Error('Đã điền giá nhưng không thấy nút "Cập nhật" – hãy tự bấm Cập nhật.');
+        saveBtn.click();
+        await confirmIfAsked();
+        const ok = await waitFor(() => document.querySelector('.ant-message-success, .ant-notification-notice-success'), 10000, 250);
+        step(ok ? `✅ Đã set ${pct}% cho ${rows.length} dòng Offset và lưu – đang tải lại trang…` : 'Đã bấm Cập nhật – đang tải lại trang…');
+        await sleep(1200);
+        location.reload();
+      } catch (err) {
+        stepEl.innerHTML = `<span class="warnx">⚠️ ${esc(err.message)}</span>`;
+        box.querySelectorAll('button, input').forEach((x) => (x.disabled = false));
+      }
+    });
+  }
+
   function openPriceDialog(q) {
+    // Báo giá chỉ có Offset → hộp Set giá theo chiết giá Offset
+    const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+    if (kinds.includes('offset') && !kinds.includes('flexo')) return openOffsetPriceDialog(q);
     root.querySelector('.pdlg')?.remove();
     const pct0 = Number(lsGet('dgDealPct')) || 25;
     const box = document.createElement('div');
@@ -2003,8 +2146,76 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         btns.push(b);
         box.append(b);
       }
+      // ＋đ: cộng thêm 1 số tiền (nghìn đồng) vào giá thực bán của tất cả các dòng
+      const plus = document.createElement('button');
+      plus.type = 'button';
+      plus.textContent = '＋đ';
+      plus.title = 'Cộng thêm số tiền vào giá thực bán của TẤT CẢ các dòng (chưa lưu – bấm Cập nhật để lưu)';
+      plus.setAttribute('style', 'cursor:pointer;font-size:11px;font-weight:800;padding:0 7px;border-radius:999px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;line-height:18px;');
+      for (const ev of ['mousedown', 'mouseup', 'pointerdown']) plus.addEventListener(ev, (e) => e.stopPropagation());
+      plus.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openAddAmount(t, idx, [...btns, plus]);
+      });
+      box.append(plus);
       th.append(box);
     }
+  }
+  // Hộp nhập số tiền cộng thêm (âm = trừ bớt) → áp cho mọi dòng
+  function openAddAmount(t, idx, btns) {
+    document.getElementById('dg-addamt')?.remove();
+    const m = document.createElement('div');
+    m.id = 'dg-addamt';
+    m.innerHTML = `<div style="position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;font-family:inherit">
+      <div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.25);padding:18px 20px;width:340px">
+        <div style="font-weight:800;font-size:15px;margin-bottom:10px">＋ Cộng thêm vào Giá thực bán</div>
+        <div style="display:flex;align-items:center;gap:6px"><input class="amt" inputmode="numeric" placeholder="vd. 200" style="flex:1;height:36px;border:1px solid #cbd5e1;border-radius:8px;padding:0 10px;font-size:15px;font-weight:700;text-align:right"><b>đ</b></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${[100, 200, 300, 500, 1000, -100, -200, -500].map((v) => `<button data-v="${v}" style="cursor:pointer;border:1px solid ${v > 0 ? '#bbf7d0' : '#fecaca'};background:${v > 0 ? '#f0fdf4' : '#fef2f2'};color:${v > 0 ? '#15803d' : '#b91c1c'};border-radius:999px;padding:2px 10px;font-weight:700;font-size:12px">${v > 0 ? '+' : ''}${v.toLocaleString('vi-VN')}</button>`).join('')}</div>
+        <div style="font-size:12px;color:#64748b;margin-bottom:12px">Áp cho tất cả các dòng của báo giá (số âm = trừ bớt). Chưa lưu – xem lại rồi bấm "Cập nhật".</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px"><button data-a="x" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 14px">Huỷ</button><button data-a="ok" style="cursor:pointer;border:0;background:#2563eb;color:#fff;border-radius:8px;padding:6px 16px;font-weight:700">Áp dụng</button></div>
+      </div></div>`;
+    document.body.append(m);
+    const inp = m.querySelector('.amt');
+    inp.focus();
+    const close = () => m.remove();
+    const apply = async () => {
+      const raw = inp.value.trim();
+      const amt = (raw.startsWith('-') ? -1 : 1) * (Number(raw.replace(/[^\d]/g, '')) || 0);
+      if (!amt) return inp.focus();
+      close();
+      if (nudging) return;
+      nudging = true;
+      btns.forEach((b) => (b.disabled = true));
+      try {
+        const rows = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row'));
+        for (const tr of rows) {
+          const cell = tr.cells[idx];
+          if (!cell) continue;
+          const cur = Number(String(cell.querySelector('input')?.value || cell.innerText).replace(/[^\d]/g, '')) || 0;
+          if (!cur) continue;
+          await setCellPrice(cell, Math.max(0, cur + amt));
+          await sleep(150);
+        }
+      } finally {
+        nudging = false;
+        btns.forEach((b) => (b.disabled = false));
+      }
+    };
+    m.addEventListener('click', (e) => {
+      const v = e.target.closest('[data-v]')?.dataset.v;
+      if (v) {
+        inp.value = v;
+        return inp.focus();
+      }
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a === 'x' || e.target === m.firstElementChild) close();
+      if (a === 'ok') apply();
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') apply();
+      if (e.key === 'Escape') close();
+    });
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
 
@@ -4116,6 +4327,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     @keyframes dpBlue { 0%, 100% { background: transparent; } 50% { background: #dbeafe; } }
     @keyframes dpOrange { 0%, 100% { background: #fff7ed; } 50% { background: #fdba74; } }
     @keyframes dpRed { 0%, 100% { background: #dc2626; } 50% { background: #fca5a5; color: #7f1d1d; } }
+    .osp { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 6px 0; } .osp th, .osp td { padding: 4px 6px; border-bottom: 1px solid #f1f5f9; text-align: left; } .osp .num { text-align: right; white-space: nowrap; } .osp th { color: #64748b; font-weight: 700; }
     .learn-hint { font-size: 12px; color: #6b21a8; margin-top: 4px; }
     .learn-use { border: 1px dashed #c4b5fd; background: #faf5ff; color: #6b21a8; border-radius: 8px; padding: 1px 8px; font: inherit; font-style: italic; cursor: pointer; text-align: left; }
     .learn-use:hover { background: #ede9fe; }

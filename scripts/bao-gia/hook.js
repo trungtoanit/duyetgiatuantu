@@ -118,8 +118,21 @@
         }
         break;
       }
+      // Bảng "Giá bán": ô cuối hàng tiêu đề (vd. "5.018đ") = giá vốn 1 đơn vị → giá bán = giá vốn ÷ (1 − % muốn bán)
+      let costUnit = null;
+      for (const tb of tables) {
+        const prev = (tb.previousElementSibling?.innerText || tb.parentElement?.previousElementSibling?.innerText || '').trim();
+        const head = tb.rows[0];
+        if (!head) continue;
+        const ht = head.innerText;
+        if (!/Giá bán/i.test(prev) && !(/Hạng mục/.test(ht) && /Đơn giá/.test(ht) && [...tb.rows].some((r) => /Giá trước VAT/i.test(r.innerText)))) continue;
+        const lastCell = head.cells[head.cells.length - 1]?.innerText.trim() || '';
+        if (/\d/.test(lastCell)) costUnit = vn(lastCell);
+        break;
+      }
       const val = (re) => (t.match(re)?.[1] || '').trim();
       emit('margin', {
+        costUnit,
         code: code[1].toUpperCase(),
         pct: pct ? Number(pct[1].replace(',', '.')) : null,
         noPrice,
