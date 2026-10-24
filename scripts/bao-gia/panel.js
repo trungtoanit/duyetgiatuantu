@@ -1451,7 +1451,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
-  async function runSetPrice(q, pct, step) {
+  async function runSetPrice(q, pct, step, rowPct = {}) {
     step('Mở Lên PO → Giấy tấm…');
     const modal = await openPoGiayTam(document);
     saveDealHist(modal, q.code);
@@ -1489,6 +1489,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     step('Đóng PO, lưu báo giá…');
     modal.querySelector('.ant-modal-close')?.click();
     await sleep(800);
+    // % riêng từng dòng: giá sau khi set deal (đang = giấy tấm ÷ (1 − pct)) → giấy tấm ÷ (1 − % dòng)
+    const custom = Object.entries(rowPct).filter(([, v]) => v != null && v !== pct);
+    if (custom.length) {
+      await sleep(700);
+      const rows = flexoRowsForDialog();
+      for (const [i, v] of custom) {
+        const r = rows.find((x) => x.i === Number(i));
+        if (!r?.cur) continue;
+        step(`Dòng ${r.i + 1}: đặt riêng ${v}%…`);
+        await setCellPrice(r.cell, Math.ceil((r.cur * (1 - pct / 100)) / (1 - v / 100)));
+        await sleep(300);
+      }
+    }
     const saveBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Cập nhật');
     if (!saveBtn) throw new Error('Đã set deal nhưng không thấy nút "Cập nhật" để lưu báo giá – hãy tự bấm Cập nhật.');
     saveBtn.click();
@@ -1525,6 +1538,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
       return { i, tr, cell, x, cur, offset: /offset/i.test(txt) || !!x, name: (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C[^,]*/i) || [x?.spec || `Dòng ${i + 1}`])[0] };
     }).filter((r) => r.offset);
+  }
+  // Các dòng Flexo (không phải Offset) trong bảng Hàng hóa: tên + ô Giá thực bán + giá hiện tại
+  function flexoRowsForDialog() {
+    const t = pageProductTable();
+    if (!t) return [];
+    const heads = [...t.querySelectorAll('thead th')];
+    const pIdx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
+    return [...t.querySelectorAll('.ant-table-tbody tr')]
+      .filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim())
+      .map((tr, i) => {
+        const txt = tr.innerText.replace(/\s+/g, ' ');
+        const cell = tr.cells[pIdx];
+        const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
+        const name = (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C/i) || [txt.slice(0, 60)])[0];
+        return { i, tr, cell, cur, name, offset: /offset/i.test(txt) };
+      })
+      .filter((r) => !r.offset && r.cell);
   }
   async function setCellPrice(cell, value) {
     let input = cell.querySelector('input');
@@ -1658,6 +1688,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <input type="range" min="5" max="50" step="1" value="${pct0}">
       <div class="pdlg-chips">${[20, 22, 23, 25, 27, 28, 30, 32, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
       <div class="pdlg-sum"></div>
+      <div class="pdlg-rows"></div>
       <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
       <div class="pdlg-step"></div>
       <div class="pdlg-btns"><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
@@ -1682,12 +1713,43 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         </div>
         <div class="ps-est">Bán <b>${pct}%</b> → thu về ≈ <b>${trM(estBase)}</b>, chênh lệch ≈ <b class="pos">+${trM(estBase - fx.paper)}</b> <span class="muted">(ước tính = giấy tấm ÷ (1 − ${pct}%))</span></div>`;
     };
+    // % riêng cho từng dòng Flexo (để trống = theo % chung)
+    const rowPct = {};
+    const rowsEl = box.querySelector('.pdlg-rows');
+    const renderRows = () => {
+      const rows = flexoRowsForDialog();
+      if (rows.length < 2) return (rowsEl.innerHTML = '');
+      const pct = Number(range.value);
+      rowsEl.innerHTML = `<div class="pr-h">🎯 % riêng từng dòng <span class="muted">(để trống = theo ${pct}%)</span></div>${rows
+        .map((r) => {
+          const v = rowPct[r.i];
+          return `<div class="pr-row${v != null && v !== pct ? ' own' : ''}"><span class="pr-no">${r.i + 1}</span><span class="pr-name" title="${esc(r.name)}">${esc(r.name)}</span>
+            <span class="pr-cur">${r.cur ? money(r.cur) : '0đ'}</span>
+            <span class="pr-ctl"><button class="act" data-rd="${r.i}" data-d="-1">−</button><input data-ri="${r.i}" inputmode="numeric" placeholder="${pct}" value="${v ?? ''}"><b>%</b><button class="act" data-rd="${r.i}" data-d="1">+</button></span></div>`;
+        })
+        .join('')}`;
+    };
+    rowsEl.addEventListener('input', (e) => {
+      const i = e.target.dataset?.ri;
+      if (i == null) return;
+      const n = parseFloat(String(e.target.value).replace(',', '.'));
+      if (Number.isFinite(n) && n > 0 && n < 90) rowPct[i] = n;
+      else delete rowPct[i];
+      e.target.closest('.pr-row').classList.toggle('own', rowPct[i] != null && rowPct[i] !== Number(range.value));
+      syncGo();
+    });
+    const syncGo = () => {
+      const own = Object.values(rowPct).filter((v) => v !== Number(range.value)).length;
+      box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%${own ? ` (+${own} dòng riêng)` : ''}`;
+    };
     const sync = () => {
       box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
-      box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%`;
+      syncGo();
       renderSum();
+      renderRows();
     };
     renderSum();
+    renderRows();
     // Tính lại khi kéo: nghe nhiều sự kiện + dò giá trị định kỳ (bộ gõ / trang có thể chặn sự kiện "input")
     let lastV = range.value;
     const onMove = () => {
@@ -1731,6 +1793,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
     });
     box.addEventListener('click', async (e) => {
+      const rd = e.target.closest('[data-rd]');
+      if (rd) {
+        const i = rd.dataset.rd;
+        rowPct[i] = Math.max(1, Math.min(80, (rowPct[i] ?? Number(range.value)) + Number(rd.dataset.d)));
+        renderRows();
+        return syncGo();
+      }
       const v = e.target.closest('[data-v]')?.dataset.v;
       if (v) {
         range.value = v;
@@ -1744,7 +1813,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const stepEl = box.querySelector('.pdlg-step');
       const step = (t) => (stepEl.innerHTML = `<span class="spinner"></span> ${esc(t)}`);
       try {
-        await runSetPrice(q, pct, step);
+        await runSetPrice(q, pct, step, { ...rowPct });
       } catch (err) {
         stepEl.innerHTML = `<span class="warnx">⚠️ ${esc(err.message)}</span>`;
         box.querySelectorAll('button, input').forEach((x) => (x.disabled = false));
@@ -5204,6 +5273,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .ps-t.pos { border-color: #bbf7d0; background: #f0fdf4; } .ps-t.pos b { color: #15803d; }
     .ps-t.neg { border-color: #fecaca; background: #fef2f2; } .ps-t.neg b { color: #b91c1c; }
     .ps-est { margin-top: 6px; font-size: 12px; }
+    .pdlg-rows:empty { display: none; }
+    .pdlg-card:has(.pdlg-rows:not(:empty)) { width: min(480px, calc(100vw - 32px)); }
+    .pdlg-rows { display: grid; gap: 4px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #f8fafc; max-height: 240px; overflow: auto; }
+    .pr-h { font-weight: 800; font-size: 12px; margin-bottom: 2px; }
+    .pr-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 6px; align-items: center; background: #fff; border: 1px solid #eef2f7; border-radius: 8px; padding: 3px 6px; font-size: 12px; }
+    .pr-row.own { border-color: #86efac; background: #f0fdf4; }
+    .pr-no { color: #94a3b8; font-weight: 800; text-align: right; }
+    .pr-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pr-cur { color: #64748b; font-variant-numeric: tabular-nums; }
+    .pr-ctl { display: inline-flex; align-items: center; gap: 2px; }
+    .pr-ctl .act { height: 22px; width: 22px; padding: 0; display: grid; place-items: center; border-radius: 6px; font-weight: 800; }
+    .pr-ctl input { width: 38px; height: 22px; border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; font: inherit; font-weight: 800; color: #15803d; padding: 0; }
+    .pr-ctl b { color: #64748b; font-size: 11px; }
     .ps-est .pos { color: #15803d; }
     .pdlg-step { min-height: 18px; font-size: 12px; color: #4338ca; }
     .pdlg-btns { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
