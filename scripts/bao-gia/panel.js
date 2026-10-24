@@ -3400,7 +3400,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!box) {
       box = document.createElement('div');
       box.setAttribute('data-dg-kpi', '1');
-      box.setAttribute('style', 'display:flex;gap:10px;align-items:center;margin-left:16px;flex:none');
+      box.setAttribute('style', 'display:flex;flex-wrap:nowrap;gap:6px;align-items:center;margin-left:12px;flex:none;white-space:nowrap');
       nav.append(box);
       box.addEventListener('click', (e) => {
         const ms = e.target.closest('[data-dg-miss]');
@@ -3456,7 +3456,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total || 0)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const tile = (ic, lab, val, fg, bg, bd, tip) =>
-      `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:112px;padding:5px 14px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+      `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
         <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
     const kd = state.kpiDay || 0;
     const dLab = kd === 0 ? 'Hôm nay' : kd === 1 ? 'Hôm qua' : new Date(vn0 + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit' });
@@ -3547,6 +3547,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const badge = cell.querySelector('.dg-new');
         if (fresh && !badge) {
           newCss();
+          cell.style.whiteSpace = 'nowrap'; // nhãn NEW + "6 ngày trước" trên cùng 1 dòng
           const b = document.createElement('span');
           b.className = 'dg-new';
           b.textContent = 'NEW';
