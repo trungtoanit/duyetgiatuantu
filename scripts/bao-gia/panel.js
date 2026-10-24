@@ -3475,12 +3475,33 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
   // Viên "chênh lệch" màu theo mức: <5tr tím · <10tr cam · <30tr xanh dương · <50tr xanh đậm · còn lại xanh lá · âm đỏ
+  // Chênh lệch từ 30 tr nhấp nháy – tiền càng lớn nháy càng nhanh / sáng / phồng mạnh (CSS chèn vào trang CRM)
+  function blinkCss() {
+    if (document.getElementById('dg-diff-blink')) return;
+    const st = document.createElement('style');
+    st.id = 'dg-diff-blink';
+    st.textContent = `
+      @keyframes dgBlink1 { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.0); } 50% { box-shadow: 0 0 6px 1px rgba(22,163,74,.55); } }
+      @keyframes dgBlink2 { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.0); transform: scale(1); } 50% { box-shadow: 0 0 9px 2px rgba(22,163,74,.7); transform: scale(1.05); } }
+      @keyframes dgBlink3 { 0%,100% { box-shadow: 0 0 0 0 rgba(234,88,12,.0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 12px 3px rgba(234,88,12,.8); transform: scale(1.1); filter: brightness(1.12); } }
+      @keyframes dgBlink4 { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 16px 5px rgba(220,38,38,.9); transform: scale(1.16); filter: brightness(1.25) saturate(1.3); } }
+      .dg-blink1 { animation: dgBlink1 2s ease-in-out infinite; }
+      .dg-blink2 { animation: dgBlink2 1.3s ease-in-out infinite; }
+      .dg-blink3 { animation: dgBlink3 .9s ease-in-out infinite; }
+      .dg-blink4 { animation: dgBlink4 .55s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) { .dg-blink1, .dg-blink2, .dg-blink3, .dg-blink4 { animation: none; } }`;
+    document.head.append(st);
+  }
+  const blinkLevel = (v) => (v >= 200e6 ? 4 : v >= 100e6 ? 3 : v >= 50e6 ? 2 : v >= 30e6 ? 1 : 0);
+
   function diffPill(q, wait = false) {
     const v = q ? diffVal(q) : null;
     if (q?.noSheet) return '<span style="color:#b91c1c;font-weight:800" title="Có dòng giá giấy tấm 0đ/m2">😡</span>';
     if (v != null) {
       const [fg, bg] = v < 0 ? ['#b91c1c', '#fee2e2'] : v < 5e6 ? ['#7e22ce', '#f3e8ff'] : v < 10e6 ? ['#c2410c', '#ffedd5'] : v < 30e6 ? ['#2563eb', '#dbeafe'] : v < 50e6 ? ['#1e3a8a', '#c7d2fe'] : ['#15803d', '#dcfce7'];
-      return `<span style="display:inline-block;font-weight:800;color:${fg};background:${bg};border-radius:999px;padding:0 8px;white-space:nowrap;font-variant-numeric:tabular-nums">${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>`;
+      const lv = blinkLevel(v);
+      if (lv) blinkCss();
+      return `<span${lv ? ` class="dg-blink${lv}"` : ''} style="display:inline-block;font-weight:800;color:${fg};background:${bg};border-radius:999px;padding:0 8px;white-space:nowrap;font-variant-numeric:tabular-nums">${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>`;
     }
     if (q && q.amount === 0 && q.kinds?.length) return '<span style="color:#94a3b8" title="Báo giá chưa cho giá (0đ) – chưa tính được chênh lệch">–</span>';
     if (wait || (q && (q.kinds?.length || q.offset))) return '<span style="color:#d97706" title="Đang đọc ngầm báo giá để tính chênh lệch">⏳</span>';
