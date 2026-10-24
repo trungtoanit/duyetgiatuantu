@@ -3468,7 +3468,25 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
       tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span data-dg-miss="day" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
-      tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`);
+      tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`) +
+      // Dự báo cả tháng: chênh lệch hiện tại ÷ ngày làm việc đã qua × ngày làm việc của tháng (trừ Chủ nhật)
+      (() => {
+        const y = mvn.getUTCFullYear();
+        const mo = mvn.getUTCMonth();
+        const dim = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+        const isWork = (d) => new Date(Date.UTC(y, mo, d)).getUTCDay() !== 0;
+        let total = 0;
+        let done = 0;
+        for (let d = 1; d <= dim; d++) {
+          if (!isWork(d)) continue;
+          total++;
+          if (d <= mvn.getUTCDate()) done++;
+        }
+        if (!mDn || !done) return '';
+        const fc = (mSum / done) * total;
+        return tile('🔮', `Dự báo T${mo + 1}`, `${fc < 0 ? '−' : ''}${big(Math.abs(fc))}`, fc < 0 ? '#b91c1c' : '#0e7490', fc < 0 ? '#fef2f2' : '#ecfeff', fc < 0 ? '#fecaca' : '#a5f3fc',
+          `Dự báo chênh lệch tháng ${mo + 1}: ${money(Math.round(mSum))} ÷ ${done} ngày làm việc đã qua × ${total} ngày làm việc trong tháng (trừ Chủ nhật) = ${money(Math.round(fc))}`);
+      })();
     if (box.dataset.h !== html) {
       box.dataset.h = html;
       box.innerHTML = html;
