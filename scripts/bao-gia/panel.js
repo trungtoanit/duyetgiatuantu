@@ -2162,6 +2162,40 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         openAddAmount(t, idx, [...btns, plus]);
       });
       box.append(plus);
+      // ⟲ Giá gần nhất: lấy cột "Giá gần nhất" của từng dòng điền vào "Giá thực bán" (dòng giá gần nhất = 0 thì bỏ qua)
+      const last = document.createElement('button');
+      last.type = 'button';
+      last.textContent = '⟲ Gần nhất';
+      last.title = 'Áp "Giá gần nhất" vào giá thực bán của các dòng (dòng chưa có giá gần nhất giữ nguyên) – chưa lưu, bấm Cập nhật để lưu';
+      last.setAttribute('style', 'cursor:pointer;font-size:11px;font-weight:800;padding:0 7px;border-radius:999px;border:1px solid #fde68a;background:#fffbeb;color:#b45309;line-height:18px;white-space:nowrap;');
+      for (const ev of ['mousedown', 'mouseup', 'pointerdown']) last.addEventListener(ev, (e) => e.stopPropagation());
+      last.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (nudging) return;
+        const lIdx = [...t.querySelectorAll('thead th')].findIndex((x) => /^Giá gần nhất/i.test(x.innerText.trim()));
+        if (lIdx < 0) return alert('Không thấy cột "Giá gần nhất".');
+        nudging = true;
+        const all = [...btns, plus, last];
+        all.forEach((b) => (b.disabled = true));
+        let n = 0;
+        try {
+          for (const tr of [...t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row'))) {
+            const v = Number(String(tr.cells[lIdx]?.innerText || '').replace(/[^\d]/g, '')) || 0;
+            const cell = tr.cells[idx];
+            if (!v || !cell) continue;
+            await setCellPrice(cell, v);
+            n++;
+            await sleep(150);
+          }
+        } finally {
+          nudging = false;
+          all.forEach((b) => (b.disabled = false));
+        }
+        last.textContent = `✓ ${n} dòng`;
+        setTimeout(() => (last.textContent = '⟲ Gần nhất'), 2500);
+      });
+      box.append(last);
       th.append(box);
     }
   }
