@@ -301,13 +301,25 @@
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
       tr('đã dán ảnh');
       await sleep(1500);
-      if (job.draft) return setStatus(id, { ...job, image: null, status: 'sent', drafted: true, doneAt: Date.now(), via: used });
-      // tự gửi: bấm nút gửi trong khung xem trước ảnh nếu có, không thì Enter
-      const sendBtn = [...document.querySelectorAll('[data-translate-inner="STR_SEND"], [title="Gửi"], button')].find((b) => visible(b) && /^Gửi$/i.test((b.innerText || '').trim()));
-      if (sendBtn) sendBtn.click();
-      else pressSend(el);
-      await sleep(1500);
-      return setStatus(id, { ...job, image: null, status: 'sent', doneAt: Date.now(), via: used });
+      if (!job.draft) {
+        // tự gửi: bấm nút gửi trong khung xem trước ảnh nếu có, không thì Enter
+        const sendBtn = [...document.querySelectorAll('[data-translate-inner="STR_SEND"], [title="Gửi"], button')].find((b) => visible(b) && /^Gửi$/i.test((b.innerText || '').trim()));
+        if (sendBtn) sendBtn.click();
+        else pressSend(el);
+        await sleep(2000);
+      }
+      // Kèm câu chữ (vd. "Khách của ai xem xét thúc khách kéo đơn về…") vào ô soạn ngay sau ảnh
+      if (job.caption) {
+        const box = chatInput() || el;
+        await pasteText(box, job.caption, '', tr);
+        tr('đã điền câu kèm ảnh');
+        if (!job.draft) {
+          await sleep(500);
+          pressSend(chatInput() || box);
+          await sleep(1200);
+        }
+      }
+      return setStatus(id, { ...job, image: null, status: 'sent', drafted: !!job.draft, doneAt: Date.now(), via: used });
     }
     const how = await pasteText(chatInput() || input, job.text, job.html, tr);
     const rich = document.querySelector('#richInput');

@@ -3119,7 +3119,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
-    keep[`${Date.now()}-team`] = { draft: lsGet('dgZaloDraft') !== '0', to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, status: 'pending', at: Date.now(), team: true };
+    keep[`${Date.now()}-team`] = { draft: lsGet('dgZaloDraft') !== '0', to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     try {
       await navigator.clipboard.writeText(text);
