@@ -2543,7 +2543,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
   function crmTagCss() {
     if (document.getElementById('dg-tagcol-css') || !root) return;
-    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|dl-hotbadge)([.:][\w-]+)*\s*$/;
+    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|dl-hotbadge)([.:][\w-]+)*\s*$/;
     let css = '';
     for (const st of root.querySelectorAll('style')) {
       for (const r of st.sheet?.cssRules || []) {
@@ -2564,6 +2564,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['offset', '🟪', 'Offset', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
     ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
+    ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
     ['promise', '🤝', 'Hứa lên đơn', '#d97706', (q, c) => promiseInfo(q, c)],
     ['contract', '📝', 'Hợp đồng', '#0284c7', (q, c) => contractInfo(c)],
     ['sample', '✂️', 'Cắt mẫu', '#db2777', (q, c) => sampleInfo(c)],
@@ -2781,7 +2782,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const q = code && byCode[code];
         const c = q && renderCtx.comments?.[q.id];
         const hot = q && renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c);
-        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
+        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
         if (td.dataset.k !== `${code}|${html.length}`) {
           td.dataset.k = `${code}|${html.length}`;
           // 1 dòng, dài quá thì "…"; rê chuột vào ô thấy đủ các nhãn
@@ -4139,6 +4140,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .bok { margin-left: 6px; display: inline-block; background: #dcfce7; color: #166534; border: 1px solid #86efac; border-radius: 999px; padding: 0 9px;
       font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .fchip.green { --c: #16a34a; --bg: #dcfce7; }
+    .byr { margin-left: 6px; display: inline-block; background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
+    .it-main .byr { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .bok.reo { background: #e0f2fe; color: #075985; border-color: #7dd3fc; }
     .it-main .bok { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .nosheet { margin-left: 6px; display: inline-block; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 999px; padding: 0 9px;
@@ -5453,7 +5456,54 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   ];
   // Bình luận / tên cơ hội đã nhắc % hoa hồng cho thu mua chưa
   const BUYER_PCT_RE = /hoa\s*hồng|(^|[^\p{L}])hh\s*\d|chi\s*(hh|hoa|\d+\s*%)|%\s*(cho\s*)?(thu\s*mua|tm|người\s*mua|mua\s*hàng)|(thu\s*mua|người\s*mua)\s*\d+(?:[.,]\d+)?\s*%|chiết\s*khấu|ck\s*\d/iu;
+  // % / tiền cho thu mua đọc từ tên cơ hội + bình luận: "hh 2%", "hoa hồng 2%", "chi 500đ", "thu mua 1%", "ck 3%"
+  const BUYER_VAL_RE = /(?:hoa\s*hồng|(?<![\p{L}])hh|chi(?:\s*(?:hh|hoa\s*hồng))?|cho\s*thu\s*mua|thu\s*mua|(?<![\p{L}])tm|chiết\s*khấu|(?<![\p{L}])ck)(?:\s*(?:thu\s*mua|tm))?\s*[:=(]?\s*(\d+(?:[.,]\d+)?)\s*(%|đ|k|ngàn|nghìn|vnđ)/iu;
+  const BUYER_VAL_RE2 = /(\d+(?:[.,]\d+)?)\s*(%|đ|k)\s*(?:\/\s*[\p{L}]+\s*)?(?:cho\s*)?(?:thu\s*mua|người\s*mua|(?<![\p{L}])tm(?![\p{L}]))/iu;
+  function buyerHit(q, c) {
+    const pick = (text) => {
+      const m = String(text || '').match(BUYER_VAL_RE) || String(text || '').match(BUYER_VAL_RE2);
+      if (!m) return null;
+      const unit = /k|ngàn|nghìn/i.test(m[2]) ? '.000đ' : m[2] === '%' ? '%' : 'đ';
+      return `${m[1].replace('.', ',')}${unit}`.replace(',000.000đ', '.000đ');
+    };
+    let best = null;
+    const walk = (t) => {
+      const v = pick(t.text);
+      if (v && (!best || t.createdAt > best.at)) best = { val: v, at: t.createdAt, by: t.staff?.name, text: t.text, code: q?.code };
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    if (!best) {
+      const v = pick(q?.name);
+      if (v) best = { val: v, at: q?.createdAt || 0, by: '', text: q?.name, code: q?.code };
+    }
+    return best;
+  }
+  // Theo từng khách: % thu mua mới nhất ghi nhận ở bất kỳ báo giá nào của khách
+  const buyerByCust = { q: null, c: null, map: new Map() };
+  function custBuyer(q) {
+    if (buyerByCust.q !== renderCtx.quotes || buyerByCust.c !== renderCtx.comments) {
+      buyerByCust.q = renderCtx.quotes;
+      buyerByCust.c = renderCtx.comments;
+      buyerByCust.map = new Map();
+      for (const x of Object.values(renderCtx.quotes || {})) {
+        const k = custKey(x);
+        if (!k) continue;
+        const h = buyerHit(x, renderCtx.comments?.[x.id]);
+        if (h && (!buyerByCust.map.get(k) || h.at > buyerByCust.map.get(k).at)) buyerByCust.map.set(k, h);
+      }
+    }
+    return buyerByCust.map.get(custKey(q)) || null;
+  }
+  const buyerInfo = (q, c) => buyerHit(q, c) || custBuyer(q);
+  const buyerTag = (q, c) => {
+    const h = buyerInfo(q, c);
+    if (!h) return '';
+    const other = h.code && h.code !== q?.code;
+    return ` <span class="byr" title="${esc(`${other ? `Từ ${h.code} cùng khách · ` : ''}${h.by ? `${h.by}: ` : ''}${h.text || ''}`.slice(0, 300))}">🤝 Thu mua ${esc(h.val)}${other ? ' *' : ''}</span>`;
+  };
   function buyerPctInfo(q, c) {
+    if (buyerInfo(q, c)) return true;
     if (BUYER_PCT_RE.test(q?.name || '')) return true;
     let hit = false;
     const walk = (t) => {
@@ -7447,7 +7497,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const sg = suggests[qid];
       const last = lastComment(c);
       const mode = followMode(q, c);
-      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
+      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
       current = `
         <div class="side-info">
           <div class="si-name">${esc(q?.name || '')}</div>
@@ -7504,6 +7554,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       sample: ({ c }) => sampleInfo(c),
       contract: ({ c }) => contractInfo(c),
       bossok: ({ q, c }) => bossOkInfo(q, c),
+      buyer: ({ q, c }) => !!buyerInfo(q, c),
       nosheet: ({ q }) => !!q?.noSheet,
       nocmt: ({ c }) => !c?.threads?.length,
       unread: ({ q }) => q?.isRead === false,
@@ -7555,6 +7606,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ]],
         ['Tín hiệu khách', [
           ['tgt', 'green', '💲', 'Khách cho giá', cnt(FILTERS.tgt)],
+          ['buyer', 'violet', '🤝', 'Thu mua %', cnt(FILTERS.buyer)],
           ['promise', 'amber', '🤝', 'Hứa lên đơn', cnt(FILTERS.promise)],
           ['bossok', 'green', '✅', 'Lấy đơn', cnt(FILTERS.bossok)],
           ['contract', 'sky', '📝', 'Hợp đồng', cnt(FILTERS.contract)],
@@ -7621,7 +7673,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <span class="it-no">${i + 1}</span>
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-cust">${custTag(q).trim()}${occ > 1 ? `<i class="kh-occ" title="Khách này xuất hiện lần thứ ${occ} trong bảng (đã có báo giá phía trên)">${occ}</i>` : ''}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
@@ -8976,7 +9028,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         i + 1,
         q?.createdAt ? new Date(q.createdAt * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
         q?.code || c?.code || '',
-        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
+        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${buyerTag(q, c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.customer?.code || '',
         q?.customer?.name || '',
         q?.name || '',
