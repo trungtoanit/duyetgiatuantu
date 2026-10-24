@@ -3243,7 +3243,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Đơn (ngày đang xem) chưa có chênh lệch → mở ngầm báo giá để tính (mỗi lượt tối đa 2 báo giá, 1 báo giá thử lại sau 3 giờ)
   let dayDiffBusy = false;
   async function fillDayDiffs() {
-    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || collect.running || !MY_ADMIN || (!state.dayOrders && !state.misaNeed?.length)) return;
+    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || (collect.running && !state.diffFocus) || !MY_ADMIN || (!state.dayOrders && !state.misaNeed?.length)) return;
     const [d0, d1] = kpiDayRange();
     const tried = JSON.parse(lsGet('dgDayDiffTry') || '{}');
     const byCode = renderCtx.byCode || {};
@@ -3254,7 +3254,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         return q ? diffVal(q) == null && !q.noSheet && !(q.amount === 0 && q.kinds?.length) : !!o.qid;
       })
       // ngày đang xem trước, rồi đơn mới nhất
-      .sort((a, b) => (b.at > 1e12) - (a.at > 1e12) || (b.at >= d0 && b.at < d1) - (a.at >= d0 && a.at < d1) || b.at - a.at)
+      .sort((a, b) => !!state.diffFocus?.has(b.bg) - !!state.diffFocus?.has(a.bg) || (b.at > 1e12) - (a.at > 1e12) || (b.at >= d0 && b.at < d1) - (a.at >= d0 && a.at < d1) || b.at - a.at)
       .slice(0, 3);
     if (need.length && !tabLock('dgDayDiffLock', 120e3)) return;
     if (!need.length) return;
@@ -3309,6 +3309,84 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const d0 = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3 - (state.kpiDay || 0) * 86400e3;
     return [d0, d0 + 86400e3];
   };
+  // Bấm ⏳ ở ô số liệu: danh sách đơn chưa có chênh lệch (ngày / tháng đang xem) + đọc ngầm tính tiếp liên tục khi hộp đang mở
+  function missDiffList(scope) {
+    const [d0, d1] = kpiDayRange();
+    const dv = new Date(d0 + 7 * 3600e3);
+    const from = scope === 'month' ? Date.UTC(dv.getUTCFullYear(), dv.getUTCMonth(), 1) - 7 * 3600e3 : d0;
+    const byCode = renderCtx.byCode || {};
+    return Object.values(state.dayOrders || {})
+      .filter((o) => o?.at >= from && o.at < d1 && !o.cancel)
+      .map((o) => ({ ...o, q: o.bg ? byCode[o.bg] : null }))
+      .filter((o) => !(o.q && !o.q.noSheet && diffVal(o.q) != null))
+      .sort((a, b) => b.at - a.at);
+  }
+  function openMissDiff(scope) {
+    document.getElementById('dg-miss')?.remove();
+    const tried = () => JSON.parse(lsGet('dgDayDiffTry') || '{}');
+    // mở hộp = tính lại ngay các đơn này (bỏ thời gian chờ 3 giờ), ưu tiên trước
+    const t0 = tried();
+    const first = missDiffList(scope);
+    for (const o of first) if (o.bg) delete t0[o.bg];
+    lsSet('dgDayDiffTry', JSON.stringify(t0));
+    state.diffFocus = new Set(first.map((o) => o.bg).filter(Boolean));
+    lsSet('dgDayDiffLock', JSON.stringify({ tab: TAB_ID, at: Date.now() })); // tab đang mở hộp nhận việc đọc
+    const box = document.createElement('div');
+    box.id = 'dg-miss';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.35);display:grid;place-items:center;font-family:inherit');
+    box.innerHTML = `<div style="width:min(760px,94vw);max-height:84vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:linear-gradient(90deg,#fff7ed,#fef3c7);border-bottom:1px solid #fde68a">
+        <b style="font-size:15px">⏳ Đơn chưa tính chênh lệch – ${scope === 'month' ? 'cả tháng' : 'ngày đang xem'}</b><span data-st style="font-size:12px;color:#92400e"></span>
+        <button data-x style="margin-left:auto;all:unset;cursor:pointer;font-size:20px;color:#64748b;padding:0 6px">×</button></div>
+      <div data-l style="overflow:auto;padding:8px 12px"></div>
+      <div style="padding:8px 16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">Hộp đang mở: đọc ngầm liên tục từng báo giá (ưu tiên các đơn này). Đóng hộp vẫn tiếp tục chậm hơn ở chế độ nền.</div></div>`;
+    document.body.append(box);
+    const close = () => {
+      clearInterval(tm);
+      state.diffFocus = null;
+      box.remove();
+    };
+    box.addEventListener('click', (e) => {
+      if (e.target === box || e.target.closest('[data-x]')) close();
+    });
+    const why = (o) => {
+      if (state.diffReading?.bg === o.bg) return `<span style="color:#2563eb;font-weight:700"><i class="dg-spin"></i> đang đọc · ${esc(state.diffReading.step || '')}</span>`;
+      if (!o.bg) return '<span style="color:#94a3b8">đơn không gắn báo giá</span>';
+      if (o.q?.noSheet) return '<span style="color:#b91c1c">😡 chưa có giá giấy tấm</span>';
+      if (o.q && o.q.amount === 0) return '<span style="color:#94a3b8">BG 0đ – chưa cho giá</span>';
+      if (!o.q && !o.qid) return '<span style="color:#94a3b8">chưa có mã báo giá để mở</span>';
+      const t = tried()[o.bg];
+      return t ? `<span style="color:#c2410c">đã thử ${new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – chưa ra số</span>` : '<span style="color:#d97706">⏳ chờ đọc</span>';
+    };
+    const draw = () => {
+      if (!document.getElementById('dg-spin-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-spin-css';
+        st.textContent = '@keyframes dgSpin{to{transform:rotate(360deg)}}.dg-spin{display:inline-block;width:12px;height:12px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:dgSpin .8s linear infinite;vertical-align:-2px}';
+        document.head.append(st);
+      }
+      const list = missDiffList(scope);
+      box.querySelector('[data-st]').textContent = list.length ? `còn ${list.length} đơn` : '✅ đã tính xong';
+      box.querySelector('[data-l]').innerHTML = list.length
+        ? `<table style="width:100%;border-collapse:collapse;font-size:12.5px">${list
+            .map((o) => {
+              const id = o.q?.id || o.qid;
+              return `<tr style="border-bottom:1px solid #f1f5f9${state.diffReading?.bg === o.bg ? ';background:#eff6ff' : ''}"><td style="padding:5px 6px;white-space:nowrap;color:#64748b">${new Date(o.at + 7 * 3600e3).toLocaleString('vi-VN', { timeZone: 'UTC', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                <td style="padding:5px 6px;font-weight:700">${esc(o.dh || '')}</td>
+                <td style="padding:5px 6px">${id && o.bg ? `<a href="/bao-gia/update/${id}" target="_blank" style="font-weight:800;color:#1d4ed8">${esc(o.bg)}</a>` : esc(o.bg || '–')}</td>
+                <td style="padding:5px 6px;text-align:right;font-weight:700;color:#047857;white-space:nowrap">${money(o.total || 0)}</td>
+                <td style="padding:5px 6px">${why(o)}</td></tr>`;
+            })
+            .join('')}</table>`
+        : '<div style="padding:20px;text-align:center;color:#15803d;font-weight:700">✅ Mọi đơn đã có chênh lệch</div>';
+    };
+    draw();
+    const tm = setInterval(() => {
+      if (!box.isConnected) return clearInterval(tm);
+      fillDayDiffs().catch(() => {});
+      draw();
+    }, 2000);
+  }
   // 3 ô số liệu cạnh hàng tab trạng thái: Số đơn · Doanh thu · Tổng chênh lệch (theo các dòng đang hiện)
   function crmKpiTiles(wrap, k) {
     const nav = [...document.querySelectorAll('.ant-tabs-nav')].find((x) => /Tất cả/.test(x.innerText) && /Thành công|Chờ xin giá/.test(x.innerText));
@@ -3320,6 +3398,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       box.setAttribute('style', 'display:flex;gap:10px;align-items:center;margin-left:16px;flex:none');
       nav.append(box);
       box.addEventListener('click', (e) => {
+        const ms = e.target.closest('[data-dg-miss]');
+        if (ms) {
+          e.preventDefault();
+          e.stopPropagation();
+          return openMissDiff(ms.dataset.dgMiss);
+        }
         const b = e.target.closest('[data-dg-kd]');
         if (!b || b.disabled) return;
         e.preventDefault();
@@ -3377,8 +3461,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
-      tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span style="color:#d97706" title="Đang đọc ngầm để tính">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
-      tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span style="color:#d97706" title="Đang đọc ngầm để tính">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`);
+      tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span data-dg-miss="day" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
+      tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`);
     if (box.dataset.h !== html) {
       box.dataset.h = html;
       box.innerHTML = html;
