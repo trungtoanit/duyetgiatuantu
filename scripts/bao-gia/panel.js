@@ -2959,7 +2959,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['nosheet', '😡', 'Chưa có giá GT', '#dc2626', (q) => q.noSheet],
     ['zero', '⚠️', 'Chưa cho giá', '#dc2626', (q) => noPrice(q)],
   ];
-  function crmFilterBar(wrap, counts, total, staffN = {}) {
+  // Mức chênh lệch (màu giống cột Chênh lệch); BG 0đ → không xếp mức
+  const DIFF_LV = [
+    ['neg', '🔻 Âm', '#b91c1c'], ['lt5', '< 5tr', '#7e22ce'], ['lt10', '5–10tr', '#c2410c'], ['lt30', '10–30tr', '#2563eb'],
+    ['lt50', '30–50tr', '#1e3a8a'], ['ge50', '≥ 50tr', '#15803d'], ['none', '⏳ Chưa tính', '#94a3b8'],
+  ];
+  function diffLevel(q) {
+    if (!(Number(q?.amount) > 0)) return null;
+    const v = q.noSheet ? null : diffVal(q);
+    if (v == null) return 'none';
+    return v < 0 ? 'neg' : v < 5e6 ? 'lt5' : v < 10e6 ? 'lt10' : v < 30e6 ? 'lt30' : v < 50e6 ? 'lt50' : 'ge50';
+  }
+  function crmFilterBar(wrap, counts, total, staffN = {}, dCounts = {}) {
+    const selD = lsGet('dgCrmD') || '';
     const sel = lsGet('dgCrmF') || '';
     const selS = lsGet('dgCrmS') || '';
     let bar = document.getElementById('dg-crmf');
@@ -2971,6 +2983,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       st0.textContent = '#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}';
       bar.append(st0);
       bar.addEventListener('click', (e) => {
+        const dl = e.target.closest('[data-dl]');
+        if (dl) {
+          lsSet('dgCrmD', lsGet('dgCrmD') === dl.dataset.dl ? '' : dl.dataset.dl);
+          return crmListTags();
+        }
         const st = e.target.closest('[data-s]');
         if (st) {
           lsSet('dgCrmS', lsGet('dgCrmS') === st.dataset.s ? '' : st.dataset.s);
@@ -2989,7 +3006,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;flex:0 0 100px;width:100px">👤 NVKD:</b>${Object.entries(staffN)
         .sort((a, b) => b[1] - a[1])
         .map(([n, k]) => `<span data-s="${esc(n)}" title="${esc(n)}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 10px 1px 2px;font-weight:700;border:1px solid ${selS === n ? '#1e293b' : '#e2e8f0'};${selS === n ? 'background:#1e293b;color:#fff' : 'background:#fff;color:#334155'}">${avatarHtml(n, 18)}${esc(shortName(n))} <b style="opacity:.7">${k}</b></span>`)
-        .join('')}${selS ? '<span data-s="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc NVKD</span>' : ''}</div>`;
+        .join('')}${selS ? '<span data-s="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc NVKD</span>' : ''}</div>
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;flex:0 0 100px;width:100px">📈 Chênh lệch:</b>${DIFF_LV.filter(([k]) => dCounts[k] || selD === k)
+        .map(([k, label, col]) => `<span data-dl="${k}" style="cursor:pointer;border-radius:999px;padding:2px 10px;font-weight:800;border:1px solid ${col}55;${selD === k ? `background:${col};color:#fff` : `background:${col}14;color:${col}`}">${label} <b style="opacity:.75">${dCounts[k] || 0}</b></span>`)
+        .join('')}${selD ? '<span data-dl="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc chênh lệch</span>' : ''}</div>`;
     if (bar.dataset.h !== html) {
       bar.dataset.h = html;
       bar.innerHTML = `<style>#dg-crmf .ava{border-radius:50%;object-fit:cover;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800}</style>${html}`;
@@ -3704,7 +3724,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const selF = CRM_F.find((f) => f[0] === sel)?.[4];
       const counts = {};
       const staffN = {};
+      const dCounts = {};
       const selS = lsGet('dgCrmS') || '';
+      const selD = lsGet('dgCrmD') || '';
       let total = 0;
       for (const tr of wrap.querySelectorAll('tbody tr')) {
         if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
@@ -3770,9 +3792,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const who = q ? staffOf(q, c) : '';
         if (who && !isExcluded(who)) staffN[who] = (staffN[who] || 0) + 1;
         if (selS && who !== selS) match = false;
+        // Lọc theo mức chênh lệch (cùng màu với cột Chênh lệch)
+        const lv = q ? diffLevel(q) : null;
+        if (match && lv) dCounts[lv] = (dCounts[lv] || 0) + 1;
+        if (selD && lv !== selD) match = false;
         tr.style.display = match ? '' : 'none';
       }
-      crmFilterBar(wrap, counts, total, staffN);
+      crmFilterBar(wrap, counts, total, staffN, dCounts);
       stickReq();
       // Cột "Số tiền" in đậm
       {
