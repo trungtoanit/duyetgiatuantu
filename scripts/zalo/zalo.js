@@ -183,30 +183,40 @@
     return call({ type: 'remote.push', ns: 'zaloDebug', patch: { last: { step, at: Date.now(), cands, chosen: el ? { tag: el.tagName, id: el.id, cls: String(el.className).slice(0, 120) } : null,
       foot: (foot?.outerHTML || '').slice(0, 6000), extra, w: innerWidth, h: innerHeight } } }).catch(() => {});
   }
+  // Khung soạn tin (ô nhập + thanh công cụ + nút emoji/gửi) – chỉ tìm nút gửi trong vùng này, không đụng thanh bên trái
+  function chatBox() {
+    const core = document.querySelector('#chat-input-content-id') || chatInput();
+    if (!core) return null;
+    const cr = core.getBoundingClientRect();
+    let box = core;
+    for (let p = core.parentElement; p && p !== document.body; p = p.parentElement) {
+      const r = p.getBoundingClientRect();
+      if (r.left < LEFT_COL() - 5 || r.top < cr.top - 140) break;
+      box = p;
+    }
+    return box;
+  }
+  function findSend() {
+    const box = chatBox();
+    if (!box) return null;
+    const ok = (e) => visible(e) && !e.closest('[contenteditable="true"], [class*="leftbar"]');
+    const attrs = (e) => `${String(e.className?.baseVal ?? e.className)} ${e.getAttribute('icon') || ''} ${e.getAttribute('title') || ''} ${e.getAttribute('data-translate-title') || ''} ${e.getAttribute('data-id') || ''}`;
+    const hit = [...box.querySelectorAll('*')].find((e) => ok(e) && /send|sent|paper-plane|(^|\s)gửi(\s|$)/i.test(attrs(e)) && !/sticker|emoji|file|image|ảnh/i.test(attrs(e)));
+    if (hit) return hit.closest('[class*="btn"], [role="button"], button') || hit;
+    // dự phòng: nút ngoài cùng bên phải ở hàng dưới cùng khung soạn (bên phải nút emoji)
+    const r = box.getBoundingClientRect();
+    const leaf = [...box.querySelectorAll('i, svg, img, [class*="btn"], [role="button"], button')]
+      .filter((e) => ok(e) && !/emoji|sticker/i.test(attrs(e)))
+      .map((e) => [e, e.getBoundingClientRect()])
+      .filter(([, br]) => br.width > 8 && br.width < 64 && r.right - br.right < 60 && r.bottom - br.bottom < 60)
+      .sort((x, y) => y[1].right - x[1].right || y[1].bottom - x[1].bottom)[0]?.[0];
+    return leaf ? leaf.closest('[class*="btn"], [role="button"], button') || leaf : null;
+  }
   function pressSend(el, log = () => {}) {
-    const btn =
-      [...document.querySelectorAll('[icon*="Sent"], [icon*="send" i], [data-translate-title*="SEND"], [title="Gửi"], [title^="Gửi "], .send-btn, [class*="send-btn"], [class*="SendButton"], [data-id*="Send"]')].find(visible) ||
-      // nút mũi tên gửi ở góc dưới phải khung soạn (chế độ định dạng)
-      [...document.querySelectorAll('i, svg, [class*="send" i], [class*="Sent"]')]
-        .filter((i) => visible(i) && !i.closest('#richInput, [contenteditable="true"], .message-view, [class*="chat-item"]') && /send|sent|paper-plane/i.test(String(i.className?.baseVal ?? i.className) + (i.getAttribute('data-icon') || '') + (i.getAttribute('icon') || '')))
-        .map((i) => i.closest('button, [role="button"], [class*="btn"], div') || i)
-        .find(Boolean) ||
-      // dự phòng: nút ngoài cùng bên phải, ngang hàng nút emoji ở góc dưới khung soạn
-      (() => {
-        const ed = chatInput();
-        const box = ed?.closest('[id*="chat-input"], [class*="chat-input"], [class*="chat-box"], footer');
-        if (!box) return null;
-        const r = box.getBoundingClientRect();
-        return [...box.querySelectorAll('div, span, button, i, svg')]
-          .filter((b) => visible(b) && !b.closest('[contenteditable="true"]') && !b.children.length)
-          .map((b) => [b, b.getBoundingClientRect()])
-          .filter(([, br]) => br.width > 8 && br.width < 60 && r.right - br.right < 40 && r.bottom - br.bottom < 50)
-          .sort((a, b) => b[1].right - a[1].right)
-          .map(([b]) => b.closest('[class*="btn"], [role="button"], button') || b)[0];
-      })();
+    const btn = findSend();
     if (btn) {
       log(`bấm nút gửi: ${btn.tagName}.${String(btn.className?.baseVal ?? btn.className).slice(0, 60)} ${btn.getAttribute('title') || btn.getAttribute('icon') || ''}`);
-      for (const t of ['mousedown', 'mouseup', 'click']) btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+      for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
       return;
     }
     log('không thấy nút gửi → Enter');
@@ -216,7 +226,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.314';
+  const ZVER = '1.2.315';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -366,21 +376,21 @@
     }
     pressSend(chatInput() || input, tr);
     await sleep(1500);
-    let left = typed(chatInput());
-    if (left.length > 10) {
+    // Gửi thành công = vẫn đúng khung chat người nhận + ô soạn còn đó và đã trống
+    const sentOk = () => headerHas(used) && !!chatInput() && typed(chatInput()).length < 10;
+    if (!sentOk() && headerHas(used) && chatInput()) {
       // thử Enter trực tiếp vào ô soạn
-      const el2 = chatInput() || input;
+      const el2 = chatInput();
       el2.focus();
       for (const t of ['keydown', 'keypress', 'keyup']) el2.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       await sleep(1500);
-      left = typed(chatInput());
-      tr(`sau Enter: còn ${left.length} ký tự`);
+      tr(`sau Enter: còn ${typed(chatInput()).length} ký tự`);
     }
-    if (left.length > 10) {
-      // dò các nút trong khung soạn để biết nút gửi trông thế nào
-      const area = (chatInput() || input).closest('[id*="chat-input"], [class*="chat-input"], footer') || document.body;
-      tr(`nút quanh khung soạn: ${[...area.parentElement?.querySelectorAll('[icon], button, [title]') || []].filter(visible).map((b) => `${b.tagName}[${b.getAttribute('icon') || ''}|${b.getAttribute('title') || ''}|${String(b.className).slice(0, 40)}]`).slice(-15).join(' ')}`);
-      return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
+    if (!sentOk()) {
+      const box = chatBox();
+      call({ type: 'remote.push', ns: 'zaloDebug', patch: { sendbox: { at: Date.now(), html: (box?.outerHTML || '').replace(/<div[^>]*data-component="rtf-block"[\s\S]*?<\/div>/g, '').slice(0, 12000) } } }).catch(() => {});
+      tr(`chưa gửi được · đúng khung=${headerHas(used)} · ô soạn=${!!chatInput()}`);
+      return fail('Đã dán nội dung nhưng chưa gửi được – bấm nút gửi trong Zalo.');
     }
     tr('đã gửi');
     await markSent(job, false);
