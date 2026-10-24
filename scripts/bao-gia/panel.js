@@ -3117,6 +3117,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     window.addEventListener('scroll', stickReq, true);
     window.addEventListener('resize', stickReq);
   }
+  // 3 ô số liệu cạnh hàng tab trạng thái: Số đơn · Doanh thu · Tổng chênh lệch (theo các dòng đang hiện)
+  function crmKpiTiles(wrap, k) {
+    const nav = [...document.querySelectorAll('.ant-tabs-nav')].find((x) => /Tất cả/.test(x.innerText) && /Thành công|Chờ xin giá/.test(x.innerText));
+    if (!nav) return;
+    let box = nav.querySelector(':scope > [data-dg-kpi]');
+    if (!box) {
+      box = document.createElement('div');
+      box.setAttribute('data-dg-kpi', '1');
+      box.setAttribute('style', 'display:flex;gap:10px;align-items:center;margin-left:16px;flex:none');
+      nav.append(box);
+    }
+    const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
+    const tile = (ic, lab, val, fg, bg, bd, tip) =>
+      `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:112px;padding:5px 14px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+        <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
+    const html =
+      tile('📄', 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', 'Số báo giá đang hiện (theo bộ lọc)') +
+      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Tổng Số tiền các báo giá đang hiện: ${money(k.sum || 0)}`) +
+      tile('📈', 'Tổng chênh lệch', k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch ${k.dn || 0} báo giá đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
+    if (box.dataset.h !== html) {
+      box.dataset.h = html;
+      box.innerHTML = html;
+    }
+  }
   function crmListTags() {
     if (!IS_TOP || !root || !/^\/bao-gia\/?$/.test(location.pathname) || !renderCtx.quotes) return;
     try {
@@ -3271,6 +3295,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const txt = `Σ ${moneyShortG(sum) || '0đ'}`;
           if (sp.textContent !== txt) sp.textContent = txt;
           sp.title = `Tổng ${n} báo giá đang hiện: ${money(sum)}`;
+          state.crmKpi = { n, sum };
         }
       }
       // Cột "Chênh lệch" (giống extension) ngay sau "Số tiền": Flexo = BG − giấy tấm · Offset = BG − NVL; màu theo mức
@@ -3332,6 +3357,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             ds.style.background = dsum < 0 ? '#fee2e2' : '#dcfce7';
           }
           if (ds) ds.title = `Tổng chênh lệch ${dn} báo giá đang hiện (đã tính được)`;
+          crmKpiTiles(wrap, { ...(state.crmKpi || {}), dsum, dn });
         }
       }
       // Cột "Sale": tên gọn (3 chữ → chữ cuối, 4 chữ trở lên → 2 chữ cuối), rê chuột thấy tên đầy đủ
