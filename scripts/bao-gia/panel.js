@@ -2999,12 +2999,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 
   // 📣 Nhắc cả đội: gom deal gợi ý chốt đơn theo NVKD (chỉ mã khách) → việc gửi Zalo vào nhóm "Sale Nội Bộ - Tuấn Tú"
   const TEAM_GROUP = 'Sale Nội Bộ - Tuấn Tú';
-  async function teamRemind(btn) {
+  function buildTeamMsg() {
     const items = state.teamItems || [];
-    if (!items.length) return;
-    // mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ)
-    const zal = renderCtx.zaloAlive;
-    if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
     // Mỗi khách 1 lần (cộng giá trị các báo giá gợi ý của khách đó), gom theo NVKD
     const byCust = new Map();
     for (const { q } of items) {
@@ -3026,6 +3022,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const head = 'Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
     const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n');
     const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('')}`;
+    return { text, html, n: byCust.size };
+  }
+  // Ca nhắc: sáng (trước 12h) / chiều (từ 12h), thứ 2 → thứ 7 (giờ VN)
+  function teamSlot() {
+    const vn = new Date(Date.now() + 7 * 3600e3);
+    const dow = vn.getUTCDay(); // 0 = CN
+    if (dow === 0) return null;
+    return `${vn.toISOString().slice(0, 10)}-${vn.getUTCHours() < 12 ? 'sang' : 'chieu'}`;
+  }
+  async function teamRemind(btn) {
+    if (!(state.teamItems || []).length) return;
+    // mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ)
+    const zal = renderCtx.zaloAlive;
+    if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
+    const { text, html } = buildTeamMsg();
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
@@ -3034,9 +3045,40 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     try {
       await navigator.clipboard.writeText(text);
     } catch {}
-    btn.textContent = '✅ Đã soạn – mở Zalo';
-    setTimeout(() => (btn.textContent = '📣 Nhắc cả đội'), 4000);
+    const slot = teamSlot();
+    if (slot) kvMerge('teamRemind', { [slot]: { at: Date.now(), by: meName } }).catch(() => {});
+    document.getElementById('dg-team-modal')?.remove();
+    if (btn) btn.textContent = '✅ Đã soạn – mở Zalo';
+    if (btn) setTimeout(() => (btn.textContent = '📣 Nhắc cả đội'), 4000);
   }
+  // Tự hiện hộp "Nhắc cả đội" (quản trị): thứ 2–7, sáng 1 lần + chiều 1 lần; ca đó đã gửi (ở bất kỳ máy nào) thì thôi
+  async function teamRemindPopup(force = false) {
+    if (!IS_TOP || !MY_ADMIN || !(state.teamItems || []).length || document.getElementById('dg-team-modal')) return;
+    const slot = teamSlot() || 'cn';
+    if (!force) {
+      if (slot === 'cn' || lsGet(`dgTeamShown-${slot}`)) return;
+      if ((await kvGet('teamRemind'))[slot]) return;
+      lsSet(`dgTeamShown-${slot}`, '1');
+    }
+    const { html, n } = buildTeamMsg();
+    const m = document.createElement('div');
+    m.id = 'dg-team-modal';
+    m.innerHTML = `<div style="position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;animation:dgLbIn .2s ease">
+      <div style="background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.35);width:min(760px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px">
+        <div style="padding:16px 20px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px"><span style="font-size:26px">📣</span><div><b style="font-size:17px">Nhắc cả đội kéo đơn về${slot === 'cn' ? '' : ` – ca ${slot.endsWith('sang') ? 'sáng' : 'chiều'}`}</b><div style="opacity:.85;font-size:12px">${n} khách đang trong Gợi ý chốt đơn · gửi vào nhóm Zalo “${esc(TEAM_GROUP)}”</div></div></div>
+        <div style="padding:14px 20px;overflow:auto;line-height:1.7;background:#f8fafc">${html}</div>
+        <div style="padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0">
+          <button data-a="later" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:8px 16px;font-weight:600">Để sau</button>
+          <button data-a="send" style="cursor:pointer;border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:8px 20px;font-weight:800">📣 Gửi vào nhóm Zalo</button></div>
+      </div></div>`;
+    document.body.append(m);
+    m.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a === 'later' || e.target === m.firstElementChild) m.remove();
+      if (a === 'send') teamRemind(null);
+    });
+  }
+  if (IS_TOP) setInterval(() => teamRemindPopup().catch(() => {}), 20000);
   // ---------- Băng vàng đầu trang CRM ("1. CÔNG TY … (xxđ) 2. …") → thay bằng danh sách 🔥 Gợi ý chốt đơn ----------
   // Ẩn nội dung gốc của CRM và chèn danh sách deal ưu tiên (bấm để mở báo giá). NVKD chỉ thấy deal của mình.
   let topHotHtml = '';
@@ -3134,7 +3176,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (tb) {
         e.preventDefault();
         e.stopPropagation();
-        return teamRemind(tb);
+        return teamRemindPopup(true); // bấm nút → hiện hộp xem trước, bấm Gửi mới mở Zalo
       }
       const a = e.target.closest?.('a[data-dg-hotlink]');
       if (!a || e.metaKey || e.ctrlKey) return;
