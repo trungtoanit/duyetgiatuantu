@@ -3027,14 +3027,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
   async function drawTeamImage() {
-    const { groups, head, val } = buildTeamMsg();
+    const { groups, val } = buildTeamMsg();
     const W = 1100, P = 36, S = 2;
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d');
     const font = (w, px) => `${w} ${px}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
     // đo chiều cao trước
     const lay = [];
-    let y = 150;
+    let y = 20; // chỉ các thẻ NVKD (không tiêu đề)
     for (const [who, cs] of groups) {
       ctx.font = font(700, 20);
       let x = P + 24, rows = 1;
@@ -3056,23 +3056,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       lay.push({ who, cs, chips, y, h });
       y += h + 16;
     }
-    const H = y + 30;
+    const H = y + 4;
     c.width = W * S;
     c.height = H * S;
     ctx.scale(S, S);
     ctx.fillStyle = '#f1f5f9';
     ctx.fillRect(0, 0, W, H);
-    const gr = ctx.createLinearGradient(0, 0, W, 0);
-    gr.addColorStop(0, '#0068ff');
-    gr.addColorStop(1, '#7c3aed');
-    ctx.fillStyle = gr;
-    ctx.fillRect(0, 0, W, 120);
-    ctx.fillStyle = '#fff';
-    ctx.font = font(800, 30);
-    ctx.fillText('📣 NHẮC CẢ ĐỘI KÉO ĐƠN VỀ', P, 52);
-    ctx.font = font(500, 18);
-    const vn = new Date(Date.now() + 7 * 3600e3);
-    ctx.fillText(`${head}  ·  ${vn.toISOString().slice(0, 10).split('-').reverse().join('/')}`, P, 92);
     const rr = (x, yy, w, h, r) => {
       ctx.beginPath();
       ctx.roundRect ? ctx.roundRect(x, yy, w, h, r) : ctx.rect(x, yy, w, h);
