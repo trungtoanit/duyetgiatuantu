@@ -3256,7 +3256,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!need.length) return;
     dayDiffBusy = true;
     try {
-      for (const o of need) {
+      for (const [ni, o] of need.entries()) {
+        state.diffReading = { bg: o.bg, step: 'mở báo giá', left: need.length - ni - 1 };
+        try { misaListDiff(); } catch {}
         tried[o.bg] = Date.now();
         lsSet('dgDayDiffTry', JSON.stringify(tried));
         let q = byCode[o.bg];
@@ -3277,16 +3279,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             await readOffsetMargins(f, q.code).catch(() => {});
             await readFlexoCost(f, q).catch(() => {});
           });
-        } else if (needOff || needFx)
+        } else if (needOff || needFx) {
+          state.diffReading.step = [needOff && 'đọc chiết giá Offset', needFx && 'đọc PO giấy tấm Flexo'].filter(Boolean).join(' + ');
           await loadInFrame(q.id, undefined, undefined, async (f) => {
             if (needOff) await readOffsetMargins(f, q.code);
             if (needFx) await readFlexoCost(f, q);
           });
+        }
+        // cập nhật ngay ô của báo giá vừa đọc
+        renderCtx.margins = await kvGet('margins');
+        renderCtx.quotes = await kvGet('quotes');
       }
       renderCtx.margins = await kvGet('margins');
       renderCtx.quotes = await kvGet('quotes');
     } finally {
       dayDiffBusy = false;
+      state.diffReading = null;
+      try { misaListDiff(); } catch {}
     }
   }
   setInterval(() => fillDayDiffs().catch(() => {}), 20000);
@@ -3391,13 +3400,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           cols[ti] ? cols[ti].after(col) : cg.append(col);
         }
       }
-      const nHead = ths.length;
+      // hàng đầu của mỗi đơn có đủ ô (hàng phụ – dòng sản phẩm thứ 2… – thiếu các ô gộp); tiêu đề có thể dư ô thanh cuộn
+      const trs = [...wrap.querySelectorAll('tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.classList.contains('ant-table-placeholder'));
+      const nFull = Math.max(0, ...trs.map((tr) => [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol')).length));
+      if (!document.getElementById('dg-spin-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-spin-css';
+        st.textContent = '@keyframes dgSpin{to{transform:rotate(360deg)}}.dg-spin{display:inline-block;width:12px;height:12px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:dgSpin .8s linear infinite;vertical-align:-2px}';
+        document.head.append(st);
+      }
       let sum = 0;
       let n = 0;
-      for (const tr of wrap.querySelectorAll('tbody tr')) {
-        if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
+      for (const tr of trs) {
         const own = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol'));
-        if (own.length < nHead) continue; // hàng phụ (dòng sản phẩm thứ 2…) của cùng đơn
+        if (own.length < nFull) continue; // hàng phụ của cùng đơn
         let td = tr.querySelector(':scope > td[data-dg-diffcol]');
         if (!td) {
           td = document.createElement('td');
@@ -3410,7 +3426,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const bg = (tr.innerText.match(/BG\d{3,}/) || [])[0];
         const q = bg && byCode[bg];
         const v0 = q && !q.noSheet ? diffVal(q) : null;
-        const h = bg ? diffPill(q, v0 == null) : '';
+        const reading = bg && state.diffReading?.bg === bg;
+        const h = reading
+          ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-weight:700;font-size:11px;white-space:nowrap" title="Đang đọc ngầm ${esc(bg)} để tính chênh lệch – ${esc(state.diffReading.step || '')}"><i class="dg-spin"></i>đang đọc</span>`
+          : bg ? diffPill(q, v0 == null) : '';
         // chưa có chênh lệch → đưa vào hàng đợi đọc ngầm
         if (bg && v0 == null && !q?.noSheet && !(q?.amount === 0 && q?.kinds?.length)) {
           const qid = q?.id || Number([...tr.querySelectorAll('a[href]')].map((a) => a.getAttribute('href').match(/\/(?:bao-gia|co-hoi)\/(?:update|view)\/(\d+)/)?.[1]).find(Boolean)) || null;
@@ -3424,6 +3443,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           sum += v0;
           n++;
         }
+      }
+      let st2 = dth.querySelector('[data-dg-dread]');
+      if (!st2) {
+        st2 = document.createElement('div');
+        st2.setAttribute('data-dg-dread', '1');
+        st2.setAttribute('style', 'font-size:10.5px;font-weight:700;color:#2563eb;white-space:nowrap;margin-top:2px');
+        dth.append(st2);
+      }
+      const rd = state.diffReading;
+      const rh = rd ? `<i class="dg-spin"></i> ${esc(rd.bg)}${rd.left ? ` · còn ${rd.left}` : ''}` : need.length ? `⏳ chờ đọc ${need.length}` : '';
+      if (st2.dataset.h !== rh) {
+        st2.dataset.h = rh;
+        st2.innerHTML = rh;
+        st2.title = rd ? `Đang đọc ngầm ${rd.bg}: ${rd.step || ''}` : '';
       }
       const ds = dth.querySelector('[data-dg-dsum]');
       const t = n ? `Σ ${Math.abs(sum) >= 1e9 ? `${(sum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(sum)}` : '';
