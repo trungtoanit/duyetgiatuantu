@@ -184,7 +184,13 @@
       foot: (foot?.outerHTML || '').slice(0, 6000), extra, w: innerWidth, h: innerHeight } } }).catch(() => {});
   }
   function pressSend(el) {
-    const btn = [...document.querySelectorAll('[icon*="Sent"], [data-translate-title*="SEND"], [title="Gửi"], .send-btn, [class*="send-btn"]')].find(visible);
+    const btn =
+      [...document.querySelectorAll('[icon*="Sent"], [icon*="send" i], [data-translate-title*="SEND"], [title="Gửi"], [title^="Gửi "], .send-btn, [class*="send-btn"], [class*="SendButton"], [data-id*="Send"]')].find(visible) ||
+      // nút mũi tên gửi ở góc dưới phải khung soạn (chế độ định dạng)
+      [...document.querySelectorAll('i.fa, svg')]
+        .filter((i) => visible(i) && /send|sent|paper-plane/i.test(String(i.className?.baseVal ?? i.className) + (i.getAttribute('data-icon') || '')))
+        .map((i) => i.closest('button, [role="button"], div'))
+        .find(Boolean);
     if (btn) return btn.click();
     const o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
     el.dispatchEvent(new KeyboardEvent('keydown', o));
@@ -201,6 +207,11 @@
     call({ type: 'remote.push', ns: 'zaloDebug', patch: { [`${runId}-${String(trace.length).padStart(2, '0')}`]: { ver: ZVER, at: Date.now(), t, hidden: document.hidden } } }).catch(() => {});
   };
   // Ghi lại deal đã hỏi (đồng bộ giữa các máy) – mỗi deal chỉ hỏi 1 lần, mỗi người 1 tin / 30 phút
+  // Tin nhắc cả đội đã gửi → lưu lần gần nhất lên máy chủ (đồng bộ mọi máy)
+  const markTeam = (job, drafted) =>
+    job.team && !drafted
+      ? kvMerge('teamRemind', { last: { at: Date.now(), slot: job.slot || '', image: !!job.image || !!job.wasImage, n: job.n || 0 }, ...(job.slot ? { [job.slot]: { at: Date.now(), sent: true } } : {}) }).catch(() => {})
+      : null;
   const markSent = (job, drafted) => (job.qid ? kvMerge('zaloSent', { [job.qid]: { to: job.to, code: job.code, at: Date.now(), drafted } }).catch(() => {}) : null);
   async function runJob(id, job) {
     trace = [];
@@ -319,6 +330,7 @@
           await sleep(1200);
         }
       }
+      await markTeam({ ...job, wasImage: true }, !!job.draft);
       return setStatus(id, { ...job, image: null, status: 'sent', drafted: !!job.draft, doneAt: Date.now(), via: used });
     }
     const how = await pasteText(chatInput() || input, job.text, job.html, tr);
@@ -339,6 +351,7 @@
     const left = typed(chatInput());
     if (left.length > 10) return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
     await markSent(job, false);
+    await markTeam(job, false);
     await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
   }
 

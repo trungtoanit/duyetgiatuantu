@@ -3112,15 +3112,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   async function teamRemind(btn, asImage = false) {
     if (!(state.teamItems || []).length) return;
-    // mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ)
-    const zal = renderCtx.zaloAlive;
-    if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
+    // chuyển sang tab Zalo ngay lúc bấm: có tab "dg-zalo" thì đưa lên trước, chưa có thì mở mới
+    try {
+      const w = window.open('', 'dg-zalo');
+      let blank = false;
+      try {
+        blank = !w || w.location.href === 'about:blank';
+      } catch {
+        blank = false; // đã là trang Zalo (khác nguồn)
+      }
+      if (w && blank) w.location.href = 'https://chat.zalo.me/';
+      w?.focus();
+    } catch {}
     const { text, html } = buildTeamMsg();
     const image = asImage ? await drawTeamImage() : null;
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
-    keep[`${Date.now()}-team`] = { draft: lsGet('dgZaloDraft') !== '0', to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
+    keep[`${Date.now()}-team`] = { draft: false, slot: teamSlot() || '', n: buildTeamMsg().n, to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     try {
       await navigator.clipboard.writeText(text);
@@ -3141,11 +3150,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       lsSet(`dgTeamShown-${slot}`, '1');
     }
     const { html, n } = buildTeamMsg();
+    state.teamLast = (await kvGet('teamRemind')).last || null;
     const m = document.createElement('div');
     m.id = 'dg-team-modal';
     m.innerHTML = `<div style="position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;animation:dgLbIn .2s ease">
       <div style="background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.35);width:min(760px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px">
-        <div style="padding:16px 20px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px"><span style="font-size:26px">📣</span><div><b style="font-size:17px">Nhắc cả đội kéo đơn về${slot === 'cn' ? '' : ` – ca ${slot.endsWith('sang') ? 'sáng' : 'chiều'}`}</b><div style="opacity:.85;font-size:12px">${n} khách đang trong Gợi ý chốt đơn · gửi vào nhóm Zalo “${esc(TEAM_GROUP)}”</div></div></div>
+        <div style="padding:16px 20px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px"><span style="font-size:26px">📣</span><div><b style="font-size:17px">Nhắc cả đội kéo đơn về${slot === 'cn' ? '' : ` – ca ${slot.endsWith('sang') ? 'sáng' : 'chiều'}`}</b><div style="opacity:.85;font-size:12px">${n} khách đang trong Gợi ý chốt đơn · gửi vào nhóm Zalo “${esc(TEAM_GROUP)}”${(() => { const l = state.teamLast; return l?.at ? ` · lần gửi gần nhất: ${new Date(l.at).toLocaleString('vi-VN')}` : ''; })()}</div></div></div>
         <div style="padding:14px 20px;overflow:auto;background:#f1f5f9;display:grid;gap:10px">
           <div style="color:#334155;font-weight:600">${esc(buildTeamMsg().head)}</div>
           ${buildTeamMsg().groups.map(([who, cs]) => {
@@ -3273,7 +3283,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (tb) {
         e.preventDefault();
         e.stopPropagation();
-        return teamRemindPopup(true); // bấm nút → hiện hộp xem trước, bấm Gửi mới mở Zalo
+        return teamRemind(tb, true); // bấm nút → chuyển thẳng sang Zalo, gửi hình + câu nhắc (không hiện hộp)
       }
       const a = e.target.closest?.('a[data-dg-hotlink]');
       if (!a || e.metaKey || e.ctrlKey) return;
