@@ -3283,7 +3283,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (tb) {
         e.preventDefault();
         e.stopPropagation();
-        return teamRemind(tb, true); // bấm nút → chuyển thẳng sang Zalo, gửi hình + câu nhắc (không hiện hộp)
+        return teamRemind(tb); // bấm nút → chuyển thẳng sang Zalo, gửi dạng chữ (có định dạng), không hiện hộp
       }
       const a = e.target.closest?.('a[data-dg-hotlink]');
       if (!a || e.metaKey || e.ctrlKey) return;
