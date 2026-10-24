@@ -3203,7 +3203,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
     // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
     state.teamItems = items;
-    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b>${MY_ADMIN ? '<button class="dgh-team" data-dg-team title="Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội</button>' : ''}</div><div class="dgh-l">${items
+    // Ca này chưa gửi nhắc cả đội → nút to + rung lắc
+    const slotNow = teamSlot();
+    const urge = MY_ADMIN && slotNow && !(await kvGet('teamRemind'))[slotNow];
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b>${MY_ADMIN ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button>` : ''}</div><div class="dgh-l">${items
       .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
@@ -3224,6 +3227,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 [data-dg-hot] .dgh-t{display:flex;align-items:center;gap:6px}
 [data-dg-hot] .dgh-team{margin-left:auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;text-transform:none;letter-spacing:0;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed);border-radius:999px;padding:1px 10px}
 [data-dg-hot] .dgh-team:hover{filter:brightness(1.1)}
+[data-dg-hot] .dgh-team.urge{font-size:13px;padding:4px 16px;background:linear-gradient(90deg,#ef4444,#f97316);box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:dgUrgeShake .9s ease-in-out infinite, dgUrgeGlow 1.2s ease-in-out infinite}
+@keyframes dgUrgeShake{0%,100%{transform:translate(0,0) rotate(0)}10%{transform:translate(-3px,1px) rotate(-6deg)}20%{transform:translate(3px,-1px) rotate(6deg)}30%{transform:translate(-3px,1px) rotate(-6deg)}40%{transform:translate(3px,-1px) rotate(6deg)}50%{transform:translate(-2px,0) rotate(-4deg)}60%{transform:translate(2px,0) rotate(4deg)}70%,100%{transform:none}}
+@keyframes dgUrgeGlow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
 [data-dg-hot] .dgh-l{display:flex;flex-wrap:wrap;gap:3px 5px;max-height:62px;overflow-y:auto}
 [data-dg-hot] .dgh-i{display:inline-flex;align-items:center;gap:3px;font-size:10px;line-height:16px;padding:0 6px 0 2px;border-radius:999px;background:#fff;border:1px solid #fde68a;color:#334155;text-decoration:none;white-space:nowrap;max-width:260px}
 [data-dg-hot] .dgh-i:hover{border-color:#f97316;box-shadow:0 1px 4px rgba(249,115,22,.25)}
