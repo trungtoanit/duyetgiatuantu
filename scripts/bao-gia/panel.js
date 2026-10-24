@@ -3136,7 +3136,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const byCode = renderCtx.byCode || {};
     const today = new Map(); // khoá đơn → { code BG, total, q }
     for (const od of Object.values(renderCtx.orders || {}))
-      for (const o of od?.orders || []) if ((o.at || 0) >= vn0) today.set(`o${o.id}`, { bg: o.quote, dh: o.code, total: Number(o.total) || 0, q: o.quote ? byCode[o.quote] : null });
+      for (const o of od?.orders || []) if ((o.at || 0) >= vn0) today.set(`o${o.code || o.id}`, { bg: o.quote, dh: o.code, total: Number(o.total) || 0, q: o.quote ? byCode[o.quote] : null });
     for (const q of Object.values(renderCtx.quotes || {}))
       if (q?.orderSeenAt >= vn0 && ![...today.values()].some((x) => x.bg === q.code)) today.set(`q${q.id}`, { bg: q.code, dh: q.orderCode, total: Number(q.amount) || 0, q });
     const list = [...today.values()];
