@@ -3450,7 +3450,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // Ca này chưa gửi nhắc cả đội → nút to + rung lắc
     const slotNow = teamSlot();
     const urge = MY_ADMIN && slotNow && !(await kvGet('teamRemind'))[slotNow];
-    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b>${MY_ADMIN ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
+    const hotSum = items.reduce((t, { q }) => t + (Number(q.amount) || 0), 0);
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b><span class="dgh-sum" title="Tổng giá trị các báo giá trong Gợi ý chốt đơn">Σ ${moneyShortG(hotSum)}</span>${MY_ADMIN ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
       .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
@@ -3471,6 +3472,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 [data-dg-hot] .dgh-t{display:flex;align-items:center;gap:6px}
 [data-dg-hot] .dgh-team{margin-left:auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;text-transform:none;letter-spacing:0;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed);border-radius:999px;padding:1px 10px}
 [data-dg-hot] .dgh-team:hover{filter:brightness(1.1)}
+[data-dg-hot] .dgh-sum{font-size:11px;font-weight:900;text-transform:none;letter-spacing:0;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:999px;padding:0 8px;font-variant-numeric:tabular-nums}
 [data-dg-hot] .dgh-cd{font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;color:#475569;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
 [data-dg-hot] .dgh-cd b{background:none!important;color:#1d4ed8!important;padding:0!important;margin:0!important}
 [data-dg-hot] .dgh-cd.urge{color:#b91c1c;border-color:#fecaca;background:#fef2f2}
