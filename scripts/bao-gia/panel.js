@@ -1338,7 +1338,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const SHEET_SINCE = 1792344732;
   const flexoStale = (fx, q) =>
     !fx || fx.mode !== FLEXO_MODE || (fx.missing?.length > 0 && Date.now() / 1000 - fx.at > 3600) || flexoAmountChanged(fx, q) ||
-    (!!q && q.noSheetAt == null && (fx.at || 0) < SHEET_SINCE);
+    (!!q && q.noSheetAt == null && (fx.at || 0) < SHEET_SINCE) ||
+    // đã lên đơn (thường đã có PO thật) mà số cũ là PO nháp → tính lại theo PO thật (24 giờ / lần)
+    (!!q && (q.hasOrder || q.orderCode) && !fx.fromPo && Date.now() / 1000 - (fx.poCheckAt || 0) > 86400);
 
   // ---------- 💲 Set giá nhanh cho báo giá Flexo ----------
   // Bình luận NVKD xin giá ("Sếp cho em xin báo giá đơn này") → nút "💲 Set giá" cạnh "Trả lời".
@@ -4267,11 +4269,64 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectPriceButtons(), 2000);
 
+  async function readRealPos(doc, q, vis) {
+    const lbl = [...doc.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^DS PO:?$/.test(e.textContent.trim()));
+    const box = lbl?.parentElement;
+    const btns = box ? [...box.querySelectorAll('button')].filter((b) => /PO\d+/i.test(b.innerText)) : [];
+    if (!btns.length) {
+      // chưa có PO thật → đánh dấu đã kiểm (khỏi mở lại liên tục)
+      const all0 = await kvGet('margins');
+      if (all0[q.code]?.flexo) await kvMerge('margins', { [q.code]: { ...all0[q.code], flexo: { ...all0[q.code].flexo, poCheckAt: Math.floor(Date.now() / 1000) } } }).catch(() => {});
+      return false;
+    }
+    const suppliers = [];
+    for (const [i, b] of btns.entries()) {
+      const po = b.innerText.trim();
+      setStep(`Đọc PO thật ${po} (${i + 1}/${btns.length})…`);
+      b.click();
+      const modal = await waitFor(() => vis().find((m) => /Cập nhật PO/.test(m.innerText)), 10000, 250);
+      if (!modal) continue;
+      const read = () => Number((modal.innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
+      let last = -1;
+      let same = 0;
+      let total = 0;
+      for (let k = 0; k < 40 && same < 2; k++) {
+        await sleep(400);
+        total = read();
+        same = total && total === last ? same + 1 : 0;
+        last = total;
+      }
+      const sel = modal.querySelector('.ant-select-selection-item')?.innerText || '';
+      const code = sel.split('|')[0].trim() || po.split('_')[0];
+      if (total) {
+        const ex = suppliers.find((x) => x.code === code);
+        if (ex) {
+          ex.total += total;
+          ex.po += `, ${po}`;
+        } else suppliers.push({ code, name: sel.split('|').slice(1).join('|').trim() || sel, total, po });
+      }
+      modal.querySelector('.ant-modal-close')?.click();
+      await waitFor(() => !vis().includes(modal), 4000, 200);
+      await sleep(300);
+    }
+    if (!suppliers.length) return false;
+    let pageTotal = 0;
+    const tl = [...doc.querySelectorAll('label, div, span')].find((e) => e.children.length === 0 && /^Số tiền thanh toán:?$/.test(e.innerText.trim()));
+    const inp = tl?.closest('.ant-form-item, .ant-row, div')?.parentElement?.querySelector('input');
+    if (inp) pageTotal = Number(String(inp.value).replace(/[^\d]/g, '')) || 0;
+    const all = await kvGet('margins');
+    const cur = all[q.code] || { products: {} };
+    cur.flexo = { suppliers, missing: [], quoteTotal: pageTotal || q.amount || 0, amountAt: q.amount || 0, mode: FLEXO_MODE, fromPo: true, at: Math.floor(Date.now() / 1000), poCheckAt: Math.floor(Date.now() / 1000) };
+    await kvMerge('margins', { [q.code]: cur });
+    return true;
+  }
   async function readFlexoCost(f, q) {
     const doc = f.contentDocument;
     if (!doc) return;
     await saveKindTotals(doc, q?.code).catch(() => {});
     const vis = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => getComputedStyle(m).display !== 'none');
+    // Đã có PO thật ("DS PO: LT_PO15171 …") → ưu tiên đọc "Tổng thanh toán" của từng PO (số chính xác), không dùng PO nháp
+    if (await readRealPos(doc, q, vis)) return;
     const poBtn = [...doc.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lên PO');
     if (!poBtn) return;
     setStep('Đang mở Lên PO → Giấy tấm…');
@@ -4351,6 +4406,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       amountAt: q.amount || 0, // tổng báo giá lúc tính – đổi thì tính lại
       mode: FLEXO_MODE,
       at: Math.floor(Date.now() / 1000),
+      poCheckAt: Math.floor(Date.now() / 1000), // đã kiểm: chưa có PO thật
     };
     await kvMerge('margins', { [q.code]: cur });
   }
