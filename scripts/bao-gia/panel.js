@@ -3494,6 +3494,38 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   const blinkLevel = (v) => (v >= 200e6 ? 4 : v >= 100e6 ? 3 : v >= 50e6 ? 2 : v >= 30e6 ? 1 : 0);
 
+  // Danh sách Báo giá của CRM: báo giá tạo trong 7 ngày → badge 🆕 ở cột "Ngày tạo"
+  function injectNewBadges() {
+    if (!IS_TOP || !renderCtx.quotes) return;
+    const byCode = renderCtx.byCode && renderCtx.byCodeSrc === renderCtx.quotes ? renderCtx.byCode : (renderCtx.byCode = Object.fromEntries(Object.values(renderCtx.quotes).map((q) => [q.code, q])));
+    renderCtx.byCodeSrc = renderCtx.quotes;
+    for (const t of document.querySelectorAll('.ant-table')) {
+      if (t.closest('#dg-root')) continue;
+      const hs = [...t.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-dg-diffcol')).map((th) => th.innerText.trim());
+      const iDate = hs.indexOf('Ngày tạo');
+      if (iDate < 0 || !hs.some((h) => /Mã báo giá/i.test(h))) continue;
+      for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+        if (tr.classList.contains('ant-table-measure-row')) continue;
+        const own = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol'));
+        const cell = own[iDate];
+        if (!cell) continue;
+        const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
+        const q = code && byCode[code];
+        const fresh = !!q?.createdAt && hoursSince(q.createdAt) < 7 * 24;
+        const badge = cell.querySelector('.dg-new');
+        if (fresh && !badge) {
+          const b = document.createElement('span');
+          b.className = 'dg-new';
+          b.textContent = '🆕';
+          b.title = 'Báo giá mới tạo trong 7 ngày gần nhất';
+          b.setAttribute('style', 'margin-right:4px;font-size:12px;');
+          cell.prepend(b);
+        } else if (!fresh && badge) badge.remove();
+      }
+    }
+  }
+  if (IS_TOP) setInterval(() => injectNewBadges(), 2000);
+
   function diffPill(q, wait = false) {
     const v = q ? diffVal(q) : null;
     if (q?.noSheet) return '<span style="color:#b91c1c;font-weight:800" title="Có dòng giá giấy tấm 0đ/m2">😡</span>';
@@ -8973,7 +9005,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const dateCell = (sec) => {
       if (!sec) return '<span class="it-date"></span>';
       const fresh = hoursSince(sec) < 7 * 24;
-      return `<span class="it-date${fresh ? ' new' : ''}" title="Tạo lúc ${esc(fmtTime(sec))} ${esc(dmy(sec).slice(-4))}">${fresh ? ago(sec) : dmy(sec)}</span>`;
+      return `<span class="it-date${fresh ? ' new' : ''}" title="Tạo lúc ${esc(fmtTime(sec))} ${esc(dmy(sec).slice(-4))}">${fresh ? `🆕 ${ago(sec)}` : dmy(sec)}</span>`;
     };
     const listRows = (items, forExport = false) => {
       const rows = applyFilter(items);
