@@ -2295,12 +2295,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return null;
   }
+  // Ô "Kết cấu giấy" của 1 dòng: ô có dạng "1253 | PNTP_…" (không dựa vào vị trí cột – bảng có cột cố định)
+  const paperCell = (tr, iKc) =>
+    [...tr.cells].find((td) => /\d+\s*\|\s*[A-Z0-9]+_/.test(td.innerText || '')) || tr.cells[iKc];
+  // Giấy cũ: ô có dấu ⚠ (chữ) hoặc bất kỳ biểu tượng nào (hình / SVG / icon) – ô giấy mới chỉ có chữ + thanh
   const isOldPaper = (cell) =>
-    /⚠/.test(cell?.innerText || '') || !!cell?.querySelector('.anticon-warning, .anticon-exclamation-circle, [aria-label*="warning"], [aria-label*="exclamation"]');
+    !!cell && (/⚠/.test(cell.innerText || '') || !!cell.querySelector('svg, img, .anticon, [role="img"], i[class*="icon"], [class*="warning"], [class*="Warning"]'));
   async function reloadPaper(btn) {
     const pt = productTable();
     if (!pt) return (btn.textContent = '⚠️ Không thấy bảng hàng hóa');
-    const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && isOldPaper(tr.cells[pt.iKc]));
+    const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && isOldPaper(paperCell(tr, pt.iKc)));
     if (!rows.length) {
       btn.textContent = '✓ Không có giấy cũ';
       return setTimeout(() => (btn.textContent = '🔄 Load lại giá giấy mới'), 3000);
@@ -2309,7 +2313,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     let skip = 0;
     for (const [i, tr] of rows.entries()) {
       btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: mở…`;
-      const qb = tr.cells[pt.iQty]?.querySelector('button, a, span');
+      // ô số lượng: ô có con số dạng 5.000 màu xanh (nút / link) – tìm theo nội dung nếu lệch cột
+      const qCell = tr.cells[pt.iQty]?.querySelector('button, a') ? tr.cells[pt.iQty] : [...tr.cells].find((td) => td.querySelector('button, a') && /^\s*[\d.]+\s*$/.test(td.innerText || ''));
+      const qb = qCell?.querySelector('button, a') || tr.cells[pt.iQty]?.querySelector('span');
       if (!qb) {
         skip++;
         continue;
