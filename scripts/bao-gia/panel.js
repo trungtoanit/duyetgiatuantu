@@ -3319,6 +3319,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .filter((o) => o?.at >= from && o.at < d1 && !o.cancel)
       .map((o) => ({ ...o, q: o.bg ? byCode[o.bg] : null }))
       .filter((o) => !(o.q && !o.q.noSheet && diffVal(o.q) != null))
+      .filter((o) => !(o.q && !(Number(o.q.amount) > 0))) // BG 0đ (chưa cho giá) → bỏ qua
       .sort((a, b) => b.at - a.at);
   }
   function openMissDiff(scope) {
@@ -3451,7 +3452,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         mDn++;
       }
     }
-    const mMiss = mList.length - mDn;
+    const mMiss = mList.filter((o) => !(o.bg && byCode[o.bg] && !(Number(byCode[o.bg].amount) > 0))).length - mDn;
     const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total || 0)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const tile = (ic, lab, val, fg, bg, bd, tip) =>
@@ -3460,7 +3461,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const kd = state.kpiDay || 0;
     const dLab = kd === 0 ? 'Hôm nay' : kd === 1 ? 'Hôm qua' : new Date(vn0 + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit' });
     const nb = (dir, dis, t) => `<button data-dg-kd="${dir}" ${dis ? 'disabled' : ''} title="${t}" style="all:unset;cursor:${dis ? 'default' : 'pointer'};display:grid;place-items:center;width:28px;height:28px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:${dis ? '#cbd5e1' : '#334155'};font-weight:900;font-size:15px">${dir > 0 ? '‹' : '›'}</button>`;
-    const missing = list.length - k.dn;
+    const zero = (x) => x.q && !(Number(x.q.amount) > 0); // BG 0đ → không tính, không đếm
+    const missing = list.filter((x) => !zero(x)).length - k.dn;
     const html =
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
