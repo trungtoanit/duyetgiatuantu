@@ -281,7 +281,7 @@
     })
     .catch(() => {});
 
-  const OFF_VER = 3; // 3: đọc thêm tổng Nguyên liệu + nhận bảng chiết giá 0đ // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
+  const OFF_VER = 4; // 4: đọc lại đủ dòng (thử lại khi thiếu) // 3: đọc thêm tổng Nguyên liệu + nhận bảng chiết giá 0đ // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
   // Đọc lại khi: chưa có / đổi cách lưu / giá trị báo giá đổi so với lúc đọc chiết giá (sửa đơn giá rồi Cập nhật)
   const offsetStale = (m, q) =>
     !Object.keys(m?.products || {}).length ||
@@ -1280,17 +1280,32 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       setStep(`Đang mở bảng chiết giá Offset (sản phẩm ${ri + 1}/${Math.min(rows.length, 10)})…`);
       const btn = tr.cells[idx]?.querySelector('button');
       if (!btn) continue;
-      btn.click();
-      let modal = null;
-      for (let i = 0; i < 20 && !modal; i++) {
-        await sleep(250);
-        modal = visModals().find((m) => /Tính giá offset/i.test(m.innerText));
+      // Đọc xong phải thấy đúng dòng này (quy cách + SL) được lưu; chưa thấy thì thử lại (tối đa 3 lần, chờ lâu dần)
+      const rowTxt = tr.innerText.replace(/\s+/g, ' ');
+      const saved = async (t0) => {
+        if (!code) return true;
+        const prods = Object.values((await kvGet('margins'))[code]?.products || {});
+        return prods.some((x) => (x.at || 0) * 1000 >= t0 - 1500 && offRowFor([rowTxt], x.spec, x.qty));
+      };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const t0 = Date.now();
+        btn.click();
+        let modal = null;
+        for (let i = 0; i < 24 && !modal; i++) {
+          await sleep(250);
+          modal = visModals().find((m) => /Tính giá offset/i.test(m.innerText));
+        }
+        let ok = false;
+        if (modal) {
+          await sleep(400 + attempt * 600); // chờ hộp tính giá tải xong số liệu
+          doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'G', code: 'KeyG', ctrlKey: true, shiftKey: true, bubbles: true }));
+          for (let i = 0; i < 12 + attempt * 6 && !(ok = await saved(t0)); i++) await sleep(400); // hook.js đọc bảng chiết giá
+        }
+        await closeModals();
+        if (ok || !code) break;
+        setStep(`Đọc lại chiết giá sản phẩm ${ri + 1} (lần ${attempt + 2})…`);
+        await sleep(600);
       }
-      if (modal) {
-        doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'G', code: 'KeyG', ctrlKey: true, shiftKey: true, bubbles: true }));
-        await sleep(2500); // hook.js đọc bảng chiết giá
-      }
-      await closeModals();
     }
     // Ghi giá trị báo giá lúc đọc chiết giá → giá trị đổi (sửa đơn giá) thì tự đọc lại
     if (code) {
