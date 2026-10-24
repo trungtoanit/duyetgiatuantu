@@ -3135,7 +3135,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (!dh || !tm || tr.cells.length < hs.length) continue; // chỉ hàng đầu của mỗi đơn (đủ ô)
       const at = Date.UTC(+tm[5], +tm[4] - 1, +tm[3], +tm[1], +tm[2]) - 7 * 3600e3;
       const total = Number(String(tr.cells[ti]?.innerText || '').replace(/[^\d]/g, '')) || 0;
-      out[dh] = { dh, at, bg: txt.match(/BG\d{3,}/)?.[0] || '', total, cancel: /Hủy|Huỷ/.test(tr.cells[0]?.innerText || '') };
+      const qid = Number([...tr.querySelectorAll('a[href]')].map((a) => a.getAttribute('href').match(/\/(?:bao-gia|co-hoi)\/(?:update|view)\/(\d+)/)?.[1]).find(Boolean)) || null;
+      out[dh] = { dh, at, bg: txt.match(/BG\d{3,}/)?.[0] || '', qid, total, cancel: /Hủy|Huỷ/.test(tr.cells[0]?.innerText || '') };
     }
     return Object.keys(out).length ? out : null;
   }
@@ -3146,7 +3147,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sig = JSON.stringify(got);
     if (sig === dayOrdersSig) return true;
     dayOrdersSig = sig;
-    const keepFrom = Date.now() - 3 * 86400e3;
+    const keepFrom = Date.now() - 62 * 86400e3; // giữ 2 tháng để xem lại các ngày trước
     const old = await kvGet('dayOrders');
     const patch = { ...Object.fromEntries(Object.entries(got).filter(([, o]) => o.at >= keepFrom)), _src: { path, at: Date.now() } };
     for (const [k2, o] of Object.entries(old)) if (k2 !== '_src' && !(o?.at >= keepFrom)) patch[k2] = null;
@@ -3187,6 +3188,62 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const all2 = await kvGet('dayOrders');
     state.dayOrders = Object.fromEntries(Object.entries(all2).filter(([k2, o]) => k2 !== '_src' && o));
   }
+  // Đơn (ngày đang xem) chưa có chênh lệch → mở ngầm báo giá để tính (mỗi lượt tối đa 2 báo giá, 1 báo giá thử lại sau 3 giờ)
+  let dayDiffBusy = false;
+  async function fillDayDiffs() {
+    if (!IS_TOP || dayDiffBusy || collect.running || !/^\/bao-gia\/?$/.test(location.pathname) || !state.dayOrders) return;
+    const [d0, d1] = kpiDayRange();
+    const tried = JSON.parse(lsGet('dgDayDiffTry') || '{}');
+    const byCode = renderCtx.byCode || {};
+    const need = Object.values(state.dayOrders)
+      .filter((o) => o?.bg && o.at >= d0 && o.at < d1 && !o.cancel && Date.now() - (tried[o.bg] || 0) > 3 * 3600e3)
+      .filter((o) => {
+        const q = byCode[o.bg];
+        return q ? diffVal(q) == null && !q.noSheet : !!o.qid;
+      })
+      .slice(0, 2);
+    if (!need.length) return;
+    dayDiffBusy = true;
+    try {
+      for (const o of need) {
+        tried[o.bg] = Date.now();
+        lsSet('dgDayDiffTry', JSON.stringify(tried));
+        let q = byCode[o.bg];
+        // chưa có báo giá trong dữ liệu → mở trang chi tiết 1 lần để lấy (loại Flexo/Offset, số tiền)
+        if (!q && o.qid) {
+          await loadInFrame(o.qid);
+          q = (await kvGet('quotes'))[o.qid];
+          if (!q) continue;
+        }
+        const k = q.kinds || (q.offset ? ['offset'] : []);
+        const mg = (await kvGet('margins'))[q.code] || {};
+        const needOff = k.includes('offset') && offsetStale(mg, q);
+        const needFx = k.includes('flexo') && q.amount && flexoStale(mg.flexo, q);
+        if (!needOff && !needFx && !k.length) {
+          // chưa biết loại → mở lại để đọc tổng theo loại rồi thử tính cả hai
+          await loadInFrame(q.id, undefined, undefined, async (f) => {
+            await readOffsetMargins(f, q.code).catch(() => {});
+            await readFlexoCost(f, q).catch(() => {});
+          });
+        } else if (needOff || needFx)
+          await loadInFrame(q.id, undefined, undefined, async (f) => {
+            if (needOff) await readOffsetMargins(f, q.code);
+            if (needFx) await readFlexoCost(f, q);
+          });
+      }
+      renderCtx.margins = await kvGet('margins');
+      renderCtx.quotes = await kvGet('quotes');
+    } finally {
+      dayDiffBusy = false;
+    }
+  }
+  setInterval(() => fillDayDiffs().catch(() => {}), 20000);
+  // Ngày đang xem ở 3 ô số liệu: 0 = hôm nay, 1 = hôm qua…
+  const kpiDayRange = () => {
+    const vn = new Date(Date.now() + 7 * 3600e3);
+    const d0 = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3 - (state.kpiDay || 0) * 86400e3;
+    return [d0, d0 + 86400e3];
+  };
   setTimeout(() => refreshDayOrders().catch(() => {}), 4000);
   setInterval(() => refreshDayOrders().catch(() => {}), 30000);
   // 3 ô số liệu cạnh hàng tab trạng thái: Số đơn · Doanh thu · Tổng chênh lệch (theo các dòng đang hiện)
@@ -3199,15 +3256,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       box.setAttribute('data-dg-kpi', '1');
       box.setAttribute('style', 'display:flex;gap:10px;align-items:center;margin-left:16px;flex:none');
       nav.append(box);
+      box.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-dg-kd]');
+        if (!b || b.disabled) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const d = Number(b.dataset.dgKd);
+        state.kpiDay = d === 0 ? 0 : Math.max(0, Math.min(60, (state.kpiDay || 0) + d));
+        crmKpiTiles(null, {});
+        fillDayDiffs().catch(() => {});
+      });
     }
     // Đơn lên HÔM NAY (giờ VN): theo trang "Danh sách đơn" của CRM (đọc ngầm, lưu kv dayOrders)
-    const vn0 = (() => {
-      const vn = new Date(Date.now() + 7 * 3600e3);
-      return Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3;
-    })();
+    const [vn0, vn1] = kpiDayRange();
     const byCode = renderCtx.byCode || {};
     const list = Object.values(state.dayOrders || {})
-      .filter((o) => o?.at >= vn0 && !o.cancel)
+      .filter((o) => o?.at >= vn0 && o.at < vn1 && !o.cancel)
       .map((o) => ({ ...o, q: o.bg ? byCode[o.bg] : null }));
     k = { n: list.length, sum: list.reduce((t, x) => t + (x.total || 0), 0), dsum: 0, dn: 0 };
     for (const x of list) {
@@ -3222,10 +3286,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const tile = (ic, lab, val, fg, bg, bd, tip) =>
       `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:112px;padding:5px 14px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
         <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
+    const kd = state.kpiDay || 0;
+    const dLab = kd === 0 ? 'Hôm nay' : kd === 1 ? 'Hôm qua' : new Date(vn0 + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit' });
+    const nb = (dir, dis, t) => `<button data-dg-kd="${dir}" ${dis ? 'disabled' : ''} title="${t}" style="all:unset;cursor:${dis ? 'default' : 'pointer'};display:grid;place-items:center;width:28px;height:28px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:${dis ? '#cbd5e1' : '#334155'};font-weight:900;font-size:15px">${dir < 0 ? '‹' : '›'}</button>`;
+    const missing = list.length - k.dn;
     const html =
-      tile('📄', 'Đơn hôm nay', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
+      `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
+      tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
-      tile('📈', 'Tổng chênh lệch', k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
+      tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span style="color:#d97706" title="Đang đọc ngầm để tính">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
     if (box.dataset.h !== html) {
       box.dataset.h = html;
       box.innerHTML = html;
