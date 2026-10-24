@@ -355,17 +355,6 @@
       // Bản lưu cũ (khoá chỉ theo quy cách, offVer < 2) → bỏ, đọc lại từ đầu.
       if (cur.offVer !== OFF_VER) Object.assign(cur, { products: {}, offVer: OFF_VER }); // giữ cur.order (thứ tự sản phẩm)
       const spec = data.spec || 'sản phẩm';
-      // Bảng chiết giá đang mở trên trang báo giá mà giá 1 thùng KHÁC giá dòng sản phẩm đã lưu của báo giá
-      // → đang thử trong hộp "Tính giá offset" (chưa lưu) → không ghi đè số thật
-      if (IS_TOP && renderCtx.quotes?.[currentQuoteId()]?.code === data.code) {
-        const row = offRowFor(pageProductRows() || [], spec, data.qty);
-        const pr = String(data.price || '').replace(/[^\d]/g, '');
-        if (row && pr && !offNums(row).includes(pr)) {
-          cur.products[[spec, data.qty, data.price, 'draft'].join(' | ')] = { spec, pct: data.pct, price: data.price, qty: data.qty, nvlUnit: data.nvlUnit ?? null, nvlTotal: data.nvlTotal ?? null, draft: true, at: data.at };
-          await kvMerge('margins', { [data.code]: cur });
-          return;
-        }
-      }
       // Cùng quy cách + SL đọc lại (vd. đổi giá / về 0đ) → thay bản cũ, không giữ song song giá cũ
       for (const [k, v] of Object.entries(cur.products)) if (v.spec === spec && String(v.qty) === String(data.qty)) delete cur.products[k]; // gồm cả bản thử (draft)
       cur.products[[spec, data.qty, data.price].filter(Boolean).join(' | ')] = {
@@ -1511,7 +1500,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const heads = [...t.querySelectorAll('thead th')];
     const pIdx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
     const rows = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim());
-    const prods = Object.values(renderCtx.margins?.[q.code]?.products || {}).filter((x) => !x.draft);
+    const prods = offEntries(renderCtx.margins?.[q.code], q.code).map(([, x]) => x);
     const used = new Set();
     return rows.map((tr, i) => {
       const txt = tr.innerText.replace(/\s+/g, ' ');
@@ -6038,7 +6027,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return rows.length ? rows.map((tr) => tr.innerText.replace(/\s+/g, ' ').slice(0, 400)) : null;
   }
   function offEntries(m, code) {
-    const list = Object.entries(m?.products || {}).filter(([, x]) => !x.draft); // bỏ bản thử trên ERP chưa lưu
+    // Mỗi quy cách + SL chỉ giữ bản đọc mới nhất (giá trong chiết giá có thể khác "Giá thực bán" – vẫn là cùng 1 dòng)
+    const latest = new Map();
+    for (const e of Object.entries(m?.products || {})) {
+      const k = `${String(e[1].spec || '').replace(/\s+/g, '')}|${String(e[1].qty || '').replace(/[^\d]/g, '')}`;
+      if (!latest.has(k) || (e[1].at || 0) > (latest.get(k)[1].at || 0)) latest.set(k, e);
+    }
+    const list = [...latest.values()];
     const live = code && renderCtx.quotes?.[currentQuoteId()]?.code === code ? pageProductRows() : null;
     const order = live || m?.order || [];
     if (live && code && state.ordDbg !== code) {
@@ -6144,7 +6139,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   function marginParts(q) {
     const m = renderCtx.margins?.[q?.code] || {};
-    const offs = Object.values(m.products || {}).filter((x) => !x.draft);
+    const offs = offEntries(m, q?.code).map(([, x]) => x);
     const priced = offs.filter((x) => x.pct != null && !x.noPrice);
     // % Offset = (1 − NVL sau VAT ÷ giá trị BG phần Offset) × 100 – khớp với số NVL / chênh lệch hiện trên thẻ.
     // Chưa tính được NVL thì lấy "đang bán %" thấp nhất trong các sản phẩm.
