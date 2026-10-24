@@ -3117,6 +3117,78 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     window.addEventListener('scroll', stickReq, true);
     window.addEventListener('resize', stickReq);
   }
+  // ---------- Trang "Danh sách đơn" của CRM: đọc các đơn (mã DH, giờ lên đơn, BG, Tổng tiền) → kv dayOrders ----------
+  function scrapeDayOrders(doc) {
+    if (![...doc.querySelectorAll('h1, h2, h3, h4, div, span')].some((e) => !e.children.length && /^Danh sách đơn$/i.test(e.textContent.trim()))) return null;
+    const t = [...doc.querySelectorAll('.ant-table')].find((x) => {
+      const hs = [...x.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+      return hs.includes('Tổng tiền') && hs.includes('Báo giá');
+    });
+    if (!t) return null;
+    const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+    const ti = hs.indexOf('Tổng tiền');
+    const out = {};
+    for (const tr of t.querySelectorAll('tbody tr')) {
+      const txt = tr.innerText || '';
+      const dh = txt.match(/DH\d{5,}/)?.[0];
+      const tm = txt.match(/(\d{1,2}):(\d{2}),\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!dh || !tm || tr.cells.length < hs.length) continue; // chỉ hàng đầu của mỗi đơn (đủ ô)
+      const at = Date.UTC(+tm[5], +tm[4] - 1, +tm[3], +tm[1], +tm[2]) - 7 * 3600e3;
+      const total = Number(String(tr.cells[ti]?.innerText || '').replace(/[^\d]/g, '')) || 0;
+      out[dh] = { dh, at, bg: txt.match(/BG\d{3,}/)?.[0] || '', total, cancel: /Hủy|Huỷ/.test(tr.cells[0]?.innerText || '') };
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  let dayOrdersSig = '';
+  async function saveDayOrders(doc, path) {
+    const got = scrapeDayOrders(doc);
+    if (!got) return false;
+    const sig = JSON.stringify(got);
+    if (sig === dayOrdersSig) return true;
+    dayOrdersSig = sig;
+    const keepFrom = Date.now() - 3 * 86400e3;
+    const old = await kvGet('dayOrders');
+    const patch = { ...Object.fromEntries(Object.entries(got).filter(([, o]) => o.at >= keepFrom)), _src: { path, at: Date.now() } };
+    for (const [k2, o] of Object.entries(old)) if (k2 !== '_src' && !(o?.at >= keepFrom)) patch[k2] = null;
+    await kvMerge('dayOrders', patch).catch(() => {});
+    return true;
+  }
+  // Đang mở trang Danh sách đơn → lưu ngay (mỗi 5 giây)
+  setInterval(() => {
+    if (IS_TOP) saveDayOrders(document, location.pathname).catch(() => {});
+  }, 5000);
+  // Ở trang Báo giá: 10 phút / lần mở ngầm trang Danh sách đơn (đường dẫn học được khi đã từng mở) để cập nhật đơn hôm nay
+  let dayOrdersBusy = false;
+  async function refreshDayOrders() {
+    if (!IS_TOP || dayOrdersBusy || !/^\/bao-gia\/?$/.test(location.pathname)) return;
+    const all = await kvGet('dayOrders');
+    state.dayOrders = Object.fromEntries(Object.entries(all).filter(([k2, o]) => k2 !== '_src' && o));
+    const src = all._src;
+    if (!src?.path || Date.now() - src.at < 10 * 60e3) return;
+    dayOrdersBusy = true;
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = src.path;
+    document.documentElement.append(f);
+    try {
+      for (let i = 0; i < 40; i++) {
+        await sleep(750);
+        let ok = false;
+        try {
+          ok = await saveDayOrders(f.contentDocument, src.path);
+        } catch {}
+        if (ok) break;
+      }
+    } finally {
+      f.remove();
+      dayOrdersBusy = false;
+    }
+    const all2 = await kvGet('dayOrders');
+    state.dayOrders = Object.fromEntries(Object.entries(all2).filter(([k2, o]) => k2 !== '_src' && o));
+  }
+  setTimeout(() => refreshDayOrders().catch(() => {}), 4000);
+  setInterval(() => refreshDayOrders().catch(() => {}), 30000);
   // 3 ô số liệu cạnh hàng tab trạng thái: Số đơn · Doanh thu · Tổng chênh lệch (theo các dòng đang hiện)
   function crmKpiTiles(wrap, k) {
     const nav = [...document.querySelectorAll('.ant-tabs-nav')].find((x) => /Tất cả/.test(x.innerText) && /Thành công|Chờ xin giá/.test(x.innerText));
@@ -3128,19 +3200,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       box.setAttribute('style', 'display:flex;gap:10px;align-items:center;margin-left:16px;flex:none');
       nav.append(box);
     }
-    // Đơn lên HÔM NAY (giờ VN): đơn Misa có ngày tạo hôm nay + báo giá vừa thấy "Mã đơn hàng Misa" hôm nay
+    // Đơn lên HÔM NAY (giờ VN): theo trang "Danh sách đơn" của CRM (đọc ngầm, lưu kv dayOrders)
     const vn0 = (() => {
       const vn = new Date(Date.now() + 7 * 3600e3);
-      return (Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3) / 1000;
+      return Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3600e3;
     })();
     const byCode = renderCtx.byCode || {};
-    const today = new Map(); // khoá đơn → { code BG, total, q }
-    for (const od of Object.values(renderCtx.orders || {}))
-      for (const o of od?.orders || []) if ((o.at || 0) >= vn0) today.set(`o${o.code || o.id}`, { bg: o.quote, dh: o.code, total: Number(o.total) || 0, q: o.quote ? byCode[o.quote] : null });
-    for (const q of Object.values(renderCtx.quotes || {}))
-      if (q?.orderSeenAt >= vn0 && ![...today.values()].some((x) => x.bg === q.code)) today.set(`q${q.id}`, { bg: q.code, dh: q.orderCode, total: Number(q.amount) || 0, q });
-    const list = [...today.values()];
-    k = { n: list.length, sum: list.reduce((t, x) => t + x.total, 0), dsum: 0, dn: 0 };
+    const list = Object.values(state.dayOrders || {})
+      .filter((o) => o?.at >= vn0 && !o.cancel)
+      .map((o) => ({ ...o, q: o.bg ? byCode[o.bg] : null }));
+    k = { n: list.length, sum: list.reduce((t, x) => t + (x.total || 0), 0), dsum: 0, dn: 0 };
     for (const x of list) {
       const v = x.q ? diffVal(x.q) : null;
       if (v != null) {
@@ -3148,14 +3217,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         k.dn++;
       }
     }
-    const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total)}`).join('\n');
+    const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total || 0)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const tile = (ic, lab, val, fg, bg, bd, tip) =>
       `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:112px;padding:5px 14px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
         <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
     const html =
       tile('📄', 'Đơn hôm nay', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
-      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu (trước VAT) các đơn lên hôm nay: ${money(k.sum || 0)}`) +
+      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
       tile('📈', 'Tổng chênh lệch', k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`);
     if (box.dataset.h !== html) {
       box.dataset.h = html;
