@@ -2284,6 +2284,96 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
 
+  // ---------- 🔄 Load lại giá giấy mới (dòng có ⚠️ giấy cũ ở cột "Kết cấu giấy") ----------
+  // Mỗi dòng có ⚠️: bấm số lượng → hộp "Tính giá carton" → "Đồng bộ giá carton mới" → Lưu → dòng kế.
+  function productTable() {
+    for (const t of document.querySelectorAll('.ant-table')) {
+      const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+      const iQty = hs.indexOf('Số lượng');
+      const iKc = hs.findIndex((h) => /^Kết cấu giấy/i.test(h));
+      if (iQty >= 0 && iKc >= 0) return { t, iQty, iKc };
+    }
+    return null;
+  }
+  const isOldPaper = (cell) =>
+    /⚠/.test(cell?.innerText || '') || !!cell?.querySelector('.anticon-warning, .anticon-exclamation-circle, [aria-label*="warning"], [aria-label*="exclamation"]');
+  async function reloadPaper(btn) {
+    const pt = productTable();
+    if (!pt) return (btn.textContent = '⚠️ Không thấy bảng hàng hóa');
+    const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && isOldPaper(tr.cells[pt.iKc]));
+    if (!rows.length) {
+      btn.textContent = '✓ Không có giấy cũ';
+      return setTimeout(() => (btn.textContent = '🔄 Load lại giá giấy mới'), 3000);
+    }
+    let ok = 0;
+    let skip = 0;
+    for (const [i, tr] of rows.entries()) {
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: mở…`;
+      const qb = tr.cells[pt.iQty]?.querySelector('button, a, span');
+      if (!qb) {
+        skip++;
+        continue;
+      }
+      qb.click();
+      const modal = await waitFor(() => visModalsTop().find((m) => /Tính giá carton/i.test(m.innerText)), 6000, 200);
+      if (!modal) {
+        skip++;
+        continue;
+      }
+      await sleep(800);
+      const sync = await waitFor(() => [...modal.querySelectorAll('button')].find((b) => /Đồng bộ giá carton mới/i.test(b.innerText)), 2500, 200);
+      if (!sync) {
+        // giá đã mới → đóng, không lưu
+        ([...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Đóng') || modal.querySelector('.ant-modal-close'))?.click();
+        skip++;
+        await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 4000, 200);
+        continue;
+      }
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: đồng bộ giá…`;
+      sync.click();
+      await sleep(1500);
+      const save = [...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lưu');
+      if (!save) {
+        skip++;
+        continue;
+      }
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: lưu…`;
+      save.click();
+      const closed = await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 8000, 200);
+      if (closed) ok++;
+      else skip++;
+      await sleep(600);
+    }
+    btn.textContent = `✅ Đã cập nhật giấy ${ok}/${rows.length} dòng${skip ? ` (bỏ qua ${skip})` : ''}`;
+    setTimeout(() => (btn.textContent = '🔄 Load lại giá giấy mới'), 6000);
+  }
+  function injectPaperReload() {
+    if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-paper-reload')) return;
+    const off = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Offset' && b.closest('.ant-btn, button'));
+    if (!off) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ant-btn dg-paper-reload';
+    b.textContent = '🔄 Load lại giá giấy mới';
+    b.title = 'Dòng có ⚠️ (giấy cũ chưa cập nhật): bấm số lượng → Đồng bộ giá carton mới → Lưu, lần lượt từng dòng';
+    b.setAttribute('style', 'margin-left:8px;height:32px;padding:0 14px;border-radius:6px;font-weight:700;cursor:pointer;color:#fff;border:0;background:linear-gradient(90deg,#f59e0b,#ea580c);');
+    b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.dataset.busy) return;
+      b.dataset.busy = '1';
+      try {
+        await reloadPaper(b);
+      } catch (err) {
+        b.textContent = `⚠️ ${err.message}`;
+      } finally {
+        delete b.dataset.busy;
+      }
+    });
+    off.after(b);
+  }
+  if (IS_TOP) setInterval(() => injectPaperReload(), 2000);
+
   // Hộp "Tính giá carton" của CRM: trang trí lại (thẻ cho từng phần Quy cách / In / Khác, ô nhập bo tròn, bảng giá, cảnh báo, đơn giá nổi bật)
   const CC_CSS = `
 .dg-cc .ant-modal-content{border-radius:16px!important;overflow:hidden;padding:0!important;box-shadow:0 24px 60px rgba(15,23,42,.28)!important}
