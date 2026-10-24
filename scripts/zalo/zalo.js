@@ -183,7 +183,7 @@
     return call({ type: 'remote.push', ns: 'zaloDebug', patch: { last: { step, at: Date.now(), cands, chosen: el ? { tag: el.tagName, id: el.id, cls: String(el.className).slice(0, 120) } : null,
       foot: (foot?.outerHTML || '').slice(0, 6000), extra, w: innerWidth, h: innerHeight } } }).catch(() => {});
   }
-  function pressSend(el) {
+  function pressSend(el, log = () => {}) {
     const btn =
       [...document.querySelectorAll('[icon*="Sent"], [icon*="send" i], [data-translate-title*="SEND"], [title="Gửi"], [title^="Gửi "], .send-btn, [class*="send-btn"], [class*="SendButton"], [data-id*="Send"]')].find(visible) ||
       // nút mũi tên gửi ở góc dưới phải khung soạn (chế độ định dạng)
@@ -191,14 +191,19 @@
         .filter((i) => visible(i) && /send|sent|paper-plane/i.test(String(i.className?.baseVal ?? i.className) + (i.getAttribute('data-icon') || '')))
         .map((i) => i.closest('button, [role="button"], div'))
         .find(Boolean);
-    if (btn) return btn.click();
+    if (btn) {
+      log(`bấm nút gửi: ${btn.tagName}.${String(btn.className?.baseVal ?? btn.className).slice(0, 60)} ${btn.getAttribute('title') || btn.getAttribute('icon') || ''}`);
+      for (const t of ['mousedown', 'mouseup', 'click']) btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+      return;
+    }
+    log('không thấy nút gửi → Enter');
     const o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
     el.dispatchEvent(new KeyboardEvent('keydown', o));
     el.dispatchEvent(new KeyboardEvent('keypress', o));
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.169';
+  const ZVER = '1.2.313';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -346,10 +351,25 @@
       await markSent(job, true);
       return setStatus(id, { ...job, status: 'sent', drafted: true, doneAt: Date.now(), via: used });
     }
-    pressSend(input);
+    pressSend(chatInput() || input, tr);
     await sleep(1500);
-    const left = typed(chatInput());
-    if (left.length > 10) return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
+    let left = typed(chatInput());
+    if (left.length > 10) {
+      // thử Enter trực tiếp vào ô soạn
+      const el2 = chatInput() || input;
+      el2.focus();
+      for (const t of ['keydown', 'keypress', 'keyup']) el2.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      await sleep(1500);
+      left = typed(chatInput());
+      tr(`sau Enter: còn ${left.length} ký tự`);
+    }
+    if (left.length > 10) {
+      // dò các nút trong khung soạn để biết nút gửi trông thế nào
+      const area = (chatInput() || input).closest('[id*="chat-input"], [class*="chat-input"], footer') || document.body;
+      tr(`nút quanh khung soạn: ${[...area.parentElement?.querySelectorAll('[icon], button, [title]') || []].filter(visible).map((b) => `${b.tagName}[${b.getAttribute('icon') || ''}|${b.getAttribute('title') || ''}|${String(b.className).slice(0, 40)}]`).slice(-15).join(' ')}`);
+      return fail('Đã dán nội dung nhưng chưa gửi được – bấm Enter trong Zalo để gửi.');
+    }
+    tr('đã gửi');
     await markSent(job, false);
     await markTeam(job, false);
     await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
