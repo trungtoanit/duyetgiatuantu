@@ -905,7 +905,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       autoFilled[`${qid}:tried`] = true;
       ta = ta || findCommentBox();
-      if (!ta || document.activeElement === ta) return;
+      if (!ta) return;
+      // (bấm "Trả lời" làm CRM tự đặt con trỏ vào ô – vẫn điền, miễn ô còn trống)
       const last = autoFilled[`${qid}:last`] || '';
       if (ta.value.trim() && ta.value.trim() !== last) return; // người dùng đang gõ nội dung khác
       // ô bình luận mới ở trên cùng đã điền từ bản trước → xoá đi (giờ điền vào luồng của báo giá)
@@ -916,8 +917,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       autoFilled[qid] = key;
       autoFilled[`${qid}:last`] = qc.text;
+      await sleep(150);
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, qc.text);
       ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.dispatchEvent(new Event('change', { bubbles: true }));
     } finally {
       autoBusy = false;
     }
