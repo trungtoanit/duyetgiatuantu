@@ -2316,20 +2316,44 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 .dg-cc .dg-cc-price{display:inline-flex!important;align-items:baseline;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:5px 12px;font-size:13px!important;color:#475569!important;margin-right:6px}
 .dg-cc .dg-cc-price *{font-size:20px!important;font-weight:900!important}
 `;
+  const OF_CSS = `
+.dg-of .ant-modal-header{padding:12px 56px 10px 20px!important}
+.dg-of .ant-modal-body{padding:12px 14px!important;max-height:calc(100vh - 150px)}
+.dg-of .dg-of-card{background:#fff!important;border:1px solid #e2e8f0!important;border-radius:14px!important;box-shadow:0 1px 3px rgba(15,23,42,.05)!important;transition:box-shadow .15s,border-color .15s,opacity .15s}
+.dg-of .dg-of-card:hover{border-color:#c7d2fe!important;box-shadow:0 6px 18px rgba(15,23,42,.08)!important}
+.dg-of .dg-of-card.dg-off{opacity:.5;filter:grayscale(.5)}
+.dg-of .dg-of-card.dg-off:hover{opacity:1;filter:none}
+.dg-of .dg-of-h{text-decoration:none!important;font-weight:800!important;color:#0f172a!important;font-size:14px!important;display:inline-flex!important;align-items:center;gap:6px}
+.dg-of .dg-of-h::before{content:attr(data-ic);display:inline-grid;place-items:center;width:24px;height:24px;border-radius:8px;background:var(--cc,#eef2ff);font-size:13px;flex:none}
+.dg-of label{font-size:11.5px!important}
+.dg-of .ant-btn:not(.ant-btn-primary):not(.ant-btn-link){border-radius:999px!important;font-weight:700!important}
+.dg-of .ant-btn-primary{border-radius:9px!important;font-weight:700!important}
+.dg-of table{border-collapse:separate!important;border-spacing:0!important;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+.dg-of table th{background:#f8fafc!important;color:#64748b!important;font-size:11.5px!important;font-weight:700!important}
+.dg-of table td{font-variant-numeric:tabular-nums;font-weight:600}
+.dg-of .dg-of-total{background:linear-gradient(90deg,#ecfdf5,#eff6ff)!important;border-color:#a7f3d0!important;display:flex!important;flex-wrap:wrap;align-items:center;gap:6px 28px;padding:12px 16px!important}
+.dg-of .dg-of-total *{font-size:15px!important;margin:0!important}
+.dg-of .dg-of-total b,.dg-of .dg-of-total strong{font-size:20px!important;color:#047857!important}
+`;
   const CC_SEC = { 'Quy cách': ['📐', '#e0f2fe'], In: ['🖨️', '#fce7f3'], Khác: ['⚙️', '#fef3c7'] };
   function styleCartonModal() {
     for (const m of document.querySelectorAll('.ant-modal')) {
       const title = m.querySelector('.ant-modal-title');
-      if (!title || !/^\s*Tính giá carton/i.test(title.textContent)) continue;
+      if (!title || !/^\s*Tính giá (carton|offset)/i.test(title.textContent)) continue;
       if (!document.getElementById('dg-cc-css')) {
         const st = document.createElement('style');
         st.id = 'dg-cc-css';
-        st.textContent = CC_CSS;
+        st.textContent = CC_CSS + OF_CSS;
         document.head.append(st);
       }
       m.classList.add('dg-cc');
       const body = m.querySelector('.ant-modal-body');
       if (!body) continue;
+      if (/offset/i.test(title.textContent)) {
+        m.classList.add('dg-of');
+        styleOffsetBody(body);
+        continue;
+      }
       // Tiêu đề từng phần (chữ to, đúng tên) → bọc phần đó thành 1 thẻ
       const heads = [...body.querySelectorAll('*')].filter((e) => !e.children.length && CC_SEC[e.textContent.trim()] && parseFloat(getComputedStyle(e).fontSize) >= 15);
       for (const h of heads) {
@@ -2367,6 +2391,52 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           if (/^Đơn giá 1 thùng/i.test(e.textContent.trim()) && e.textContent.length < 60 && ![...e.children].some((c) => /^Đơn giá 1 thùng/i.test(c.textContent.trim()))) e.classList.add('dg-cc-price');
         }
     }
+  }
+  // Hộp "Tính giá offset": các khung có viền sẵn → thẻ trắng bo góc, tiêu đề có biểu tượng, khung đang tắt thì làm mờ
+  const OF_IC = [
+    [/^Thông tin sản phẩm/i, '📦', '#e0f2fe'], [/^Phối giấy/i, '🧻', '#fef3c7'], [/^Ghi chú/i, '📝', '#f1f5f9'], [/^Tính giá theo bài in/i, '🖨️', '#fce7f3'],
+    [/^Kẽm/i, '🧩', '#ede9fe'], [/^Tính giá theo sản phẩm/i, '🏷️', '#dcfce7'], [/^Tem/i, '🔖', '#fef9c3'], [/^Bồi/i, '🧱', '#ffedd5'], [/^Cán/i, '✨', '#e0e7ff'],
+    [/^Bế chìm/i, '🔲', '#f1f5f9'], [/^Bế/i, '✂️', '#fee2e2'], [/^Gia công sau in/i, '🛠️', '#e2e8f0'], [/^Gia công túi/i, '🛍️', '#fae8ff'], [/^Dán cửa sổ/i, '🪟', '#e0f2fe'],
+    [/^Ép kim/i, '⭐', '#fef3c7'], [/^UV/i, '💧', '#cffafe'], [/^Đóng gói/i, '📦', '#ffedd5'], [/^Tính theo các khung/i, '📊', '#dcfce7'],
+  ];
+  const OF_SKIP = '.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-select, .ant-select-selector, .ant-checkbox-wrapper, .ant-checkbox, .ant-checkbox-inner, .ant-btn, button, textarea, table, td, th, tr, .ant-picker, img, .ant-image, .ant-upload';
+  function styleOffsetBody(body) {
+    const n = body.getElementsByTagName('*').length;
+    if (body._dgN === n) return markOffsetOff(body);
+    body._dgN = n;
+    for (const e of body.querySelectorAll('div')) {
+      if (e.classList.contains('dg-of-card') || e.matches(OF_SKIP) || e.closest('.ant-select, .ant-input-affix-wrapper, .ant-input-number, .ant-picker, table')) continue;
+      const cs = getComputedStyle(e);
+      if (!(parseFloat(cs.borderTopWidth) >= 1 && cs.borderTopStyle !== 'none' && parseFloat(cs.borderLeftWidth) >= 1)) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 120 || r.height < 40 || !e.querySelector('input, .ant-select, textarea, table, button')) continue;
+      if (e.parentElement?.closest('.dg-of-card')) continue; // chỉ khung ngoài cùng
+      e.classList.add('dg-of-card');
+      // tiêu đề khung: chữ đầu tiên, to hoặc gạch chân
+      const h = [...e.querySelectorAll('*')].find((x) => {
+        if (x.children.length && !(x.children.length === 1 && x.firstChild?.nodeType === 3)) return false;
+        const t = x.textContent.trim();
+        if (t.length < 2 || t.length > 45 || x.closest('label.ant-checkbox-wrapper, .ant-select, .ant-btn')) return false;
+        const xs = getComputedStyle(x);
+        return parseFloat(xs.fontSize) >= 15 || /underline/.test(xs.textDecorationLine);
+      });
+      if (h && !h.classList.contains('dg-of-h')) {
+        const ic = OF_IC.find(([re]) => re.test(h.textContent.trim()));
+        h.classList.add('dg-of-h');
+        h.dataset.ic = ic ? ic[1] : '▪️';
+        h.style.setProperty('--cc', ic ? ic[2] : '#f1f5f9');
+      }
+      if (/Tổng giá:/.test(e.textContent) && /Tổng tiền:/.test(e.textContent) && e.textContent.length < 120) e.classList.add('dg-of-total');
+    }
+    markOffsetOff(body);
+  }
+  // Khung tuỳ chọn đang tắt (mọi ô đều khoá) → mờ đi cho dễ nhìn phần đang dùng
+  function markOffsetOff(body) {
+    body.querySelectorAll('.dg-of-card').forEach((c) => {
+      const f = [...c.querySelectorAll('input:not([type=checkbox]), .ant-select')];
+      const off = f.length > 0 && f.every((x) => x.disabled || x.classList.contains('ant-select-disabled'));
+      c.classList.toggle('dg-off', off && !/Thông tin|Phối giấy|Tính giá theo bài/i.test(c.textContent.slice(0, 40)));
+    });
   }
   if (IS_TOP) setInterval(styleCartonModal, 700);
 
