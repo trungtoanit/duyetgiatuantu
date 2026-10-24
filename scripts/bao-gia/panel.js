@@ -1539,7 +1539,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <input type="range" min="5" max="60" step="1" value="${pct0}">
       <div class="pdlg-chips">${[25, 30, 32, 35, 38, 40, 42, 45, 50].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
       <div class="pdlg-sum"></div>
-      <div class="muted pdlg-note">Giá mới = giá vốn (ô cuối bảng "Giá bán" của chiết giá) ÷ (1 − %). Bấm Set giá: điền "Giá thực bán" từng dòng Offset, lưu báo giá rồi tải lại trang.</div>
+      <div class="muted pdlg-note">Giá mới = NVL 1 thùng (dòng Tổng bảng "Nguyên liệu" của chiết giá) ÷ (1 − %) – giống hàng "Mốc NVL". Bấm Set giá: điền "Giá thực bán" từng dòng Offset, lưu báo giá rồi tải lại trang.</div>
       <div class="pdlg-step"></div>
       <div class="pdlg-btns"><button class="act" data-p="read">↻ Đọc lại chiết giá</button><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
     </div></div>`;
@@ -1551,9 +1551,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const pct = Number(range.value);
       const rows = offsetRowsForDialog(q);
       if (!rows.length) return (sumEl.innerHTML = '<div class="muted">Không thấy dòng sản phẩm Offset trong bảng Hàng hóa.</div>');
-      sumEl.innerHTML = `<table class="osp"><tr><th>Sản phẩm</th><th class="num">SL</th><th class="num">Giá vốn</th><th class="num">Giá hiện tại</th><th class="num">Giá mới (${pct}%)</th></tr>${rows
+      sumEl.innerHTML = `<table class="osp"><tr><th>Sản phẩm</th><th class="num">SL</th><th class="num">NVL 1 thùng</th><th class="num">Giá hiện tại</th><th class="num">Giá mới (${pct}%)</th></tr>${rows
         .map((r) => {
-          const cost = r.x?.costUnit;
+          const cost = r.x?.nvlUnit; // NVL 1 thùng (dòng Tổng bảng Nguyên liệu, vd. 1.078đ)
           const np = cost ? Math.ceil(cost / (1 - pct / 100)) : null;
           return `<tr><td>${esc(r.name)}</td><td class="num">${esc(r.x?.qty || '')}</td><td class="num">${cost ? money(cost) : reading ? '<span class="spinner"></span>' : '<span class="warnx">chưa đọc</span>'}</td><td class="num">${r.cur ? money(r.cur) : '0đ'}</td><td class="num"><b class="pos">${np ? money(np) : '–'}</b></td></tr>`;
         })
@@ -1585,7 +1585,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     render2();
     // Chưa có giá vốn dòng nào → tự đọc chiết giá (khung ẩn, không bật hộp thoại in)
-    if (offsetRowsForDialog(q).some((r) => !r.x?.costUnit)) readNow().catch(() => {});
+    if (offsetRowsForDialog(q).some((r) => !r.x?.nvlUnit)) readNow().catch(() => {});
     box.addEventListener('click', async (e) => {
       const v = e.target.closest('[data-v]')?.dataset.v;
       if (v) {
@@ -1600,13 +1600,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const stepEl = box.querySelector('.pdlg-step');
       const step = (t) => (stepEl.innerHTML = `<span class="spinner"></span> ${esc(t)}`);
       const rows = offsetRowsForDialog(q);
-      const miss = rows.filter((r) => !r.x?.costUnit);
-      if (miss.length) return (stepEl.innerHTML = `<span class="warnx">⚠️ Chưa có giá vốn của ${miss.length} dòng – bấm "↻ Đọc lại chiết giá".</span>`);
+      const miss = rows.filter((r) => !r.x?.nvlUnit);
+      if (miss.length) return (stepEl.innerHTML = `<span class="warnx">⚠️ Chưa có NVL 1 thùng của ${miss.length} dòng – bấm "↻ Đọc lại chiết giá".</span>`);
       box.querySelectorAll('button, input').forEach((x) => (x.disabled = true));
       try {
         for (const r of rows) {
           step(`Điền giá dòng ${r.i + 1}…`);
-          await setCellPrice(r.cell, Math.ceil(r.x.costUnit / (1 - pct / 100)));
+          await setCellPrice(r.cell, Math.ceil(r.x.nvlUnit / (1 - pct / 100)));
           await sleep(300);
         }
         try {
