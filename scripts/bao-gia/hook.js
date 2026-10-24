@@ -77,7 +77,8 @@
     try {
       if (COLLECTOR_FRAME && f.contentWindow) f.contentWindow.print = () => {};
       const t = f.contentDocument?.body?.innerText || '';
-      const pct = t.match(/Đang bán\s*\((-?\d+(?:[.,]\d+)?)%\)/);
+      // "Đang bán (57%)" hoặc – khi trùng 1 mốc – "30% (Đang bán)"
+      const pct = t.match(/Đang bán\s*\((-?\d+(?:[.,]\d+)?)%\)/) || t.match(/(-?\d+(?:[.,]\d+)?)%\s*\(\s*Đang bán\s*\)/);
       const noPrice = !pct && /Đang bán\s*\(-?Infinity%\)/i.test(t); // báo giá chưa cho giá (giá 1 thùng 0đ)
       const code = t.match(/CHIẾT GIÁ\s*#?(BG\d+)/i);
       if ((!pct && !noPrice) || !code || t === lastChiet) return;

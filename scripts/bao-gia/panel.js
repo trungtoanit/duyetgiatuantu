@@ -281,7 +281,7 @@
     })
     .catch(() => {});
 
-  const OFF_VER = 4; // 4: đọc lại đủ dòng (thử lại khi thiếu) // 3: đọc thêm tổng Nguyên liệu + nhận bảng chiết giá 0đ // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
+  const OFF_VER = 5; // 4: đọc lại đủ dòng (thử lại khi thiếu) // 3: đọc thêm tổng Nguyên liệu + nhận bảng chiết giá 0đ // tăng khi đổi cách lưu bảng chiết giá Offset → các báo giá sẽ được đọc lại
   // Đọc lại khi: chưa có / đổi cách lưu / giá trị báo giá đổi so với lúc đọc chiết giá (sửa đơn giá rồi Cập nhật)
   const offsetStale = (m, q) =>
     !Object.keys(m?.products || {}).length ||
