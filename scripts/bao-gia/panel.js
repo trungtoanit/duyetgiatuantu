@@ -3024,8 +3024,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const groups = [...by].map(([who, cs]) => [who, cs.sort((a, b) => b.amt - a.amt)]).sort((a, b) => b[1].reduce((t, c) => t + c.amt, 0) - a[1].reduce((t, c) => t + c.amt, 0));
     const val = (a) => (a ? moneyShortG(a) : 'chưa cho giá');
     const head = '📣 Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
-    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} ${val(c.amt)}`).join(', ')}`)].join('\n');
-    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b>${esc(shortName(who))}</b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> ${esc(val(c.amt))}`).join(', ')}</div>`).join('')}`;
+    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n');
+    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('')}`;
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
