@@ -3340,7 +3340,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
     const kd = state.kpiDay || 0;
     const dLab = kd === 0 ? 'Hôm nay' : kd === 1 ? 'Hôm qua' : new Date(vn0 + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit' });
-    const nb = (dir, dis, t) => `<button data-dg-kd="${dir}" ${dis ? 'disabled' : ''} title="${t}" style="all:unset;cursor:${dis ? 'default' : 'pointer'};display:grid;place-items:center;width:28px;height:28px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:${dis ? '#cbd5e1' : '#334155'};font-weight:900;font-size:15px">${dir < 0 ? '‹' : '›'}</button>`;
+    const nb = (dir, dis, t) => `<button data-dg-kd="${dir}" ${dis ? 'disabled' : ''} title="${t}" style="all:unset;cursor:${dis ? 'default' : 'pointer'};display:grid;place-items:center;width:28px;height:28px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:${dis ? '#cbd5e1' : '#334155'};font-weight:900;font-size:15px">${dir > 0 ? '‹' : '›'}</button>`;
     const missing = list.length - k.dn;
     const html =
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
