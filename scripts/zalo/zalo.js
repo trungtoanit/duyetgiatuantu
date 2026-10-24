@@ -187,10 +187,23 @@
     const btn =
       [...document.querySelectorAll('[icon*="Sent"], [icon*="send" i], [data-translate-title*="SEND"], [title="Gửi"], [title^="Gửi "], .send-btn, [class*="send-btn"], [class*="SendButton"], [data-id*="Send"]')].find(visible) ||
       // nút mũi tên gửi ở góc dưới phải khung soạn (chế độ định dạng)
-      [...document.querySelectorAll('i.fa, svg')]
-        .filter((i) => visible(i) && /send|sent|paper-plane/i.test(String(i.className?.baseVal ?? i.className) + (i.getAttribute('data-icon') || '')))
-        .map((i) => i.closest('button, [role="button"], div'))
-        .find(Boolean);
+      [...document.querySelectorAll('i, svg, [class*="send" i], [class*="Sent"]')]
+        .filter((i) => visible(i) && !i.closest('#richInput, [contenteditable="true"], .message-view, [class*="chat-item"]') && /send|sent|paper-plane/i.test(String(i.className?.baseVal ?? i.className) + (i.getAttribute('data-icon') || '') + (i.getAttribute('icon') || '')))
+        .map((i) => i.closest('button, [role="button"], [class*="btn"], div') || i)
+        .find(Boolean) ||
+      // dự phòng: nút ngoài cùng bên phải, ngang hàng nút emoji ở góc dưới khung soạn
+      (() => {
+        const ed = chatInput();
+        const box = ed?.closest('[id*="chat-input"], [class*="chat-input"], [class*="chat-box"], footer');
+        if (!box) return null;
+        const r = box.getBoundingClientRect();
+        return [...box.querySelectorAll('div, span, button, i, svg')]
+          .filter((b) => visible(b) && !b.closest('[contenteditable="true"]') && !b.children.length)
+          .map((b) => [b, b.getBoundingClientRect()])
+          .filter(([, br]) => br.width > 8 && br.width < 60 && r.right - br.right < 40 && r.bottom - br.bottom < 50)
+          .sort((a, b) => b[1].right - a[1].right)
+          .map(([b]) => b.closest('[class*="btn"], [role="button"], button') || b)[0];
+      })();
     if (btn) {
       log(`bấm nút gửi: ${btn.tagName}.${String(btn.className?.baseVal ?? btn.className).slice(0, 60)} ${btn.getAttribute('title') || btn.getAttribute('icon') || ''}`);
       for (const t of ['mousedown', 'mouseup', 'click']) btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
@@ -203,7 +216,7 @@
     el.dispatchEvent(new KeyboardEvent('keyup', o));
   }
 
-  const ZVER = '1.2.313';
+  const ZVER = '1.2.314';
   let trace = [];
   let runId = '';
   // Mỗi bước 1 dòng riêng trên máy chủ (không ghi đè nhau khi gửi lệch thứ tự)
@@ -373,6 +386,15 @@
     await markSent(job, false);
     await markTeam(job, false);
     await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
+    // Tin nhắc cả đội: gửi xong tự đóng tab Zalo do trợ lý mở (không còn việc nào chờ)
+    if (job.team) {
+      await sleep(2000);
+      const more = Object.values(await kvGet('zaloJobs')).some((j) => j?.status === 'pending' && Date.now() - j.at < 10 * 60e3);
+      if (!more && (window.opener || window.name === 'dg-zalo')) {
+        tr('đóng tab Zalo');
+        window.close();
+      }
+    }
   }
 
   let busy = false;

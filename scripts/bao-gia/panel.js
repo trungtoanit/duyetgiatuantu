@@ -3121,7 +3121,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       } catch {
         blank = false; // đã là trang Zalo (khác nguồn)
       }
-      if (w && blank) w.location.href = 'https://chat.zalo.me/';
+      // luôn tải lại tab Zalo để chạy bản script mới nhất (job vẫn chờ trong hàng đợi)
+      if (w) w.location.href = 'https://chat.zalo.me/';
       w?.focus();
     } catch {}
     const { text, html } = buildTeamMsg();
