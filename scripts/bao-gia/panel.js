@@ -3005,18 +3005,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // mở tab Zalo ngay lúc bấm (trình duyệt chặn cửa sổ mở sau khi chờ)
     const zal = renderCtx.zaloAlive;
     if (!zal?.at || Date.now() - zal.at > 15000) window.open('https://chat.zalo.me/', 'dg-zalo');
-    const by = new Map();
+    // Mỗi khách 1 lần (cộng giá trị các báo giá gợi ý của khách đó), gom theo NVKD
+    const byCust = new Map();
     for (const { q } of items) {
       const who = staffOf(q, renderCtx.comments?.[q.id]) || 'Chưa rõ NVKD';
       if (isExcluded(who)) continue;
       const code = q.customer?.code || shortCompany(q.customer?.name || '') || q.code;
-      if (!by.has(who)) by.set(who, []);
-      if (!by.get(who).includes(code)) by.get(who).push(code);
+      const key = custKey(q) || code;
+      const cur = byCust.get(key) || { who, code, amt: 0 };
+      cur.amt += Number(q.amount) || 0;
+      byCust.set(key, cur);
     }
-    const groups = [...by].sort((a, b) => b[1].length - a[1].length);
+    const by = new Map();
+    for (const c of byCust.values()) {
+      if (!by.has(c.who)) by.set(c.who, []);
+      by.get(c.who).push(c);
+    }
+    const groups = [...by].map(([who, cs]) => [who, cs.sort((a, b) => b.amt - a.amt)]).sort((a, b) => b[1].reduce((t, c) => t + c.amt, 0) - a[1].reduce((t, c) => t + c.amt, 0));
+    const val = (a) => (a ? moneyShortG(a) : 'chưa cho giá');
     const head = '📣 Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
-    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.join(', ')}`)].join('\n');
-    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b>${esc(shortName(who))}</b> (${cs.length}): ${cs.map((c) => `<b>${esc(c)}</b>`).join(', ')}</div>`).join('')}`;
+    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} ${val(c.amt)}`).join(', ')}`)].join('\n');
+    const html = `<div>${esc(head)}</div>${groups.map(([who, cs]) => `<div><b>${esc(shortName(who))}</b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> ${esc(val(c.amt))}`).join(', ')}</div>`).join('')}`;
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
