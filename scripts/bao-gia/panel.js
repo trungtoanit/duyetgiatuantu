@@ -3273,6 +3273,67 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           sp.title = `Tổng ${n} báo giá đang hiện: ${money(sum)}`;
         }
       }
+      // Cột "Chênh lệch" (giống extension) ngay sau "Số tiền": Flexo = BG − giấy tấm · Offset = BG − NVL; màu theo mức
+      {
+        const ths = [...wrap.querySelectorAll('thead th')];
+        const si = ths.findIndex((th) => /^Số tiền/.test(th.innerText.trim()));
+        if (si >= 0) {
+          let dth = wrap.querySelector('th[data-dg-diffcol]');
+          if (!dth) {
+            dth = document.createElement('th');
+            dth.className = ths[si].className;
+            dth.setAttribute('data-dg-diffcol', '1');
+            dth.style.textAlign = 'right';
+            dth.innerHTML = 'Chênh lệch<div data-dg-dsum style="font-size:12px;font-weight:800;border-radius:6px;padding:0 6px;margin-top:2px;display:inline-block;white-space:nowrap"></div>';
+            ths[si].after(dth);
+            for (const cg of wrap.querySelectorAll('colgroup')) {
+              const cols = cg.querySelectorAll('col:not([data-dg-diffcol])');
+              const col = document.createElement('col');
+              col.setAttribute('data-dg-diffcol', '1');
+              col.style.width = '110px';
+              cols[si] ? cols[si].after(col) : cg.append(col);
+            }
+          }
+          let dsum = 0;
+          let dn = 0;
+          for (const tr of wrap.querySelectorAll('tbody tr')) {
+            if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
+            let td = tr.querySelector(':scope > td[data-dg-diffcol]');
+            if (!td) {
+              td = document.createElement('td');
+              td.className = tr.cells[si]?.className || '';
+              td.setAttribute('data-dg-diffcol', '1');
+              td.style.textAlign = 'right';
+              tr.cells[si] ? tr.cells[si].after(td) : tr.append(td);
+            }
+            const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
+            const q = code && byCode[code];
+            const v = q ? diffVal(q) : null;
+            let h = '';
+            if (q?.noSheet) h = '<span style="color:#b91c1c;font-weight:800" title="Có dòng giá giấy tấm 0đ/m2">😡</span>';
+            else if (v != null) {
+              const [fg, bg] = v < 0 ? ['#b91c1c', '#fee2e2'] : v < 5e6 ? ['#7e22ce', '#f3e8ff'] : v < 10e6 ? ['#c2410c', '#ffedd5'] : v < 30e6 ? ['#2563eb', '#dbeafe'] : v < 50e6 ? ['#1e3a8a', '#c7d2fe'] : ['#15803d', '#dcfce7'];
+              h = `<span style="display:inline-block;font-weight:800;color:${fg};background:${bg};border-radius:999px;padding:0 8px;white-space:nowrap;font-variant-numeric:tabular-nums">${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>`;
+              if (tr.style.display !== 'none') {
+                dsum += v;
+                dn++;
+              }
+            } else if (q && (q.kinds?.length || q.offset)) h = '<span style="color:#cbd5e1">…</span>';
+            if (td.dataset.h !== h) {
+              td.dataset.h = h;
+              td.innerHTML = h;
+            }
+          }
+          const ds = dth.querySelector('[data-dg-dsum]');
+          const t = `Σ ${dn ? (Math.abs(dsum) >= 1e9 ? `${(dsum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(dsum)) : '–'}`;
+          if (ds && ds.textContent !== t) {
+            ds.textContent = t;
+            ds.style.color = dsum < 0 ? '#b91c1c' : '#047857';
+            ds.style.background = dsum < 0 ? '#fee2e2' : '#dcfce7';
+          }
+          if (ds) ds.title = `Tổng chênh lệch ${dn} báo giá đang hiện (đã tính được)`;
+        }
+      }
       // Cột "Sale": tên gọn (3 chữ → chữ cuối, 4 chữ trở lên → 2 chữ cuối), rê chuột thấy tên đầy đủ
       {
         const ths = [...wrap.querySelectorAll('thead th')];
