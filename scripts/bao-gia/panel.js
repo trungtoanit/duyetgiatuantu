@@ -1712,12 +1712,36 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           : '<div class="muted">Không đọc được giấy tấm (PO) của báo giá này.</div>');
       const pct = Number(range.value);
       const estBase = fx.paper / (1 - pct / 100);
-      sumEl.innerHTML = `<div class="ps-grid">
-          <div class="ps-t"><span>Mua giấy tấm</span><b>${trM(fx.paper)}</b><small>${esc(fx.code)}</small></div>
-          <div class="ps-t"><span>Thu về (BG Flexo)</span><b>${fx.base ? trM(fx.base) : '0đ'}</b><small>${fx.base ? 'hiện tại' : 'chưa cho giá'}</small></div>
-          <div class="ps-t ${fx.diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${fx.diff < 0 ? '−' : '+'}${trM(Math.abs(fx.diff))}</b><small>${fx.rest != null ? `${fx.rest}%` : fx.base ? 'PO > BG' : 'hiện tại'}</small></div>
-        </div>
-        <div class="ps-est">Bán <b>${pct}%</b> → thu về ≈ <b>${trM(estBase)}</b>, chênh lệch ≈ <b class="pos">+${trM(estBase - fx.paper)}</b> <span class="muted">(ước tính = giấy tấm ÷ (1 − ${pct}%))</span></div>`;
+      // 3 ô theo % đang chọn (có % riêng từng dòng thì renderTot ghi đè bằng tổng từng dòng); đổi số → nháy
+      if (!sumEl.querySelector('.ps-grid'))
+        sumEl.innerHTML = `<div class="ps-grid">
+          <div class="ps-t" data-k="p"><span>Mua giấy tấm</span><b></b><small></small></div>
+          <div class="ps-t" data-k="r"><span>Thu về (theo % chọn)</span><b></b><small></small></div>
+          <div class="ps-t" data-k="d"><span>Chênh lệch</span><b></b><small></small></div>
+        </div><div class="ps-est"></div>`;
+      setTiles(fx.paper, estBase, `hiện tại ${fx.base ? trM(fx.base) : '0đ'}`, fx.code);
+      sumEl.querySelector('.ps-est').innerHTML = `<span class="muted">Hiện tại: thu về ${fx.base ? trM(fx.base) : '0đ'}, chênh lệch ${fx.diff < 0 ? '−' : '+'}${trM(Math.abs(fx.diff))}${fx.rest != null ? ` (${fx.rest}%)` : ''} · ước tính = giấy tấm ÷ (1 − %)</span>`;
+      renderTot?.();
+    };
+    // Ghi 3 ô + hiệu ứng khi số đổi
+    const setTiles = (paper, rev, revNote, code) => {
+      const diff = rev - paper;
+      const put = (k, txt, small, cls) => {
+        const t = sumEl.querySelector(`.ps-t[data-k="${k}"]`);
+        if (!t) return;
+        if (cls != null) t.className = `ps-t ${cls}`;
+        const b = t.querySelector('b');
+        if (b.textContent !== txt) {
+          b.textContent = txt;
+          t.classList.remove('bump');
+          void t.offsetWidth;
+          t.classList.add('bump');
+        }
+        t.querySelector('small').textContent = small;
+      };
+      put('p', trM(paper), code || '');
+      put('r', trM(rev), revNote || '');
+      put('d', `${diff < 0 ? '−' : '+'}${trM(Math.abs(diff))}`, rev ? `${((diff / rev) * 100).toFixed(1)}%` : '', diff < 0 ? 'neg' : 'pos');
     };
     // % riêng cho từng dòng Flexo (để trống = theo % chung)
     const rowPct = {};
@@ -1738,7 +1762,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     // Tổng theo % từng dòng: giấy tấm chia cho từng dòng theo tỷ lệ thành tiền hiện tại → thành tiền mới = giấy tấm dòng ÷ (1 − % dòng)
     // Từng dòng: giấy tấm của dòng (theo Mã TP trong PO; chưa có thì chia theo tỷ lệ thành tiền ≈) → thành tiền = giấy tấm ÷ (1 − % dòng)
-    const renderTot = () => {
+    var renderTot = () => {
       const el = rowsEl.querySelector('.pr-tot');
       const fx = flexoPaper(q);
       const byTp = renderCtx.margins?.[q.code]?.flexo?.byTp || {};
@@ -1773,6 +1797,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           line.innerHTML = `<span title="${exact ? `Giấy tấm theo PO (${esc(r.tp)})` : `Ước tính: PO không có dòng mã ${esc(r.tp || '?')} → tính theo tỷ lệ giấy tấm / thành tiền của các dòng khác`}">GT ${exact ? '' : '≈'}<b>${trM(paper)}</b></span><span>TT <b>${trM(tt)}</b>${r.qty ? ` <i>(${money(Math.ceil(tt / r.qty))}/c)</i>` : ''}</span><span class="${d < 0 ? 'neg' : 'pos'}">CL <b>${d < 0 ? '−' : '+'}${trM(Math.abs(d))}</b></span>`;
       }
       const diff = rev - paperSum;
+      setTiles(paperSum, rev, `cộng từng dòng · hiện tại ${fx.base ? trM(fx.base) : '0đ'}`, fx.code);
       el.innerHTML = `<div class="ps-grid"><div class="ps-t"><span>Tổng mua giấy tấm</span><b>${trM(paperSum)}</b><small>${esc(fx.code)}</small></div>
         <div class="ps-t"><span>Tổng thành tiền</span><b>${trM(rev)}</b><small>cộng từng dòng</small></div>
         <div class="ps-t ${diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${diff < 0 ? '−' : '+'}${trM(Math.abs(diff))}</b><small>${rev ? `${((diff / rev) * 100).toFixed(1)}%` : ''}</small></div></div>`;
@@ -6098,6 +6123,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .ps-t.pos { border-color: #bbf7d0; background: #f0fdf4; } .ps-t.pos b { color: #15803d; }
     .ps-t.neg { border-color: #fecaca; background: #fef2f2; } .ps-t.neg b { color: #b91c1c; }
     .ps-est { margin-top: 6px; font-size: 12px; }
+    .ps-t.bump { animation: psBump .55s ease-out; }
+    .ps-t.bump b { animation: psFlash .7s ease-out; }
+    @keyframes psBump { 0% { transform: scale(1); } 30% { transform: scale(1.05); box-shadow: 0 0 0 4px rgba(34,197,94,.25); } 100% { transform: scale(1); box-shadow: none; } }
+    @keyframes psFlash { 0% { color: #2563eb; } 100% { } }
     .pdlg-rows:empty { display: none; }
     .pr-line { grid-column: 2 / -1; display: flex; gap: 10px; font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
     .pr-line b { color: #0f172a; } .pr-line i { font-style: normal; color: #94a3b8; } .pr-line .pos b { color: #15803d; } .pr-line .neg b { color: #b91c1c; }
