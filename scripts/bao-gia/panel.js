@@ -17,7 +17,7 @@
   const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
   const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
   // Dữ liệu dùng chung mọi domain (việc gửi Zalo, máy, file cài đặt) → không thêm tiền tố
-  const SHARED_NS = new Set(['zaloJobs', 'zaloAlive', 'zaloDebug', 'zaloNames', 'zaloSent', 'machine', 'files']);
+  const SHARED_NS = new Set(['zaloJobs', 'zaloAlive', 'zaloDebug', 'zaloNames', 'zaloSent', 'machine', 'files', 'badge', 'popupCards']);
   const siteNs = (k) => (SITE.prefix && k && !SHARED_NS.has(k) && !String(k).startsWith(SITE.prefix) ? SITE.prefix + k : k);
   const call = (msg0) => {
     const msg = { ...msg0 };
@@ -6451,6 +6451,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .gp-staff { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .gp-amt { text-align: right; font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
     .gp-diff { text-align: right; }
+    .gp-row.unread { font-weight: 700; background: #fffbeb; border-color: #fde68a; }
+    .gp-row.unread .gp-main b::before { content: '●'; color: #ef4444; margin-right: 4px; }
+    .gp-row.read { opacity: .6; } .gp-row.read:hover { opacity: 1; }
     .pr-line { grid-column: 2 / -1; display: flex; gap: 10px; font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
     .pr-line b { color: #0f172a; } .pr-line i { font-style: normal; color: #94a3b8; } .pr-line .pos b { color: #15803d; } .pr-line .neg b { color: #b91c1c; }
     .pr-tot { display: none; } /* trùng với 3 ô phía trên → ẩn (vẫn dùng để tính từng dòng) */
@@ -8553,6 +8556,43 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     state.gapCache = { at: Date.now(), rows };
     return rows;
   }
+  // Popup + số trên biểu tượng extension (chỉ máy của Nguyễn Trung Toán): danh sách chênh lệch 2 hệ thống + số chưa đọc
+  async function gapToPopup() {
+    if (!IS_TOP || !IS_OWNER()) return;
+    const all = await gapRows();
+    const byDiff = lsGet('dgGapSort') === 'diff';
+    const rows = all.slice().sort((a, b) => (byDiff ? b.v - a.v : (b.q.createdAt || 0) - (a.q.createdAt || 0) || (a.q.erpRank ?? 1e9) - (b.q.erpRank ?? 1e9)));
+    const unread = rows.filter((r) => r.q.isRead === false).length;
+    const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
+    const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
+    const card = {
+      title: '📈 Chênh lệch 2 hệ thống',
+      sub: `Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
+      chips: [
+        { text: `● Chưa đọc ${unread}`, color: '#b91c1c' },
+        { text: `Tất cả ${rows.length}`, color: '#334155' },
+        { text: `🟥 Tuấn Tú Σ ${big(sumOf('tuantu'))}`, color: '#dc2626' },
+        { text: `🟦 Đại Dương Σ ${big(sumOf('daiduong'))}`, color: '#2563eb' },
+      ],
+      rows: rows.slice(0, 120).map((r) => ({
+        tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
+        tagColor: r.site.key === 'tuantu' ? '#dc2626' : '#2563eb',
+        title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}`,
+        sub: `${shortName(r.q.staff?.name || '')} · ${r.q.name || ''}`,
+        right: `${r.v < 0 ? '−' : ''}${trM(Math.abs(r.v))}`,
+        unread: r.q.isRead === false ? true : r.q.isRead === true ? false : undefined,
+        url: `${r.host}/bao-gia/update/${r.q.id}`,
+      })),
+      at: Date.now(),
+    };
+    const sig = JSON.stringify([card.chips, card.rows]);
+    if (sig === state.gapPopupSig) return;
+    state.gapPopupSig = sig;
+    await kvMerge('popupCards', { gap: card });
+    await call({ type: 'kv.set', key: 'badge', value: { text: unread ? String(unread) : '', color: '#dc2626', title: `${unread} báo giá chênh lệch lớn chưa đọc (Tuấn Tú + Đại Dương)` } });
+  }
+  setTimeout(() => gapToPopup().catch(() => {}), 20e3);
+  setInterval(() => gapToPopup().catch(() => {}), 60e3);
   async function gapTab() {
     const all = await gapRows();
     const f = lsGet('dgGapSite') || '';
@@ -8567,16 +8607,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       `<button class="gp-chip${f === k ? ' on' : ''}" data-act="gap-site" data-site="${k}" style="--c:${col}">${label} <b>${list.length}</b> · Σ ${big(sum(list))}</button>`;
     const tt = all.filter((r) => r.site.key === 'tuantu');
     const dd = all.filter((r) => r.site.key === 'daiduong');
+    const unread = all.filter((r) => r.q.isRead === false).length;
     return `<div class="gp">
       <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
         <button class="gp-chip" data-act="gap-sort" style="--c:#475569;margin-left:auto">↕ ${byDiff ? 'Theo chênh lệch' : 'Như danh sách báo giá'}</button></div>
-      <div class="gp-chips">${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
+      <div class="gp-chips"><span class="gp-chip" style="--c:#b91c1c;cursor:default">● Chưa đọc <b>${unread}</b></span>${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
       <div class="gp-list">${rows
         .slice(0, 300)
         .map((r, i) => {
           const q = r.q;
           const staff = q.staff?.name || '';
-          return `<a class="gp-row" href="${r.host}/bao-gia/update/${q.id}" target="_blank" rel="noopener">
+          const rd = q.isRead === false ? ' unread' : q.isRead === true ? ' read' : '';
+          return `<a class="gp-row${rd}" title="${q.isRead === false ? 'Chưa đọc' : q.isRead === true ? 'Đã đọc' : ''}" href="${r.host}/bao-gia/update/${q.id}" target="_blank" rel="noopener">
             <span class="gp-no">${i + 1}</span><span class="gp-site ${r.site.key}">${r.site.key === 'tuantu' ? 'TT' : 'ĐD'}</span>
             <span class="gp-main"><b>${esc(q.code)}</b> <span class="gp-cust">${esc(shortCompany(q.customer?.code || q.customer?.name || ''))}</span><span class="gp-name">${esc(q.name || '')}</span></span>
             <span class="gp-staff">${esc(shortName(staff))}</span>

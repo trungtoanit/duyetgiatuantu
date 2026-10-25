@@ -171,4 +171,32 @@ $('fullCollect').onclick = async () => {
 loadCrm();
 setInterval(loadCrm, 2000);
 
+// ---- Khung do script trên trang gửi tới: kv 'popupCards' = { <id>: { title, sub, chips:[{text,color}], rows:[{tag,tagColor,title,sub,right,rightColor,rightBg,url}], at } } ----
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+let cardsSig = '';
+async function loadCards() {
+  const cards = (await chrome.storage.local.get(KV('popupCards')))[KV('popupCards')] || {};
+  const list = Object.values(cards).filter((c) => c && Array.isArray(c.rows));
+  const sig = JSON.stringify(list);
+  if (sig === cardsSig) return;
+  cardsSig = sig;
+  document.body.classList.toggle('wide', list.length > 0);
+  $('cards').innerHTML = list
+    .map((c) => `<section class="card"><h2>${esc(c.title)}</h2>${c.sub ? `<div class="hint" style="margin:-4px 0 6px">${esc(c.sub)}</div>` : ''}
+      ${c.chips?.length ? `<div class="pc-chips">${c.chips.map((x) => `<span class="pc-chip" style="color:${esc(x.color || '#334155')}">${esc(x.text)}</span>`).join('')}</div>` : ''}
+      <div class="pc-list">${c.rows
+        .map((r, i) => `<div class="pc-row${r.unread === true ? ' unread' : r.unread === false ? ' read' : ''}" data-url="${esc(r.url || '')}" title="${r.unread === true ? 'Chưa đọc' : r.unread === false ? 'Đã đọc' : ''}"><span class="pc-no">${i + 1}</span>
+          <span class="pc-tag" style="background:${esc(r.tagColor || '#64748b')}">${esc(r.tag || '')}</span>
+          <span class="pc-main"><b>${esc(r.title)}</b><span class="s">${esc(r.sub || '')}</span></span>
+          <span class="pc-right" style="color:${esc(r.rightColor || '#047857')};background:${esc(r.rightBg || '#ecfdf5')}">${esc(r.right || '')}</span></div>`)
+        .join('') || '<div class="hint">Không có dữ liệu.</div>'}</div></section>`)
+    .join('');
+}
+$('cards').addEventListener('click', (e) => {
+  const url = e.target.closest('.pc-row')?.dataset.url;
+  if (url && /^https:\/\//.test(url)) chrome.tabs.create({ url });
+});
+loadCards();
+setInterval(loadCards, 2000);
+
 send('getStatus');

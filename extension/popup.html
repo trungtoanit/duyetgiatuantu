@@ -73,6 +73,21 @@
     .collect span { flex: 1; }
     .collect button { padding: 5px 10px; font-size: 12px; }
     .hint { font-size: 12px; color: var(--muted); }
+    /* Khung do script trên trang gửi tới (kv 'popupCards') – thêm/sửa nội dung không cần cài lại extension */
+    body.wide { width: 560px; }
+    .pc-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+    .pc-chip { font-size: 11.5px; font-weight: 700; padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); background: #fff; }
+    .pc-list { display: grid; gap: 3px; max-height: 380px; overflow: auto; }
+    .pc-row { display: grid; grid-template-columns: 22px 26px minmax(0,1fr) auto; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 8px; border: 1px solid #eef2f7; cursor: pointer; font-size: 12px; }
+    .pc-row:hover { border-color: #c7d2fe; background: #f8faff; }
+    .pc-no { color: var(--muted); font-weight: 800; text-align: right; font-size: 11px; }
+    .pc-tag { font-size: 10px; font-weight: 900; color: #fff; border-radius: 5px; text-align: center; padding: 1px 0; }
+    .pc-main { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pc-main b { color: var(--blue); } .pc-main .s { color: var(--muted); margin-left: 4px; }
+    .pc-row.unread .pc-main b::before { content: '●'; color: #ef4444; margin-right: 4px; }
+    .pc-row.unread .pc-main { font-weight: 700; }
+    .pc-row.read { opacity: .6; }
+    .pc-right { font-weight: 800; border-radius: 999px; padding: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -91,6 +106,8 @@
       <b>Allow User Scripts</b> (Chrome 138+) hoặc bật <b>Developer mode</b> (Chrome cũ hơn).
       <div style="margin-top:8px"><button id="openExt">Mở trang cài đặt extension</button></div>
     </div>
+
+    <div id="cards"></div>
 
     <section class="card">
       <h2>💳 Chi phí Claude</h2>

@@ -190,7 +190,19 @@ chrome.alarms.onAlarm.addListener((a) => {
   }
 });
 
+// Số trên biểu tượng extension: script trên trang ghi kv 'badge' = { text, color, title } → hiện ngay (không cần cài lại khi đổi nội dung)
+async function applyBadge(b) {
+  try {
+    await chrome.action.setBadgeText({ text: b?.text ? String(b.text).slice(0, 4) : '' });
+    if (b?.color) await chrome.action.setBadgeBackgroundColor({ color: b.color });
+    if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: b?.textColor || '#ffffff' });
+    await chrome.action.setTitle({ title: b?.title || 'Duyệt giá Tuấn Tú' });
+  } catch {}
+}
+chrome.storage.local.get('kv:badge').then((o) => applyBadge(o['kv:badge'])).catch(() => {});
+
 chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area === 'local' && changes['kv:badge']) applyBadge(changes['kv:badge'].newValue);
   if (area === 'sync' && changes.config) {
     await scheduleAlarm();
     await sync(true);
