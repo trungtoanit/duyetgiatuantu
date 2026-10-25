@@ -1547,14 +1547,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!t) return [];
     const heads = [...t.querySelectorAll('thead th')];
     const pIdx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
+    const qIdx = heads.findIndex((th) => /^Số lượng$/i.test(th.innerText.trim()));
     return [...t.querySelectorAll('.ant-table-tbody tr')]
       .filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim())
       .map((tr, i) => {
         const txt = tr.innerText.replace(/\s+/g, ' ');
         const cell = tr.cells[pIdx];
+        const qty = qIdx >= 0 ? Number(String(tr.cells[qIdx]?.querySelector('input')?.value || tr.cells[qIdx]?.innerText || '').replace(/[^\d]/g, '')) || 0 : 0;
         const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
         const name = (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C/i) || [txt.slice(0, 60)])[0];
-        return { i, tr, cell, cur, name, offset: /offset/i.test(txt) };
+        return { i, tr, cell, cur, qty, name, offset: /offset/i.test(txt) };
       })
       .filter((r) => !r.offset && r.cell);
   }
@@ -1729,7 +1731,28 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
             <span class="pr-cur">${r.cur ? money(r.cur) : '0đ'}</span>
             <span class="pr-ctl"><button class="act" data-rd="${r.i}" data-d="-1">−</button><input data-ri="${r.i}" inputmode="numeric" placeholder="${pct}" value="${v ?? ''}"><b>%</b><button class="act" data-rd="${r.i}" data-d="1">+</button></span></div>`;
         })
-        .join('')}`;
+        .join('')}<div class="pr-tot"></div>`;
+      renderTot();
+    };
+    // Tổng theo % từng dòng: giấy tấm chia cho từng dòng theo tỷ lệ thành tiền hiện tại → thành tiền mới = giấy tấm dòng ÷ (1 − % dòng)
+    const renderTot = () => {
+      const el = rowsEl.querySelector('.pr-tot');
+      const fx = flexoPaper(q);
+      const rows = flexoRowsForDialog();
+      if (!el) return;
+      if (!fx?.paper || !rows.length) return (el.innerHTML = '<span class="muted">Chưa có tổng giấy tấm (PO) để tính.</span>');
+      const pct = Number(range.value);
+      const curTot = rows.reduce((t, r) => t + r.cur * (r.qty || 0), 0);
+      let rev = 0;
+      for (const r of rows) {
+        const share = curTot ? (r.cur * (r.qty || 0)) / curTot : 1 / rows.length;
+        const p = rowPct[r.i] ?? pct;
+        rev += (fx.paper * share) / (1 - p / 100);
+      }
+      const diff = rev - fx.paper;
+      el.innerHTML = `<div class="ps-grid"><div class="ps-t"><span>Tổng mua giấy tấm</span><b>${trM(fx.paper)}</b><small>${esc(fx.code)}</small></div>
+        <div class="ps-t"><span>Tổng thành tiền</span><b>${trM(rev)}</b><small>theo % từng dòng</small></div>
+        <div class="ps-t ${diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${diff < 0 ? '−' : '+'}${trM(Math.abs(diff))}</b><small>${rev ? `${((diff / rev) * 100).toFixed(1)}%` : ''}</small></div></div>`;
     };
     rowsEl.addEventListener('input', (e) => {
       const i = e.target.dataset?.ri;
@@ -1739,6 +1762,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       else delete rowPct[i];
       e.target.closest('.pr-row').classList.toggle('own', rowPct[i] != null && rowPct[i] !== Number(range.value));
       syncGo();
+      renderTot();
     });
     const syncGo = () => {
       const own = Object.values(rowPct).filter((v) => v !== Number(range.value)).length;
@@ -6004,6 +6028,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .ps-t.neg { border-color: #fecaca; background: #fef2f2; } .ps-t.neg b { color: #b91c1c; }
     .ps-est { margin-top: 6px; font-size: 12px; }
     .pdlg-rows:empty { display: none; }
+    .pr-tot { margin-top: 4px; position: sticky; bottom: -8px; background: #f8fafc; padding: 6px 0 2px; }
     .pdlg-card:has(.pdlg-rows:not(:empty)) { width: min(480px, calc(100vw - 32px)); }
     .pdlg-rows { display: grid; gap: 4px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #f8fafc; max-height: 240px; overflow: auto; }
     .pr-h { font-weight: 800; font-size: 12px; margin-bottom: 2px; }
