@@ -3865,14 +3865,42 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const cell = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol'))[iStaff];
           if (!cell) continue;
           const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const texts = [];
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!n.parentElement?.closest('.dg-staffava')) texts.push(n);
+          for (const n of texts) {
             const full = n.nodeValue.trim();
             if (!full || full === n.parentElement?.dataset.dgShort) continue; // đã rút gọn
             const sh = shortName(full);
-            if (sh === full) continue;
-            n.nodeValue = sh;
+            if (n.parentElement === cell) {
+              // chữ nằm thẳng trong ô → bọc vào span để gắn avatar
+              const w = document.createElement('span');
+              n.before(w);
+              w.append(n);
+            }
+            if (sh !== full) n.nodeValue = sh;
             n.parentElement.dataset.dgShort = sh;
+            n.parentElement.dataset.dgFull = full;
             n.parentElement.title = full;
+          }
+          // Avatar nhân viên trước tên (cập nhật khi có ảnh sau)
+          const el = cell.querySelector('[data-dg-full]');
+          if (el) {
+            const full = el.dataset.dgFull;
+            const want = avatarHtml(full, 20);
+            let av = cell.querySelector('.dg-staffava');
+            if (!av) {
+              av = document.createElement('span');
+              av.className = 'dg-staffava';
+              av.setAttribute('style', 'display:inline-flex;vertical-align:middle;margin-right:6px');
+              el.before(av);
+              const box = el.parentElement;
+              if (box && box !== cell) box.style.whiteSpace = 'nowrap';
+              else cell.style.whiteSpace = 'nowrap';
+            }
+            if (av.dataset.html !== want) {
+              av.dataset.html = want;
+              av.innerHTML = want.replace('class="ava', 'style="border-radius:50%;object-fit:cover;display:inline-flex;align-items:center;justify-content:center;background:#dbe4ff;color:#1d4ed8;font-size:10px;font-weight:800;width:20px;height:20px" class="ava').replace(/ style="width:20px;height:20px"/, '');
+            }
           }
         }
       }
