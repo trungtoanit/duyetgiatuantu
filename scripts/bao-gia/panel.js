@@ -2409,6 +2409,30 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: đồng bộ giá…`;
       sync.click();
       await sleep(1500);
+      // Tên đang là "Hộp carton…" → đặt Số lượng thùng về 0 rồi trả lại số cũ để CRM tự đặt lại tên đúng
+      {
+        const title = modal.querySelector('.ant-modal-title')?.textContent || '';
+        if (/Tính giá carton:\s*Hộp carton/i.test(title)) {
+          const lbl = [...modal.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^Số lượng thùng$/i.test(e.textContent.trim()));
+          const inp = (lbl?.closest('.ant-form-item') || lbl?.parentElement?.parentElement)?.querySelector('input');
+          const setV = (v) => {
+            inp.focus();
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, v);
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+            inp.blur();
+          };
+          const old = inp ? String(inp.value).replace(/[^\d]/g, '') : '';
+          if (inp && Number(old) > 0) {
+            btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: đổi tên (SL 0 → ${Number(old).toLocaleString('vi-VN')})…`;
+            setV('0');
+            await sleep(900);
+            setV(old);
+            await waitFor(() => !/Tính giá carton:\s*Hộp carton/i.test(modal.querySelector('.ant-modal-title')?.textContent || ''), 3000, 150);
+            await sleep(600);
+          }
+        }
+      }
       // "Ghi chú khách hàng" còn trống → bấm "Tự động" để CRM tự điền trước khi lưu
       {
         const lbl = [...modal.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^Ghi chú khách hàng$/i.test(e.textContent.trim()));
