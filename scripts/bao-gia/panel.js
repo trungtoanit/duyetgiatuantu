@@ -12,7 +12,7 @@
   // Tuấn Tú giữ tên dữ liệu cũ; domain khác thêm tiền tố (vd. "dd.quotes") để không lẫn báo giá / khách giữa 2 CRM.
   const SITES = {
     tuantu: { key: 'tuantu', prefix: '', name: 'Tuấn Tú', org: 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ', watermark: 'TUAN TU PACKAGING', teamGroup: 'Sale Nội Bộ - Tuấn Tú', bossSign: true, excluded: ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'] },
-    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY BAO BÌ ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú'] },
+    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY BAO BÌ ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'] },
   };
   const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
   const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
@@ -8686,6 +8686,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         renderCtx.margins = mg || {};
         for (const q of Object.values(qs || {})) {
           if (!q?.code || !(Number(q.amount) > 0) || q.noSheet || CLOSED.has(q.quoteStatus) || q.hasOrder) continue;
+          // NVKD bị loại của từng hệ thống (vd. Nguyễn Trí Thức) → ẩn
+          const sn = q.staff?.name || '';
+          if (sn && st.excluded.some((x) => norm(x) === norm(sn) || norm(sn).endsWith(` ${norm(x)}`))) continue;
           let v = null;
           try {
             v = diffVal(q);
