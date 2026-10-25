@@ -1441,10 +1441,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
 
   // Kéo thanh "% Deal" (antd Slider) tới đúng giá trị: phím mũi tên trên tay kéo, không ăn thì bấm thẳng vào thanh
+  // PO vừa đổi nhà cung cấp có thể vẽ lại cả hộp → luôn tìm lại hộp "Tạo PO" và tay kéo mới nhất, chờ tới khi có
+  const poModalNow = (doc = document) =>
+    [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => m.isConnected && getComputedStyle(m).display !== 'none').find((m) => /Tạo PO cho báo giá/.test(m.innerText));
+  const dealHandle = (modal) => {
+    const m = modal?.isConnected && modal.querySelector('.ant-slider-handle') ? modal : poModalNow(modal?.ownerDocument || document);
+    return m?.querySelector('.ant-slider-handle') || null;
+  };
   async function setDealSlider(modal, pct) {
-    const handle = modal.querySelector('.ant-slider-handle');
+    let handle = await waitFor(() => dealHandle(modal), 15000, 250);
     if (!handle) throw new Error('Không thấy thanh kéo "% Deal" trong PO.');
-    const val = () => Number(handle.getAttribute('aria-valuenow'));
+    await sleep(300);
+    handle = dealHandle(modal) || handle;
+    const val = () => {
+      if (!handle.isConnected) handle = dealHandle(modal) || handle;
+      return Number(handle.getAttribute('aria-valuenow'));
+    };
     const key = (k) => handle.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k, keyCode: k === 'ArrowRight' ? 39 : 37, which: k === 'ArrowRight' ? 39 : 37, bubbles: true, cancelable: true }));
     for (let i = 0; i < 120 && val() !== pct; i++) {
       const before = val();
@@ -1487,12 +1499,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const t = b.innerText.trim();
       if (/^[A-Z][A-Z0-9_.&-]{1,12}$/.test(t) && t !== 'OUT' && !chips.some((c) => c.code === t)) chips.push({ code: t, btn: b });
     }
-    const readTotal = () => Number((modal.innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
+    const readTotal = () => Number(((poModalNow() || modal).innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
     const done = [];
     for (const [i, ch] of (chips.length ? chips : [null]).entries()) {
       if (ch) {
         step(`Nhà cung cấp ${ch.code} (${i + 1}/${chips.length}): chọn…`);
-        ch.btn.click();
+        ([...(poModalNow() || modal).querySelectorAll('button.ant-btn')].find((b) => b.innerText.trim() === ch.code) || ch.btn).click();
         // chờ PO của nhà này tải xong: "Tổng thanh toán" đứng yên 3 lần đọc
         let last = -1;
         let same = 0;
@@ -1505,7 +1517,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       step(`${ch ? `Nhà cung cấp ${ch.code}: ` : ''}kéo % Deal = ${pct}%…`);
       await setDealSlider(modal, pct);
-      const setBtn = [...modal.querySelectorAll('button')].find((b) => /Set deal cho BG/i.test(b.innerText));
+      const setBtn = [...(poModalNow() || modal).querySelectorAll('button')].find((b) => /Set deal cho BG/i.test(b.innerText));
       if (!setBtn) throw new Error('Không thấy nút "Set deal cho BG".');
       step(`${ch ? `Nhà cung cấp ${ch.code}: ` : ''}bấm "Set deal cho BG"…`);
       setBtn.click();
@@ -1514,7 +1526,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       done.push(ch?.code || 'NCC');
     }
     step('Đóng PO, lưu báo giá…');
-    modal.querySelector('.ant-modal-close')?.click();
+    (poModalNow() || modal).querySelector('.ant-modal-close')?.click();
     await sleep(800);
     // % riêng từng dòng: giá sau khi set deal (đang = giấy tấm ÷ (1 − pct)) → giấy tấm ÷ (1 − % dòng)
     const custom = Object.entries(rowPct).filter(([, v]) => v != null && v !== pct);
