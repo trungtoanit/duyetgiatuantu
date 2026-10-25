@@ -3579,6 +3579,33 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }, 2000);
   }
   // 3 ô số liệu cạnh hàng tab trạng thái: Số đơn · Doanh thu · Tổng chênh lệch (theo các dòng đang hiện)
+  // Doanh số tháng đúng như biểu đồ "Doanh số tháng này" của CRM: API dashboard/saleByDate (Σ totalSale theo ngày).
+  // Chỉ đọc, dùng phiên đăng nhập sẵn có của trang; lưu tạm 5 phút.
+  const crmSale = {};
+  function crmSaleSum(from, to) {
+    const key = `${from}|${to}`;
+    const c = crmSale[key];
+    if (c && Date.now() - c.at < 5 * 60e3) return c.total;
+    if (!c?.busy) {
+      crmSale[key] = { ...(c || {}), busy: true, at: c?.at || 0 };
+      (async () => {
+        try {
+          const tok = JSON.parse(localStorage.getItem('UserStore') || '{}').token;
+          const ver = (document.body.innerText.match(/v(\d+\.\d+\.\d+)/) || [])[1];
+          if (!tok || !ver) throw new Error('no auth');
+          const r = await fetch(`https://sale.tuantu.com.vn:8080/v1/admin/dashboard/saleByDate?fromDate=${from}&toDate=${to}`, { headers: { token: tok, version: ver, 'X-Client-Version': ver } });
+          const j = await r.json();
+          const arr = Array.isArray(j?.data) ? j.data : [];
+          if (!r.ok || !arr.length && j?.status === false) throw new Error('api');
+          crmSale[key] = { total: arr.reduce((a, x) => a + (Number(x.totalSale) || 0), 0), at: Date.now() };
+        } catch {
+          crmSale[key] = { ...(crmSale[key] || {}), busy: false, at: Date.now() - 4 * 60e3 }; // thử lại sau ~1 phút
+        }
+      })();
+    }
+    return c?.total ?? null;
+  }
+
   function crmKpiTiles(wrap, k) {
     const nav = [...document.querySelectorAll('.ant-tabs-nav')].find((x) => /Tất cả/.test(x.innerText) && /Thành công|Chờ xin giá/.test(x.innerText));
     if (!nav) return;
@@ -3667,9 +3694,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           total++;
           if (d <= mvn.getUTCDate()) done++;
         }
-        const fc = done ? (mRev / done) * total : 0;
-        return `<div title="${esc(`Doanh thu tháng ${mo + 1}: ${money(mRev)} (${mList.length} đơn, tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'})\nDự kiến cả tháng = ${money(mRev)} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật) = ${money(Math.round(fc))}`)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:#f0fdf4;border:1.5px solid #86efac;box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
-          <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">💵 Doanh thu T${mo + 1}</span><b style="font-size:18px;font-weight:900;color:#15803d;white-space:nowrap;font-variant-numeric:tabular-nums">${big(mRev)}</b>
+        // số của CRM (biểu đồ Doanh số tháng này); chưa lấy được thì tạm dùng Σ Tổng tiền các đơn đọc được
+        const ymd = (d) => `${y}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const crm = crmSaleSum(ymd(1), ymd(mvn.getUTCDate()));
+        const rev = crm ?? mRev;
+        const fc = done ? (rev / done) * total : 0;
+        return `<div title="${esc(`Doanh thu tháng ${mo + 1}: ${money(rev)} ${crm != null ? '(theo CRM – biểu đồ Doanh số tháng này)' : `(tạm tính từ ${mList.length} đơn đọc được – đang lấy số của CRM)`}, tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}\nDự kiến cả tháng = ${money(rev)} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật) = ${money(Math.round(fc))}`)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:#f0fdf4;border:1.5px solid #86efac;box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+          <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">💵 Doanh thu T${mo + 1}</span><b style="font-size:18px;font-weight:900;color:#15803d;white-space:nowrap;font-variant-numeric:tabular-nums">${big(rev)}${crm == null ? '<span style="font-size:11px;color:#94a3b8"> ≈</span>' : ''}</b>
           <span style="font-size:10.5px;font-weight:700;color:#0e7490;white-space:nowrap">→ dự kiến ${big(fc)} <span style="color:#94a3b8;font-weight:600">(${done}/${total} ngày công)</span></span></div>`;
       })() +
       // Dự báo cả tháng: chênh lệch hiện tại ÷ ngày làm việc đã qua × ngày làm việc của tháng (trừ Chủ nhật)
