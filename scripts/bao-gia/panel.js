@@ -3733,14 +3733,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const st = document.createElement('style');
     st.id = 'dg-diff-blink';
     st.textContent = `
-      @keyframes dgBlink1 { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.0); } 50% { box-shadow: 0 0 6px 1px rgba(22,163,74,.55); } }
-      @keyframes dgBlink2 { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.0); transform: scale(1); } 50% { box-shadow: 0 0 9px 2px rgba(22,163,74,.7); transform: scale(1.05); } }
-      @keyframes dgBlink3 { 0%,100% { box-shadow: 0 0 0 0 rgba(234,88,12,.0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 12px 3px rgba(234,88,12,.8); transform: scale(1.1); filter: brightness(1.12); } }
-      @keyframes dgBlink4 { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 16px 5px rgba(220,38,38,.9); transform: scale(1.16); filter: brightness(1.25) saturate(1.3); } }
-      .dg-blink1 { animation: dgBlink1 2s ease-in-out infinite; }
-      .dg-blink2 { animation: dgBlink2 1.3s ease-in-out infinite; }
-      .dg-blink3 { animation: dgBlink3 .9s ease-in-out infinite; }
-      .dg-blink4 { animation: dgBlink4 .55s ease-in-out infinite; }
+      @keyframes dgBlink1 { 0%,100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 10px 3px rgba(37,99,235,.85); transform: scale(1.08); filter: brightness(1.35) saturate(1.3); } }
+      @keyframes dgBlink2 { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 14px 4px rgba(22,163,74,.95); transform: scale(1.12); filter: brightness(1.45) saturate(1.4); } }
+      @keyframes dgBlink3 { 0%,100% { box-shadow: 0 0 0 0 rgba(234,88,12,0); transform: scale(1); filter: brightness(1); } 50% { box-shadow: 0 0 18px 6px rgba(234,88,12,1); transform: scale(1.18); filter: brightness(1.6) saturate(1.6); } }
+      @keyframes dgBlink4 { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); transform: scale(1); filter: brightness(1); } 25% { box-shadow: 0 0 22px 8px rgba(220,38,38,1); transform: scale(1.24); filter: brightness(1.8) saturate(1.8); } 50% { box-shadow: 0 0 4px 1px rgba(220,38,38,.6); transform: scale(1.04); filter: brightness(1.1); } 75% { box-shadow: 0 0 22px 8px rgba(250,204,21,1); transform: scale(1.24); filter: brightness(1.8) saturate(1.8); } }
+      .dg-blink1, .dg-blink2, .dg-blink3, .dg-blink4 { position: relative; z-index: 1; }
+      .dg-blink1 { animation: dgBlink1 1.1s ease-in-out infinite; }
+      .dg-blink2 { animation: dgBlink2 .8s ease-in-out infinite; }
+      .dg-blink3 { animation: dgBlink3 .55s ease-in-out infinite; }
+      .dg-blink4 { animation: dgBlink4 .45s ease-in-out infinite; }
       @media (prefers-reduced-motion: reduce) { .dg-blink1, .dg-blink2, .dg-blink3, .dg-blink4 { animation: none; } }`;
     document.head.append(st);
   }
