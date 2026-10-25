@@ -8557,11 +8557,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return rows;
   }
   // Popup + số trên biểu tượng extension (chỉ máy của Nguyễn Trung Toán): danh sách chênh lệch 2 hệ thống + số chưa đọc
+  // Thứ tự như danh sách Báo giá của CRM: vị trí trên ERP (erpRank, đọc trong 2 ngày gần đây; CRM xếp theo hoạt động mới nhất,
+  // không theo ngày tạo) – 2 hệ thống xen kẽ theo vị trí; báo giá chưa có vị trí mới thì xếp sau, theo ngày tạo
+  const gapRank = (q) => (q.erpRank != null && Date.now() / 1000 - (q.erpRankAt || 0) < 2 * 86400 ? q.erpRank : Infinity);
+  const gapOrder = (a, b) => {
+    const ra = gapRank(a.q);
+    const rb = gapRank(b.q);
+    if (ra !== rb) return ra === Infinity ? 1 : rb === Infinity ? -1 : ra - rb;
+    return (b.q.createdAt || 0) - (a.q.createdAt || 0);
+  };
   async function gapToPopup() {
     if (!IS_TOP || !IS_OWNER()) return;
     const all = await gapRows();
     const byDiff = lsGet('dgGapSort') === 'diff';
-    const rows = all.slice().sort((a, b) => (byDiff ? b.v - a.v : (b.q.createdAt || 0) - (a.q.createdAt || 0) || (a.q.erpRank ?? 1e9) - (b.q.erpRank ?? 1e9)));
+    const rows = all.slice().sort((a, b) => (byDiff ? b.v - a.v : gapOrder(a, b)));
     const unread = rows.filter((r) => r.q.isRead === false).length;
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
@@ -8600,7 +8609,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const byDiff = lsGet('dgGapSort') === 'diff';
     // Mặc định: như thứ tự danh sách Báo giá của CRM (mới tạo trước; cùng hệ thống thì theo vị trí trên ERP)
     const rows = (f ? all.filter((r) => r.site.key === f) : all.slice()).sort((a, b) =>
-      byDiff ? b.v - a.v : (b.q.createdAt || 0) - (a.q.createdAt || 0) || (a.q.erpRank ?? 1e9) - (b.q.erpRank ?? 1e9),
+      byDiff ? b.v - a.v : gapOrder(a, b),
     );
     const sum = (list) => list.reduce((t, r) => t + r.v, 0);
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
