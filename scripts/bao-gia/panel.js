@@ -8580,6 +8580,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}`,
         sub: `${shortName(r.q.staff?.name || '')} · ${r.q.name || ''}`,
         right: `${r.v < 0 ? '−' : ''}${trM(Math.abs(r.v))}`,
+        ...(([rightColor, rightBg]) => ({ rightColor, rightBg }))(diffColors(r.v)),
         unread: r.q.isRead === false ? true : r.q.isRead === true ? false : undefined,
         url: `${r.host}/bao-gia/update/${r.q.id}`,
       })),
@@ -8628,8 +8629,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         .join('') || '<div class="muted">Chưa có báo giá nào tính được chênh lệch.</div>'}</div>
       ${rows.length > 300 ? `<div class="muted">… và ${rows.length - 300} báo giá nhỏ hơn</div>` : ''}</div>`;
   }
+  // Màu theo mức chênh lệch (quy định chung): <5tr tím · <10tr cam · <30tr xanh dương · <50tr xanh đậm · ≥50tr xanh lá · âm đỏ
+  const diffColors = (v) => (v < 0 ? ['#b91c1c', '#fee2e2'] : v < 5e6 ? ['#7e22ce', '#f3e8ff'] : v < 10e6 ? ['#c2410c', '#ffedd5'] : v < 30e6 ? ['#2563eb', '#dbeafe'] : v < 50e6 ? ['#1e3a8a', '#c7d2fe'] : ['#15803d', '#dcfce7']);
   const diffPillV = (v) => {
-    const [fg, bg] = v < 0 ? ['#b91c1c', '#fee2e2'] : v < 5e6 ? ['#7e22ce', '#f3e8ff'] : v < 10e6 ? ['#c2410c', '#ffedd5'] : v < 30e6 ? ['#2563eb', '#dbeafe'] : v < 50e6 ? ['#1e3a8a', '#c7d2fe'] : ['#15803d', '#dcfce7'];
+    const [fg, bg] = diffColors(v);
     return `<span style="display:inline-block;font-weight:800;color:${fg};background:${bg};border-radius:999px;padding:0 8px;white-space:nowrap;font-variant-numeric:tabular-nums">${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>`;
   };
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
