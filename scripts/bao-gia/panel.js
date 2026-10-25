@@ -8567,7 +8567,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return (b.q.createdAt || 0) - (a.q.createdAt || 0);
   };
   async function gapToPopup() {
-    if (!IS_TOP || !IS_OWNER()) return;
+    if (!IS_TOP) return;
+    if (!state.meReal) state.meReal = (await kvGet('me'))?.name || ''; // bảng chưa mở vẫn biết tài khoản
+    if (!IS_OWNER()) return;
     const all = await gapRows();
     const byDiff = lsGet('dgGapSort') === 'diff';
     const rows = all.slice().sort((a, b) => (byDiff ? b.v - a.v : gapOrder(a, b)));
