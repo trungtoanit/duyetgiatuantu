@@ -8778,7 +8778,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     // Số trên biểu tượng: ghi lại mỗi lượt (kèm thời điểm → background luôn nhận thay đổi và vẽ lại, kể cả sau khi tải lại extension)
     await call({ type: 'kv.set', key: 'badge', value: { text: unread ? String(unread) : '', color: '#dc2626', anim: unread ? 'pulse' : '', title: `${unread} báo giá chênh lệch lớn chưa đọc (Tuấn Tú + Đại Dương)`, at: Date.now() } });
-    const sig = JSON.stringify([card.chips, card.rows]);
+    const sig = JSON.stringify([card.chips, card.rows, card.actions]); // kể cả nội dung nút chép (đổi định dạng → ghi lại)
     if (sig === state.gapPopupSig) return;
     state.gapPopupSig = sig;
     await kvMerge('popupCards', { gap: card });
