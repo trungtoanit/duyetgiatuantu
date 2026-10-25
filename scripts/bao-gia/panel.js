@@ -4428,31 +4428,47 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const list = teamTplList().slice();
     const mode = state.teamTpl?.mode === 'fixed' ? 'fixed' : 'rotate';
     let pick = Number(state.teamTpl?.pick) || 0;
+    let bulk = false; // ✍️ soạn hàng loạt: mỗi dòng 1 câu
     const draw = () => {
-      box.innerHTML = `<div style="width:min(680px,94vw);max-height:86vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35)">
-        <div style="padding:14px 18px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:8px"><b style="font-size:16px">💬 Tin nhắn mẫu của sếp – Nhắc cả đội</b><button data-t="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px">×</button></div>
-        <div style="padding:14px 18px;display:grid;gap:10px;font-size:13px">
-          <div style="color:#64748b">Câu mở đầu tin nhắn gửi nhóm Zalo (phía dưới vẫn là danh sách khách theo từng NVKD).</div>
-          <div style="display:flex;gap:16px"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="tm" value="rotate" ${mode === 'rotate' ? 'checked' : ''}> 🔄 Xoay vòng – mỗi ca 1 câu khác</label>
-            <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="tm" value="fixed" ${mode === 'fixed' ? 'checked' : ''}> 📌 Luôn dùng câu đã chọn</label></div>
-          <div style="display:grid;gap:6px">${list
-            .map((t, i) => `<div style="display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:start">
-              <input type="radio" name="tp" value="${i}" ${i === pick ? 'checked' : ''} title="Câu dùng khi chọn 'Luôn dùng câu đã chọn'" style="margin-top:9px">
-              <textarea data-i="${i}" rows="2" style="font:inherit;font-size:13px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;resize:vertical">${esc(t)}</textarea>
-              <button data-t="del" data-i="${i}" title="Xoá câu này" style="all:unset;cursor:pointer;color:#b91c1c;font-size:16px;padding:6px">🗑</button></div>`)
-            .join('')}</div>
-          <button data-t="add" style="justify-self:start;border:1px dashed #94a3b8;background:#f8fafc;border-radius:8px;padding:5px 12px;cursor:pointer;font:inherit">＋ Thêm câu</button>
-          <div style="display:grid;gap:6px"><b>📱 Tin nhắn sẽ gửi vào nhóm Zalo “${esc(TEAM_GROUP)}” (ca này):</b>
-            <div style="background:#e5efff;border-radius:12px;padding:10px;max-height:300px;overflow:auto">
-              <div data-pv style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);font-size:13.5px;line-height:1.55;color:#111;white-space:normal"></div></div></div>
-          <div style="display:flex;gap:8px;justify-content:flex-end"><button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
-            <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div>
-        </div></div>`;
+      box.innerHTML = `<div style="width:min(1280px,96vw);height:min(92vh,980px);display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+        <div style="padding:12px 18px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px;flex:none"><b style="font-size:16px">💬 Tin nhắn mẫu của sếp – Nhắc cả đội</b>
+          <span style="opacity:.85;font-size:12px">${list.length} câu</span><button data-t="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px">×</button></div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 18px;border-bottom:1px solid #e2e8f0;font-size:13px;flex:none">
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="tm" value="rotate" ${mode === 'rotate' ? 'checked' : ''}> 🔄 Xoay vòng – mỗi ca 1 câu</label>
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="tm" value="fixed" ${mode === 'fixed' ? 'checked' : ''}> 📌 Luôn dùng câu đã chọn</label>
+          <button data-t="bulk" style="margin-left:auto;border:1px solid #c7d2fe;background:${bulk ? '#4f46e5;color:#fff' : '#eef2ff;color:#3730a3'};border-radius:999px;padding:4px 12px;cursor:pointer;font:inherit;font-weight:700">${bulk ? '✅ Xong, về dạng danh sách' : '✍️ Soạn hàng loạt (mỗi dòng 1 câu)'}</button></div>
+        <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:0">
+          <div style="min-height:0;overflow:auto;padding:10px 14px;border-right:1px solid #e2e8f0">
+            ${bulk
+              ? `<textarea data-bulk style="width:100%;height:100%;min-height:400px;box-sizing:border-box;font:inherit;font-size:13px;line-height:1.7;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;resize:none">${esc(list.join('\n'))}</textarea>`
+              : `<div style="display:grid;gap:3px">${list
+                  .map((t, i) => `<div style="display:grid;grid-template-columns:26px 18px minmax(0,1fr) 26px;gap:4px;align-items:center">
+                    <span style="color:#94a3b8;font-size:11px;font-weight:800;text-align:right">${i + 1}</span>
+                    <input type="radio" name="tp" value="${i}" ${i === pick ? 'checked' : ''} title="Câu dùng khi chọn 'Luôn dùng câu đã chọn'" style="margin:0">
+                    <input data-i="${i}" value="${esc(t)}" placeholder="Nhập câu…" style="font:inherit;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;height:28px;box-sizing:border-box;min-width:0">
+                    <button data-t="del" data-i="${i}" title="Xoá câu này" style="all:unset;cursor:pointer;color:#b91c1c;font-size:13px;text-align:center">🗑</button></div>`)
+                  .join('')}</div>
+                <button data-t="add" style="margin-top:8px;border:1px dashed #94a3b8;background:#f8fafc;border-radius:8px;padding:4px 12px;cursor:pointer;font:inherit">＋ Thêm câu</button>`}
+          </div>
+          <div style="min-height:0;display:flex;flex-direction:column;padding:10px 14px;gap:6px;background:#f8fafc">
+            <b style="font-size:13px">📱 Tin sẽ gửi vào nhóm Zalo “${esc(TEAM_GROUP)}” (ca này):</b>
+            <div style="flex:1;min-height:0;overflow:auto;background:#e5efff;border-radius:12px;padding:10px">
+              <div data-pv style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);font-size:13px;line-height:1.5;color:#111"></div></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
+          <span style="color:#64748b;font-size:12px;margin-right:auto">Câu mở đầu tin nhắn; phía dưới là danh sách khách theo từng NVKD.</span>
+          <button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
+          <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div></div>`;
       preview();
     };
     const read = () => {
-      box.querySelectorAll('textarea[data-i]').forEach((ta) => (list[Number(ta.dataset.i)] = ta.value));
-      pick = Number(box.querySelector('input[name="tp"]:checked')?.value) || 0;
+      const bt = box.querySelector('textarea[data-bulk]');
+      if (bt) {
+        const ls = bt.value.split('\n').map((x) => x.trim()).filter(Boolean);
+        list.splice(0, list.length, ...(ls.length ? ls : [TEAM_TPL_DEFAULT[0]]));
+      } else box.querySelectorAll('input[data-i]').forEach((ta) => (list[Number(ta.dataset.i)] = ta.value));
+      pick = Math.min(list.length - 1, Number(box.querySelector('input[name="tp"]:checked')?.value ?? pick) || 0);
       return { list: list.map((x) => x.trim()).filter(Boolean), mode: box.querySelector('input[name="tm"]:checked')?.value || 'rotate', pick };
     };
     const preview = () => {
@@ -4466,6 +4482,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
       state.teamTpl = keep;
     };
+    // Enter trong 1 dòng → thêm dòng mới ngay bên dưới (soạn nhanh)
+    box.addEventListener('keydown', (e) => {
+      const inp = e.target.closest?.('input[data-i]');
+      if (!inp || e.key !== 'Enter' || e.isComposing) return;
+      e.preventDefault();
+      read();
+      const i = Number(inp.dataset.i) + 1;
+      list.splice(i, 0, '');
+      draw();
+      const nx = box.querySelector(`input[data-i="${i}"]`);
+      nx?.focus();
+      nx?.scrollIntoView({ block: 'nearest' });
+    });
     box.addEventListener('input', preview);
     box.addEventListener('change', preview);
     box.addEventListener('click', async (e) => {
@@ -4473,11 +4502,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const b = e.target.closest('[data-t]');
       if (!b) return;
       if (b.dataset.t === 'x') return box.remove();
+      if (b.dataset.t === 'bulk') {
+        read();
+        bulk = !bulk;
+        draw();
+        return;
+      }
       if (b.dataset.t === 'add') {
         read();
         list.push('');
         draw();
-        box.querySelectorAll('textarea')[list.length - 1]?.focus();
+        const ins = box.querySelectorAll('input[data-i]');
+        ins[ins.length - 1]?.focus();
+        ins[ins.length - 1]?.scrollIntoView({ block: 'nearest' });
         return;
       }
       if (b.dataset.t === 'del') {
