@@ -3681,7 +3681,26 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
       tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span data-dg-miss="day" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
-      tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`) +
+      // Chênh lệch tháng + dự báo cả tháng theo ngày công (gộp 1 ô, giống ô Doanh thu tháng)
+      (() => {
+        const y = mvn.getUTCFullYear();
+        const mo = mvn.getUTCMonth();
+        const dim = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+        let total = 0;
+        let done = 0;
+        for (let d = 1; d <= dim; d++) {
+          if (new Date(Date.UTC(y, mo, d)).getUTCDay() === 0) continue;
+          total++;
+          if (d <= mvn.getUTCDate()) done++;
+        }
+        const fc = done && mDn ? (mSum / done) * total : null;
+        const neg = mSum < 0;
+        const tip = `Chênh lệch tháng ${mo + 1}/${y} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${money(Math.round(mSum))} – ${mDn}/${mList.length} đơn đã tính được\nDự báo cả tháng = ${money(Math.round(mSum))} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật)${fc != null ? ` = ${money(Math.round(fc))}` : ''}`;
+        return `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${neg ? '#fef2f2' : '#fdf2f8'};border:1.5px solid ${neg ? '#fecaca' : '#fbcfe8'};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+          <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">🗓️ Chênh lệch T${mo + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}</span>
+          <b style="font-size:18px;font-weight:900;color:${neg ? '#b91c1c' : '#be185d'};white-space:nowrap;font-variant-numeric:tabular-nums">${mDn ? `${neg ? '−' : ''}${big(Math.abs(mSum))}` : '–'}</b>
+          <span style="font-size:10.5px;font-weight:700;color:#0e7490;white-space:nowrap">→ dự báo ${fc != null ? `${fc < 0 ? '−' : ''}${big(Math.abs(fc))}` : '–'} <span style="color:#94a3b8;font-weight:600">(${done}/${total} ngày công)</span></span></div>`;
+      })() +
       // Doanh thu tháng (tới ngày đang xem) + dự kiến cả tháng theo ngày công (trừ Chủ nhật)
       (() => {
         const y = mvn.getUTCFullYear();
@@ -3716,7 +3735,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           total++;
           if (d <= mvn.getUTCDate()) done++;
         }
-        if (!mDn || !done) return '';
+        return ''; // đã gộp vào ô Chênh lệch tháng
+        // eslint-disable-next-line no-unreachable
         const fc = (mSum / done) * total;
         return tile('🔮', `Dự báo T${mo + 1}`, `${fc < 0 ? '−' : ''}${big(Math.abs(fc))}`, fc < 0 ? '#b91c1c' : '#0e7490', fc < 0 ? '#fef2f2' : '#ecfeff', fc < 0 ? '#fecaca' : '#a5f3fc',
           `Dự báo chênh lệch tháng ${mo + 1}: ${money(Math.round(mSum))} ÷ ${done} ngày làm việc đã qua × ${total} ngày làm việc trong tháng (trừ Chủ nhật) = ${money(Math.round(fc))}`);
@@ -3803,16 +3823,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const iCust = hs.indexOf('Khách hàng');
       if (iCust < 0 || !hs.some((h) => /Mã báo giá/i.test(h))) continue;
       const cells = [];
+      // ô khách = ô chứa mã khách đã gắn ([data-dg-kh]); không đoán theo thứ tự cột (dễ lệch vì cột Nhãn / Chênh lệch chèn thêm)
+      t.querySelectorAll('.dg-custn').forEach((b) => !b.closest('td')?.querySelector('[data-dg-kh]') && b.remove());
       for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
         if (tr.classList.contains('ant-table-measure-row') || tr.style.display === 'none') continue;
-        const cell = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol'))[iCust];
+        const kh = tr.querySelector('[data-dg-kh]');
+        const cell = kh?.closest('td');
         if (!cell) continue;
-        const name = (cell.innerText || '').replace(/\s*\d+\s*$/, '').trim().toUpperCase(); // bỏ số đếm đã gắn
-        if (name) cells.push({ cell, name });
+        const name = (kh.textContent || '').trim().toUpperCase();
+        if (name) cells.push({ cell, name, kh });
       }
       const count = {};
       for (const x of cells) count[x.name] = (count[x.name] || 0) + 1;
-      for (const { cell, name } of cells) {
+      for (const { cell, name, kh } of cells) {
         const n = count[name];
         let b = cell.querySelector('.dg-custn');
         if (n < 2) {
@@ -3823,7 +3846,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           b = document.createElement('span');
           b.className = 'dg-custn';
           b.setAttribute('style', 'display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:999px;background:#ea580c;color:#fff;font-size:10.5px;font-weight:800;vertical-align:middle;');
-          (cell.querySelector('.ant-tag') || cell.firstElementChild || cell).after(b);
+          kh.after(b);
         }
         if (b.textContent !== String(n)) b.textContent = String(n);
         b.title = `Khách này xuất hiện ${n} lần trong danh sách đang xem`;
