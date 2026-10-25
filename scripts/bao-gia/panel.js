@@ -4442,7 +4442,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
               <button data-t="del" data-i="${i}" title="Xoá câu này" style="all:unset;cursor:pointer;color:#b91c1c;font-size:16px;padding:6px">🗑</button></div>`)
             .join('')}</div>
           <button data-t="add" style="justify-self:start;border:1px dashed #94a3b8;background:#f8fafc;border-radius:8px;padding:5px 12px;cursor:pointer;font:inherit">＋ Thêm câu</button>
-          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px"><b>Xem trước ca này:</b> <span data-pv style="color:#1d4ed8"></span></div>
+          <div style="display:grid;gap:6px"><b>📱 Tin nhắn sẽ gửi vào nhóm Zalo “${esc(TEAM_GROUP)}” (ca này):</b>
+            <div style="background:#e5efff;border-radius:12px;padding:10px;max-height:300px;overflow:auto">
+              <div data-pv style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);font-size:13.5px;line-height:1.55;color:#111;white-space:normal"></div></div></div>
           <div style="display:flex;gap:8px;justify-content:flex-end"><button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
             <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div>
         </div></div>`;
@@ -4457,7 +4459,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const keep = state.teamTpl;
       state.teamTpl = read();
       const pv = box.querySelector('[data-pv]');
-      if (pv) pv.textContent = teamHead();
+      if (pv) {
+        // giống hệt tin gửi: câu mở đầu + mỗi NVKD 1 dòng (tên xanh đậm, mã khách in đậm), cách 1 dòng
+        if ((state.teamItems || []).length) pv.innerHTML = buildTeamMsg().html;
+        else pv.innerHTML = `<div>${esc(teamHead())}</div><div style="color:#94a3b8;margin-top:6px">(chưa có danh sách Gợi ý chốt đơn trên trang này – mở trang Báo giá để xem đủ tin)</div>`;
+      }
       state.teamTpl = keep;
     };
     box.addEventListener('input', preview);
