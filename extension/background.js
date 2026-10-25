@@ -198,6 +198,45 @@ async function applyBadge(b) {
     if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: b?.textColor || '#ffffff' });
     await chrome.action.setTitle({ title: b?.title || 'Duyệt giá Tuấn Tú' });
   } catch {}
+  shakeIcon(b?.anim === 'shake' && !!b?.text);
+}
+// Hiệu ứng biểu tượng: badge.anim = 'shake' → biểu tượng rung lắc (mỗi 2,5 giây rung 1 đợt); khác → đứng yên
+let animTimer = null;
+let iconBmp = null;
+async function shakeIcon(on) {
+  if (!on) {
+    if (animTimer) clearInterval(animTimer);
+    animTimer = null;
+    await chrome.action.setIcon({ path: { 16: 'icons/icon16.png', 32: 'icons/icon32.png' } }).catch(() => {});
+    return;
+  }
+  if (animTimer) return;
+  try {
+    iconBmp ||= await createImageBitmap(await (await fetch(chrome.runtime.getURL('icons/icon48.png'))).blob());
+  } catch {
+    return;
+  }
+  const seq = [0, -22, 20, -18, 16, -12, 10, -6, 4, 0]; // độ xoay của 1 đợt rung
+  const frame = (deg, scale) => {
+    const out = {};
+    for (const n of [16, 32]) {
+      const c = new OffscreenCanvas(n, n);
+      const x = c.getContext('2d');
+      x.translate(n / 2, n / 2);
+      x.rotate((deg * Math.PI) / 180);
+      x.scale(scale, scale);
+      x.drawImage(iconBmp, -n / 2, -n / 2, n, n);
+      out[n] = x.getImageData(0, 0, n, n);
+    }
+    return out;
+  };
+  let t = 0;
+  animTimer = setInterval(() => {
+    const k = t++ % 32; // 32 nhịp × 70ms ≈ 2,2 giây: rung 10 nhịp đầu rồi nghỉ
+    if (k < seq.length) chrome.action.setIcon({ imageData: frame(seq[k], k ? 0.88 : 1) }).catch(() => {});
+    else if (k === seq.length) chrome.action.setIcon({ imageData: frame(0, 1) }).catch(() => {});
+    else chrome.action.getBadgeText({}).catch(() => {}); // gọi API nhẹ để service worker không bị tắt giữa chừng
+  }, 70);
 }
 chrome.storage.local.get('kv:badge').then((o) => applyBadge(o['kv:badge'])).catch(() => {});
 
