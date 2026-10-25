@@ -3858,6 +3858,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const name = (kh.textContent || '').trim().toUpperCase();
         if (name) cells.push({ cell, name, kh });
       }
+      // Cột "Nhân viên tạo": rút gọn tên như trong extension (shortName), rê chuột xem tên đầy đủ
+      const iStaff = hs.indexOf('Nhân viên tạo');
+      if (iStaff >= 0) {
+        for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+          const cell = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol'))[iStaff];
+          if (!cell) continue;
+          const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            const full = n.nodeValue.trim();
+            if (!full || full === n.parentElement?.dataset.dgShort) continue; // đã rút gọn
+            const sh = shortName(full);
+            if (sh === full) continue;
+            n.nodeValue = sh;
+            n.parentElement.dataset.dgShort = sh;
+            n.parentElement.title = full;
+          }
+        }
+      }
       const count = {};
       for (const x of cells) count[x.name] = (count[x.name] || 0) + 1;
       for (const { cell, name, kh } of cells) {
