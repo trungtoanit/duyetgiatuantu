@@ -3642,8 +3642,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .filter((o) => o?.at >= vn0 && o.at < vn1 && !o.cancel)
       .map((o) => ({ ...o, q: o.bg ? byCode[o.bg] : null }));
     k = { n: list.length, sum: list.reduce((t, x) => t + (x.total || 0), 0), dsum: 0, dn: 0 };
+    // Chênh lệch theo DOANH THU THỰC của đơn: tỷ lệ chênh lệch của báo giá × tổng tiền đơn
+    // (1 báo giá lên nhiều đơn / đơn lấy 1 phần → không cộng trùng cả báo giá)
+    const orderDiff = (o, q) => {
+      const v = q && !q.noSheet ? diffVal(q) : null;
+      if (v == null) return null;
+      const amt = Number(q.amount) || 0;
+      return amt > 0 && o.total > 0 ? (v * o.total) / amt : v;
+    };
     for (const x of list) {
-      const v = x.q ? diffVal(x.q) : null;
+      const v = orderDiff(x, x.q);
       if (v != null) {
         k.dsum += v;
         k.dn++;
@@ -3659,7 +3667,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const o of mList) {
       mRev += o.total || 0;
       const q = o.bg ? byCode[o.bg] : null;
-      const v = q && !q.noSheet ? diffVal(q) : null;
+      const v = orderDiff(o, q);
       if (v != null) {
         mSum += v;
         mDn++;
