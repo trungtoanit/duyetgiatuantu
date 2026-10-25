@@ -181,6 +181,9 @@ async function loadCards() {
   if (sig === cardsSig) return;
   cardsSig = sig;
   document.body.classList.toggle('wide', list.length > 0);
+  // bề rộng popup do script quyết định (card.width, tối đa 800 – giới hạn của Chrome)
+  const w = Math.max(0, ...list.map((c) => Number(c.width) || 0));
+  document.body.style.width = list.length ? `${Math.min(800, Math.max(560, w || 560))}px` : '';
   $('cards').innerHTML = list
     .map((c) => `<section class="card"><h2>${esc(c.title)}</h2>${c.sub ? `<div class="hint" style="margin:-4px 0 6px">${esc(c.sub)}</div>` : ''}
       ${c.chips?.length ? `<div class="pc-chips">${c.chips.map((x) => `<span class="pc-chip" style="color:${esc(x.color || '#334155')}">${esc(x.text)}</span>`).join('')}</div>` : ''}

@@ -8578,6 +8578,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
     const card = {
       title: '📈 Chênh lệch 2 hệ thống',
+      width: 800, // popup rộng tối đa (extension ≥ 1.4.0)
       sub: `Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
       chips: [
         { text: `● Chưa đọc ${unread}`, color: '#b91c1c' },
