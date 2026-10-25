@@ -2019,11 +2019,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Chữ ký NVKD dưới "Người biên soạn": tên NVKD in trên báo giá có trong kho chữ ký (signImgs) → chèn ảnh
   async function addSaleSignature(root0) {
     const imgs = await kvGet('signImgs').catch(() => ({}));
-    const text = root0.textContent || '';
-    const name = Object.keys(imgs || {})
-      .filter((n) => imgs[n]?.img && text.includes(n))
-      .sort((a, b) => b.length - a.length)[0];
-    if (!name) return false;
+    const nf = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').toLowerCase();
+    const text = nf(root0.textContent);
+    // tên NVKD in trên báo giá; không thấy thì lấy NVKD của báo giá đang mở
+    const q = renderCtx.quotes?.[currentQuoteId()];
+    const staff = nf(q ? staffOf(q, renderCtx.comments?.[q.id]) : '');
+    const keys = Object.keys(imgs || {}).filter((n) => imgs[n]?.img);
+    const name = keys.filter((n) => text.includes(nf(n))).sort((a, b) => b.length - a.length)[0] || keys.find((n) => staff && nf(n) === staff);
+    if (!name) {
+      console.warn('[DG] chữ ký NVKD: không thấy', { có: keys, staff });
+      return false;
+    }
     return addSignature(root0, imgs[name].img, /^Người biên soạn$/i);
   }
   async function addSignature(root0, sig0 = globalThis.DG_SIGNATURE, labelRe = /^Trưởng bộ phận$/i) {
