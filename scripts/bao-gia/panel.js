@@ -10136,7 +10136,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   async function scanSheetPrice() {
     const qid = currentQuoteId();
     if (!qid) return;
-    const cells = [...document.querySelectorAll('span, div, td')].filter((e) => !e.children.length && /\/\s*m2$/i.test(e.textContent.trim()));
+    // chỉ trong bảng Hàng hóa (bình luận cũ có thể chứa "0/m2" → không tính)
+    const tbl = pageProductTable();
+    if (!tbl) return;
+    const cells = [...tbl.querySelectorAll('tbody span, tbody div, tbody td')].filter((e) => !e.children.length && /\/\s*m2$/i.test(e.textContent.trim()));
     if (!cells.length) return; // bảng sản phẩm chưa tải
     const zero = cells.filter((e) => /^0\s*(đ|vnđ|vnd)?\s*\/\s*m2$/i.test(e.textContent.trim().replace(/\s+/g, ' '))).length;
     const key = `${qid}:${zero}`;
