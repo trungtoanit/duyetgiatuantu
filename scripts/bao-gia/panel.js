@@ -8662,6 +8662,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (ra !== rb) return ra === Infinity ? 1 : rb === Infinity ? -1 : ra - rb;
     return (b.q.createdAt || 0) - (a.q.createdAt || 0);
   };
+  // Chép nhanh danh sách khách Đại Dương (theo NVKD) để làm việc với sếp bên đó
+  function gapCopyText(rows, key = 'daiduong') {
+    const list = rows.filter((r) => r.site.key === key);
+    const by = new Map();
+    for (const r of list) {
+      const who = shortName(r.q.staff?.name || '') || 'Chưa rõ NVKD';
+      if (!by.has(who)) by.set(who, []);
+      by.get(who).push(r);
+    }
+    const tr = (v) => `${Math.round(v / 1e5) / 10}`.replace('.', ',') + 'tr';
+    const total = list.reduce((t, r) => t + r.v, 0);
+    const lines = [`${key === 'daiduong' ? 'Đại Dương' : 'Tuấn Tú'} – báo giá chênh lệch ≥ 10tr: ${list.length} báo giá, tổng chênh lệch ${tr(total)}`];
+    for (const [who, rs] of [...by].sort((a, b) => b[1].reduce((t, r) => t + r.v, 0) - a[1].reduce((t, r) => t + r.v, 0))) {
+      lines.push('', `${who} (${rs.length}):`);
+      for (const r of rs) lines.push(`• ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')} – ${r.q.code} – BG ${tr(Number(r.q.amount) || 0)} – chênh lệch ${tr(r.v)}${r.q.name ? ` – ${r.q.name}` : ''}`);
+    }
+    return lines.join('\n');
+  }
   async function gapToPopup() {
     if (!IS_TOP) return;
     if (!state.meReal) state.meReal = (await kvGet('me'))?.name || ''; // bảng chưa mở vẫn biết tài khoản
@@ -8674,6 +8692,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
     const card = {
       title: '📈 Chênh lệch 2 hệ thống',
+      actions: [{ label: '📋 Copy danh sách khách Đại Dương', copy: gapCopyText(rows, 'daiduong'), color: '#2563eb' }, { label: '📋 Copy Tuấn Tú', copy: gapCopyText(rows, 'tuantu'), color: '#dc2626' }],
       width: 800, // popup rộng tối đa (extension ≥ 1.4.0)
       sub: `Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
       chips: [
@@ -8720,7 +8739,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const unread = all.filter((r) => r.q.isRead === false).length;
     return `<div class="gp">
       <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
-        <button class="gp-chip" data-act="gap-sort" style="--c:#475569;margin-left:auto">↕ ${byDiff ? 'Theo chênh lệch' : 'Như danh sách báo giá'}</button></div>
+        <button class="gp-chip" data-act="gap-copy" data-site="daiduong" style="--c:#2563eb;margin-left:auto">📋 Copy khách Đại Dương</button>
+        <button class="gp-chip" data-act="gap-sort" style="--c:#475569">↕ ${byDiff ? 'Theo chênh lệch' : 'Như danh sách báo giá'}</button></div>
       <div class="gp-chips"><span class="gp-chip" style="--c:#b91c1c;cursor:default">● Chưa đọc <b>${unread}</b></span>${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
       <div class="gp-list">${rows
         .slice(0, 300)
@@ -11225,6 +11245,17 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'close') {
       setPanelOpen(false);
       render();
+    }
+    else if (act === 'gap-copy') {
+      gapRows().then(async (rows) => {
+        try {
+          await navigator.clipboard.writeText(gapCopyText(rows, b.dataset.site || 'daiduong'));
+          b.textContent = '✅ Đã chép';
+        } catch {
+          b.textContent = '⚠️ Không chép được';
+        }
+        setTimeout(() => render(), 1500);
+      });
     }
     else if (act === 'gap-sort') {
       lsSet('dgGapSort', lsGet('dgGapSort') === 'diff' ? null : 'diff');

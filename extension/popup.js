@@ -176,7 +176,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 let cardsSig = '';
 async function loadCards() {
   const cards = (await chrome.storage.local.get(KV('popupCards')))[KV('popupCards')] || {};
-  const list = Object.values(cards).filter((c) => c && Array.isArray(c.rows));
+  cardsData = cards;
+  const list = Object.entries(cards).filter(([, c]) => c && Array.isArray(c.rows)).map(([id, c]) => ({ ...c, id }));
   const sig = JSON.stringify(list);
   if (sig === cardsSig) return;
   cardsSig = sig;
@@ -187,6 +188,7 @@ async function loadCards() {
   $('cards').innerHTML = list
     .map((c) => `<section class="card"><h2>${esc(c.title)}</h2>${c.sub ? `<div class="hint" style="margin:-4px 0 6px">${esc(c.sub)}</div>` : ''}
       ${c.chips?.length ? `<div class="pc-chips">${c.chips.map((x) => `<span class="pc-chip" style="color:${esc(x.color || '#334155')}">${esc(x.text)}</span>`).join('')}</div>` : ''}
+      ${c.actions?.length ? `<div class="pc-chips">${c.actions.map((a, i) => `<button class="pc-act" data-card="${esc(c.id || '')}" data-ai="${i}" style="color:${esc(a.color || '#1d4ed8')}">${esc(a.label)}</button>`).join('')}</div>` : ''}
       <div class="pc-list">${c.rows
         .map((r, i) => `<div class="pc-row${r.unread === true ? ' unread' : r.unread === false ? ' read' : ''}" data-url="${esc(r.url || '')}" title="${r.unread === true ? 'Chưa đọc' : r.unread === false ? 'Đã đọc' : ''}"><span class="pc-no">${i + 1}</span>
           <span class="pc-tag" style="background:${esc(r.tagColor || '#64748b')}">${esc(r.tag || '')}</span>
@@ -195,7 +197,22 @@ async function loadCards() {
         .join('') || '<div class="hint">Không có dữ liệu.</div>'}</div></section>`)
     .join('');
 }
-$('cards').addEventListener('click', (e) => {
+// Nút hành động của khung: { label, copy } → chép chữ vào bộ nhớ tạm
+let cardsData = {};
+$('cards').addEventListener('click', async (e) => {
+  const act = e.target.closest('.pc-act');
+  if (act) {
+    const a = cardsData[act.dataset.card]?.actions?.[Number(act.dataset.ai)];
+    if (a?.copy != null) {
+      try {
+        await navigator.clipboard.writeText(String(a.copy));
+        const t = act.textContent;
+        act.textContent = '✅ Đã chép';
+        setTimeout(() => (act.textContent = t), 1500);
+      } catch {}
+    }
+    return;
+  }
   const url = e.target.closest('.pc-row')?.dataset.url;
   if (url && /^https:\/\//.test(url)) chrome.tabs.create({ url });
 });
