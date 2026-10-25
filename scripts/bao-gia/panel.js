@@ -8530,7 +8530,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function gapRows() {
     if (state.gapCache && Date.now() - state.gapCache.at < 60e3) return state.gapCache.rows;
     const sites = [
-      { s: SITES.tuantu, host: 'https://sale.tuantu.com.vn', min: 20e6 }, // Tuấn Tú: chênh lệch từ 20 tr
+      { s: SITES.tuantu, host: 'https://sale.tuantu.com.vn', min: 10e6 }, // Tuấn Tú: chênh lệch từ 10 tr
       { s: SITES.daiduong, host: 'https://quanly.baobidaiduong.com', min: 10e6 }, // Đại Dương: từ 10 tr
     ];
     const rows = [];
@@ -8578,7 +8578,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
     const card = {
       title: '📈 Chênh lệch 2 hệ thống',
-      sub: `Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
+      sub: `Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
       chips: [
         { text: `● Chưa đọc ${unread}`, color: '#b91c1c' },
         { text: `Tất cả ${rows.length}`, color: '#334155' },
@@ -8622,7 +8622,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const dd = all.filter((r) => r.site.key === 'daiduong');
     const unread = all.filter((r) => r.q.isRead === false).length;
     return `<div class="gp">
-      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
+      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
         <button class="gp-chip" data-act="gap-sort" style="--c:#475569;margin-left:auto">↕ ${byDiff ? 'Theo chênh lệch' : 'Như danh sách báo giá'}</button></div>
       <div class="gp-chips"><span class="gp-chip" style="--c:#b91c1c;cursor:default">● Chưa đọc <b>${unread}</b></span>${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
       <div class="gp-list">${rows
