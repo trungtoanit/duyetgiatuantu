@@ -8712,7 +8712,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return (b.q.createdAt || 0) - (a.q.createdAt || 0);
   };
   // Chép nhanh danh sách khách Đại Dương (theo NVKD) để làm việc với sếp bên đó
-  function gapCopyText(rows, key = 'daiduong') {
+  // Chép nhanh danh sách khách (theo NVKD) – cùng kiểu tin nhắc cả đội trên Zalo:
+  // dòng tổng, rồi mỗi NVKD: "Tên (số khách) – có thể có đơn X – chênh lệch Y:" và mỗi khách 1 dòng "• MÃ KHÁCH (giá trị · CL …)"
+  function gapCopyData(rows, key = 'daiduong') {
     const list = rows.filter((r) => r.site.key === key);
     const by = new Map();
     for (const r of list) {
@@ -8720,15 +8722,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (!by.has(who)) by.set(who, []);
       by.get(who).push(r);
     }
-    const tr = (v) => `${Math.round(v / 1e5) / 10}`.replace('.', ',') + 'tr';
-    const total = list.reduce((t, r) => t + r.v, 0);
-    const lines = [`${key === 'daiduong' ? 'Đại Dương' : 'Tuấn Tú'} – báo giá chênh lệch ≥ 10tr: ${list.length} báo giá, tổng chênh lệch ${tr(total)}`];
-    for (const [who, rs] of [...by].sort((a, b) => b[1].reduce((t, r) => t + r.v, 0) - a[1].reduce((t, r) => t + r.v, 0))) {
-      lines.push('', `${who} (${rs.length}):`);
-      for (const r of rs) lines.push(`• ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')} – ${r.q.code} – BG ${tr(Number(r.q.amount) || 0)} – chênh lệch ${tr(r.v)}${r.q.name ? ` – ${r.q.name}` : ''}`);
-    }
-    return lines.join('\n');
+    const sumTxt = (v) => (Math.abs(v) >= 1e9 ? `${(Math.round(v / 1e7) / 100).toLocaleString('vi-VN')} tỷ` : `${Math.round(v / 1e6).toLocaleString('vi-VN')}tr`);
+    const amt = (r) => Number(r.q.amount) || 0;
+    const tot = list.reduce((t, r) => t + amt(r), 0);
+    const totD = list.reduce((t, r) => t + r.v, 0);
+    const head = `Danh sách khách ${key === 'daiduong' ? 'Đại Dương' : 'Tuấn Tú'} cần kéo đơn (chênh lệch ≥ 10tr): ${list.length} báo giá`;
+    const totalLine = `Tổng có thể có đơn: ${sumTxt(tot)} · chênh lệch ${sumTxt(totD)}`;
+    const groups = [...by].sort((a, b) => b[1].reduce((t, r) => t + amt(r), 0) - a[1].reduce((t, r) => t + amt(r), 0));
+    const gLine = (who, rs) => `${who} (${rs.length}) – có thể có đơn ${sumTxt(rs.reduce((t, r) => t + amt(r), 0))}:`;
+    const item = (r) => `${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}`;
+    const tail = (r) => `(${sumTxt(amt(r))} · CL ${sumTxt(r.v)})`;
+    const text = [`${head}\n${totalLine}`, ...groups.map(([who, rs]) => [gLine(who, rs), ...rs.map((r) => `• ${item(r)} ${tail(r)}`)].join('\n'))].join('\n\n');
+    const B = (t, c) => `<b><span style="color:${c}"><font color="${c}">${esc(t)}</font></span></b>`;
+    const html = `<div>${esc(head)}</div><div>Tổng có thể có đơn: ${B(sumTxt(tot), '#047857')} · chênh lệch ${B(sumTxt(totD), '#047857')}</div><div><br></div>${groups
+      .map(([who, rs]) => `<div>${B(who, '#1d4ed8')} (${rs.length}) – có thể có đơn ${B(sumTxt(rs.reduce((t, r) => t + amt(r), 0)), '#047857')}:</div>${rs.map((r) => `<div>• <b>${esc(item(r))}</b> ${esc(tail(r))}</div>`).join('')}`)
+      .join('<div><br></div>')}`;
+    return { text, html };
   }
+  const gapCopyText = (rows, key) => gapCopyData(rows, key).text;
   async function gapToPopup() {
     if (!IS_TOP) return;
     if (!state.meReal) state.meReal = (await kvGet('me'))?.name || ''; // bảng chưa mở vẫn biết tài khoản
@@ -11298,7 +11309,13 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'gap-copy') {
       gapRows().then(async (rows) => {
         try {
-          await navigator.clipboard.writeText(gapCopyText(rows, b.dataset.site || 'daiduong'));
+          // chép kèm định dạng (đậm, màu) – dán vào Zalo giữ đúng kiểu tin nhắc cả đội
+          const { text, html } = gapCopyData(rows, b.dataset.site || 'daiduong');
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]);
+          } catch {
+            await navigator.clipboard.writeText(text);
+          }
           b.textContent = '✅ Đã chép';
         } catch {
           b.textContent = '⚠️ Không chép được';
