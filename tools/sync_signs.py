@@ -23,7 +23,7 @@ for name, s in staff.items():
     rows.append({'ns': 'signImgs', 'id': name, 'data': {'url': url, 'img': 'data:image/png;base64,' + base64.b64encode(b).decode(), 'at': int(time.time() * 1000)}})
     print('+', name, len(b), 'bytes')
 if rows:
-    req = urllib.request.Request(base + '?on_conflict=ns,id', data=json.dumps(rows).encode(), method='POST', headers={**h, 'Prefer': 'resolution=merge-duplicates'})
+    req = urllib.request.Request(base, data=json.dumps(rows).encode(), method='POST', headers={**h, 'Prefer': 'resolution=merge-duplicates'})
     print('upload', urllib.request.urlopen(req).status)
 else:
     print('Không có chữ ký mới.')
