@@ -6431,6 +6431,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     @keyframes psBump { 0% { transform: scale(1); } 30% { transform: scale(1.05); box-shadow: 0 0 0 4px rgba(34,197,94,.25); } 100% { transform: scale(1); box-shadow: none; } }
     @keyframes psFlash { 0% { color: #2563eb; } 100% { } }
     .pdlg-rows:empty { display: none; }
+    .bigtab.gap { background: linear-gradient(90deg,#fdf2f8,#eff6ff); }
+    .gp { display: grid; gap: 8px; }
+    .gp-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 15px; }
+    .gp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .gp-chip { border: 1px solid #e2e8f0; background: #fff; border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--c); }
+    .gp-chip.on { background: var(--c); color: #fff; border-color: var(--c); }
+    .gp-list { display: grid; gap: 3px; }
+    .gp-row { display: grid; grid-template-columns: 30px 30px minmax(0,1fr) 90px 90px 96px; gap: 8px; align-items: center; padding: 5px 10px; border: 1px solid #eef2f7; border-radius: 8px; background: #fff; text-decoration: none; color: inherit; font-size: 12.5px; }
+    .gp-row:hover { border-color: #c7d2fe; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+    .gp-no { color: #94a3b8; font-weight: 800; text-align: right; }
+    .gp-site { font-size: 10.5px; font-weight: 900; border-radius: 6px; text-align: center; padding: 1px 0; color: #fff; }
+    .gp-site.tuantu { background: #dc2626; } .gp-site.daiduong { background: #2563eb; }
+    .gp-main { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gp-main b { color: #1d4ed8; } .gp-cust { font-weight: 700; color: #b45309; margin: 0 6px; } .gp-name { color: #64748b; }
+    .gp-staff { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gp-amt { text-align: right; font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
+    .gp-diff { text-align: right; }
     .pr-line { grid-column: 2 / -1; display: flex; gap: 10px; font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
     .pr-line b { color: #0f172a; } .pr-line i { font-style: normal; color: #94a3b8; } .pr-line .pos b { color: #15803d; } .pr-line .neg b { color: #b91c1c; }
     .pr-tot { display: none; } /* trùng với 3 ô phía trên → ẩn (vẫn dùng để tính từng dòng) */
@@ -8501,6 +8518,70 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Đơn hàng lấy từ lịch sử mua hàng đã thu thập (kv 'orders'); NVKD = người phụ trách khách (cột Sale của ERP).
   // Quản trị xem báo cáo của tất cả; NVKD chỉ xem của chính mình
   const ADMIN_NAMES = ['Nguyễn Trung Toán'];
+  const IS_OWNER = () => !!state.meReal && norm(state.meReal) === norm('Nguyễn Trung Toán');
+  // ---------- 📈 Chênh lệch 2 hệ thống (Tuấn Tú + Đại Dương), chỉ Nguyễn Trung Toán ----------
+  // Đọc dữ liệu cả 2 domain (Tuấn Tú: tên gốc, Đại Dương: tiền tố dd.), tính chênh lệch theo margins của từng domain.
+  async function gapRows() {
+    if (state.gapCache && Date.now() - state.gapCache.at < 60e3) return state.gapCache.rows;
+    const sites = [
+      { s: SITES.tuantu, host: 'https://sale.tuantu.com.vn' },
+      { s: SITES.daiduong, host: 'https://quanly.baobidaiduong.com' },
+    ];
+    const rows = [];
+    const keep = renderCtx.margins;
+    try {
+      for (const { s: st, host } of sites) {
+        const [qs, mg] = await Promise.all([rawCall({ type: 'kv.get', key: `${st.prefix}quotes` }), rawCall({ type: 'kv.get', key: `${st.prefix}margins` })]);
+        renderCtx.margins = mg || {};
+        for (const q of Object.values(qs || {})) {
+          if (!q?.code || !(Number(q.amount) > 0) || q.noSheet || CLOSED.has(q.quoteStatus) || q.hasOrder) continue;
+          let v = null;
+          try {
+            v = diffVal(q);
+          } catch {}
+          if (v == null) continue;
+          rows.push({ site: st, host, q, v });
+        }
+      }
+    } finally {
+      renderCtx.margins = keep;
+    }
+    rows.sort((a, b) => b.v - a.v);
+    state.gapCache = { at: Date.now(), rows };
+    return rows;
+  }
+  async function gapTab() {
+    const all = await gapRows();
+    const f = lsGet('dgGapSite') || '';
+    const rows = f ? all.filter((r) => r.site.key === f) : all;
+    const sum = (list) => list.reduce((t, r) => t + r.v, 0);
+    const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
+    const chip = (k, label, list, col) =>
+      `<button class="gp-chip${f === k ? ' on' : ''}" data-act="gap-site" data-site="${k}" style="--c:${col}">${label} <b>${list.length}</b> · Σ ${big(sum(list))}</button>`;
+    const tt = all.filter((r) => r.site.key === 'tuantu');
+    const dd = all.filter((r) => r.site.key === 'daiduong');
+    return `<div class="gp">
+      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">xếp từ lớn tới nhỏ · chỉ báo giá chưa chốt / chưa lên đơn · cập nhật mỗi phút</span></div>
+      <div class="gp-chips">${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
+      <div class="gp-list">${rows
+        .slice(0, 300)
+        .map((r, i) => {
+          const q = r.q;
+          const staff = q.staff?.name || '';
+          return `<a class="gp-row" href="${r.host}/bao-gia/update/${q.id}" target="_blank" rel="noopener">
+            <span class="gp-no">${i + 1}</span><span class="gp-site ${r.site.key}">${r.site.key === 'tuantu' ? 'TT' : 'ĐD'}</span>
+            <span class="gp-main"><b>${esc(q.code)}</b> <span class="gp-cust">${esc(shortCompany(q.customer?.code || q.customer?.name || ''))}</span><span class="gp-name">${esc(q.name || '')}</span></span>
+            <span class="gp-staff">${esc(shortName(staff))}</span>
+            <span class="gp-amt">${moneyShortG(Number(q.amount))}</span>
+            <span class="gp-diff">${diffPillV(r.v)}</span></a>`;
+        })
+        .join('') || '<div class="muted">Chưa có báo giá nào tính được chênh lệch.</div>'}</div>
+      ${rows.length > 300 ? `<div class="muted">… và ${rows.length - 300} báo giá nhỏ hơn</div>` : ''}</div>`;
+  }
+  const diffPillV = (v) => {
+    const [fg, bg] = v < 0 ? ['#b91c1c', '#fee2e2'] : v < 5e6 ? ['#7e22ce', '#f3e8ff'] : v < 10e6 ? ['#c2410c', '#ffedd5'] : v < 30e6 ? ['#2563eb', '#dbeafe'] : v < 50e6 ? ['#1e3a8a', '#c7d2fe'] : ['#15803d', '#dcfce7'];
+    return `<span style="display:inline-block;font-weight:800;color:${fg};background:${bg};border-radius:999px;padding:0 8px;white-space:nowrap;font-variant-numeric:tabular-nums">${v < 0 ? '−' : ''}${trM(Math.abs(v))}</span>`;
+  };
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
   // perms = { enforced: bool, users: { <tên chuẩn hoá>: { name, enabled, role: 'admin'|'sale', tabs: [...] } } }
   const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['qa', '💬 Bộ câu hỏi'], ['set', '⚙️ Cài đặt']];
@@ -9245,6 +9326,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function renderInner() {
     const meObj = await kvGet('me');
     meName = myName(meObj);
+    state.meReal = meObj?.name || ''; // tên tài khoản CRM thật (không dùng tên mặc định)
     PERMS = (await kvGet('perms')) || {};
     QB = (await kvGet('qbank')) || {};
     const perm = userPerm(meObj);
@@ -9606,7 +9688,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
         const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t));
-        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt', 'qa'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        if (IS_OWNER()) allowed.push('gap'); // tab riêng của Nguyễn Trung Toán
+        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt', 'qa', 'gap'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
@@ -9621,6 +9704,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button>
           <button class="bigtab${tab === 'debt' ? ' on' : ''}" data-act="tab" data-tab="debt">💰 Công nợ</button>
           <button class="bigtab qa${tab === 'qa' ? ' on' : ''}" data-act="tab" data-tab="qa">💬 Bộ câu hỏi</button>
+          <button class="bigtab gap${tab === 'gap' ? ' on' : ''}" data-act="tab" data-tab="gap">📈 Chênh lệch 2 hệ thống</button>
           <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
         // Chỉ hiện các tab được phân quyền
         const bar = barRaw.replace(/<button class="bigtab[^"]*" data-act="tab" data-tab="(\w+)">[\s\S]*?<\/button>/g, (m, t) => (allowed.includes(t) ? m : ''));
@@ -9635,6 +9719,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           return bar + qaTab(perm.admin);
         }
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
+        if (tab === 'gap') return bar + (await gapTab());
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
           renderCtx.reports = await kvGet('reports');
@@ -10977,6 +11062,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'close') {
       setPanelOpen(false);
+      render();
+    }
+    else if (act === 'gap-site') {
+      lsSet('dgGapSite', b.dataset.site || null);
       render();
     }
     else if (act === 'tab') {
