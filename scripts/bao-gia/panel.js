@@ -8556,7 +8556,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function gapTab() {
     const all = await gapRows();
     const f = lsGet('dgGapSite') || '';
-    const rows = f ? all.filter((r) => r.site.key === f) : all;
+    const byDiff = lsGet('dgGapSort') === 'diff';
+    // Mặc định: như thứ tự danh sách Báo giá của CRM (mới tạo trước; cùng hệ thống thì theo vị trí trên ERP)
+    const rows = (f ? all.filter((r) => r.site.key === f) : all.slice()).sort((a, b) =>
+      byDiff ? b.v - a.v : (b.q.createdAt || 0) - (a.q.createdAt || 0) || (a.q.erpRank ?? 1e9) - (b.q.erpRank ?? 1e9),
+    );
     const sum = (list) => list.reduce((t, r) => t + r.v, 0);
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const chip = (k, label, list, col) =>
@@ -8564,7 +8568,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const tt = all.filter((r) => r.site.key === 'tuantu');
     const dd = all.filter((r) => r.site.key === 'daiduong');
     return `<div class="gp">
-      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · xếp từ lớn tới nhỏ · chỉ báo giá chưa chốt / chưa lên đơn</span></div>
+      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
+        <button class="gp-chip" data-act="gap-sort" style="--c:#475569;margin-left:auto">↕ ${byDiff ? 'Theo chênh lệch' : 'Như danh sách báo giá'}</button></div>
       <div class="gp-chips">${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
       <div class="gp-list">${rows
         .slice(0, 300)
@@ -11065,6 +11070,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     else if (act === 'close') {
       setPanelOpen(false);
+      render();
+    }
+    else if (act === 'gap-sort') {
+      lsSet('dgGapSort', lsGet('dgGapSort') === 'diff' ? null : 'diff');
       render();
     }
     else if (act === 'gap-site') {
