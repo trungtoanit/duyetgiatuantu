@@ -2409,6 +2409,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: đồng bộ giá…`;
       sync.click();
       await sleep(1500);
+      // "Ghi chú khách hàng" còn trống → bấm "Tự động" để CRM tự điền trước khi lưu
+      {
+        const lbl = [...modal.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^Ghi chú khách hàng$/i.test(e.textContent.trim()));
+        const item = lbl?.closest('.ant-form-item') || lbl?.parentElement?.parentElement;
+        const ta = item?.querySelector('textarea') || lbl?.closest('div')?.parentElement?.querySelector('textarea');
+        const auto = (item || modal) && [...(item || modal).querySelectorAll('button')].find((b) => b.innerText.trim() === 'Tự động');
+        if (ta && !ta.value.trim() && auto) {
+          btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: ghi chú tự động…`;
+          auto.click();
+          await waitFor(() => ta.value.trim(), 3000, 150);
+          await sleep(300);
+        }
+      }
       const save = [...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lưu');
       if (!save) {
         skip++;
