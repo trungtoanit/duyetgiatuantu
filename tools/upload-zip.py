@@ -12,7 +12,7 @@ row = [{'ns': 'files', 'id': 'extension-zip', 'data': {
     'name': 'DuyetGia-extension.zip', 'size': len(raw), 'b64': base64.b64encode(raw).decode(),
     'version': ver, 'at': int(time.time() * 1000)}}]
 req = urllib.request.Request(
-    team['supabaseUrl'].rstrip('/') + '/rest/v1/dg_items?on_conflict=ns,id', data=json.dumps(row).encode(), method='POST',
+    team['supabaseUrl'].rstrip('/') + '/rest/v1/dg_items', data=json.dumps(row).encode(), method='POST',
     headers={'apikey': team['supabaseKey'], 'x-team-secret': team['teamSecret'], 'Content-Type': 'application/json',
              'Prefer': 'resolution=merge-duplicates,return=minimal'})
 urllib.request.urlopen(req)
