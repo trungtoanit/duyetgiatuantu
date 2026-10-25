@@ -3855,6 +3855,59 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectNewBadges(), 2000);
 
+  // Danh sách Báo giá của CRM: báo giá chưa có bình luận nào (bộ thu thập đã xem, không thấy luồng nào) → icon 💬 nhấp nháy
+  // cuối ô "Tên cơ hội", bấm để mở báo giá và bình luận giải quyết
+  function noCmtCss() {
+    if (document.getElementById('dg-nocmt-css')) return;
+    const st = document.createElement('style');
+    st.id = 'dg-nocmt-css';
+    st.textContent = `.dg-nocmt{display:inline-flex;align-items:center;gap:3px;margin-left:8px;padding:1px 8px 1px 6px;border-radius:999px;background:linear-gradient(135deg,#f97316,#ef4444);color:#fff;font-size:10.5px;font-weight:800;cursor:pointer;vertical-align:middle;white-space:nowrap;animation:dgNoCmt 1.2s ease-in-out infinite;box-shadow:0 0 0 0 rgba(239,68,68,.6)}
+.dg-nocmt:hover{animation-play-state:paused;filter:brightness(1.1)}
+.dg-nocmt i{font-style:normal;display:inline-block;animation:dgNoCmtWig 1.2s ease-in-out infinite}
+@keyframes dgNoCmt{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55);transform:scale(1)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0);transform:scale(1.08)}}
+@keyframes dgNoCmtWig{0%,60%,100%{transform:rotate(0)}70%{transform:rotate(-14deg)}80%{transform:rotate(12deg)}90%{transform:rotate(-6deg)}}`;
+    document.head.append(st);
+  }
+  function injectNoComment() {
+    if (!IS_TOP || !renderCtx.quotes) return;
+    const byCode = renderCtx.byCode || {};
+    const skip = (c) => c.hasAttribute('data-dg-diffcol') || c.hasAttribute('data-dg-tagcol');
+    for (const t of document.querySelectorAll('.ant-table')) {
+      if (t.closest('#dg-root')) continue;
+      const hs = [...t.querySelectorAll('thead th')].filter((th) => !skip(th)).map((th) => th.innerText.trim());
+      const iName = hs.indexOf('Tên cơ hội');
+      if (iName < 0 || !hs.some((h) => /Mã báo giá/i.test(h))) continue;
+      for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+        if (tr.classList.contains('ant-table-measure-row')) continue;
+        const cell = [...tr.cells].filter((c) => !skip(c))[iName];
+        if (!cell) continue;
+        const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
+        const q = code && byCode[code];
+        const none = !!q?.id && !!renderCtx.collected?.[q.id] && !renderCtx.comments?.[q.id]?.threads?.length && !CLOSED.has(q.quoteStatus) && !q.hasOrder;
+        let b = cell.querySelector('.dg-nocmt');
+        if (!none) {
+          b?.remove();
+          continue;
+        }
+        if (b) continue;
+        noCmtCss();
+        b = document.createElement('span');
+        b.className = 'dg-nocmt';
+        b.innerHTML = '<i>💬</i> Chưa bình luận';
+        b.title = `${q.code} chưa có bình luận nào – bấm để mở báo giá và bình luận giải quyết`;
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const url = `/co-hoi/update/${q.id}`;
+          if (e.ctrlKey || e.metaKey) window.open(url, '_blank');
+          else location.href = url;
+        });
+        cell.append(b);
+      }
+    }
+  }
+  if (IS_TOP) setInterval(() => injectNoComment(), 2000);
+
   // Danh sách Báo giá của CRM: cột "Khách hàng" – khách xuất hiện từ 2 lần trong danh sách đang xem → số lần cạnh mã khách
   function injectCustCounts() {
     if (!IS_TOP) return;
