@@ -3794,6 +3794,44 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectNewBadges(), 2000);
 
+  // Danh sách Báo giá của CRM: cột "Khách hàng" – khách xuất hiện từ 2 lần trong danh sách đang xem → số lần cạnh mã khách
+  function injectCustCounts() {
+    if (!IS_TOP) return;
+    for (const t of document.querySelectorAll('.ant-table')) {
+      if (t.closest('#dg-root')) continue;
+      const hs = [...t.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-dg-diffcol')).map((th) => th.innerText.trim());
+      const iCust = hs.indexOf('Khách hàng');
+      if (iCust < 0 || !hs.some((h) => /Mã báo giá/i.test(h))) continue;
+      const cells = [];
+      for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+        if (tr.classList.contains('ant-table-measure-row') || tr.style.display === 'none') continue;
+        const cell = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-diffcol'))[iCust];
+        if (!cell) continue;
+        const name = (cell.innerText || '').replace(/\s*\d+\s*$/, '').trim().toUpperCase(); // bỏ số đếm đã gắn
+        if (name) cells.push({ cell, name });
+      }
+      const count = {};
+      for (const x of cells) count[x.name] = (count[x.name] || 0) + 1;
+      for (const { cell, name } of cells) {
+        const n = count[name];
+        let b = cell.querySelector('.dg-custn');
+        if (n < 2) {
+          b?.remove();
+          continue;
+        }
+        if (!b) {
+          b = document.createElement('span');
+          b.className = 'dg-custn';
+          b.setAttribute('style', 'display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:999px;background:#ea580c;color:#fff;font-size:10.5px;font-weight:800;vertical-align:middle;');
+          (cell.querySelector('.ant-tag') || cell.firstElementChild || cell).after(b);
+        }
+        if (b.textContent !== String(n)) b.textContent = String(n);
+        b.title = `Khách này xuất hiện ${n} lần trong danh sách đang xem`;
+      }
+    }
+  }
+  if (IS_TOP) setInterval(() => injectCustCounts(), 2000);
+
   function diffPill(q, wait = false) {
     const v = q ? diffVal(q) : null;
     if (q?.noSheet) return '<span style="color:#b91c1c;font-weight:800" title="Có dòng giá giấy tấm 0đ/m2">😡</span>';
