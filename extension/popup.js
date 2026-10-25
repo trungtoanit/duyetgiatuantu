@@ -205,7 +205,10 @@ $('cards').addEventListener('click', async (e) => {
     const a = cardsData[act.dataset.card]?.actions?.[Number(act.dataset.ai)];
     if (a?.copy != null) {
       try {
-        await navigator.clipboard.writeText(String(a.copy));
+        // có copyHtml → chép kèm định dạng (đậm, màu) để dán vào Zalo giữ nguyên kiểu
+        if (a.copyHtml && window.ClipboardItem)
+          await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([String(a.copy)], { type: 'text/plain' }), 'text/html': new Blob([String(a.copyHtml)], { type: 'text/html' }) })]);
+        else await navigator.clipboard.writeText(String(a.copy));
         const t = act.textContent;
         act.textContent = '✅ Đã chép';
         setTimeout(() => (act.textContent = t), 1500);

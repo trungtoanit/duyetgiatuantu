@@ -8731,7 +8731,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const groups = [...by].sort((a, b) => b[1].reduce((t, r) => t + amt(r), 0) - a[1].reduce((t, r) => t + amt(r), 0));
     const gLine = (who, rs) => `${who} (${rs.length}) – có thể có đơn ${sumTxt(rs.reduce((t, r) => t + amt(r), 0))}:`;
     const item = (r) => `${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}`;
-    const tail = (r) => `(${sumTxt(amt(r))} · CL ${sumTxt(r.v)})`;
+    const tail = (r) => `(${sumTxt(amt(r))})`; // giống tin nhắc cả đội: mã khách (giá trị)
     const text = [`${head}\n${totalLine}`, ...groups.map(([who, rs]) => [gLine(who, rs), ...rs.map((r) => `• ${item(r)} ${tail(r)}`)].join('\n'))].join('\n\n');
     const B = (t, c) => `<b><span style="color:${c}"><font color="${c}">${esc(t)}</font></span></b>`;
     const html = `<div>${esc(head)}</div><div>Tổng có thể có đơn: ${B(sumTxt(tot), '#047857')} · chênh lệch ${B(sumTxt(totD), '#047857')}</div><div><br></div>${groups
@@ -8752,7 +8752,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
     const card = {
       title: '📈 Chênh lệch 2 hệ thống',
-      actions: [{ label: '📋 Copy danh sách khách Đại Dương', copy: gapCopyText(rows, 'daiduong'), color: '#2563eb' }, { label: '📋 Copy Tuấn Tú', copy: gapCopyText(rows, 'tuantu'), color: '#dc2626' }],
+      actions: [
+        (({ text, html }) => ({ label: '📋 Copy danh sách khách Đại Dương', copy: text, copyHtml: html, color: '#2563eb' }))(gapCopyData(rows, 'daiduong')),
+        (({ text, html }) => ({ label: '📋 Copy Tuấn Tú', copy: text, copyHtml: html, color: '#dc2626' }))(gapCopyData(rows, 'tuantu')),
+      ],
       width: 800, // popup rộng tối đa (extension ≥ 1.4.0)
       sub: `Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
       chips: [
