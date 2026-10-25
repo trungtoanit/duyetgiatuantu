@@ -317,6 +317,14 @@
       await call({ type: 'kv.set', key: 'auth', value: data }).catch(() => {});
       return render();
     }
+    if (kind === 'staffSigns') {
+      // chỉ lưu đường dẫn ảnh (đồng bộ); ảnh dạng data (signImgs) do công cụ tools/sync_signs.py tải về vì máy chủ ảnh chặn CORS
+      const cur = await kvGet('staffSigns');
+      const patch = {};
+      for (const s of data) if (cur[s.name]?.sign !== s.sign) patch[s.name] = { ...s, at: Date.now() };
+      if (Object.keys(patch).length) await kvMerge('staffSigns', patch);
+      return;
+    }
     if (kind === 'me') {
       await call({ type: 'kv.set', key: 'me', value: data });
     } else if (kind === 'quotes') {
@@ -1976,8 +1984,50 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return { src: c.toDataURL('image/png'), height: Math.round((h / S) * (64 / img.height) ) };
   }
 
-  async function addSignature(root0) {
-    let sig = globalThis.DG_SIGNATURE;
+  // Lấy ngầm chữ ký NVKD: 1 lần / ngày mở trang Nhân sự trong khung ẩn, gõ tên từng NVKD vào ô tìm → hook.js đọc signImage
+  async function collectStaffSigns() {
+    if (!IS_TOP || !MY_ADMIN || !renderCtx.quotes) return;
+    if (Date.now() - Number(lsGet('dgStaffSignAt') || 0) < 24 * 3600e3) return;
+    lsSet('dgStaffSignAt', String(Date.now()));
+    const names = [...new Set(Object.values(renderCtx.quotes).map((q) => q?.staff?.name).filter(Boolean))].slice(0, 30);
+    if (!names.length) return;
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = '/nhan-su?t=nhan-su';
+    document.documentElement.append(f);
+    try {
+      let inp = null;
+      for (let i = 0; i < 40 && !inp; i++) {
+        await sleep(500);
+        inp = [...(f.contentDocument?.querySelectorAll('input') || [])].find((x) => /tìm|search/i.test(x.placeholder || ''));
+      }
+      if (!inp) return;
+      await sleep(1500);
+      for (const n of names) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, n);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        await sleep(3000);
+      }
+    } finally {
+      f.remove();
+    }
+  }
+  setTimeout(() => collectStaffSigns().catch(() => {}), 90e3);
+  // Chữ ký NVKD dưới "Người biên soạn": tên NVKD in trên báo giá có trong kho chữ ký (signImgs) → chèn ảnh
+  async function addSaleSignature(root0) {
+    const imgs = await kvGet('signImgs').catch(() => ({}));
+    const text = root0.textContent || '';
+    const name = Object.keys(imgs || {})
+      .filter((n) => imgs[n]?.img && text.includes(n))
+      .sort((a, b) => b.length - a.length)[0];
+    if (!name) return false;
+    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i);
+  }
+  async function addSignature(root0, sig0 = globalThis.DG_SIGNATURE, labelRe = /^Trưởng bộ phận$/i) {
+    let sig = sig0;
     if (!sig) return false;
     let sigH = 64;
     try {
@@ -1985,7 +2035,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       sig = ink.src;
       sigH = ink.height; // giữ cỡ nét như bản gốc (64px) dù canvas có lề
     } catch {}
-    const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng bộ phận$/i.test(e.textContent.trim()));
+    const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && labelRe.test(e.textContent.trim()));
     if (!label) return false;
     // khối của cột ký: ô bảng chứa nhãn, hoặc thẻ cha chứa cả "(Ký và ghi rõ họ tên)"
     let col = label.closest('td, th');
@@ -2095,6 +2145,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
     if (signOn()) await addSignature(clone);
+    await addSaleSignature(clone).catch(() => {}); // chữ ký NVKD (Người biên soạn)
     addApproval(clone, signOn());
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {

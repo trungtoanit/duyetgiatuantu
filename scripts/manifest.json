@@ -1,5 +1,5 @@
 {
-  "version": "1.2.351",
+  "version": "1.2.352",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -59,6 +59,8 @@
     "reports",
     "scanLock",
     "seenUsers",
+    "signImgs",
+    "staffSigns",
     "teamRemind",
     "zaloNames",
     "zaloSent"

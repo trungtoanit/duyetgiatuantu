@@ -437,6 +437,12 @@
     if (!d) return;
 
     // Người đang đăng nhập (để gợi ý bình luận xưng hô cho đúng)
+    // Danh sách nhân sự (/admin/staff): lấy ảnh chữ ký (signImage) của từng người → đồng bộ để chèn vào ảnh báo giá
+    if (/\/admin\/staff(\?|$)/.test(url) && Array.isArray(d?.data)) {
+      const list = d.data.filter((s) => s?.name && s.signImage).map((s) => ({ id: s.id, code: s.code, name: s.name, sign: s.signImage }));
+      if (list.length) emit('staffSigns', list);
+      return;
+    }
     if (/\/auth\/profile\b/.test(url)) {
       const name = d.name || d.staff?.name;
       // Kèm thông tin quyền để phân biệt quản trị / NVKD (báo cáo tuần: NVKD chỉ xem của mình)
