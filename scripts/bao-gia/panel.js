@@ -8773,10 +8773,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       width: 800, // popup rộng tối đa (extension ≥ 1.4.0)
       sub: `Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · ${byDiff ? 'theo chênh lệch' : 'như danh sách báo giá'} · cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
       chips: [
-        { text: `● Chưa đọc ${unread}`, color: '#b91c1c' },
-        { text: `Tất cả ${rows.length}`, color: '#334155' },
-        { text: `🟥 Tuấn Tú · Σ chênh lệch ${big(sumOf('tuantu'))}`, color: '#dc2626' },
-        { text: `🟦 Đại Dương · Σ chênh lệch ${big(sumOf('daiduong'))}`, color: '#2563eb' },
+        { text: `● Chưa đọc ${unread}`, color: '#b91c1c', filter: 'unread' },
+        { text: `Tất cả ${rows.length}`, color: '#334155', filter: '' },
+        { text: `🟥 Tuấn Tú · Σ chênh lệch ${big(sumOf('tuantu'))}`, color: '#dc2626', filter: 'tuantu' },
+        { text: `🟦 Đại Dương · Σ chênh lệch ${big(sumOf('daiduong'))}`, color: '#2563eb', filter: 'daiduong' },
       ],
       rows: rows.slice(0, 120).map((r) => ({
         tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
@@ -8786,6 +8786,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         right: `${r.v < 0 ? '−' : ''}${trM(Math.abs(r.v))}`,
         ...(([rightColor, rightBg]) => ({ rightColor, rightBg }))(diffColors(r.v)),
         unread: r.q.isRead === false ? true : r.q.isRead === true ? false : undefined,
+        f: [r.site.key, ...(r.q.isRead === false ? ['unread'] : [])], // cho chip lọc trong popup
         url: `${r.host}/bao-gia/update/${r.q.id}`,
       })),
       at: Date.now(),
@@ -8804,7 +8805,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const f = lsGet('dgGapSite') || '';
     const byDiff = lsGet('dgGapSort') === 'diff';
     // Mặc định: như thứ tự danh sách Báo giá của CRM (mới tạo trước; cùng hệ thống thì theo vị trí trên ERP)
-    const rows = (f ? all.filter((r) => r.site.key === f) : all.slice()).sort((a, b) =>
+    const rows = (f === 'unread' ? all.filter((r) => r.q.isRead === false) : f ? all.filter((r) => r.site.key === f) : all.slice()).sort((a, b) =>
       byDiff ? b.v - a.v : gapOrder(a, b),
     );
     const sum = (list) => list.reduce((t, r) => t + r.v, 0);
@@ -8818,7 +8819,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
         <button class="gp-chip" data-act="gap-copy" data-site="daiduong" style="--c:#2563eb;margin-left:auto">📋 Copy khách Đại Dương</button>
         <button class="gp-chip" data-act="gap-sort" style="--c:#475569">↕ ${byDiff ? 'Theo chênh lệch' : 'Như danh sách báo giá'}</button></div>
-      <div class="gp-chips"><span class="gp-chip" style="--c:#b91c1c;cursor:default">● Chưa đọc <b>${unread}</b></span>${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
+      <div class="gp-chips"><button class="gp-chip${f === 'unread' ? ' on' : ''}" data-act="gap-site" data-site="unread" style="--c:#b91c1c">● Chưa đọc <b>${unread}</b></button>${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
       <div class="gp-list">${rows
         .slice(0, 300)
         .map((r, i) => {

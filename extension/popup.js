@@ -174,11 +174,12 @@ setInterval(loadCrm, 2000);
 // ---- Khung do script trên trang gửi tới: kv 'popupCards' = { <id>: { title, sub, chips:[{text,color}], rows:[{tag,tagColor,title,sub,right,rightColor,rightBg,url}], at } } ----
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 let cardsSig = '';
+var cardFilter = {}; // lọc theo chip của từng khung
 async function loadCards() {
   const cards = (await chrome.storage.local.get(KV('popupCards')))[KV('popupCards')] || {};
   cardsData = cards;
   const list = Object.entries(cards).filter(([, c]) => c && Array.isArray(c.rows)).map(([id, c]) => ({ ...c, id }));
-  const sig = JSON.stringify(list);
+  const sig = JSON.stringify([list, cardFilter]);
   if (sig === cardsSig) return;
   cardsSig = sig;
   document.body.classList.toggle('wide', list.length > 0);
@@ -187,9 +188,14 @@ async function loadCards() {
   document.body.style.width = list.length ? `${Math.min(800, Math.max(560, w || 560))}px` : '';
   $('cards').innerHTML = list
     .map((c) => `<section class="card"><h2>${esc(c.title)}</h2>${c.sub ? `<div class="hint" style="margin:-4px 0 6px">${esc(c.sub)}</div>` : ''}
-      ${c.chips?.length ? `<div class="pc-chips">${c.chips.map((x) => `<span class="pc-chip" style="color:${esc(x.color || '#334155')}">${esc(x.text)}</span>`).join('')}</div>` : ''}
+      ${c.chips?.length ? `<div class="pc-chips">${c.chips.map((x) => {
+        // chip có filter → bấm để lọc dòng (row.f chứa giá trị đó); bấm lại / chip filter '' → tất cả
+        const on = x.filter != null && (cardFilter[c.id] || '') === x.filter;
+        return `<span class="pc-chip${x.filter != null ? ' fl' : ''}${on ? ' on' : ''}" ${x.filter != null ? `data-card="${esc(c.id)}" data-f="${esc(x.filter)}"` : ''} style="color:${esc(x.color || '#334155')};${on ? `background:${esc(x.color || '#334155')};color:#fff` : ''}">${esc(x.text)}</span>`;
+      }).join('')}</div>` : ''}
       ${c.actions?.length ? `<div class="pc-chips">${c.actions.map((a, i) => `<button class="pc-act" data-card="${esc(c.id || '')}" data-ai="${i}" style="color:${esc(a.color || '#1d4ed8')}">${esc(a.label)}</button>`).join('')}</div>` : ''}
       <div class="pc-list">${c.rows
+        .filter((r) => !cardFilter[c.id] || (r.f || []).includes(cardFilter[c.id]))
         .map((r, i) => `<div class="pc-row${r.unread === true ? ' unread' : r.unread === false ? ' read' : ''}" data-url="${esc(r.url || '')}" title="${r.unread === true ? 'Chưa đọc' : r.unread === false ? 'Đã đọc' : ''}"><span class="pc-no">${i + 1}</span>
           <span class="pc-tag" style="background:${esc(r.tagColor || '#64748b')}">${esc(r.tag || '')}</span>
           <span class="pc-main"><b>${esc(r.title)}</b><span class="s">${esc(r.sub || '')}</span></span>
@@ -200,6 +206,13 @@ async function loadCards() {
 // Nút hành động của khung: { label, copy } → chép chữ vào bộ nhớ tạm
 let cardsData = {};
 $('cards').addEventListener('click', async (e) => {
+  const fc = e.target.closest('.pc-chip.fl');
+  if (fc) {
+    const id = fc.dataset.card;
+    cardFilter = { ...cardFilter, [id]: cardFilter[id] === fc.dataset.f ? '' : fc.dataset.f };
+    loadCards();
+    return;
+  }
   const act = e.target.closest('.pc-act');
   if (act) {
     const a = cardsData[act.dataset.card]?.actions?.[Number(act.dataset.ai)];
