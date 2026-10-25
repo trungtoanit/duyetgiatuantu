@@ -8582,8 +8582,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       chips: [
         { text: `● Chưa đọc ${unread}`, color: '#b91c1c' },
         { text: `Tất cả ${rows.length}`, color: '#334155' },
-        { text: `🟥 Tuấn Tú Σ ${big(sumOf('tuantu'))}`, color: '#dc2626' },
-        { text: `🟦 Đại Dương Σ ${big(sumOf('daiduong'))}`, color: '#2563eb' },
+        { text: `🟥 Tuấn Tú · Σ chênh lệch ${big(sumOf('tuantu'))}`, color: '#dc2626' },
+        { text: `🟦 Đại Dương · Σ chênh lệch ${big(sumOf('daiduong'))}`, color: '#2563eb' },
       ],
       rows: rows.slice(0, 120).map((r) => ({
         tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
@@ -8617,7 +8617,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sum = (list) => list.reduce((t, r) => t + r.v, 0);
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const chip = (k, label, list, col) =>
-      `<button class="gp-chip${f === k ? ' on' : ''}" data-act="gap-site" data-site="${k}" style="--c:${col}">${label} <b>${list.length}</b> · Σ ${big(sum(list))}</button>`;
+      `<button class="gp-chip${f === k ? ' on' : ''}" data-act="gap-site" data-site="${k}" style="--c:${col}">${label} <b>${list.length}</b> · Σ chênh lệch ${big(sum(list))}</button>`;
     const tt = all.filter((r) => r.site.key === 'tuantu');
     const dd = all.filter((r) => r.site.key === 'daiduong');
     const unread = all.filter((r) => r.q.isRead === false).length;
