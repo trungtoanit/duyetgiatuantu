@@ -4521,8 +4521,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const groups = [...by].map(([who, cs]) => [who, cs.sort((a, b) => b.amt - a.amt)]).sort((a, b) => b[1].reduce((t, c) => t + c.amt, 0) - a[1].reduce((t, c) => t + c.amt, 0));
     const val = (a) => (a ? `${Math.max(1, Math.round(a / 1e6)).toLocaleString('vi-VN')}tr` : 'chưa cho giá'); // vd. 87tr
     const head = teamHead();
-    const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n\n'); // mỗi NVKD cách 1 dòng trống
-    const html = `<div>${esc(head)}</div><div><br></div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('<div><br></div>')}`;
+    // Dạng danh sách: tên NVKD (số khách): rồi mỗi khách 1 dòng "• MÃ KHÁCH (xxtr)"; mỗi NVKD cách 1 dòng trống
+    const text = [head, ...groups.map(([who, cs]) => [`${shortName(who)} (${cs.length}):`, ...cs.map((c) => `• ${c.code} (${val(c.amt)})`)].join('\n'))].join('\n\n');
+    const html = `<div>${esc(head)}</div><div><br></div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}):</div>${cs.map((c) => `<div>• <b>${esc(c.code)}</b> (${esc(val(c.amt))})</div>`).join('')}`).join('<div><br></div>')}`;
     return { text, html, n: byCust.size, groups, head, val };
   }
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
