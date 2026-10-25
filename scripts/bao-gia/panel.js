@@ -3446,11 +3446,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Đơn (ngày đang xem) chưa có chênh lệch → mở ngầm báo giá để tính (mỗi lượt tối đa 2 báo giá, 1 báo giá thử lại sau 3 giờ)
   let dayDiffBusy = false;
   async function fillDayDiffs() {
-    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || (collect.running && !state.diffFocus) || !MY_ADMIN || (!state.dayOrders && !state.misaNeed?.length)) return;
+    if (!IS_TOP || dayDiffBusy || dayOrdersBusy || (collect.running && !state.diffFocus) || !MY_ADMIN || (!state.dayOrders && !state.misaNeed?.length && !state.listNeed?.length)) return;
     const [d0, d1] = kpiDayRange();
     const tried = JSON.parse(lsGet('dgDayDiffTry') || '{}');
     const byCode = renderCtx.byCode || {};
-    const need = [...(state.misaNeed || []), ...Object.values(state.dayOrders || {})]
+    const need = [...(state.misaNeed || []), ...(state.listNeed || []), ...Object.values(state.dayOrders || {})]
       .filter((o, i, arr) => o?.bg && !o.cancel && Date.now() - (tried[o.bg] || 0) > 3 * 3600e3 && arr.findIndex((x) => x?.bg === o.bg) === i)
       .filter((o) => {
         const q = byCode[o.bg];
@@ -4179,6 +4179,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           }
           let dsum = 0;
           let dn = 0;
+          const listNeed = [];
           for (const tr of wrap.querySelectorAll('tbody tr')) {
             if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
             let td = tr.querySelector(':scope > td[data-dg-diffcol]');
@@ -4192,7 +4193,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
             const q = code && byCode[code];
             const v = q ? diffVal(q) : null;
-            const h = diffPill(q);
+            const reading = !!q && state.diffReading?.bg === code;
+            const h = reading
+              ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-weight:700;font-size:11px;white-space:nowrap" title="Đang đọc ngầm ${esc(code)} – ${esc(state.diffReading.step || '')}"><i class="dg-spin"></i>đang đọc</span>`
+              : diffPill(q);
+            // chưa có chênh lệch (đã cho giá) → hàng đợi đọc ngầm
+            if (q && v == null && !q.noSheet && Number(q.amount) > 0 && tr.style.display !== 'none') listNeed.push({ bg: code, qid: q.id, at: Date.now() + 1e12 });
             if (v != null && !q.noSheet && tr.style.display !== 'none') {
               dsum += v;
               dn++;
@@ -4201,6 +4207,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
               td.dataset.h = h;
               td.innerHTML = h;
             }
+          }
+          state.listNeed = listNeed;
+          if (!document.getElementById('dg-spin-css')) {
+            const st = document.createElement('style');
+            st.id = 'dg-spin-css';
+            st.textContent = '@keyframes dgSpin{to{transform:rotate(360deg)}}.dg-spin{display:inline-block;width:12px;height:12px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:dgSpin .8s linear infinite;vertical-align:-2px}';
+            document.head.append(st);
           }
           const ds = dth.querySelector('[data-dg-dsum]');
           const t = `Σ ${dn ? (Math.abs(dsum) >= 1e9 ? `${(dsum / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(dsum)) : '–'}`;
