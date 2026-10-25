@@ -1548,6 +1548,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const heads = [...t.querySelectorAll('thead th')];
     const pIdx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
     const qIdx = heads.findIndex((th) => /^Số lượng$/i.test(th.innerText.trim()));
+    const tIdx = heads.findIndex((th) => /^Mã SP$/i.test(th.innerText.trim()));
     return [...t.querySelectorAll('.ant-table-tbody tr')]
       .filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim())
       .map((tr, i) => {
@@ -1556,7 +1557,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const qty = qIdx >= 0 ? Number(String(tr.cells[qIdx]?.querySelector('input')?.value || tr.cells[qIdx]?.innerText || '').replace(/[^\d]/g, '')) || 0 : 0;
         const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
         const name = (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C/i) || [txt.slice(0, 60)])[0];
-        return { i, tr, cell, cur, qty, name, offset: /offset/i.test(txt) };
+        const tp = ((tIdx >= 0 ? tr.cells[tIdx]?.innerText : txt) || '').match(/TP\d{3,}/)?.[0] || '';
+        return { i, tr, cell, cur, qty, tp, name, offset: /offset/i.test(txt) };
       })
       .filter((r) => !r.offset && r.cell);
   }
@@ -1729,29 +1731,42 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           const v = rowPct[r.i];
           return `<div class="pr-row${v != null && v !== pct ? ' own' : ''}"><span class="pr-no">${r.i + 1}</span><span class="pr-name" title="${esc(r.name)}">${esc(r.name)}</span>
             <span class="pr-cur">${r.cur ? money(r.cur) : '0đ'}</span>
-            <span class="pr-ctl"><button class="act" data-rd="${r.i}" data-d="-1">−</button><input data-ri="${r.i}" inputmode="numeric" placeholder="${pct}" value="${v ?? ''}"><b>%</b><button class="act" data-rd="${r.i}" data-d="1">+</button></span></div>`;
+            <span class="pr-ctl"><button class="act" data-rd="${r.i}" data-d="-1">−</button><input data-ri="${r.i}" inputmode="numeric" placeholder="${pct}" value="${v ?? ''}"><b>%</b><button class="act" data-rd="${r.i}" data-d="1">+</button></span><div class="pr-line" data-rl="${r.i}"></div></div>`;
         })
         .join('')}<div class="pr-tot"></div>`;
       renderTot();
     };
     // Tổng theo % từng dòng: giấy tấm chia cho từng dòng theo tỷ lệ thành tiền hiện tại → thành tiền mới = giấy tấm dòng ÷ (1 − % dòng)
+    // Từng dòng: giấy tấm của dòng (theo Mã TP trong PO; chưa có thì chia theo tỷ lệ thành tiền ≈) → thành tiền = giấy tấm ÷ (1 − % dòng)
     const renderTot = () => {
       const el = rowsEl.querySelector('.pr-tot');
       const fx = flexoPaper(q);
+      const byTp = renderCtx.margins?.[q.code]?.flexo?.byTp || {};
       const rows = flexoRowsForDialog();
       if (!el) return;
       if (!fx?.paper || !rows.length) return (el.innerHTML = '<span class="muted">Chưa có tổng giấy tấm (PO) để tính.</span>');
       const pct = Number(range.value);
-      const curTot = rows.reduce((t, r) => t + r.cur * (r.qty || 0), 0);
+      const known = rows.reduce((t, r) => t + (byTp[r.tp] || 0), 0);
+      const restRows = rows.filter((r) => !byTp[r.tp]);
+      const restCur = restRows.reduce((t, r) => t + r.cur * (r.qty || 0), 0);
+      const restPaper = Math.max(0, fx.paper - known);
       let rev = 0;
+      let paperSum = 0;
       for (const r of rows) {
-        const share = curTot ? (r.cur * (r.qty || 0)) / curTot : 1 / rows.length;
+        const exact = !!byTp[r.tp];
+        const paper = exact ? byTp[r.tp] : restCur ? (restPaper * r.cur * (r.qty || 0)) / restCur : restPaper / (restRows.length || 1);
         const p = rowPct[r.i] ?? pct;
-        rev += (fx.paper * share) / (1 - p / 100);
+        const tt = paper / (1 - p / 100);
+        const d = tt - paper;
+        rev += tt;
+        paperSum += paper;
+        const line = rowsEl.querySelector(`[data-rl="${r.i}"]`);
+        if (line)
+          line.innerHTML = `<span title="${exact ? `Giấy tấm theo PO (${esc(r.tp)})` : 'Ước tính: chưa có dòng PO theo mã TP'}">GT ${exact ? '' : '≈'}<b>${trM(paper)}</b></span><span>TT <b>${trM(tt)}</b>${r.qty ? ` <i>(${money(Math.ceil(tt / r.qty))}/c)</i>` : ''}</span><span class="${d < 0 ? 'neg' : 'pos'}">CL <b>${d < 0 ? '−' : '+'}${trM(Math.abs(d))}</b></span>`;
       }
-      const diff = rev - fx.paper;
-      el.innerHTML = `<div class="ps-grid"><div class="ps-t"><span>Tổng mua giấy tấm</span><b>${trM(fx.paper)}</b><small>${esc(fx.code)}</small></div>
-        <div class="ps-t"><span>Tổng thành tiền</span><b>${trM(rev)}</b><small>theo % từng dòng</small></div>
+      const diff = rev - paperSum;
+      el.innerHTML = `<div class="ps-grid"><div class="ps-t"><span>Tổng mua giấy tấm</span><b>${trM(paperSum)}</b><small>${esc(fx.code)}</small></div>
+        <div class="ps-t"><span>Tổng thành tiền</span><b>${trM(rev)}</b><small>cộng từng dòng</small></div>
         <div class="ps-t ${diff < 0 ? 'neg' : 'pos'}"><span>Chênh lệch</span><b>${diff < 0 ? '−' : '+'}${trM(Math.abs(diff))}</b><small>${rev ? `${((diff / rev) * 100).toFixed(1)}%` : ''}</small></div></div>`;
     };
     rowsEl.addEventListener('input', (e) => {
@@ -1800,7 +1815,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     kvGet('dealHist').then(async (all) => {
       const cached = all[q.code];
       if (cached) showHist(cached.list, `Lúc ${new Date(cached.at).toLocaleString('vi-VN')}`);
-      const needPo = !flexoPaper(q);
+      const needPo = !flexoPaper(q) || !renderCtx.margins?.[q.code]?.flexo?.byTp || !Object.keys(renderCtx.margins[q.code].flexo.byTp).length;
       if (!needPo) {
         poLoading = false;
         renderSum();
@@ -3550,6 +3565,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
       tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span data-dg-miss="day" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
       tile('🗓️', `Chênh lệch T${mvn.getUTCMonth() + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}`, mDn ? `${mSum < 0 ? '−' : ''}${big(Math.abs(mSum))}` : '–', mSum < 0 ? '#b91c1c' : '#be185d', mSum < 0 ? '#fef2f2' : '#fdf2f8', mSum < 0 ? '#fecaca' : '#fbcfe8', `Tháng ${mvn.getUTCMonth() + 1}/${mvn.getUTCFullYear()} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${mList.length} đơn · doanh thu ${money(mRev)} · chênh lệch ${money(Math.round(mSum))} (${mDn}/${mList.length} đơn đã tính được)`) +
+      // Doanh thu tháng (tới ngày đang xem) + dự kiến cả tháng theo ngày công (trừ Chủ nhật)
+      (() => {
+        const y = mvn.getUTCFullYear();
+        const mo = mvn.getUTCMonth();
+        const dim = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+        let total = 0;
+        let done = 0;
+        for (let d = 1; d <= dim; d++) {
+          if (new Date(Date.UTC(y, mo, d)).getUTCDay() === 0) continue;
+          total++;
+          if (d <= mvn.getUTCDate()) done++;
+        }
+        const fc = done ? (mRev / done) * total : 0;
+        return `<div title="${esc(`Doanh thu tháng ${mo + 1}: ${money(mRev)} (${mList.length} đơn, tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'})\nDự kiến cả tháng = ${money(mRev)} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật) = ${money(Math.round(fc))}`)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:#f0fdf4;border:1.5px solid #86efac;box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+          <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">💵 Doanh thu T${mo + 1}</span><b style="font-size:18px;font-weight:900;color:#15803d;white-space:nowrap;font-variant-numeric:tabular-nums">${big(mRev)}</b>
+          <span style="font-size:10.5px;font-weight:700;color:#0e7490;white-space:nowrap">→ dự kiến ${big(fc)} <span style="color:#94a3b8;font-weight:600">(${done}/${total} ngày công)</span></span></div>`;
+      })() +
       // Dự báo cả tháng: chênh lệch hiện tại ÷ ngày làm việc đã qua × ngày làm việc của tháng (trừ Chủ nhật)
       (() => {
         const y = mvn.getUTCFullYear();
@@ -4552,6 +4584,29 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectPriceButtons(), 2000);
 
+  // Dòng hàng trong 1 PO (giấy tấm): Mã TP → "Thành tiền", quy đổi theo "Tổng thanh toán" của PO → giấy tấm từng sản phẩm
+  function readPoLines(modal, total) {
+    const t = [...modal.querySelectorAll('table')].find((x) => [...x.querySelectorAll('th')].some((th) => th.innerText.trim() === 'Mã TP'));
+    if (!t) return {};
+    const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+    const ti = hs.indexOf('Mã TP');
+    const ai = hs.indexOf('Thành tiền');
+    if (ti < 0 || ai < 0) return {};
+    const raw = {};
+    for (const tr of t.querySelectorAll('tbody tr')) {
+      const tp = (tr.cells[ti]?.innerText.match(/TP\d{3,}/) || [])[0];
+      const amt = Number(String(tr.cells[ai]?.innerText || '').split('\n')[0].replace(/[^\d]/g, '')) || 0;
+      if (tp && amt) raw[tp] = (raw[tp] || 0) + amt;
+    }
+    const sum = Object.values(raw).reduce((a, v) => a + v, 0);
+    if (!sum) return {};
+    const k = total ? total / sum : 1;
+    return Object.fromEntries(Object.entries(raw).map(([tp, v]) => [tp, Math.round(v * k)]));
+  }
+  const addTp = (acc, lines) => {
+    for (const [tp, v] of Object.entries(lines || {})) acc[tp] = (acc[tp] || 0) + v;
+    return acc;
+  };
   async function readRealPos(doc, q, vis) {
     const lbl = [...doc.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^DS PO:?$/.test(e.textContent.trim()));
     const box = lbl?.parentElement;
@@ -4563,6 +4618,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return false;
     }
     const suppliers = [];
+    const byTp = {};
     for (const [i, b] of btns.entries()) {
       const po = b.innerText.trim();
       setStep(`Đọc PO thật ${po} (${i + 1}/${btns.length})…`);
@@ -4582,6 +4638,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const sel = modal.querySelector('.ant-select-selection-item')?.innerText || '';
       const code = sel.split('|')[0].trim() || po.split('_')[0];
       if (total) {
+        addTp(byTp, readPoLines(modal, total));
         const ex = suppliers.find((x) => x.code === code);
         if (ex) {
           ex.total += total;
@@ -4599,7 +4656,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (inp) pageTotal = Number(String(inp.value).replace(/[^\d]/g, '')) || 0;
     const all = await kvGet('margins');
     const cur = all[q.code] || { products: {} };
-    cur.flexo = { suppliers, missing: [], quoteTotal: pageTotal || q.amount || 0, amountAt: q.amount || 0, mode: FLEXO_MODE, fromPo: true, at: Math.floor(Date.now() / 1000), poCheckAt: Math.floor(Date.now() / 1000) };
+    cur.flexo = { suppliers, byTp, missing: [], quoteTotal: pageTotal || q.amount || 0, amountAt: q.amount || 0, mode: FLEXO_MODE, fromPo: true, at: Math.floor(Date.now() / 1000), poCheckAt: Math.floor(Date.now() / 1000) };
     await kvMerge('margins', { [q.code]: cur });
     return true;
   }
@@ -4657,11 +4714,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     const list = chips.slice(0, 8);
     const suppliers = [];
+    const byTpD = {};
     let missing = [];
     for (const [ci, ch] of list.entries()) {
       setStep(`Đang đọc nhà cung cấp ${ch.code} (${ci + 1}/${list.length})…`);
       const total = await readOne(ch);
-      if (total) suppliers.push({ code: ch.code, name: selName(), total });
+      if (total) {
+        suppliers.push({ code: ch.code, name: selName(), total });
+        addTp(byTpD, readPoLines(modal, total));
+      }
       else missing.push(ch);
     }
     // Đọc lại nhà cung cấp bị lỡ (PO tải quá chậm) – thiếu 1 nhà là % sai hẳn
@@ -4670,6 +4731,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const total = await readOne(ch);
       if (!total) continue;
       suppliers.push({ code: ch.code, name: selName(), total });
+      addTp(byTpD, readPoLines(modal, total));
       missing = missing.filter((x) => x !== ch);
     }
     vis().forEach((m) => m.querySelector('.ant-modal-close')?.click());
@@ -4684,6 +4746,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const cur = all[q.code] || { products: {} };
     cur.flexo = {
       suppliers,
+      byTp: byTpD,
       missing: missing.map((c) => c.code),
       quoteTotal: pageTotal || q.amount || 0,
       amountAt: q.amount || 0, // tổng báo giá lúc tính – đổi thì tính lại
@@ -6028,6 +6091,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .ps-t.neg { border-color: #fecaca; background: #fef2f2; } .ps-t.neg b { color: #b91c1c; }
     .ps-est { margin-top: 6px; font-size: 12px; }
     .pdlg-rows:empty { display: none; }
+    .pr-line { grid-column: 2 / -1; display: flex; gap: 10px; font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
+    .pr-line b { color: #0f172a; } .pr-line i { font-style: normal; color: #94a3b8; } .pr-line .pos b { color: #15803d; } .pr-line .neg b { color: #b91c1c; }
     .pr-tot { margin-top: 4px; position: sticky; bottom: -8px; background: #f8fafc; padding: 6px 0 2px; }
     .pdlg-card:has(.pdlg-rows:not(:empty)) { width: min(480px, calc(100vw - 32px)); }
     .pdlg-rows { display: grid; gap: 4px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #f8fafc; max-height: 240px; overflow: auto; }
