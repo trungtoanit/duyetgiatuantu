@@ -4404,6 +4404,95 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 
   // 📣 Nhắc cả đội: gom deal gợi ý chốt đơn theo NVKD (chỉ mã khách) → việc gửi Zalo vào nhóm "Sale Nội Bộ - Tuấn Tú"
   const TEAM_GROUP = SITE.teamGroup; // trống → domain chưa có nhóm Zalo: ẩn nút Nhắc cả đội
+  // Tin nhắn mẫu của sếp (câu mở đầu tin nhắc cả đội): kv 'teamTpl' (đồng bộ) = { list:[…], mode:'rotate'|'fixed', pick }
+  const TEAM_TPL_DEFAULT = ['Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:'];
+  function teamTplList() {
+    const l = (state.teamTpl?.list || []).map((x) => String(x || '').trim()).filter(Boolean);
+    return l.length ? l : TEAM_TPL_DEFAULT;
+  }
+  // Mỗi ca 1 câu (xoay vòng theo ca) – cùng 1 ca gửi lại vẫn ra cùng câu; chế độ cố định → luôn câu đã chọn
+  function teamHead() {
+    const l = teamTplList();
+    if (state.teamTpl?.mode === 'fixed') return l[Math.min(l.length - 1, Number(state.teamTpl.pick) || 0)];
+    const slot = teamSlot() || new Date().toISOString().slice(0, 10);
+    let h = 0;
+    for (const ch of slot) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return l[h % l.length];
+  }
+  async function openTeamTpl() {
+    state.teamTpl = (await kvGet('teamTpl')).main || state.teamTpl || {};
+    document.getElementById('dg-team-tpl')?.remove();
+    const box = document.createElement('div');
+    box.id = 'dg-team-tpl';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.4);display:grid;place-items:center;font-family:inherit');
+    const list = teamTplList().slice();
+    const mode = state.teamTpl?.mode === 'fixed' ? 'fixed' : 'rotate';
+    let pick = Number(state.teamTpl?.pick) || 0;
+    const draw = () => {
+      box.innerHTML = `<div style="width:min(680px,94vw);max-height:86vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35)">
+        <div style="padding:14px 18px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:8px"><b style="font-size:16px">💬 Tin nhắn mẫu của sếp – Nhắc cả đội</b><button data-t="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px">×</button></div>
+        <div style="padding:14px 18px;display:grid;gap:10px;font-size:13px">
+          <div style="color:#64748b">Câu mở đầu tin nhắn gửi nhóm Zalo (phía dưới vẫn là danh sách khách theo từng NVKD).</div>
+          <div style="display:flex;gap:16px"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="tm" value="rotate" ${mode === 'rotate' ? 'checked' : ''}> 🔄 Xoay vòng – mỗi ca 1 câu khác</label>
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="tm" value="fixed" ${mode === 'fixed' ? 'checked' : ''}> 📌 Luôn dùng câu đã chọn</label></div>
+          <div style="display:grid;gap:6px">${list
+            .map((t, i) => `<div style="display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:start">
+              <input type="radio" name="tp" value="${i}" ${i === pick ? 'checked' : ''} title="Câu dùng khi chọn 'Luôn dùng câu đã chọn'" style="margin-top:9px">
+              <textarea data-i="${i}" rows="2" style="font:inherit;font-size:13px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;resize:vertical">${esc(t)}</textarea>
+              <button data-t="del" data-i="${i}" title="Xoá câu này" style="all:unset;cursor:pointer;color:#b91c1c;font-size:16px;padding:6px">🗑</button></div>`)
+            .join('')}</div>
+          <button data-t="add" style="justify-self:start;border:1px dashed #94a3b8;background:#f8fafc;border-radius:8px;padding:5px 12px;cursor:pointer;font:inherit">＋ Thêm câu</button>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px"><b>Xem trước ca này:</b> <span data-pv style="color:#1d4ed8"></span></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end"><button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
+            <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div>
+        </div></div>`;
+      preview();
+    };
+    const read = () => {
+      box.querySelectorAll('textarea[data-i]').forEach((ta) => (list[Number(ta.dataset.i)] = ta.value));
+      pick = Number(box.querySelector('input[name="tp"]:checked')?.value) || 0;
+      return { list: list.map((x) => x.trim()).filter(Boolean), mode: box.querySelector('input[name="tm"]:checked')?.value || 'rotate', pick };
+    };
+    const preview = () => {
+      const keep = state.teamTpl;
+      state.teamTpl = read();
+      const pv = box.querySelector('[data-pv]');
+      if (pv) pv.textContent = teamHead();
+      state.teamTpl = keep;
+    };
+    box.addEventListener('input', preview);
+    box.addEventListener('change', preview);
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const b = e.target.closest('[data-t]');
+      if (!b) return;
+      if (b.dataset.t === 'x') return box.remove();
+      if (b.dataset.t === 'add') {
+        read();
+        list.push('');
+        draw();
+        box.querySelectorAll('textarea')[list.length - 1]?.focus();
+        return;
+      }
+      if (b.dataset.t === 'del') {
+        read();
+        list.splice(Number(b.dataset.i), 1);
+        if (!list.length) list.push(TEAM_TPL_DEFAULT[0]);
+        pick = Math.min(pick, list.length - 1);
+        draw();
+        return;
+      }
+      if (b.dataset.t === 'save') {
+        const v = { ...read(), at: Date.now(), by: meName };
+        state.teamTpl = v;
+        await kvMerge('teamTpl', { main: v });
+        box.remove();
+      }
+    });
+    draw();
+    document.body.append(box);
+  }
+  if (IS_TOP) kvGet('teamTpl').then((t) => (state.teamTpl = t.main || null)).catch(() => {});
   function buildTeamMsg() {
     const items = state.teamItems || [];
     // Mỗi khách 1 lần (cộng giá trị các báo giá gợi ý của khách đó), gom theo NVKD
@@ -4425,7 +4514,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     const groups = [...by].map(([who, cs]) => [who, cs.sort((a, b) => b.amt - a.amt)]).sort((a, b) => b[1].reduce((t, c) => t + c.amt, 0) - a[1].reduce((t, c) => t + c.amt, 0));
     const val = (a) => (a ? `${Math.max(1, Math.round(a / 1e6)).toLocaleString('vi-VN')}tr` : 'chưa cho giá'); // vd. 87tr
-    const head = 'Khách của ai xem xét thúc khách kéo đơn về, khách nào gặp khó khăn thì gặp anh:';
+    const head = teamHead();
     const text = [head, ...groups.map(([who, cs]) => `${shortName(who)} (${cs.length}): ${cs.map((c) => `${c.code} (${val(c.amt)})`).join(', ')}`)].join('\n\n'); // mỗi NVKD cách 1 dòng trống
     const html = `<div>${esc(head)}</div><div><br></div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}): ${cs.map((c) => `<b>${esc(c.code)}</b> (${esc(val(c.amt))})`).join(', ')}</div>`).join('<div><br></div>')}`;
     return { text, html, n: byCust.size, groups, head, val };
@@ -4687,7 +4776,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const slotNow = teamSlot();
     const urge = MY_ADMIN && slotNow && !(await kvGet('teamRemind'))[slotNow];
     const hotSum = items.reduce((t, { q }) => t + (Number(q.amount) || 0), 0);
-    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b><span class="dgh-sum" title="Tổng giá trị các báo giá trong Gợi ý chốt đơn">Σ ${moneyShortG(hotSum)}</span>${MY_ADMIN && TEAM_GROUP ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm ${esc(TEAM_GROUP)}, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b><span class="dgh-sum" title="Tổng giá trị các báo giá trong Gợi ý chốt đơn">Σ ${moneyShortG(hotSum)}</span>${MY_ADMIN && TEAM_GROUP ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm ${esc(TEAM_GROUP)}, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><button class="dgh-tpl" data-dg-team-tpl title="Cài đặt tin nhắn mẫu của sếp (câu mở đầu tin nhắc cả đội)">⚙️</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
       .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
@@ -4708,6 +4797,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 [data-dg-hot] .dgh-t{display:flex;align-items:center;gap:6px}
 [data-dg-hot] .dgh-team{margin-left:auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;text-transform:none;letter-spacing:0;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed);border-radius:999px;padding:1px 10px}
 [data-dg-hot] .dgh-team:hover{filter:brightness(1.1)}
+[data-dg-hot] .dgh-tpl{border:1px solid #c7d2fe;background:#fff;border-radius:999px;cursor:pointer;font-size:10px;padding:0 6px;line-height:16px;margin-left:-2px}
+[data-dg-hot] .dgh-tpl:hover{background:#eef2ff}
 [data-dg-hot] .dgh-sum{font-size:11px;font-weight:900;text-transform:none;letter-spacing:0;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:999px;padding:0 8px;font-variant-numeric:tabular-nums}
 [data-dg-hot] .dgh-cd{font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;color:#475569;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
 [data-dg-hot] .dgh-cd b{background:none!important;color:#1d4ed8!important;padding:0!important;margin:0!important}
@@ -4766,6 +4857,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         e.preventDefault();
         e.stopPropagation();
         return teamRemind(tb); // bấm nút → chuyển thẳng sang Zalo, gửi dạng chữ (có định dạng), không hiện hộp
+      }
+      if (e.target.closest?.('[data-dg-team-tpl]')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return openTeamTpl();
       }
       const a = e.target.closest?.('a[data-dg-hotlink]');
       if (!a || e.metaKey || e.ctrlKey) return;
