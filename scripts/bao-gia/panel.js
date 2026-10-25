@@ -3868,6 +3868,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 @keyframes dgNoCmtWig{0%,60%,100%{transform:rotate(0)}70%{transform:rotate(-14deg)}80%{transform:rotate(12deg)}90%{transform:rotate(-6deg)}}`;
     document.head.append(st);
   }
+  const SYS_CMT_RE = /đã tạo báo giá #?BG\d+|^Mã đơn hàng Misa:|lên đơn hàng với giá trị/i;
   function injectNoComment() {
     if (!IS_TOP || !renderCtx.quotes) return;
     const byCode = renderCtx.byCode || {};
@@ -3883,7 +3884,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!cell) continue;
         const code = (tr.innerText.match(/BG\d{3,}/) || [])[0];
         const q = code && byCode[code];
-        const none = !!q?.id && !!renderCtx.collected?.[q.id] && !renderCtx.comments?.[q.id]?.threads?.length && !CLOSED.has(q.quoteStatus) && !q.hasOrder;
+        // chỉ có dòng tự động của CRM ("… đã tạo báo giá #BG… giá trị …", "Mã đơn hàng Misa: …") cũng tính là chưa bình luận
+        const real = (renderCtx.comments?.[q?.id]?.threads || []).filter((t) => (t.children?.length || 0) > 0 || !SYS_CMT_RE.test(String(t.text || '').trim()));
+        const none = !!q?.id && !!renderCtx.collected?.[q.id] && !real.length && !CLOSED.has(q.quoteStatus) && !q.hasOrder;
         let b = cell.querySelector('.dg-nocmt');
         if (!none) {
           b?.remove();
