@@ -6093,7 +6093,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .pdlg-rows:empty { display: none; }
     .pr-line { grid-column: 2 / -1; display: flex; gap: 10px; font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
     .pr-line b { color: #0f172a; } .pr-line i { font-style: normal; color: #94a3b8; } .pr-line .pos b { color: #15803d; } .pr-line .neg b { color: #b91c1c; }
-    .pr-tot { margin-top: 4px; position: sticky; bottom: -8px; background: #f8fafc; padding: 6px 0 2px; }
+    .pr-tot { display: none; } /* trùng với 3 ô phía trên → ẩn (vẫn dùng để tính từng dòng) */
     .pdlg-card:has(.pdlg-rows:not(:empty)) { width: min(760px, calc(100vw - 32px)); font-size: 14px; }
     .pdlg-card:has(.pdlg-rows:not(:empty)) .pdlg-rows { max-height: min(56vh, 620px); }
     .pdlg-card:has(.pdlg-rows:not(:empty)) .pr-row { font-size: 13px; padding: 5px 8px; }
