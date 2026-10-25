@@ -1750,17 +1750,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const restRows = rows.filter((r) => !byTp[r.tp]);
       const restCur = restRows.reduce((t, r) => t + r.cur * (r.qty || 0), 0);
       const restPaper = Math.max(0, fx.paper - known);
+      const knownCur = rows.filter((r) => byTp[r.tp]).reduce((t, r) => t + r.cur * (r.qty || 0), 0);
+      const knownRatio = knownCur ? known / knownCur : (fx.paper / (rows.reduce((t, r) => t + r.cur * (r.qty || 0), 0) || 1));
       let rev = 0;
       let paperSum = 0;
       for (const r of rows) {
         const exact = !!byTp[r.tp];
         const line0 = rowsEl.querySelector(`[data-rl="${r.i}"]`);
-        if (!exact && restPaper <= 0) {
-          // PO không có dòng của sản phẩm này → không tính được riêng
-          if (line0) line0.innerHTML = `<span style="color:#d97706" title="Trong PO giấy tấm không có dòng mã ${esc(r.tp || '?')}">⚠️ không thấy trong PO${r.tp ? ` (${esc(r.tp)})` : ''}</span>`;
-          continue;
-        }
-        const paper = exact ? byTp[r.tp] : restCur ? (restPaper * r.cur * (r.qty || 0)) / restCur : restPaper / (restRows.length || 1);
+        // dòng không có trong PO (hoặc phần giấy còn lại = 0) → ước tính theo tỷ lệ giấy tấm / thành tiền của các dòng đã khớp PO
+        const paper = exact
+          ? byTp[r.tp]
+          : restPaper > 0
+            ? restCur ? (restPaper * r.cur * (r.qty || 0)) / restCur : restPaper / (restRows.length || 1)
+            : r.cur * (r.qty || 0) * knownRatio;
         const p = rowPct[r.i] ?? pct;
         const tt = paper / (1 - p / 100);
         const d = tt - paper;
@@ -1768,7 +1770,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         paperSum += paper;
         const line = rowsEl.querySelector(`[data-rl="${r.i}"]`);
         if (line)
-          line.innerHTML = `<span title="${exact ? `Giấy tấm theo PO (${esc(r.tp)})` : 'Ước tính: chưa có dòng PO theo mã TP'}">GT ${exact ? '' : '≈'}<b>${trM(paper)}</b></span><span>TT <b>${trM(tt)}</b>${r.qty ? ` <i>(${money(Math.ceil(tt / r.qty))}/c)</i>` : ''}</span><span class="${d < 0 ? 'neg' : 'pos'}">CL <b>${d < 0 ? '−' : '+'}${trM(Math.abs(d))}</b></span>`;
+          line.innerHTML = `<span title="${exact ? `Giấy tấm theo PO (${esc(r.tp)})` : `Ước tính: PO không có dòng mã ${esc(r.tp || '?')} → tính theo tỷ lệ giấy tấm / thành tiền của các dòng khác`}">GT ${exact ? '' : '≈'}<b>${trM(paper)}</b></span><span>TT <b>${trM(tt)}</b>${r.qty ? ` <i>(${money(Math.ceil(tt / r.qty))}/c)</i>` : ''}</span><span class="${d < 0 ? 'neg' : 'pos'}">CL <b>${d < 0 ? '−' : '+'}${trM(Math.abs(d))}</b></span>`;
       }
       const diff = rev - paperSum;
       el.innerHTML = `<div class="ps-grid"><div class="ps-t"><span>Tổng mua giấy tấm</span><b>${trM(paperSum)}</b><small>${esc(fx.code)}</small></div>
