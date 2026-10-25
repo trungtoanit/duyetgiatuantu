@@ -8524,13 +8524,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function gapRows() {
     if (state.gapCache && Date.now() - state.gapCache.at < 60e3) return state.gapCache.rows;
     const sites = [
-      { s: SITES.tuantu, host: 'https://sale.tuantu.com.vn' },
-      { s: SITES.daiduong, host: 'https://quanly.baobidaiduong.com' },
+      { s: SITES.tuantu, host: 'https://sale.tuantu.com.vn', min: 20e6 }, // Tuấn Tú: chênh lệch từ 20 tr
+      { s: SITES.daiduong, host: 'https://quanly.baobidaiduong.com', min: 10e6 }, // Đại Dương: từ 10 tr
     ];
     const rows = [];
     const keep = renderCtx.margins;
     try {
-      for (const { s: st, host } of sites) {
+      for (const { s: st, host, min } of sites) {
         const [qs, mg] = await Promise.all([rawCall({ type: 'kv.get', key: `${st.prefix}quotes` }), rawCall({ type: 'kv.get', key: `${st.prefix}margins` })]);
         renderCtx.margins = mg || {};
         for (const q of Object.values(qs || {})) {
@@ -8539,7 +8539,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           try {
             v = diffVal(q);
           } catch {}
-          if (v == null) continue;
+          if (v == null || v < min) continue;
           rows.push({ site: st, host, q, v });
         }
       }
@@ -8561,7 +8561,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const tt = all.filter((r) => r.site.key === 'tuantu');
     const dd = all.filter((r) => r.site.key === 'daiduong');
     return `<div class="gp">
-      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">xếp từ lớn tới nhỏ · chỉ báo giá chưa chốt / chưa lên đơn · cập nhật mỗi phút</span></div>
+      <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 20 tr · Đại Dương ≥ 10 tr · xếp từ lớn tới nhỏ · chỉ báo giá chưa chốt / chưa lên đơn</span></div>
       <div class="gp-chips">${chip('', 'Tất cả', all, '#334155')}${chip('tuantu', '🟥 Tuấn Tú', tt, '#dc2626')}${chip('daiduong', '🟦 Đại Dương', dd, '#2563eb')}</div>
       <div class="gp-list">${rows
         .slice(0, 300)
