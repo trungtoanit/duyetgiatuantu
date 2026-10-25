@@ -8595,13 +8595,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       })),
       at: Date.now(),
     };
+    // Số trên biểu tượng: ghi lại mỗi lượt (kèm thời điểm → background luôn nhận thay đổi và vẽ lại, kể cả sau khi tải lại extension)
+    await call({ type: 'kv.set', key: 'badge', value: { text: unread ? String(unread) : '', color: '#dc2626', title: `${unread} báo giá chênh lệch lớn chưa đọc (Tuấn Tú + Đại Dương)`, at: Date.now() } });
     const sig = JSON.stringify([card.chips, card.rows]);
     if (sig === state.gapPopupSig) return;
     state.gapPopupSig = sig;
     await kvMerge('popupCards', { gap: card });
-    await call({ type: 'kv.set', key: 'badge', value: { text: unread ? String(unread) : '', color: '#dc2626', title: `${unread} báo giá chênh lệch lớn chưa đọc (Tuấn Tú + Đại Dương)` } });
   }
-  setTimeout(() => gapToPopup().catch(() => {}), 20e3);
+  setTimeout(() => gapToPopup().catch(() => {}), 8e3);
   setInterval(() => gapToPopup().catch(() => {}), 60e3);
   async function gapTab() {
     const all = await gapRows();
