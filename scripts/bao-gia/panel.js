@@ -1754,6 +1754,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       let paperSum = 0;
       for (const r of rows) {
         const exact = !!byTp[r.tp];
+        const line0 = rowsEl.querySelector(`[data-rl="${r.i}"]`);
+        if (!exact && restPaper <= 0) {
+          // PO không có dòng của sản phẩm này → không tính được riêng
+          if (line0) line0.innerHTML = `<span style="color:#d97706" title="Trong PO giấy tấm không có dòng mã ${esc(r.tp || '?')}">⚠️ không thấy trong PO${r.tp ? ` (${esc(r.tp)})` : ''}</span>`;
+          continue;
+        }
         const paper = exact ? byTp[r.tp] : restCur ? (restPaper * r.cur * (r.qty || 0)) / restCur : restPaper / (restRows.length || 1);
         const p = rowPct[r.i] ?? pct;
         const tt = paper / (1 - p / 100);
@@ -6094,11 +6100,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .pr-line { grid-column: 2 / -1; display: flex; gap: 10px; font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
     .pr-line b { color: #0f172a; } .pr-line i { font-style: normal; color: #94a3b8; } .pr-line .pos b { color: #15803d; } .pr-line .neg b { color: #b91c1c; }
     .pr-tot { display: none; } /* trùng với 3 ô phía trên → ẩn (vẫn dùng để tính từng dòng) */
-    .pdlg-card:has(.pdlg-rows:not(:empty)) { width: min(760px, calc(100vw - 32px)); font-size: 14px; }
+    .pdlg-wrap:has(.pdlg-rows:not(:empty)) { width: calc(100vw - 32px); }
+    .pdlg-card:has(.pdlg-rows:not(:empty)) { flex: 1 1 auto; width: auto; min-width: 0; font-size: 14px; }
     .pdlg-card:has(.pdlg-rows:not(:empty)) .pdlg-rows { max-height: min(56vh, 620px); }
     .pdlg-card:has(.pdlg-rows:not(:empty)) .pr-row { font-size: 13px; padding: 5px 8px; }
     .pdlg-card:has(.pdlg-rows:not(:empty)) .pr-line { font-size: 12px; gap: 16px; }
-    .pdlg-wrap:has(.pdlg-rows:not(:empty)) .pdlg-hist { width: min(440px, calc(100vw - 820px)); }
+    .pdlg-wrap:has(.pdlg-rows:not(:empty)) .pdlg-hist { flex: none; width: min(380px, 28vw); }
     .pdlg-rows { display: grid; gap: 4px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #f8fafc; max-height: 240px; overflow: auto; }
     .pr-h { font-weight: 800; font-size: 12px; margin-bottom: 2px; }
     .pr-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 6px; align-items: center; background: #fff; border: 1px solid #eef2f7; border-radius: 8px; padding: 3px 6px; font-size: 12px; }
