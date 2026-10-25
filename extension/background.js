@@ -191,51 +191,91 @@ chrome.alarms.onAlarm.addListener((a) => {
 });
 
 // Số trên biểu tượng extension: script trên trang ghi kv 'badge' = { text, color, title } → hiện ngay (không cần cài lại khi đổi nội dung)
+// badge.anim:
+//   'pulse' → con số tự vẽ trên biểu tượng, phồng to / thu nhỏ + lắc nhẹ liên tục (dễ nhận ra)
+//   'shake' → cả biểu tượng rung lắc từng đợt, con số là badge thường của Chrome
+//   khác    → badge thường, đứng yên
+let animTimer = null;
+let animMode = '';
+let iconBmp = null;
+let curBadge = null;
 async function applyBadge(b) {
+  curBadge = b || null;
+  const mode = b?.text ? b.anim || '' : '';
   try {
-    await chrome.action.setBadgeText({ text: b?.text ? String(b.text).slice(0, 4) : '' });
+    // 'pulse': con số tự vẽ → tắt badge thường của Chrome (không hiện 2 số)
+    await chrome.action.setBadgeText({ text: mode === 'pulse' || !b?.text ? '' : String(b.text).slice(0, 4) });
     if (b?.color) await chrome.action.setBadgeBackgroundColor({ color: b.color });
     if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: b?.textColor || '#ffffff' });
     await chrome.action.setTitle({ title: b?.title || 'Duyệt giá Tuấn Tú' });
   } catch {}
-  shakeIcon(b?.anim === 'shake' && !!b?.text);
+  animateIcon(mode);
 }
-// Hiệu ứng biểu tượng: badge.anim = 'shake' → biểu tượng rung lắc (mỗi 2,5 giây rung 1 đợt); khác → đứng yên
-let animTimer = null;
-let iconBmp = null;
-async function shakeIcon(on) {
-  if (!on) {
-    if (animTimer) clearInterval(animTimer);
-    animTimer = null;
+async function animateIcon(mode) {
+  if (mode === animMode && (animTimer || !mode)) return;
+  if (animTimer) clearInterval(animTimer);
+  animTimer = null;
+  animMode = mode;
+  if (!mode) {
     await chrome.action.setIcon({ path: { 16: 'icons/icon16.png', 32: 'icons/icon32.png' } }).catch(() => {});
     return;
   }
-  if (animTimer) return;
   try {
     iconBmp ||= await createImageBitmap(await (await fetch(chrome.runtime.getURL('icons/icon48.png'))).blob());
   } catch {
     return;
   }
-  const seq = [0, -22, 20, -18, 16, -12, 10, -6, 4, 0]; // độ xoay của 1 đợt rung
-  const frame = (deg, scale) => {
-    const out = {};
-    for (const n of [16, 32]) {
-      const c = new OffscreenCanvas(n, n);
-      const x = c.getContext('2d');
-      x.translate(n / 2, n / 2);
-      x.rotate((deg * Math.PI) / 180);
-      x.scale(scale, scale);
-      x.drawImage(iconBmp, -n / 2, -n / 2, n, n);
-      out[n] = x.getImageData(0, 0, n, n);
+  const draw = (n, deg, iconScale, numScale, numDeg) => {
+    const c = new OffscreenCanvas(n, n);
+    const x = c.getContext('2d');
+    x.save();
+    x.translate(n / 2, n / 2);
+    x.rotate((deg * Math.PI) / 180);
+    x.scale(iconScale, iconScale);
+    x.drawImage(iconBmp, -n / 2, -n / 2, n, n);
+    x.restore();
+    if (numScale) {
+      // con số: viên tròn đỏ góc dưới phải, phồng / thu + lắc
+      const text = String(curBadge?.text || '').slice(0, 4);
+      const fs = Math.round(n * 0.5);
+      x.save();
+      x.font = `900 ${fs}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      const w = Math.max(fs * 1.05, x.measureText(text).width + fs * 0.45);
+      const h = fs * 1.12;
+      x.translate(n - w / 2 * 0.8, n - h / 2 * 0.8);
+      x.rotate((numDeg * Math.PI) / 180);
+      x.scale(numScale, numScale);
+      x.fillStyle = curBadge?.color || '#dc2626';
+      x.strokeStyle = '#ffffff';
+      x.lineWidth = Math.max(1, n / 16);
+      x.beginPath();
+      x.roundRect(-w / 2, -h / 2, w, h, h / 2);
+      x.fill();
+      x.stroke();
+      x.fillStyle = curBadge?.textColor || '#ffffff';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.fillText(text, 0, fs * 0.05);
+      x.restore();
     }
-    return out;
+    return x.getImageData(0, 0, n, n);
   };
   let t = 0;
+  const seq = [0, -22, 20, -18, 16, -12, 10, -6, 4, 0];
   animTimer = setInterval(() => {
-    const k = t++ % 32; // 32 nhịp × 70ms ≈ 2,2 giây: rung 10 nhịp đầu rồi nghỉ
-    if (k < seq.length) chrome.action.setIcon({ imageData: frame(seq[k], k ? 0.88 : 1) }).catch(() => {});
-    else if (k === seq.length) chrome.action.setIcon({ imageData: frame(0, 1) }).catch(() => {});
-    else chrome.action.getBadgeText({}).catch(() => {}); // gọi API nhẹ để service worker không bị tắt giữa chừng
+    const k = t++;
+    let frame;
+    if (animMode === 'pulse') {
+      const p = (k % 16) / 16; // 16 nhịp × 70ms ≈ 1,1 giây / lần phồng
+      const numScale = 0.72 + 0.5 * Math.abs(Math.sin(p * Math.PI)); // 0,72 → 1,22
+      const numDeg = Math.sin(p * Math.PI * 4) * 14; // lắc ±14°
+      frame = (n) => draw(n, 0, 1, numScale, numDeg);
+    } else {
+      const j = k % 32;
+      if (j > seq.length) return void chrome.action.getBadgeText({}).catch(() => {}); // giữ service worker sống
+      frame = (n) => draw(n, seq[j] || 0, j && j < seq.length ? 0.88 : 1, 0, 0);
+    }
+    chrome.action.setIcon({ imageData: { 16: frame(16), 32: frame(32) } }).catch(() => {});
   }, 70);
 }
 chrome.storage.local.get('kv:badge').then((o) => applyBadge(o['kv:badge'])).catch(() => {});
