@@ -8,7 +8,24 @@
   // ---------- Kết nối với background của extension ----------
   const NEED_RELOAD =
     'Extension trên máy này chưa được cập nhật. Vào chrome://extensions, bấm nút tải lại (↻) của "Duyệt giá Tuấn Tú", rồi tải lại trang này.';
-  const call = (msg) =>
+  // ---------- Nhiều domain: cùng phần mềm CRM, mỗi domain dữ liệu riêng ----------
+  // Tuấn Tú giữ tên dữ liệu cũ; domain khác thêm tiền tố (vd. "dd.quotes") để không lẫn báo giá / khách giữa 2 CRM.
+  const SITES = {
+    tuantu: { key: 'tuantu', prefix: '', name: 'Tuấn Tú', org: 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ', watermark: 'TUAN TU PACKAGING', teamGroup: 'Sale Nội Bộ - Tuấn Tú', bossSign: true, excluded: ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'] },
+    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY BAO BÌ ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú'] },
+  };
+  const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
+  const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
+  // Dữ liệu dùng chung mọi domain (việc gửi Zalo, máy, file cài đặt) → không thêm tiền tố
+  const SHARED_NS = new Set(['zaloJobs', 'zaloAlive', 'zaloDebug', 'zaloNames', 'zaloSent', 'machine', 'files']);
+  const siteNs = (k) => (SITE.prefix && k && !SHARED_NS.has(k) && !String(k).startsWith(SITE.prefix) ? SITE.prefix + k : k);
+  const call = (msg0) => {
+    const msg = { ...msg0 };
+    if (/^kv\.(get|set|merge)$/.test(msg.type) && msg.key) msg.key = siteNs(msg.key);
+    if (msg.type === 'remote.push' && msg.ns) msg.ns = siteNs(msg.ns);
+    return rawCall(msg);
+  };
+  const rawCall = (msg) =>
     new Promise((resolve, reject) => {
       if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return reject(new Error(NEED_RELOAD));
       chrome.runtime.sendMessage(msg, (r) => {
@@ -54,7 +71,7 @@
 
   // Tình trạng báo giá theo CRM
   // NVKD không theo dõi: báo giá của họ không vào danh sách hỏi lại, không thu thập ngầm, không tự gợi ý
-  const EXCLUDED_STAFF = ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'];
+  const EXCLUDED_STAFF = SITE.excluded;
   const norm = (n) => (n || '').normalize('NFC').trim().toLowerCase();
   // Khớp đúng tên, hoặc tên tài khoản kết thúc bằng tên đó (vd. tài khoản "… Đại Dương")
   const isExcluded = (name) => !!name && EXCLUDED_STAFF.some((x) => norm(x) === norm(name) || norm(name).endsWith(` ${norm(x)}`));
@@ -518,7 +535,7 @@
     from ? `Bàn giao khách hàng ${h.customer} từ nhân viên ${from} qua nhân viên ${h.to}` : `Bàn giao khách hàng ${h.customer} cho nhân viên ${h.to}`;
 
   // ---------- Claude ----------
-  const SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú, công ty sản xuất bao bì giấy carton (thùng 3 lớp, 5 lớp, offset, flexo...).
+  const SYSTEM = `Bạn là trưởng phòng kinh doanh của ${SITE.name}, công ty sản xuất bao bì giấy carton (thùng 3 lớp, 5 lớp, offset, flexo...).
 Bạn đọc phần bình luận nội bộ trong báo giá trên CRM – nơi nhân viên kinh doanh (NVKD) trao đổi với cấp trên/bộ phận tính giá – và đánh giá NVKD phụ trách.
 
 Tiêu chí (chấm 1–5 mỗi tiêu chí):
@@ -670,7 +687,7 @@ Yêu cầu:
 
   const suggestSystem = (learned) => {
     const b = bank(learned);
-    return `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
+    return `Bạn giúp quản lý kinh doanh của ${SITE.name} (bao bì giấy carton) viết MỘT bình luận để đăng vào phần bình luận của báo giá trên CRM, hỏi nhân viên kinh doanh (NVKD) về bước tiếp theo.
 
 BỘ CÂU HỎI NHÂN VIÊN
 
@@ -781,7 +798,7 @@ Quy tắc:
     return out.sort((a, b) => b.at - a.at);
   }
 
-  const LEARN_SYSTEM = `Bạn giúp quản lý kinh doanh của Tuấn Tú (bao bì giấy carton) xây dựng BỘ CÂU HỎI dùng để hỏi nhân viên kinh doanh (NVKD) trong phần bình luận báo giá trên CRM.
+  const LEARN_SYSTEM = `Bạn giúp quản lý kinh doanh của ${SITE.name} (bao bì giấy carton) xây dựng BỘ CÂU HỎI dùng để hỏi nhân viên kinh doanh (NVKD) trong phần bình luận báo giá trên CRM.
 Bạn được cho: bộ câu hỏi hiện có, và các bình luận THẬT mà quản lý đã viết cho NVKD (kèm câu của NVKD mà quản lý đang trả lời, nếu có).
 Nhiệm vụ: rút ra những câu hỏi / chỉ đạo của quản lý mà LẶP LẠI ĐƯỢC cho các báo giá khác và bộ câu hỏi CHƯA có ý tương tự.
 
@@ -2061,7 +2078,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Khung xác nhận duyệt giá dưới "Trưởng Phòng": người duyệt, đơn vị, ngày giờ.
   // Chỉ là xác nhận nội bộ – KHÔNG giả dạng chữ ký số (không có dấu "chữ ký hợp lệ" / chứng thư).
-  const APPROVE_ORG = 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ';
+  const APPROVE_ORG = SITE.org;
   function addApproval(root0, signed = true) {
     const label = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng Phòng$/i.test(e.textContent.trim()));
     if (!label) return false;
@@ -2131,7 +2148,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ctx.textBaseline = 'middle';
     ctx.translate(w / 2, h / 2);
     ctx.rotate(-Math.PI / 6);
-    const text = 'TUAN TU PACKAGING';
+    const text = SITE.watermark;
     const stepX = ctx.measureText(text).width + fs * 2;
     const stepY = fs * 4;
     const R = Math.hypot(w, h);
@@ -2150,7 +2167,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
-    if (signOn()) await addSignature(clone);
+    if (signOn() && SITE.bossSign) await addSignature(clone);
     await addSaleSignature(clone).catch(() => {}); // chữ ký NVKD (Người biên soạn)
     addApproval(clone, signOn());
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
@@ -3215,7 +3232,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       bar.id = 'dg-crmsearch';
       bar.setAttribute('style', 'display:inline-flex;align-items:center;gap:14px;margin-left:16px;vertical-align:middle;list-style:none');
       bar.innerHTML = `<span style="position:relative;display:inline-flex;align-items:center"><input type="search" placeholder="🔍 Tìm kiếm báo giá…" style="width:240px;height:32px;border:1px solid #d9d9d9;border-radius:6px;padding:0 10px;font:inherit;font-size:14px;outline:none"></span>
-        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;white-space:nowrap"><input type="checkbox" style="width:16px;height:16px;cursor:pointer"> Chỉ lấy của Tuấn Tú</label>`;
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;white-space:nowrap"><input type="checkbox" style="width:16px;height:16px;cursor:pointer"> Chỉ lấy của ${esc(SITE.name)}</label>`;
       pag.append(bar);
       const inp = bar.querySelector('input[type="search"]');
       const chk = bar.querySelector('input[type="checkbox"]');
@@ -3593,7 +3610,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const tok = JSON.parse(localStorage.getItem('UserStore') || '{}').token;
           const ver = (document.body.innerText.match(/v(\d+\.\d+\.\d+)/) || [])[1];
           if (!tok || !ver) throw new Error('no auth');
-          const r = await fetch(`https://sale.tuantu.com.vn:8080/v1/admin/dashboard/saleByDate?fromDate=${from}&toDate=${to}`, { headers: { token: tok, version: ver, 'X-Client-Version': ver } });
+          const r = await fetch(`${API_BASE}/v1/admin/dashboard/saleByDate?fromDate=${from}&toDate=${to}`, { headers: { token: tok, version: ver, 'X-Client-Version': ver } });
           const j = await r.json();
           const arr = Array.isArray(j?.data) ? j.data : [];
           if (!r.ok || !arr.length && j?.status === false) throw new Error('api');
@@ -4255,7 +4272,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }, 1500);
 
   // 📣 Nhắc cả đội: gom deal gợi ý chốt đơn theo NVKD (chỉ mã khách) → việc gửi Zalo vào nhóm "Sale Nội Bộ - Tuấn Tú"
-  const TEAM_GROUP = 'Sale Nội Bộ - Tuấn Tú';
+  const TEAM_GROUP = SITE.teamGroup; // trống → domain chưa có nhóm Zalo: ẩn nút Nhắc cả đội
   function buildTeamMsg() {
     const items = state.teamItems || [];
     // Mỗi khách 1 lần (cộng giá trị các báo giá gợi ý của khách đó), gom theo NVKD
@@ -4464,7 +4481,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // Tự hiện hộp "Nhắc cả đội" (quản trị): thứ 2–7, sáng 1 lần + chiều 1 lần; ca đó đã gửi (ở bất kỳ máy nào) thì thôi
   async function teamRemindPopup(force = false) {
-    if (!IS_TOP || !MY_ADMIN || !(state.teamItems || []).length || document.getElementById('dg-team-modal')) return;
+    if (!IS_TOP || !MY_ADMIN || !TEAM_GROUP || !(state.teamItems || []).length || document.getElementById('dg-team-modal')) return;
     const slot = teamSlot() || 'cn';
     if (!force) {
       if (slot === 'cn' || lsGet(`dgTeamShown-${slot}`)) return;
@@ -4539,7 +4556,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const slotNow = teamSlot();
     const urge = MY_ADMIN && slotNow && !(await kvGet('teamRemind'))[slotNow];
     const hotSum = items.reduce((t, { q }) => t + (Number(q.amount) || 0), 0);
-    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b><span class="dgh-sum" title="Tổng giá trị các báo giá trong Gợi ý chốt đơn">Σ ${moneyShortG(hotSum)}</span>${MY_ADMIN ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm Sale Nội Bộ - Tuấn Tú, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
+    const html = `<div class="dgh-t">🔥 Gợi ý chốt đơn <b>${items.length}</b><span class="dgh-sum" title="Tổng giá trị các báo giá trong Gợi ý chốt đơn">Σ ${moneyShortG(hotSum)}</span>${MY_ADMIN && TEAM_GROUP ? `<button class="dgh-team${urge ? ' urge' : ''}" data-dg-team title="${urge ? 'Ca này CHƯA nhắc cả đội – ' : ''}Soạn tin nhắc cả đội (mỗi NVKD: mã khách cần kéo đơn) → mở Zalo Web, nhóm ${esc(TEAM_GROUP)}, dán tin">📣 Nhắc cả đội${urge ? ' – chưa gửi!' : ''}</button><span class="dgh-cd${urge ? ' urge' : ''}" data-dg-cd="${teamNextAt()}" title="${urge ? 'Thời gian còn lại của ca này để nhắc cả đội' : 'Đã nhắc ca này – đếm ngược tới ca nhắc tiếp theo'}">${urge ? '⏰ hết ca' : '⏳ ca tới'} <b>${fmtCd(teamNextAt() - Date.now())}</b></span>` : ''}</div><div class="dgh-l">${items
       .map(({ x, q }, i) => `<a href="/bao-gia/update/${q.id}" data-dg-hotlink class="dgh-i" title="${esc(`${q.customer?.name || ''} · ${q.name || ''}`)}"><i>${x.pinned ? '📌' : i + 1}</i><b>${esc(q.code)}</b><span>${esc(shortCompany(q.customer?.name || q.customer?.code || ''))}</span><em>${q.amount ? moneyShortG(q.amount) : '0đ'}</em></a>`)
       .join('')}</div>`;
     let box = host.parentElement.querySelector(':scope > [data-dg-hot]');
@@ -6737,7 +6754,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
 
   // Avatar NVKD: ảnh trên server CRM (cổng 8080), không có thì hiện chữ cái đầu
-  const avatarUrl = (a) => (!a ? '' : /^https?:/.test(a) ? a : `https://sale.tuantu.com.vn:8080/${a.replace(/^\/+/, '')}`);
+  const avatarUrl = (a) => (!a ? '' : /^https?:/.test(a) ? a : `${API_BASE}/${a.replace(/^\/+/, '')}`);
   const avatarIndex = (quotes) => {
     const m = {};
     for (const q of Object.values(quotes)) if (q.staff?.name && q.staff.avatar) m[q.staff.name] = q.staff.avatar;
@@ -10144,7 +10161,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Tab "Phân tích deal": AI đọc từng báo giá đang mở của 1 NVKD, gợi ý bước kế tiếp cho NVKD ----------
   // Lưu kv 'dealAi' (đồng bộ): khoá = tên NVKD (chuẩn hoá) → { at, items: [{ id, code, stage, health, missing, steps, say, risk }] }
   const DEAL_MAX = 25;
-  const DEAL_SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú (bao bì giấy carton, in flexo / offset), đang KÈM CẶP 1 nhân viên kinh doanh (NVKD).
+  const DEAL_SYSTEM = `Bạn là trưởng phòng kinh doanh của ${SITE.name} (bao bì giấy carton, in flexo / offset), đang KÈM CẶP 1 nhân viên kinh doanh (NVKD).
 Đọc từng báo giá đang mở của NVKD (thông tin + luồng bình luận nội bộ giữa NVKD và quản lý) và với MỖI báo giá đưa ra:
 - giai đoạn hiện tại của deal, - độ "khoẻ" của deal (khả năng chốt 0–100), - còn thiếu gì để chốt,
 - 2–3 bước kế tiếp NVKD cần làm theo thứ tự (cụ thể, làm được ngay trong 1–2 ngày), - 1 câu NVKD có thể nhắn / nói với khách, - rủi ro lớn nhất (nếu có).
@@ -10333,7 +10350,7 @@ Không markdown, không giải thích ngoài JSON.`;
 
   // Claude trả về tối đa 10 báo giá có thể chốt NGAY + lý do + việc cần làm. Lưu kv 'aiHot' (đồng bộ).
   const HOT = { candidates: 80, show: 30 };
-  const HOT_SYSTEM = `Bạn là trưởng phòng kinh doanh của Tuấn Tú (bao bì giấy carton). Quản lý có quá nhiều báo giá, cần biết báo giá nào CHỐT ĐƯỢC NGAY để tập trung.
+  const HOT_SYSTEM = `Bạn là trưởng phòng kinh doanh của ${SITE.name} (bao bì giấy carton). Quản lý có quá nhiều báo giá, cần biết báo giá nào CHỐT ĐƯỢC NGAY để tập trung.
 Đọc từng báo giá (thông tin + luồng bình luận nội bộ giữa NVKD và quản lý) và chọn tối đa ${HOT.show} báo giá có khả năng chốt đơn cao nhất TRONG VÀI NGÀY TỚI.
 Tín hiệu chốt mạnh: khách đã ok giá / đồng ý / hứa lên đơn / hẹn ngày đặt; khách cho giá mục tiêu và mình đã đáp ứng; chỉ còn vướng thủ tục (cọc, hợp đồng, duyệt mẫu, maket); khách quen, tái bản; mới trao đổi gần đây.
 Tín hiệu yếu: khách chê giá cao chưa xử lý, im lặng lâu, khách đặt chỗ khác, chưa có giá, chỉ hỏi tham khảo.

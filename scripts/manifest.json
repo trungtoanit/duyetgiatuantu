@@ -1,5 +1,5 @@
 {
-  "version": "1.2.355",
+  "version": "1.2.356",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -7,7 +7,8 @@
         "bao-gia/hook.js"
       ],
       "matches": [
-        "https://sale.tuantu.com.vn/*"
+        "https://sale.tuantu.com.vn/*",
+        "https://quanly.baobidaiduong.com/*"
       ],
       "runAt": "document_start",
       "world": "MAIN",
@@ -20,7 +21,8 @@
         "bao-gia/panel.js"
       ],
       "matches": [
-        "https://sale.tuantu.com.vn/*"
+        "https://sale.tuantu.com.vn/*",
+        "https://quanly.baobidaiduong.com/*"
       ],
       "runAt": "document_start",
       "world": "USER_SCRIPT",
@@ -63,6 +65,39 @@
     "staffSigns",
     "teamRemind",
     "zaloNames",
-    "zaloSent"
+    "zaloSent",
+    "dd.aiHot",
+    "dd.aiHotDone",
+    "dd.collected",
+    "dd.comments",
+    "dd.custHidden",
+    "dd.dayOrders",
+    "dd.dealAi",
+    "dd.dealHist",
+    "dd.debt2",
+    "dd.debtMeta",
+    "dd.debts",
+    "dd.evals",
+    "dd.handovers",
+    "dd.hotPinned",
+    "dd.learnSeen",
+    "dd.learned",
+    "dd.margins",
+    "dd.notifRead",
+    "dd.notifs",
+    "dd.orders",
+    "dd.perms",
+    "dd.qbank",
+    "dd.quickDraft",
+    "dd.quickLearn",
+    "dd.quickSent",
+    "dd.quotes",
+    "dd.reports",
+    "dd.scanLock",
+    "dd.seenUsers",
+    "dd.signImgs",
+    "dd.staffSigns",
+    "dd.suggests",
+    "dd.teamRemind"
   ]
 }
