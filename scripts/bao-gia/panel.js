@@ -1446,11 +1446,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => m.isConnected && getComputedStyle(m).display !== 'none').find((m) => /Tạo PO cho báo giá/.test(m.innerText));
   const dealHandle = (modal) => {
     const m = modal?.isConnected && modal.querySelector('.ant-slider-handle') ? modal : poModalNow(modal?.ownerDocument || document);
-    return m?.querySelector('.ant-slider-handle') || null;
+    const doc = modal?.ownerDocument || document;
+    return m?.querySelector('.ant-slider-handle') || doc.querySelector('.ant-modal-wrap .ant-slider-handle, .ant-modal-root .ant-slider-handle') || null;
   };
   async function setDealSlider(modal, pct) {
     let handle = await waitFor(() => dealHandle(modal), 15000, 250);
-    if (!handle) throw new Error('Không thấy thanh kéo "% Deal" trong PO.');
+    if (!handle) {
+      const doc = modal?.ownerDocument || document;
+      throw new Error(`Không thấy thanh kéo "% Deal" trong PO (hộp PO: ${doc.querySelectorAll('.ant-modal-wrap').length}, thanh kéo trên trang: ${doc.querySelectorAll('.ant-slider-handle, [role=slider]').length}, ${modal?.isConnected ? 'hộp còn' : 'hộp đã mất'}).`);
+    }
     await sleep(300);
     handle = dealHandle(modal) || handle;
     const val = () => {
