@@ -8715,7 +8715,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Chép nhanh danh sách khách (theo NVKD) – cùng kiểu tin nhắc cả đội trên Zalo:
   // dòng tổng, rồi mỗi NVKD: "Tên (số khách) – có thể có đơn X – chênh lệch Y:" và mỗi khách 1 dòng "• MÃ KHÁCH (giá trị · CL …)"
   function gapCopyData(rows, key = 'daiduong') {
-    const list = rows.filter((r) => r.site.key === key);
+    // mỗi khách chỉ 1 dòng: gộp các báo giá cùng khách (cộng giá trị + chênh lệch)
+    const byCust = new Map();
+    for (const r of rows.filter((x) => x.site.key === key)) {
+      const ck = r.q.customer?.id || r.q.customer?.code || r.q.customer?.name || r.q.code;
+      const cur = byCust.get(ck);
+      if (cur) {
+        cur.v += r.v;
+        cur.q = { ...cur.q, amount: (Number(cur.q.amount) || 0) + (Number(r.q.amount) || 0) };
+        cur.n++;
+      } else byCust.set(ck, { ...r, q: { ...r.q }, n: 1 });
+    }
+    const list = [...byCust.values()].sort((a, b) => (Number(b.q.amount) || 0) - (Number(a.q.amount) || 0));
     const by = new Map();
     for (const r of list) {
       const who = shortName(r.q.staff?.name || '') || 'Chưa rõ NVKD';
@@ -8726,7 +8737,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const amt = (r) => Number(r.q.amount) || 0;
     const tot = list.reduce((t, r) => t + amt(r), 0);
     const totD = list.reduce((t, r) => t + r.v, 0);
-    const head = `Danh sách khách ${key === 'daiduong' ? 'Đại Dương' : 'Tuấn Tú'} cần kéo đơn (chênh lệch ≥ 10tr): ${list.length} báo giá`;
+    const head = `Danh sách khách ${key === 'daiduong' ? 'Đại Dương' : 'Tuấn Tú'} cần kéo đơn (chênh lệch ≥ 10tr): ${list.length} khách`;
     const totalLine = `Tổng có thể có đơn: ${sumTxt(tot)} · chênh lệch ${sumTxt(totD)}`;
     const groups = [...by].sort((a, b) => b[1].reduce((t, r) => t + amt(r), 0) - a[1].reduce((t, r) => t + amt(r), 0));
     const gLine = (who, rs) => `${who} (${rs.length}) – có thể có đơn ${sumTxt(rs.reduce((t, r) => t + amt(r), 0))}:`;
