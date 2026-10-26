@@ -12,7 +12,7 @@
   // Tuấn Tú giữ tên dữ liệu cũ; domain khác thêm tiền tố (vd. "dd.quotes") để không lẫn báo giá / khách giữa 2 CRM.
   const SITES = {
     tuantu: { key: 'tuantu', prefix: '', name: 'Tuấn Tú', org: 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ', watermark: 'TUAN TU PACKAGING', teamGroup: 'Sale Nội Bộ - Tuấn Tú', bossSign: true, excluded: ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'] },
-    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: true, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'] },
+    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'] },
   };
   const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
   const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
@@ -2116,6 +2116,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           <div style="position:relative;font-size:10.5px;font-weight:700;line-height:1.25;margin-top:2px">${esc(APPROVE_ORG)}</div>
           ${signed ? `<div style="position:relative;font-size:10px">${esc(meName)}</div>` : ''}
           <div style="position:relative;font-size:10px">Ngày: ${esc(day)}</div></div>`;
+      // đặt vào khoảng trống ký tên dưới "Trưởng bộ phận (Ký và ghi rõ họ tên)" (thay chữ ký); không có thì dưới "Ban lãnh đạo"
+      const tb = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng bộ phận$/i.test(e.textContent.trim()));
+      let col = tb && (tb.closest('td, th') || tb.parentElement);
+      if (tb && !tb.closest('td, th')) {
+        let c = tb.parentElement;
+        while (c && c !== root0 && !/Ký và ghi rõ/i.test(c.textContent)) c = c.parentElement;
+        if (c && c !== root0) col = c;
+      }
+      if (col) {
+        st.style.position = 'absolute';
+        st.style.left = '50%';
+        st.style.top = '100%';
+        st.style.transform = 'translateX(-50%)';
+        st.style.marginTop = '2px';
+        st.style.whiteSpace = 'normal';
+        st.style.width = '230px';
+        col.setAttribute('style', `${col.getAttribute('style') || ''};position:relative;`);
+        col.append(st);
+        return true;
+      }
       const wrap0 = doc.createElement('div');
       wrap0.setAttribute('style', 'text-align:center;');
       wrap0.append(st);
@@ -2203,17 +2223,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
-    // Mẫu báo giá Đại Dương: dòng "Số: BG…/n" đặt nổi (absolute) theo khổ in → khi chụp bị đè lên đường kẻ / lệch mép
-    // → đưa về dòng thường, canh phải
-    for (const e of clone.querySelectorAll('div, span, p, td, b, strong, h1, h2, h3, h4')) {
-      if (e.childElementCount > 2 || !/^Số:\s*BG\d+/i.test((e.textContent || '').trim()) || (e.textContent || '').length > 40) continue;
-      e.style.setProperty('position', 'static', 'important');
-      e.style.setProperty('float', 'none', 'important');
-      e.style.setProperty('display', 'block', 'important');
-      e.style.setProperty('text-align', 'right', 'important');
-      e.style.setProperty('margin', '6px 0 0', 'important');
-      e.style.setProperty('transform', 'none', 'important');
-      break;
+    // Mẫu báo giá Đại Dương: dòng "Số: BG…/n" đặt nổi (absolute) theo khổ in → khi chụp bị đè lên đường kẻ / mất
+    // → bỏ chỗ cũ, chèn lại 1 dòng canh phải ngay trên tiêu đề "BẢNG BÁO GIÁ"
+    {
+      const num = [...clone.querySelectorAll('*')].find((e) => /^Số:\s*BG\d+/i.test((e.textContent || '').trim()) && (e.textContent || '').length < 40 && ![...e.children].some((c) => /^Số:/i.test((c.textContent || '').trim())));
+      const title = [...clone.querySelectorAll('*')].find((e) => !e.children.length && /^BẢNG BÁO GIÁ$/i.test((e.textContent || '').trim()));
+      if (num && title) {
+        const t = num.textContent.trim();
+        const line = clone.ownerDocument.createElement('div');
+        line.setAttribute('style', 'text-align:right;font-weight:700;font-size:18px;margin:4px 0 -6px;');
+        line.textContent = t;
+        num.remove();
+        title.before(line);
+      }
     }
     if (signOn() && SITE.bossSign) await addSignature(clone);
     await addSaleSignature(clone).catch(() => {}); // chữ ký NVKD (Người biên soạn)
