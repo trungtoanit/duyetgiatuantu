@@ -2102,6 +2102,26 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const doc = root0.ownerDocument;
     const now = new Date();
     const when = now.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+    // Đại Dương: khung kiểu "con dấu" nền xanh lá + dấu tick lớn mờ (bố cục giống mẫu ô ký của hoá đơn),
+    // nhưng chỉ ghi là ĐÃ DUYỆT GIÁ – không ghi "ký điện tử / Signed digitally" vì đây không phải chữ ký số có chứng thư
+    if (SITE.key === 'daiduong') {
+      const day = now.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });
+      const st = doc.createElement('div');
+      st.setAttribute('style', 'display:inline-block;margin-top:4px;border:1px solid #1e293b;padding:3px;background:#fff;text-align:center;max-width:250px;font-family:Arial,Helvetica,sans-serif;');
+      st.innerHTML = `<div style="font-size:12px;font-weight:700;color:#1e2f86;margin:2px 0 3px">Người duyệt giá <i style="font-weight:400">(Approver)</i></div>
+        <div style="position:relative;background:#dff3d0;padding:5px 6px 4px;color:#1e2f86;overflow:hidden">
+          <svg viewBox="0 0 100 80" style="position:absolute;left:50%;top:50%;width:62px;height:50px;transform:translate(-50%,-50%);opacity:.45" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div style="position:relative;font-size:11px;font-weight:700">Đã duyệt giá bởi</div>
+          <div style="position:relative;font-size:9.5px;font-style:italic">(Approved by)</div>
+          <div style="position:relative;font-size:10.5px;font-weight:700;line-height:1.25;margin-top:2px">${esc(APPROVE_ORG)}</div>
+          ${signed ? `<div style="position:relative;font-size:10px">${esc(meName)}</div>` : ''}
+          <div style="position:relative;font-size:10px">Ngày: ${esc(day)}</div></div>`;
+      const wrap0 = doc.createElement('div');
+      wrap0.setAttribute('style', 'text-align:center;');
+      wrap0.append(st);
+      (label.closest('td, th') || label.parentElement).append(wrap0);
+      return true;
+    }
     const box = doc.createElement('div');
     box.setAttribute('style', 'display:inline-block;margin-top:4px;padding:4px 8px;border:1px solid #94a3b8;border-radius:4px;font-size:10px;line-height:1.35;text-align:left;color:#334155;background:#f8fafc;white-space:normal;max-width:230px;');
     const line = (t, b = false) => {
