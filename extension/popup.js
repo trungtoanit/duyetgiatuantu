@@ -202,6 +202,31 @@ async function loadCards() {
           <span class="pc-right" style="color:${esc(r.rightColor || '#047857')};background:${esc(r.rightBg || '#ecfdf5')}">${esc(r.right || '')}</span></div>`)
         .join('') || '<div class="hint">Không có dữ liệu.</div>'}</div></section>`)
     .join('');
+  restoreCardScroll();
+}
+// Giữ vị trí cuộn của từng danh sách (giữa các lần vẽ lại và các lần mở popup), theo khung + chip lọc
+const scrollKey = (id) => `pcScroll:${id}:${cardFilter[id] || ''}`;
+function restoreCardScroll() {
+  const lists = [...$('cards').querySelectorAll('.pc-list')];
+  const ids = Object.entries(cardsData).filter(([, c]) => c && Array.isArray(c.rows)).map(([id]) => id);
+  lists.forEach((el, i) => {
+    const id = ids[i];
+    if (!id) return;
+    el.dataset.card = id;
+    let y = 0;
+    try {
+      y = Number(localStorage.getItem(scrollKey(id))) || 0;
+    } catch {}
+    el.scrollTop = y;
+    if (!el.dataset.sc) {
+      el.dataset.sc = '1';
+      el.addEventListener('scroll', () => {
+        try {
+          localStorage.setItem(scrollKey(id), String(el.scrollTop));
+        } catch {}
+      }, { passive: true });
+    }
+  });
 }
 // Nút hành động của khung: { label, copy } → chép chữ vào bộ nhớ tạm
 let cardsData = {};
