@@ -2241,7 +2241,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         nn.textContent = t;
         row.append(tt, nn);
         // thay cả khối tiêu đề (thẻ chứa chữ BẢNG BÁO GIÁ, giữ chỗ trong bố cục)
-        const host = title.closest('h1, h2, h3, div, p') || title;
+        let host = title;
+        // chỉ leo lên thẻ cha khi thẻ đó chỉ chứa đúng chữ tiêu đề (tránh xoá nhầm nội dung khác)
+        while (host.parentElement && host.parentElement !== clone && (host.parentElement.textContent || '').trim() === title.textContent.trim()) host = host.parentElement;
         host.replaceWith(row);
       }
     }
