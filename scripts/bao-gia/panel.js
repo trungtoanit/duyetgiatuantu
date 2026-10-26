@@ -3743,6 +3743,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return c?.total ?? null;
   }
 
+  const DIFF_GOAL_MONTH = 4.5e9; // mục tiêu chênh lệch mỗi tháng
   function crmKpiTiles(wrap, k) {
     const nav = [...document.querySelectorAll('.ant-tabs-nav')].find((x) => /Tất cả/.test(x.innerText) && /Thành công|Chờ xin giá/.test(x.innerText));
     if (!nav) return;
@@ -3825,7 +3826,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
       tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
-      tile('📈', `Tổng chênh lệch${missing > 0 ? ` <span data-dg-miss="day" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${missing}</span>` : ''}`, k.dn ? `${k.dsum < 0 ? '−' : ''}${big(Math.abs(k.dsum))}` : '–', k.dsum < 0 ? '#b91c1c' : '#7c3aed', k.dsum < 0 ? '#fef2f2' : '#f5f3ff', k.dsum < 0 ? '#fecaca' : '#ddd6fe', `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn hôm nay đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL)`) +
+      // Tổng chênh lệch ngày + còn thiếu so với mục tiêu ngày (4,5 tỷ chênh lệch/tháng ÷ số ngày công của tháng, trừ Chủ nhật)
+      (() => {
+        const y = mvn.getUTCFullYear();
+        const mo = mvn.getUTCMonth();
+        const dim = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+        let wd = 0;
+        for (let d = 1; d <= dim; d++) if (new Date(Date.UTC(y, mo, d)).getUTCDay() !== 0) wd++;
+        const goal = DIFF_GOAL_MONTH / (wd || 1);
+        const gap = goal - (k.dsum || 0);
+        const neg = k.dsum < 0;
+        const lab = `Tổng chênh lệch${missing > 0 ? ` <span data-dg-miss="day" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${missing}</span>` : ''}`;
+        const tip = `Tổng chênh lệch của ${k.dn || 0}/${k.n || 0} đơn ${kd === 0 ? 'hôm nay' : 'ngày đang xem'} đã tính được (Flexo: BG − giấy tấm · Offset: BG − NVL): ${money(Math.round(k.dsum || 0))}\nMục tiêu ngày = ${money(DIFF_GOAL_MONTH)} ÷ ${wd} ngày công T${mo + 1} (trừ Chủ nhật) = ${money(Math.round(goal))}\n${gap > 0 ? `Còn thiếu ${money(Math.round(gap))}` : `Đã vượt ${money(Math.round(-gap))}`}`;
+        return `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${neg ? '#fef2f2' : '#f5f3ff'};border:1.5px solid ${neg ? '#fecaca' : '#ddd6fe'};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+          <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">📈 ${lab}</span>
+          <b style="font-size:18px;font-weight:900;color:${neg ? '#b91c1c' : '#7c3aed'};white-space:nowrap;font-variant-numeric:tabular-nums">${k.dn ? `${neg ? '−' : ''}${big(Math.abs(k.dsum))}` : '–'}</b>
+          <span style="font-size:11px;font-weight:700;white-space:nowrap;color:${gap > 0 ? '#b45309' : '#047857'}">${gap > 0 ? `→ còn thiếu ${big(gap)}` : `✓ vượt ${big(-gap)}`} <span style="color:#94a3b8;font-weight:600">(mục tiêu ${big(goal)}/ngày)</span></span></div>`;
+      })() +
       // Chênh lệch tháng + dự báo cả tháng theo ngày công (gộp 1 ô, giống ô Doanh thu tháng)
       (() => {
         const y = mvn.getUTCFullYear();
