@@ -174,6 +174,7 @@ setInterval(loadCrm, 2000);
 // ---- Khung do script trên trang gửi tới: kv 'popupCards' = { <id>: { title, sub, chips:[{text,color}], rows:[{tag,tagColor,title,sub,right,rightColor,rightBg,url}], at } } ----
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 let cardsSig = '';
+const fKey = (id, g) => (g ? `${id}|${g}` : id);
 var cardFilter = {}; // lọc theo chip của từng khung – lưu kv 'popupPrefs' (đồng bộ online giữa các máy)
 let prefsAt = {};
 async function loadPrefs() {
@@ -205,14 +206,16 @@ async function loadCards() {
   document.body.style.width = list.length ? `${Math.min(800, Math.max(560, w || 560))}px` : '';
   $('cards').innerHTML = list
     .map((c) => `<section class="card"><h2>${esc(c.title)}</h2>${c.sub ? `<div class="hint" style="margin:-4px 0 6px">${esc(c.sub)}</div>` : ''}
-      ${c.chips?.length ? `<div class="pc-chips">${c.chips.map((x) => {
+      ${[...new Set((c.chips || []).map((x) => x.g || ''))].map((g) => `<div class="pc-chips">${g && c.groups?.[g] ? `<span class="pc-glab">${esc(c.groups[g])}</span>` : ''}${c.chips.filter((x) => (x.g || '') === g).map((x) => {
         // chip có filter → bấm để lọc dòng (row.f chứa giá trị đó); bấm lại / chip filter '' → tất cả
-        const on = x.filter != null && (cardFilter[c.id] || '') === x.filter;
-        return `<span class="pc-chip${x.filter != null ? ' fl' : ''}${on ? ' on' : ''}" ${x.filter != null ? `data-card="${esc(c.id)}" data-f="${esc(x.filter)}"` : ''} style="color:${esc(x.color || '#334155')};${on ? `background:${esc(x.color || '#334155')};color:#fff` : ''}">${esc(x.text)}</span>`;
-      }).join('')}</div>` : ''}
+        // nhóm chip (x.g, vd. khoảng chênh lệch) lọc độc lập, kết hợp với nhóm chính
+        const fk = fKey(c.id, g);
+        const on = x.filter != null && (cardFilter[fk] || '') === x.filter;
+        return `<span class="pc-chip${x.filter != null ? ' fl' : ''}${on ? ' on' : ''}" ${x.filter != null ? `data-card="${esc(fk)}" data-f="${esc(x.filter)}"` : ''} style="color:${esc(x.color || '#334155')};${x.bg && !on ? `background:${esc(x.bg)};` : ''}${on ? `background:${esc(x.color || '#334155')};color:#fff` : ''}">${esc(x.text)}</span>`;
+      }).join('')}</div>`).join('')}
       ${c.actions?.length ? `<div class="pc-chips">${c.actions.map((a, i) => `<button class="pc-act" data-card="${esc(c.id || '')}" data-ai="${i}" style="color:${esc(a.color || '#1d4ed8')}">${esc(a.label)}</button>`).join('')}</div>` : ''}
       <div class="pc-list">${c.rows
-        .filter((r) => !cardFilter[c.id] || (r.f || []).includes(cardFilter[c.id]))
+        .filter((r) => [...new Set((c.chips || []).map((x) => x.g || ''))].every((g) => !cardFilter[fKey(c.id, g)] || (r.f || []).includes(cardFilter[fKey(c.id, g)])))
         .map((r, i) => `<div class="pc-row${r.unread === true ? ' unread' : r.unread === false ? ' read' : ''}" data-url="${esc(r.url || '')}" title="${r.unread === true ? 'Chưa đọc' : r.unread === false ? 'Đã đọc' : ''}"><span class="pc-no">${i + 1}</span>
           <span class="pc-tag" style="background:${esc(r.tagColor || '#64748b')}">${esc(r.tag || '')}</span>
           <span class="pc-main"><b>${esc(r.title)}</b><span class="s">${esc(r.sub || '')}</span></span>
@@ -222,7 +225,7 @@ async function loadCards() {
   restoreCardScroll();
 }
 // Giữ vị trí cuộn của từng danh sách (giữa các lần vẽ lại và các lần mở popup), theo khung + chip lọc
-const scrollKey = (id) => `pcScroll:${id}:${cardFilter[id] || ''}`;
+const scrollKey = (id) => `pcScroll:${id}:${Object.keys(cardFilter).filter((k) => k === id || k.startsWith(`${id}|`)).sort().map((k) => cardFilter[k] || '').join(':')}`;
 function restoreCardScroll() {
   const lists = [...$('cards').querySelectorAll('.pc-list')];
   const ids = Object.entries(cardsData).filter(([, c]) => c && Array.isArray(c.rows)).map(([id]) => id);

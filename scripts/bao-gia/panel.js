@@ -8937,6 +8937,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return { text, html };
   }
   const gapCopyText = (rows, key) => gapCopyData(rows, key).text;
+  const GAP_RANGES = [
+    { k: 'r10', t: '10–30tr', c: '#2563eb', bg: '#eff6ff', min: 10e6, max: 30e6 },
+    { k: 'r30', t: '30–50tr', c: '#1e3a8a', bg: '#eef2ff', min: 30e6, max: 50e6 },
+    { k: 'r50', t: '50–100tr', c: '#15803d', bg: '#f0fdf4', min: 50e6, max: 100e6 },
+    { k: 'r100', t: '≥ 100tr', c: '#b45309', bg: '#fffbeb', min: 100e6, max: Infinity },
+  ];
+  const gapRange = (v) => GAP_RANGES.find((b) => v >= b.min && v < b.max)?.k || 'r0';
   async function gapToPopup() {
     if (!IS_TOP) return;
     if (!state.meReal) state.meReal = (await kvGet('me'))?.name || ''; // bảng chưa mở vẫn biết tài khoản
@@ -8960,7 +8967,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         { text: `Tất cả ${rows.length}`, color: '#334155', filter: '' },
         { text: `🟥 Tuấn Tú · Σ chênh lệch ${big(sumOf('tuantu'))}`, color: '#dc2626', filter: 'tuantu' },
         { text: `🟦 Đại Dương · Σ chênh lệch ${big(sumOf('daiduong'))}`, color: '#2563eb', filter: 'daiduong' },
+        // khoảng chênh lệch (lọc riêng, kết hợp được với chip trên – extension ≥ 1.7.4)
+        ...GAP_RANGES.map((b) => ({ g: 'range', text: `${b.t} ${rows.filter((r) => gapRange(r.v) === b.k).length}`, color: b.c, bg: b.bg, filter: b.k })),
       ],
+      groups: { range: '📈 Chênh lệch:' },
       rows: rows.map((r) => ({ // hiện đủ mọi báo giá đủ điều kiện, không giới hạn
         tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
         tagColor: r.site.key === 'tuantu' ? '#dc2626' : '#2563eb',
@@ -8969,7 +8979,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         right: `${r.v < 0 ? '−' : ''}${trM(Math.abs(r.v))}`,
         ...(([rightColor, rightBg]) => ({ rightColor, rightBg }))(diffColors(r.v)),
         unread: r.q.isRead === false ? true : r.q.isRead === true ? false : undefined,
-        f: [r.site.key, ...(r.q.isRead === false ? ['unread'] : [])], // cho chip lọc trong popup
+        f: [r.site.key, ...(r.q.isRead === false ? ['unread'] : []), gapRange(r.v)], // cho chip lọc trong popup
         url: `${r.host}/bao-gia/update/${r.q.id}`,
       })),
       at: Date.now(),
