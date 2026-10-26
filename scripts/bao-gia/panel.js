@@ -12,7 +12,7 @@
   // Tuấn Tú giữ tên dữ liệu cũ; domain khác thêm tiền tố (vd. "dd.quotes") để không lẫn báo giá / khách giữa 2 CRM.
   const SITES = {
     tuantu: { key: 'tuantu', prefix: '', name: 'Tuấn Tú', org: 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ', watermark: 'TUAN TU PACKAGING', teamGroup: 'Sale Nội Bộ - Tuấn Tú', bossSign: true, excluded: ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'] },
-    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY BAO BÌ ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'] },
+    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: true, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'] },
   };
   const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
   const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
@@ -2183,6 +2183,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const clone = body.cloneNode(true);
     clone.querySelectorAll('script, link, iframe').forEach((x) => x.remove());
     const blurred = blurCustomerPhones(clone);
+    // Mẫu báo giá Đại Dương: dòng "Số: BG…/n" đặt nổi (absolute) theo khổ in → khi chụp bị đè lên đường kẻ / lệch mép
+    // → đưa về dòng thường, canh phải
+    for (const e of clone.querySelectorAll('div, span, p, td, b, strong, h1, h2, h3, h4')) {
+      if (e.childElementCount > 2 || !/^Số:\s*BG\d+/i.test((e.textContent || '').trim()) || (e.textContent || '').length > 40) continue;
+      e.style.setProperty('position', 'static', 'important');
+      e.style.setProperty('float', 'none', 'important');
+      e.style.setProperty('display', 'block', 'important');
+      e.style.setProperty('text-align', 'right', 'important');
+      e.style.setProperty('margin', '6px 0 0', 'important');
+      e.style.setProperty('transform', 'none', 'important');
+      break;
+    }
     if (signOn() && SITE.bossSign) await addSignature(clone);
     await addSaleSignature(clone).catch(() => {}); // chữ ký NVKD (Người biên soạn)
     addApproval(clone, signOn());
