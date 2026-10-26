@@ -1520,11 +1520,29 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return n ? { zero, n } : null;
   }
+  // Lịch sử deal trong hộp PO có dòng mới (≤ 5 phút) đổi deal của báo giá này thành đúng pct% → đã set xong
+  function dealConfirmed(modal, code, pct) {
+    const list = modal ? scrapeDealHist(modal) : null;
+    if (!list?.length) return false;
+    const now = Date.now();
+    return list.some((x) => {
+      if (x.code !== code || Math.abs(x.to - pct) > 0.01) return false;
+      const [hh, mm] = x.time.split(':').map(Number);
+      const [d, mo, y] = x.date.split('/').map(Number);
+      const at = Date.UTC(y, mo - 1, d, hh, mm) - 7 * 3600e3; // giờ VN
+      return Math.abs(now - at) < 5 * 60e3;
+    });
+  }
   async function runSetPrice(q, pct, step, rowPct = {}) {
     // Set deal xong mà cột "Giá deal" vẫn 0 → set lại (tối đa 3 lượt) rồi mới lưu
     let done = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
       done = await setDealOnce(q, pct, (t) => step(attempt > 1 ? `Lượt ${attempt}: ${t}` : t));
+      // CRM đã ghi "LS thay đổi deal … thành pct% … #BG" vài phút gần đây → set đã ăn (bảng Giá deal trên trang
+      // chỉ cập nhật sau khi lưu / tải lại) → không set lại nữa
+      await sleep(800);
+      const confirmed = dealConfirmed(poModalNow(), q.code, pct);
+      if (confirmed) saveDealHist(poModalNow(), q.code);
       step('Đóng PO, kiểm tra Giá deal…');
       (poModalNow() || document).querySelector('.ant-modal-close')?.click();
       await sleep(1500);
@@ -1532,7 +1550,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // dự phòng: "Tổng tiền 0 đ" dưới bảng Hàng hóa cũng là chưa ăn giá
       const tot = (document.body.innerText.match(/Tổng tiền\s*:?\s*([\d.,]+)\s*đ/) || [])[1];
       if ((!z || !z.zero) && tot != null && !Number(tot.replace(/[.,]/g, ''))) z = { zero: z?.n || 1, n: z?.n || 1 };
-      if (!z || !z.zero) break;
+      if (!z || !z.zero || confirmed) break;
       if (attempt === 3) throw new Error(`Đã set deal 3 lượt nhưng Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – kiểm tra PO giấy tấm rồi thử lại.`);
       step(`Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – set lại…`);
       await sleep(800);
