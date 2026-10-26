@@ -2110,8 +2110,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     // tên NVKD in trên báo giá; không thấy thì lấy NVKD của báo giá đang mở
     const q = renderCtx.quotes?.[currentQuoteId()];
     const staff = nf(q ? staffOf(q, renderCtx.comments?.[q.id]) : '');
-    const keys = Object.keys(imgs || {}).filter((n) => imgs[n]?.img);
-    const name = keys.filter((n) => text.includes(nf(n))).sort((a, b) => b.length - a.length)[0] || keys.find((n) => staff && nf(n) === staff);
+    const pick = (ks) => ks.filter((n) => text.includes(nf(n))).sort((a, b) => b.length - a.length)[0] || ks.find((n) => staff && nf(n) === staff);
+    let keys = Object.keys(imgs || {}).filter((n) => imgs[n]?.img);
+    let name = pick(keys);
+    // chưa có ảnh trong kho nhưng đã có đường dẫn chữ ký (trang Nhân sự) → tải qua background (extension ≥ 1.7.2), lưu signImgs
+    if (!name) {
+      const signs = await kvGet('staffSigns').catch(() => ({}));
+      const sn = pick(Object.keys(signs || {}).filter((n) => signs[n]?.sign));
+      if (sn) {
+        try {
+          const img = await rawCall({ type: 'http.dataUrl', url: signs[sn].sign });
+          if (/^data:image\//.test(img || '')) {
+            await kvMerge('signImgs', { [sn]: { url: signs[sn].sign, img, at: Date.now() } });
+            imgs[sn] = { img };
+            keys = [...keys, sn];
+            name = sn;
+          }
+        } catch (e) {
+          console.warn('[DG] chữ ký NVKD: tải ảnh lỗi', sn, e.message);
+        }
+      } else if (MY_ADMIN) lsSet('dgStaffSignAt', '0'); // chưa có đường dẫn → lần tới đọc lại trang Nhân sự
+    }
     if (!name) {
       console.warn('[DG] chữ ký NVKD: không thấy', { có: keys, staff });
       return false;

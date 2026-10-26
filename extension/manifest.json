@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Duyệt giá Tuấn Tú",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Tải và chạy các script được lưu trên GitHub, tự cập nhật không cần cài lại extension.",
   "minimum_chrome_version": "120",
   "icons": {

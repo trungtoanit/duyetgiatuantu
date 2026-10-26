@@ -582,6 +582,15 @@ const services = {
     const res = await fetch(url, { method, headers, body });
     return { status: res.status, ok: res.ok, text: await res.text() };
   },
+  // Tải tệp nhị phân (ảnh chữ ký…) qua background → data URL (máy chủ ảnh chặn CORS với trang)
+  'http.dataUrl': async ({ url }) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return `data:${res.headers.get('content-type') || 'image/png'};base64,${btoa(bin)}`;
+  },
   // Đọc / ghi chrome.storage.local theo khoá bất kỳ (trừ cấu hình bí mật)
   'store.get': async ({ keys }) => {
     const out = await chrome.storage.local.get(keys);
