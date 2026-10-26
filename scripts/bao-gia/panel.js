@@ -1502,7 +1502,44 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
 
+  // Cột "Giá deal" của bảng Hàng hóa: số dòng còn 0 (set deal chưa ăn) / tổng số dòng
+  function dealZeroRows() {
+    const t = [...document.querySelectorAll('.ant-table')].find((x) => !x.closest('.ant-modal-wrap') && [...x.querySelectorAll('thead th')].some((th) => /^Giá deal/i.test(th.innerText.trim())));
+    if (!t) return null;
+    const hs = [...t.querySelectorAll('thead th')];
+    const iD = hs.findIndex((th) => /^Giá deal/i.test(th.innerText.trim()));
+    let zero = 0;
+    let n = 0;
+    for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+      if (tr.classList.contains('ant-table-measure-row') || !tr.innerText.trim()) continue;
+      const c = tr.cells[iD];
+      if (!c) continue;
+      const v = Number((c.innerText.replace(/\d+(?:[.,]\d+)?\s*%/g, '').match(/[\d.,]+/) || ['0'])[0].replace(/[.,]/g, '')) || 0;
+      n++;
+      if (!v) zero++;
+    }
+    return n ? { zero, n } : null;
+  }
   async function runSetPrice(q, pct, step, rowPct = {}) {
+    // Set deal xong mà cột "Giá deal" vẫn 0 → set lại (tối đa 3 lượt) rồi mới lưu
+    let done = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      done = await setDealOnce(q, pct, (t) => step(attempt > 1 ? `Lượt ${attempt}: ${t}` : t));
+      step('Đóng PO, kiểm tra Giá deal…');
+      (poModalNow() || document).querySelector('.ant-modal-close')?.click();
+      await sleep(1500);
+      let z = dealZeroRows();
+      // dự phòng: "Tổng tiền 0 đ" dưới bảng Hàng hóa cũng là chưa ăn giá
+      const tot = (document.body.innerText.match(/Tổng tiền\s*:?\s*([\d.,]+)\s*đ/) || [])[1];
+      if ((!z || !z.zero) && tot != null && !Number(tot.replace(/[.,]/g, ''))) z = { zero: z?.n || 1, n: z?.n || 1 };
+      if (!z || !z.zero) break;
+      if (attempt === 3) throw new Error(`Đã set deal 3 lượt nhưng Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – kiểm tra PO giấy tấm rồi thử lại.`);
+      step(`Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – set lại…`);
+      await sleep(800);
+    }
+    await afterSetDeal(q, pct, step, rowPct, done);
+  }
+  async function setDealOnce(q, pct, step) {
     step('Mở Lên PO → Giấy tấm…');
     const modal = await openPoGiayTam(document);
     saveDealHist(modal, q.code);
@@ -1544,9 +1581,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       await sleep(1500);
       done.push(ch?.code || 'NCC');
     }
-    step('Đóng PO, lưu báo giá…');
-    (poModalNow() || modal).querySelector('.ant-modal-close')?.click();
-    await sleep(800);
+    return done;
+  }
+  async function afterSetDeal(q, pct, step, rowPct, done) {
+    step('Lưu báo giá…');
     // % riêng từng dòng: giá sau khi set deal (đang = giấy tấm ÷ (1 − pct)) → giấy tấm ÷ (1 − % dòng)
     const custom = Object.entries(rowPct).filter(([, v]) => v != null && v !== pct);
     if (custom.length) {
