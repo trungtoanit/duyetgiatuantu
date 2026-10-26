@@ -1465,6 +1465,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return Number(handle.getAttribute('aria-valuenow'));
     };
     const key = (k) => handle.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k, keyCode: k === 'ArrowRight' ? 39 : 37, which: k === 'ArrowRight' ? 39 : 37, bubbles: true, cancelable: true }));
+    // đã đúng % sẵn (giữ từ nhà cung cấp trước) → lùi 1 rồi tiến 1 để CRM ghi nhận giá trị cho nhà đang chọn
+    if (val() === pct) {
+      key(pct > 0 ? 'ArrowLeft' : 'ArrowRight');
+      await sleep(80);
+    }
     for (let i = 0; i < 120 && val() !== pct; i++) {
       const before = val();
       key(before < pct ? 'ArrowRight' : 'ArrowLeft');
@@ -1510,8 +1515,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const done = [];
     for (const [i, ch] of (chips.length ? chips : [null]).entries()) {
       if (ch) {
+        // "Set deal cho BG" của nhà trước có thể đã đóng hộp PO → mở lại để set tiếp nhà sau
+        if (i > 0 && !poModalNow()) {
+          step(`Nhà cung cấp ${ch.code} (${i + 1}/${chips.length}): mở lại Lên PO → Giấy tấm…`);
+          await openPoGiayTam(document);
+        }
         step(`Nhà cung cấp ${ch.code} (${i + 1}/${chips.length}): chọn…`);
-        ([...(poModalNow() || modal).querySelectorAll('button.ant-btn')].find((b) => b.innerText.trim() === ch.code) || ch.btn).click();
+        const chBtn = await waitFor(() => [...(poModalNow() || modal).querySelectorAll('button.ant-btn')].find((b) => b.isConnected && b.innerText.trim() === ch.code), 8000, 200);
+        if (!chBtn) throw new Error(`Không thấy nút nhà cung cấp ${ch.code} trong PO (đã set: ${done.join(', ') || 'chưa'}).`);
+        chBtn.click();
         // chờ PO của nhà này tải xong: "Tổng thanh toán" đứng yên 3 lần đọc
         let last = -1;
         let same = 0;
