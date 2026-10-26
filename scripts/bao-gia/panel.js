@@ -2203,7 +2203,37 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         st.style.left = '50%';
         st.style.top = '100%';
         st.style.transform = 'translateX(-50%)';
-        st.style.marginTop = '22px'; // giữa khoảng trống ký tên (giữa "Ký và ghi rõ họ tên" và "Ban lãnh đạo")
+        // Đo trên trang in gốc (đã dàn trang): khoảng trống giữa cột ký tên và chữ "Ban lãnh đạo" + chiều cao khung
+        // → đặt khung đúng giữa khoảng trống, canh giữa theo chữ "Ban lãnh đạo"
+        let mt = 22;
+        let left = '50%';
+        try {
+          const pd = state.printDoc;
+          const leaf = (re) => [...pd.querySelectorAll('*')].find((e) => e.childElementCount === 0 && re.test(e.textContent.trim()));
+          const tb0 = leaf(/^Trưởng bộ phận$/i);
+          let col0 = tb0 && (tb0.closest('td, th') || tb0.parentElement);
+          if (tb0 && !tb0.closest('td, th')) {
+            let c = tb0.parentElement;
+            while (c && c !== pd.body && !/Ký và ghi rõ/i.test(c.textContent)) c = c.parentElement;
+            if (c && c !== pd.body) col0 = c;
+          }
+          const ban0 = leaf(/^(Trưởng Phòng|Ban lãnh đạo)$/i);
+          if (col0 && ban0) {
+            const cr = col0.getBoundingClientRect();
+            const br = ban0.getBoundingClientRect();
+            const probe = st.cloneNode(true);
+            probe.style.cssText += ';position:absolute;visibility:hidden;left:0;top:0;';
+            pd.body.append(probe);
+            const h = probe.getBoundingClientRect().height;
+            probe.remove();
+            const gap = br.top - cr.bottom;
+            if (gap > 0 && h > 0) mt = Math.max(2, Math.round((gap - h) / 2));
+            const dx = br.left + br.width / 2 - (cr.left + cr.width / 2);
+            if (cr.width > 0) left = `${50 + (dx / cr.width) * 100}%`;
+          }
+        } catch {}
+        st.style.left = left;
+        st.style.marginTop = `${mt}px`;
         st.style.whiteSpace = 'normal';
         st.style.width = 'auto';
         col.setAttribute('style', `${col.getAttribute('style') || ''};position:relative;`);
@@ -2351,6 +2381,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (signOn() && SITE.bossSign) await addSignature(clone);
     // chữ ký NVKD (Người biên soạn) – tối đa 8s, quá thì chụp không có chữ ký (không để kẹt "Đang chụp…")
     await Promise.race([addSaleSignature(clone).catch(() => {}), sleep(8000)]);
+    state.printDoc = doc; // trang in gốc (đã dàn trang) – để đo vị trí khung duyệt
     addApproval(clone, signOn());
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {
