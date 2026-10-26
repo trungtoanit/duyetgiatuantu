@@ -1547,10 +1547,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       (poModalNow() || document).querySelector('.ant-modal-close')?.click();
       await sleep(1500);
       let z = dealZeroRows();
-      // dự phòng: "Tổng tiền 0 đ" dưới bảng Hàng hóa cũng là chưa ăn giá
-      const tot = (document.body.innerText.match(/Tổng tiền\s*:?\s*([\d.,]+)\s*đ/) || [])[1];
-      if ((!z || !z.zero) && tot != null && !Number(tot.replace(/[.,]/g, ''))) z = { zero: z?.n || 1, n: z?.n || 1 };
-      if (!z || !z.zero || confirmed) break;
+      // "Tổng tiền … đ" dưới bảng Hàng hóa đã > 0 → giá đã ăn (cột Giá deal có thể vẫn hiện 0 tới khi lưu / tải lại)
+      const totTxt = [...document.body.innerText.matchAll(/Tổng tiền\s*:?\s*([\d.,]+)\s*đ/g)].map((m) => Number(m[1].replace(/[.,]/g, '')) || 0);
+      const totOk = totTxt.some((v) => v > 0);
+      if ((!z || !z.zero) && totTxt.length && !totOk) z = { zero: z?.n || 1, n: z?.n || 1 };
+      if (!z || !z.zero || confirmed || totOk) break;
       if (attempt === 3) throw new Error(`Đã set deal 3 lượt nhưng Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – kiểm tra PO giấy tấm rồi thử lại.`);
       step(`Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – set lại…`);
       await sleep(800);
