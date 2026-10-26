@@ -8867,7 +8867,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         { text: `🟥 Tuấn Tú · Σ chênh lệch ${big(sumOf('tuantu'))}`, color: '#dc2626', filter: 'tuantu' },
         { text: `🟦 Đại Dương · Σ chênh lệch ${big(sumOf('daiduong'))}`, color: '#2563eb', filter: 'daiduong' },
       ],
-      rows: rows.slice(0, 120).map((r) => ({
+      rows: rows.map((r) => ({ // hiện đủ mọi báo giá đủ điều kiện, không giới hạn
         tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
         tagColor: r.site.key === 'tuantu' ? '#dc2626' : '#2563eb',
         title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}`,
