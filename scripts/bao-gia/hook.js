@@ -607,12 +607,15 @@
   };
 
   // Phiên đăng nhập: API trả 401 → đã bị đăng xuất; trả 2xx → đang đăng nhập. Báo cho bảng 📊 để ẩn / hiện dữ liệu.
+  // Đang đăng nhập thì nhắc lại mỗi 15s (bảng 📊 có thể chưa kịp nghe lần báo đầu tiên → kẹt "Cần đăng nhập")
   let authOk = null;
+  let authAt = 0;
   const authSignal = (status, url) => {
     if (!API.test(url || '')) return;
     const ok = status === 401 ? false : status >= 200 && status < 300 ? true : null;
-    if (ok == null || ok === authOk) return;
+    if (ok == null || (ok === authOk && !(ok && Date.now() - authAt > 15000))) return;
     authOk = ok;
+    authAt = Date.now();
     emit('auth', { ok, at: Date.now() });
   };
   if (/^\/login\b/.test(location.pathname) && !COLLECTOR_FRAME) setTimeout(() => emit('auth', { ok: false, at: Date.now() }), 0);

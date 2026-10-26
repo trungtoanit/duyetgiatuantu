@@ -292,7 +292,8 @@
   let loggedOut = /^\/login\b/.test(location.pathname);
   kvGet('auth')
     .then((a) => {
-      if (a?.ok === false && Date.now() - a.at < 12 * 3600e3) loggedOut = true;
+      // trạng thái "đăng xuất" lưu lại chỉ tin trong 5 phút (cũ hơn → chờ API của trang báo lại, tránh kẹt "Cần đăng nhập")
+      if (a?.ok === false && Date.now() - a.at < 5 * 60e3) loggedOut = true;
       if (a?.ok === true && !/^\/login\b/.test(location.pathname)) loggedOut = false;
       render();
     })
@@ -330,9 +331,11 @@
       return render();
     }
     if (kind === 'auth') {
+      const was = loggedOut;
       loggedOut = !data.ok || /^\/login\b/.test(location.pathname);
-      await call({ type: 'kv.set', key: 'auth', value: data }).catch(() => {});
-      return render();
+      // khung ẩn (bộ thu thập) gặp 401 không có nghĩa trang chính bị đăng xuất → chỉ trang chính ghi trạng thái chung
+      if (IS_TOP || data.ok) await call({ type: 'kv.set', key: 'auth', value: data }).catch(() => {});
+      return was !== loggedOut || loggedOut ? render() : undefined;
     }
     if (kind === 'staffSigns') {
       // chỉ lưu đường dẫn ảnh (đồng bộ); ảnh dạng data (signImgs) do công cụ tools/sync_signs.py tải về vì máy chủ ảnh chặn CORS
