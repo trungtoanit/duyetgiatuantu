@@ -2127,7 +2127,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         st.style.left = '50%';
         st.style.top = '100%';
         st.style.transform = 'translateX(-50%)';
-        st.style.marginTop = '2px';
+        st.style.marginTop = '22px'; // giữa khoảng trống ký tên (giữa "Ký và ghi rõ họ tên" và "Ban lãnh đạo")
         st.style.whiteSpace = 'normal';
         st.style.width = 'auto';
         col.setAttribute('style', `${col.getAttribute('style') || ''};position:relative;`);
@@ -2227,12 +2227,22 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const num = [...clone.querySelectorAll('*')].find((e) => /^Số:\s*BG\d+/i.test((e.textContent || '').trim()) && (e.textContent || '').length < 40 && ![...e.children].some((c) => /^Số:/i.test((c.textContent || '').trim())));
       const title = [...clone.querySelectorAll('*')].find((e) => !e.children.length && /^BẢNG BÁO GIÁ$/i.test((e.textContent || '').trim()));
       if (num && title) {
+        // tiêu đề giữa + "Số: …" bên phải trên CÙNG 1 hàng, cách đường kẻ đều (cân đối)
         const t = num.textContent.trim();
-        const line = clone.ownerDocument.createElement('div');
-        line.setAttribute('style', 'text-align:right;font-weight:700;font-size:18px;margin:4px 0 -6px;');
-        line.textContent = t;
         num.remove();
-        title.before(line);
+        const d = clone.ownerDocument;
+        const row = d.createElement('div');
+        row.setAttribute('style', 'position:relative;display:flex;align-items:center;justify-content:center;margin:14px 0 10px;min-height:34px;');
+        const tt = d.createElement('div');
+        tt.setAttribute('style', 'font-size:30px;font-weight:800;letter-spacing:.5px;');
+        tt.textContent = title.textContent.trim();
+        const nn = d.createElement('div');
+        nn.setAttribute('style', 'position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:16px;font-weight:700;white-space:nowrap;');
+        nn.textContent = t;
+        row.append(tt, nn);
+        // thay cả khối tiêu đề (thẻ chứa chữ BẢNG BÁO GIÁ, giữ chỗ trong bố cục)
+        const host = title.closest('h1, h2, h3, div, p') || title;
+        host.replaceWith(row);
       }
     }
     // Đại Dương: cột Đơn giá thêm "đ" + canh phải; khu tổng (Tổng tiền / Thuế / Tổng tiền thanh toán) in đậm
