@@ -2107,15 +2107,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (SITE.key === 'daiduong') {
       const day = now.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });
       const st = doc.createElement('div');
-      st.setAttribute('style', 'display:inline-block;margin-top:4px;border:1px solid #1e293b;padding:3px;background:#fff;text-align:center;max-width:250px;font-family:Arial,Helvetica,sans-serif;');
-      st.innerHTML = `<div style="font-size:12px;font-weight:700;color:#1e2f86;margin:2px 0 3px">Người duyệt giá <i style="font-weight:400">(Approver)</i></div>
-        <div style="position:relative;background:#dff3d0;padding:5px 6px 4px;color:#1e2f86;overflow:hidden">
-          <svg viewBox="0 0 100 80" style="position:absolute;left:50%;top:50%;width:62px;height:50px;transform:translate(-50%,-50%);opacity:.45" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div style="position:relative;font-size:11px;font-weight:700">Đã duyệt giá bởi</div>
-          <div style="position:relative;font-size:9.5px;font-style:italic">(Approved by)</div>
-          <div style="position:relative;font-size:10.5px;font-weight:700;line-height:1.25;margin-top:2px">${esc(APPROVE_ORG)}</div>
-          ${signed ? `<div style="position:relative;font-size:10px">${esc(meName)}</div>` : ''}
-          <div style="position:relative;font-size:10px">Ngày: ${esc(day)}</div></div>`;
+      st.setAttribute('style', 'display:inline-block;margin-top:2px;border:1px solid #1e293b;padding:2px;background:#fff;text-align:center;max-width:240px;font-family:Arial,Helvetica,sans-serif;line-height:1.2;');
+      st.innerHTML = `<div style="font-size:10px;font-weight:700;color:#1e2f86;margin:1px 0 2px">Người duyệt giá <i style="font-weight:400">(Approver)</i></div>
+        <div style="position:relative;background:#dff3d0;padding:3px 5px;color:#1e2f86;overflow:hidden">
+          <svg viewBox="0 0 100 80" style="position:absolute;left:50%;top:50%;width:46px;height:37px;transform:translate(-50%,-50%);opacity:.45" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div style="position:relative;font-size:9.5px;font-weight:700">Đã duyệt giá bởi <i style="font-weight:400">(Approved by)</i></div>
+          <div style="position:relative;font-size:9px;font-weight:700;white-space:nowrap">${esc(APPROVE_ORG)}</div>
+          <div style="position:relative;font-size:8.5px">${signed ? `${esc(meName)} · ` : ''}Ngày: ${esc(day)}</div></div>`;
       // đặt vào khoảng trống ký tên dưới "Trưởng bộ phận (Ký và ghi rõ họ tên)" (thay chữ ký); không có thì dưới "Ban lãnh đạo"
       const tb = [...root0.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /^Trưởng bộ phận$/i.test(e.textContent.trim()));
       let col = tb && (tb.closest('td, th') || tb.parentElement);
@@ -2131,7 +2129,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         st.style.transform = 'translateX(-50%)';
         st.style.marginTop = '2px';
         st.style.whiteSpace = 'normal';
-        st.style.width = '230px';
+        st.style.width = 'auto';
         col.setAttribute('style', `${col.getAttribute('style') || ''};position:relative;`);
         col.append(st);
         return true;
@@ -2235,6 +2233,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         line.textContent = t;
         num.remove();
         title.before(line);
+      }
+    }
+    // Đại Dương: cột Đơn giá thêm "đ" + canh phải; khu tổng (Tổng tiền / Thuế / Tổng tiền thanh toán) in đậm
+    if (SITE.key === 'daiduong') {
+      for (const t of clone.querySelectorAll('table')) {
+        const head = [...t.rows].find((r) => /Đơn giá/i.test(r.innerText || r.textContent));
+        if (!head) continue;
+        const hi = [...head.cells].findIndex((c) => /^Đơn giá$/i.test(c.textContent.trim()));
+        if (hi >= 0) head.cells[hi].style.textAlign = 'right';
+        for (const r of t.rows) {
+          const txt = (r.textContent || '').trim();
+          if (/^(Tổng tiền|Thuế giá trị gia tăng|Tổng tiền thanh toán)/i.test(txt.replace(/^\s+/, '')) || /Tổng tiền|Thuế giá trị gia tăng/i.test([...r.cells].slice(0, -1).map((c) => c.textContent).join(' '))) {
+            for (const c of r.cells) {
+              c.style.fontWeight = '700';
+              c.style.background = '#f1f5f9';
+            }
+            continue;
+          }
+          if (r === head || hi < 0) continue;
+          const c = r.cells[hi];
+          if (!c || r.cells.length !== head.cells.length) continue;
+          const v = c.textContent.trim();
+          if (/^[\d.,]+$/.test(v)) c.textContent = `${v} đ`;
+          c.style.textAlign = 'right';
+        }
       }
     }
     if (signOn() && SITE.bossSign) await addSignature(clone);
