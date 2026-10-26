@@ -2028,10 +2028,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     img.src = src;
     await img.decode();
     const r = (a) => (Math.random() * 2 - 1) * a; // ngẫu nhiên trong ±a
+    // ảnh chữ ký lớn (chụp điện thoại vài nghìn px) → thu về cao ≤ 160px trước khi xử lý, tránh treo khi chụp báo giá
+    const K = Math.min(1, 160 / (img.height || 160));
+    const iw = img.width * K;
+    const ih = img.height * K;
     const S = 2; // vẽ gấp đôi cho nét mịn
     const pad = 0.12; // chừa lề cho phần xoay / nghiêng
-    const w = Math.round(img.width * (1 + 2 * pad) * S);
-    const h = Math.round(img.height * (1 + 2 * pad) * S);
+    const w = Math.round(iw * (1 + 2 * pad) * S);
+    const h = Math.round(ih * (1 + 2 * pad) * S);
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
@@ -2041,7 +2045,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ctx.transform(1, r(0.02), r(0.03), 1, 0, 0); // nghiêng nhẹ
     ctx.scale(S * (1 + r(0.03)), S * (1 + r(0.03))); // co giãn ±3%
     ctx.filter = 'blur(0.35px)'; // mực thấm giấy
-    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
     ctx.filter = 'none';
     // tô lại màu mực + đậm nhạt không đều
     const ink = [22 + r(8), 42 + r(10), 128 + r(16)]; // xanh mực bút bi
@@ -2067,7 +2071,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       px[i + 3] = Math.min(255, a * Math.pow(strength, 0.8) * dens * 1.1);
     }
     ctx.putImageData(d, 0, 0);
-    return { src: c.toDataURL('image/png'), height: Math.round((h / S) * (64 / img.height) ) };
+    return { src: c.toDataURL('image/png'), height: Math.round((h / S) * (64 / ih)) };
   }
 
   // Lấy ngầm chữ ký NVKD: 1 lần / ngày mở trang Nhân sự trong khung ẩn, gõ tên từng NVKD vào ô tìm → hook.js đọc signImage
@@ -2119,7 +2123,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const sn = pick(Object.keys(signs || {}).filter((n) => signs[n]?.sign));
       if (sn) {
         try {
-          const img = await rawCall({ type: 'http.dataUrl', url: signs[sn].sign });
+          const img = await Promise.race([rawCall({ type: 'http.dataUrl', url: signs[sn].sign }), sleep(6000).then(() => null)]);
           if (/^data:image\//.test(img || '')) {
             await kvMerge('signImgs', { [sn]: { url: signs[sn].sign, img, at: Date.now() } });
             imgs[sn] = { img };
@@ -2345,7 +2349,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
     }
     if (signOn() && SITE.bossSign) await addSignature(clone);
-    await addSaleSignature(clone).catch(() => {}); // chữ ký NVKD (Người biên soạn)
+    // chữ ký NVKD (Người biên soạn) – tối đa 8s, quá thì chụp không có chữ ký (không để kẹt "Đang chụp…")
+    await Promise.race([addSaleSignature(clone).catch(() => {}), sleep(8000)]);
     addApproval(clone, signOn());
     // ảnh (logo…) → data URL để canvas không bị "bẩn"
     for (const img of clone.querySelectorAll('img')) {
@@ -2472,7 +2477,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!doc) throw new Error('CRM chưa dựng bảng báo giá để in (không thấy "BẢNG BÁO GIÁ").');
       await sleep(800); // chờ ảnh / font trong khung in
       show('📸 Đang chụp…');
-      const { png, blurred } = await docToPng(doc);
+      const { png, blurred } = await Promise.race([docToPng(doc), sleep(45000).then(() => Promise.reject(new Error('Chụp báo giá quá lâu (45s) – thử lại.')))]);
       show('📋 Đang dán…');
       await pasteImageToComment(png, `bao-gia-${q?.code || currentQuoteId()}.png`, getBox);
       // kèm câu mẫu nếu ô đang trống
