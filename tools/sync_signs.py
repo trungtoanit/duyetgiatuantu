@@ -13,15 +13,17 @@ def get(ns):
     r = urllib.request.urlopen(urllib.request.Request(f'{base}?ns=eq.{ns}&select=id,data', headers=h)).read()
     return {x['id']: x['data'] for x in json.loads(r)}
 
-staff, imgs = get('staffSigns'), get('signImgs')
 rows = []
-for name, s in staff.items():
+# Tuấn Tú: staffSigns → signImgs · Đại Dương (tiền tố dd.): dd.staffSigns → dd.signImgs
+for pre in ['', 'dd.']:
+  staff, imgs = get(pre + 'staffSigns'), get(pre + 'signImgs')
+  for name, s in staff.items():
     url = (s or {}).get('sign')
     if not url or imgs.get(name, {}).get('url') == url:
         continue
     b = urllib.request.urlopen(url).read()
-    rows.append({'ns': 'signImgs', 'id': name, 'data': {'url': url, 'img': 'data:image/png;base64,' + base64.b64encode(b).decode(), 'at': int(time.time() * 1000)}})
-    print('+', name, len(b), 'bytes')
+    rows.append({'ns': pre + 'signImgs', 'id': name, 'data': {'url': url, 'img': 'data:image/png;base64,' + base64.b64encode(b).decode(), 'at': int(time.time() * 1000)}})
+    print('+', pre or 'tt.', name, len(b), 'bytes')
 if rows:
     req = urllib.request.Request(base, data=json.dumps(rows).encode(), method='POST', headers={**h, 'Prefer': 'resolution=merge-duplicates'})
     print('upload', urllib.request.urlopen(req).status)
