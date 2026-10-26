@@ -628,6 +628,13 @@ chrome.runtime.onUserScriptMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // popup gọi dịch vụ kv (vd. lưu bộ lọc đồng bộ giữa các máy)
+  if (/^kv\.(get|merge)$/.test(msg?.type || '')) {
+    Promise.resolve(services[msg.type](msg))
+      .then((result) => sendResponse({ result }))
+      .catch((e) => sendResponse({ error: String(e.message || e) }));
+    return true;
+  }
   (async () => {
     if (msg.type === 'syncNow') await sync(true);
     if (msg.type === 'setBalance') await setBalance(msg.amount);

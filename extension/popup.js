@@ -174,8 +174,25 @@ setInterval(loadCrm, 2000);
 // ---- Khung do script trên trang gửi tới: kv 'popupCards' = { <id>: { title, sub, chips:[{text,color}], rows:[{tag,tagColor,title,sub,right,rightColor,rightBg,url}], at } } ----
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 let cardsSig = '';
-var cardFilter = {}; // lọc theo chip của từng khung
+var cardFilter = {}; // lọc theo chip của từng khung – lưu kv 'popupPrefs' (đồng bộ online giữa các máy)
+let prefsAt = {};
+async function loadPrefs() {
+  const p = (await chrome.storage.local.get(KV('popupPrefs')))[KV('popupPrefs')] || {};
+  for (const [k, v] of Object.entries(p)) {
+    if (!k.startsWith('filter:') || !v) continue;
+    const id = k.slice(7);
+    if ((prefsAt[id] || 0) >= (v.at || 0)) continue;
+    prefsAt[id] = v.at || 0;
+    cardFilter = { ...cardFilter, [id]: v.v || '' };
+  }
+}
+function savePref(id) {
+  const at = Date.now();
+  prefsAt[id] = at;
+  chrome.runtime.sendMessage({ type: 'kv.merge', key: 'popupPrefs', patch: { [`filter:${id}`]: { v: cardFilter[id] || '', at } } }, () => void chrome.runtime.lastError);
+}
 async function loadCards() {
+  await loadPrefs().catch(() => {});
   const cards = (await chrome.storage.local.get(KV('popupCards')))[KV('popupCards')] || {};
   cardsData = cards;
   const list = Object.entries(cards).filter(([, c]) => c && Array.isArray(c.rows)).map(([id, c]) => ({ ...c, id }));
@@ -235,6 +252,7 @@ $('cards').addEventListener('click', async (e) => {
   if (fc) {
     const id = fc.dataset.card;
     cardFilter = { ...cardFilter, [id]: cardFilter[id] === fc.dataset.f ? '' : fc.dataset.f };
+    savePref(id);
     loadCards();
     return;
   }
