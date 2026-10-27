@@ -2872,12 +2872,55 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           await setCellPrice(r.cell, r.next);
           await sleep(150);
         }
+        // ghi nhận đã cộng bao nhiêu trên từng dòng (cộng dồn nếu cộng nhiều lần) → hiện sau Giá thực bán
+        const code = renderCtx.quotes?.[currentQuoteId()]?.code;
+        if (code) {
+          const prev = (await kvGet('costAdds'))[code]?.rows || [];
+          const rowsRec = p.map((r) => {
+            const o = prev.find((x) => x.i === r.i && x.name === r.name);
+            return { i: r.i, name: r.name, add: (o?.add || 0) + (r.next - r.price) };
+          });
+          for (const o of prev) if (!rowsRec.some((x) => x.i === o.i && x.name === o.name)) rowsRec.push(o);
+          await kvMerge('costAdds', { [code]: { rows: rowsRec, total: (Number((await kvGet('costAdds'))[code]?.total) || 0) + amt(), at: Date.now(), by: meName } });
+          state.costAdds = null;
+        }
       } finally {
         nudging = false;
         btns.forEach((b) => (b.disabled = false));
       }
     });
   }
+  // Hiện "＋x CP" (chi phí đã cộng) ngay sau Giá thực bán của từng dòng
+  async function injectCostBadges() {
+    if (!IS_TOP || !currentQuoteId()) return;
+    const code = renderCtx.quotes?.[currentQuoteId()]?.code;
+    if (!code) return;
+    if (!state.costAdds || Date.now() - state.costAdds.at > 15e3) state.costAdds = { at: Date.now(), all: await kvGet('costAdds') };
+    const rec = state.costAdds.all?.[code];
+    const t = pageProductTable();
+    if (!t) return;
+    const heads = [...t.querySelectorAll('thead th')];
+    const idx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
+    if (idx < 0) return;
+    const rows = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.cells[idx]);
+    rows.forEach((tr, i) => {
+      const cell = tr.cells[idx];
+      const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
+      const o = rec?.rows?.find((x) => x.i === i && x.name === name) || rec?.rows?.find((x) => x.name === name);
+      let b = cell.querySelector('.dg-costadd');
+      if (!o?.add) return b?.remove();
+      const txt = `${o.add > 0 ? '+' : '−'}${Math.abs(o.add).toLocaleString('vi-VN')}`;
+      if (!b) {
+        b = document.createElement('span');
+        b.className = 'dg-costadd';
+        b.setAttribute('style', 'display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:#ecfdf5;border:1px solid #a7f3d0;color:#047857;font-size:10.5px;font-weight:800;white-space:nowrap;vertical-align:middle');
+        cell.append(b);
+      }
+      if (b.textContent !== `${txt} CP`) b.textContent = `${txt} CP`;
+      b.title = `Đã cộng chi phí vào đơn giá dòng này: ${txt}đ/cái${rec.total ? ` (tổng chi phí đã cộng ${Number(rec.total).toLocaleString('vi-VN')}đ)` : ''}`;
+    });
+  }
+  if (IS_TOP) setInterval(() => injectCostBadges().catch(() => {}), 2000);
   // Hộp nhập số tiền cộng thêm (âm = trừ bớt) → áp cho mọi dòng
   function openAddAmount(t, idx, btns) {
     document.getElementById('dg-addamt')?.remove();

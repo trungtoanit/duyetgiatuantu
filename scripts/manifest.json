@@ -1,5 +1,5 @@
 {
-  "version": "1.2.400",
+  "version": "1.2.401",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -44,6 +44,7 @@
   "sync": [
     "aiHot",
     "aiHotDone",
+    "costAdds",
     "custHidden",
     "dayOrders",
     "dd.aiHot",
