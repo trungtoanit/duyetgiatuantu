@@ -17,7 +17,7 @@
   const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
   const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
   // Dữ liệu dùng chung mọi domain (việc gửi Zalo, máy, file cài đặt) → không thêm tiền tố
-  const SHARED_NS = new Set(['zaloJobs', 'zaloAlive', 'zaloDebug', 'zaloNames', 'zaloSent', 'machine', 'files', 'badge', 'popupCards']);
+  const SHARED_NS = new Set(['zaloJobs', 'zaloAlive', 'zaloDebug', 'zaloNames', 'zaloSent', 'machine', 'files', 'badge', 'popupCards', 'popupPrefs']);
   const siteNs = (k) => (SITE.prefix && k && !SHARED_NS.has(k) && !String(k).startsWith(SITE.prefix) ? SITE.prefix + k : k);
   const call = (msg0) => {
     const msg = { ...msg0 };
@@ -9515,6 +9515,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     state.gapPopupSig = sig;
     await kvMerge('popupCards', { gap: card });
   }
+  // Bộ lọc của popup (kv popupPrefs): popup lưu cục bộ nhưng có lúc không kịp đẩy lên máy chủ (background vừa thức dậy)
+  // → lần đồng bộ sau kéo bản cũ trên máy chủ về, bộ lọc đã bỏ chọn lại hiện lại. Trang CRM đẩy bù bản mới nhất lên máy chủ.
+  let prefsPushed = '';
+  async function pushPopupPrefs() {
+    if (!IS_TOP) return;
+    const p = await kvGet('popupPrefs');
+    const sig = JSON.stringify(p);
+    if (!Object.keys(p).length || sig === prefsPushed) return;
+    prefsPushed = sig;
+    await call({ type: 'remote.push', ns: 'popupPrefs', patch: p }).catch(() => (prefsPushed = ''));
+  }
+  if (IS_TOP) setInterval(() => pushPopupPrefs().catch(() => {}), 15e3);
   setTimeout(() => gapToPopup().catch(() => {}), 8e3);
   setInterval(() => gapToPopup().catch(() => {}), 60e3);
   async function gapTab() {
