@@ -3932,8 +3932,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // 🆕 Mới tạo: báo giá tạo trong 7 ngày gần nhất (giống nhãn NEW ở cột Ngày tạo)
     ['fresh', '🆕', 'Mới tạo 7 ngày', '#0891b2', (q) => !!q.createdAt && hoursSince(q.createdAt) < 7 * 24],
     ['prio', '🔥', 'Ưu tiên', '#ea580c', (q, c) => renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c)],
-    ['flexo', '🟦', 'Flexo', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
-    ['offset', '🟪', 'Offset', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
+    ['flexo', '', 'F', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
+    ['offset', '', 'O', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
     ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
@@ -7928,10 +7928,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const k = q?.kinds || (q?.offset ? ['offset'] : []);
     return k.includes('offset') && k.includes('flexo') ? 'both' : k.includes('offset') ? 'offset' : k.includes('flexo') ? 'flexo' : null;
   };
-  const KIND_LABEL = { flexo: '🟦 Flexo', offset: '🟪 Offset', both: '🟦🟪 Flexo + Offset' };
+  const KIND_LABEL = { flexo: 'F', offset: 'O', both: 'F+O' }; // ký hiệu ngắn: F = Flexo, O = Offset
   const kindTag = (q) => {
     const k = kindOf(q);
-    return k ? ` <span class="knd ${k}">${KIND_LABEL[k]}</span>` : '';
+    return k ? ` <span class="knd ${k}" title="${{ flexo: 'Flexo', offset: 'Offset', both: 'Flexo + Offset' }[k]}">${KIND_LABEL[k]}</span>` : '';
   };
 
   // "Đang bán (X%)" từ bảng chiết giá Offset (Ctrl+Shift+G) – thấp nhất trong các sản phẩm của báo giá
