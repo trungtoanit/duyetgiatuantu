@@ -2737,7 +2737,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const actions = [...box.children];
       actions.forEach((b) => b.remove());
       const menu = document.createElement('span');
-      menu.className = 'dg-nudge-menu';
+      menu.className = 'dg-nudge-menu dg-nudge-head'; // dùng chung kiểu nút
       menu.setAttribute('style', 'display:none;position:fixed;z-index:2147483000;transform:translateX(-50%);background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.18);padding:8px;gap:5px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:260px');
       actions.forEach((b) => menu.append(b));
       const cfgBtn = document.createElement('button');
