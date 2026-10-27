@@ -2640,7 +2640,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   function injectPriceNudges() {
     if (!IS_TOP || !currentQuoteId()) return;
-    for (const t of document.querySelectorAll('.ant-table')) {
+    // chỉ 1 nút ở đúng cột "Giá thực bán" của bảng Hàng hóa (gỡ nút lạc sang cột khác)
+    const pt = pageProductTable();
+    document.querySelectorAll('th .dg-nudge-head').forEach((x) => {
+      const th = x.closest('th');
+      if (!pt || !pt.contains(th) || !/^Giá thực bán/i.test(th.innerText.trim())) x.remove();
+    });
+    for (const t of pt ? [pt] : []) {
       const heads = [...t.querySelectorAll('thead th')];
       const idx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
       if (idx < 0) continue;
@@ -2836,7 +2842,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return rows.map((r) => {
         const share = mode() === 'each' ? c : (c * r.price * r.qty) / tot;
         const add = Math.ceil(share / r.qty);
-        return { ...r, add, next: roundPrice(r.price + add) };
+        return { ...r, add, share, tot, next: roundPrice(r.price + add) };
       });
     };
     const preview = () => {
@@ -2876,9 +2882,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const code = renderCtx.quotes?.[currentQuoteId()]?.code;
         if (code) {
           const prev = (await kvGet('costAdds'))[code]?.rows || [];
+          const md = mode();
           const rowsRec = p.map((r) => {
             const o = prev.find((x) => x.i === r.i && x.name === r.name);
-            return { i: r.i, name: r.name, add: (o?.add || 0) + (r.next - r.price) };
+            // chi tiết từng lần cộng để rê chuột xem cách tính
+            const h = { at: Date.now(), by: meName, mode: md, amount: amt(), share: Math.round(r.share), qty: r.qty, from: r.price, to: r.next, add: r.next - r.price, lineVal: r.price * r.qty, tot: Math.round(r.tot) };
+            return { i: r.i, name: r.name, add: (o?.add || 0) + (r.next - r.price), hist: [...(o?.hist || []), h].slice(-10) };
           });
           for (const o of prev) if (!rowsRec.some((x) => x.i === o.i && x.name === o.name)) rowsRec.push(o);
           await kvMerge('costAdds', { [code]: { rows: rowsRec, total: (Number((await kvGet('costAdds'))[code]?.total) || 0) + amt(), at: Date.now(), by: meName } });
@@ -2914,7 +2923,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       const txt = `${o.add > 0 ? '+' : '−'}${Math.abs(o.add).toLocaleString('vi-VN')} CP`;
       if (cell.getAttribute('data-dg-cp') !== txt) cell.setAttribute('data-dg-cp', txt);
-      cell.title = `Đã cộng chi phí vào đơn giá dòng này: ${txt.replace(' CP', '')}đ/cái${rec.total ? ` (tổng chi phí đã cộng ${Number(rec.total).toLocaleString('vi-VN')}đ)` : ''}`;
+      const f = (v) => Math.round(Number(v) || 0).toLocaleString('vi-VN');
+      const lines = [`💸 Chi phí đã cộng vào đơn giá dòng này: ${txt.replace(' CP', '')}đ/cái`];
+      for (const h of o.hist || []) {
+        const when = new Date(h.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+        lines.push('', `• ${when}${h.by ? ` – ${h.by}` : ''}: chi phí ${f(h.amount)}đ`);
+        if (h.mode === 'each') lines.push(`  Cách 1 – mỗi dòng cộng đủ chi phí: ${f(h.amount)}đ ÷ ${f(h.qty)} cái = ${f(h.share / h.qty)}đ → làm tròn lên +${f(Math.ceil(h.share / h.qty))}đ/cái`);
+        else lines.push(`  Cách 2 – chia theo thành tiền: ${f(h.amount)}đ × ${f(h.lineVal)} ÷ ${f(h.tot)} (tổng thành tiền) = ${f(h.share)}đ cho dòng này`, `  ${f(h.share)}đ ÷ ${f(h.qty)} cái = +${f(Math.ceil(h.share / h.qty))}đ/cái`);
+        lines.push(`  Giá thực bán: ${f(h.from)} → ${f(h.to)}đ (+${f(h.add)}đ${h.add !== Math.ceil(h.share / h.qty) ? ', đã làm tròn theo cài đặt' : ''}) · thành tiền dòng +${f(h.add * h.qty)}đ`);
+      }
+      if (!o.hist?.length) lines.push('(cộng trước khi có ghi chi tiết – không rõ cách tính)');
+      if (rec.total) lines.push('', `Tổng chi phí đã cộng cho báo giá: ${f(rec.total)}đ`);
+      cell.title = lines.join('\n');
       if (!document.getElementById('dg-cp-css')) {
         const st = document.createElement('style');
         st.id = 'dg-cp-css';
