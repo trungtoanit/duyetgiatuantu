@@ -2523,11 +2523,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ta.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
-  async function printQuoteToComment(btn, getBox) {
-    const q = renderCtx.quotes?.[currentQuoteId()];
-    const label = btn.textContent;
-    const show = (t) => (btn.textContent = t);
-    try {
+  // In báo giá (chặn hộp thoại in) → chụp thành ảnh PNG (dùng chung cho dán bình luận / xuất PDF)
+  async function captureQuotePng(show) {
+    {
       const inBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'In');
       if (!inBtn) throw new Error('Không thấy nút "In" của CRM.');
       const f0 = document.getElementById('printWindow');
@@ -2547,13 +2545,99 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!doc) throw new Error('CRM chưa dựng bảng báo giá để in (không thấy "BẢNG BÁO GIÁ").');
       await sleep(800); // chờ ảnh / font trong khung in
       show('📸 Đang chụp…');
-      const { png, blurred } = await Promise.race([docToPng(doc), sleep(45000).then(() => Promise.reject(new Error('Chụp báo giá quá lâu (45s) – thử lại.')))]);
+      return Promise.race([docToPng(doc), sleep(45000).then(() => Promise.reject(new Error('Chụp báo giá quá lâu (45s) – thử lại.')))]);
+    }
+  }
+  async function printQuoteToComment(btn, getBox) {
+    const q = renderCtx.quotes?.[currentQuoteId()];
+    const label = btn.textContent;
+    const show = (t) => (btn.textContent = t);
+    try {
+      const { png, blurred } = await captureQuotePng(show);
       show('📋 Đang dán…');
       await pasteImageToComment(png, `bao-gia-${q?.code || currentQuoteId()}.png`, getBox);
       // kèm câu mẫu nếu ô đang trống
       const ta = await (getBox || (async () => findCommentBox()))();
       if (ta && !ta.value.trim()) setTextarea(ta, priceGiveText(q));
       show(blurred ? '✅ Đã dán (đã che SĐT)' : '✅ Đã dán – không thấy SĐT để che');
+    } catch (e) {
+      show(`⚠️ ${e.message}`);
+    }
+    setTimeout(() => show(label), 5000);
+  }
+
+  // ---------- 📄 In báo giá → xuất PDF (khổ A4, tự chia trang nếu dài) ----------
+  // Dựng file PDF tối giản: mỗi trang 1 ảnh JPEG (cắt từ ảnh chụp báo giá) – không cần thư viện ngoài
+  async function pngToPdf(png) {
+    const img = await createImageBitmap(png);
+    const W = img.width;
+    const pageH = Math.round((W * 842) / 595); // tỉ lệ A4 đứng
+    const pages = [];
+    for (let y = 0; y < img.height; y += pageH) {
+      const h = Math.min(pageH, img.height - y);
+      if (h < pageH * 0.05 && pages.length) break; // phần thừa rất mỏng → bỏ
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = pageH;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff';
+      x.fillRect(0, 0, W, pageH);
+      x.drawImage(img, 0, y, W, h, 0, 0, W, h);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+      pages.push({ data: new Uint8Array(await blob.arrayBuffer()), w: W, h: pageH });
+    }
+    const enc = new TextEncoder();
+    const parts = [];
+    const offs = [];
+    let len = 0;
+    const push = (b) => {
+      const u = typeof b === 'string' ? enc.encode(b) : b;
+      parts.push(u);
+      len += u.length;
+    };
+    push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    const n = pages.length;
+    // đối tượng: 1 Catalog, 2 Pages, rồi mỗi trang 3 đối tượng (Page, Contents, Image)
+    const obj = (id, body) => {
+      offs[id] = len;
+      push(`${id} 0 obj\n`);
+      for (const b of [].concat(body)) push(b);
+      push('\nendobj\n');
+    };
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}] /Count ${n} >>`);
+    pages.forEach((pg, i) => {
+      const pid = 3 + i * 3;
+      const content = `q 595 0 0 842 0 0 cm /Im${i} Do Q`;
+      obj(pid, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im${i} ${pid + 2} 0 R >> >> /Contents ${pid + 1} 0 R >>`);
+      obj(pid + 1, [`<< /Length ${content.length} >>\nstream\n`, content, '\nendstream']);
+      obj(pid + 2, [`<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.data.length} >>\nstream\n`, pg.data, '\nendstream']);
+    });
+    const total = 3 + n * 3;
+    const xref = len;
+    push(`xref\n0 ${total}\n0000000000 65535 f \n`);
+    for (let id = 1; id < total; id++) push(`${String(offs[id]).padStart(10, '0')} 00000 n \n`);
+    push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+    return new Blob(parts, { type: 'application/pdf' });
+  }
+  async function printQuoteToPdf(btn) {
+    const q = renderCtx.quotes?.[currentQuoteId()];
+    const label = btn.textContent;
+    const show = (t) => (btn.textContent = t);
+    try {
+      const { png, blurred } = await captureQuotePng(show);
+      show('📄 Đang tạo PDF…');
+      const pdf = await pngToPdf(png);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(pdf);
+      a.download = `bao-gia-${q?.code || currentQuoteId()}.pdf`;
+      document.body.append(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(a.href);
+        a.remove();
+      }, 5000);
+      show(blurred ? '✅ Đã tải PDF (đã che SĐT)' : '✅ Đã tải PDF');
     } catch (e) {
       show(`⚠️ ${e.message}`);
     }
@@ -3511,6 +3595,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       e.stopPropagation();
       if (!b.textContent.startsWith('⏳') && !b.textContent.startsWith('📸')) printQuoteToComment(b);
     });
+    // 📄 In báo giá → xuất PDF (tải file về máy)
+    const pdfB = document.createElement('span');
+    pdfB.className = 'dg-printpdf';
+    pdfB.textContent = '📄 In báo giá → PDF';
+    pdfB.title = 'In báo giá (không mở hộp thoại in), che SĐT khách, xuất file PDF khổ A4 và tải về máy';
+    pdfB.setAttribute('style', 'display:inline-block;margin-left:8px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#dc2626,#f97316);border-radius:999px;padding:3px 12px');
+    pdfB.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!/^[⏳📸📄]/u.test(pdfB.textContent) || pdfB.textContent === '📄 In báo giá → PDF') printQuoteToPdf(pdfB);
+    });
     // Nút bật / tắt ký tên trên ảnh báo giá (nhớ trên máy)
     const sg = document.createElement('span');
     sg.className = 'dg-signtg';
@@ -3527,12 +3622,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       lsSet('dgSignOn', signOn() ? '0' : '1');
       paintSg();
     });
-    if (h) h.append(b, sg);
+    if (h) h.append(b, pdfB, sg);
     else {
       // không thấy tiêu đề → đặt nút ngay trên ô nhập bình luận
       const holder = document.createElement('div');
       holder.setAttribute('style', 'margin:0 0 6px');
-      holder.append(b, sg);
+      holder.append(b, pdfB, sg);
       const anchor = box.closest('.ant-comment, .ant-form-item, .ant-row') || box.parentElement;
       anchor.parentElement.insertBefore(holder, anchor);
     }
