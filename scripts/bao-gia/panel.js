@@ -3196,14 +3196,39 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         continue;
       }
       const before = cb?.checked;
-      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: tính lại (tề biên)…`;
-      (cb || target).click();
-      await sleep(700);
-      (cb || target).click();
-      await sleep(1500);
-      if (cb && cb.checked !== before) {
-        cb.click(); // giữ đúng trạng thái ban đầu
-        await sleep(800);
+      // "Tổng giá: X đ" trong hộp tính giá: chờ > 0 và đứng yên (CRM tính xong) – chưa có thì bấm tề biên thêm lượt
+      const total = () => Number(((modal.innerText.match(/Tổng giá\s*:?\s*([\d.,]+)/i) || [])[1] || '').replace(/[.,]/g, '')) || 0;
+      const settle = async () => {
+        let last = -1;
+        let same = 0;
+        for (let k = 0; k < 30 && same < 3; k++) {
+          await sleep(300);
+          const v = total();
+          same = v > 0 && v === last ? same + 1 : 0;
+          last = v;
+        }
+        return total();
+      };
+      let priced = 0;
+      for (let attempt = 1; attempt <= 3 && !priced; attempt++) {
+        btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: tính lại (tề biên)${attempt > 1 ? ` – lượt ${attempt}` : ''}…`;
+        (cb || target).click();
+        await sleep(900);
+        (cb || target).click();
+        await sleep(900);
+        if (cb && cb.checked !== before) {
+          cb.click(); // giữ đúng trạng thái ban đầu
+          await sleep(800);
+        }
+        priced = await settle();
+      }
+      if (!priced) {
+        // vẫn chưa ra giá → không lưu giá 0, đóng hộp và báo bỏ qua
+        skip++;
+        ([...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Đóng') || modal.querySelector('.ant-modal-close'))?.click();
+        await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 4000, 200);
+        await sleep(500);
+        continue;
       }
       const save = [...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lưu');
       if (!save) {
@@ -3227,7 +3252,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         await waitFor(() => document.querySelector('.ant-message-success, .ant-notification-notice-success'), 8000, 250);
       }
     }
-    btn.textContent = `✅ Đã cho giá ${ok}/${rows.length} dòng Offset${skip ? ` (bỏ qua ${skip})` : ''}${ok ? ' · đã lưu' : ''}`;
+    btn.textContent = `✅ Đã cho giá ${ok}/${rows.length} dòng Offset${skip ? ` (${skip} dòng chưa ra giá – kiểm tra tay)` : ''}${ok ? ' · đã lưu' : ''}`;
     setTimeout(() => (btn.textContent = '⚙️ Cho giá tự động Offset'), 6000);
   }
   function injectAutoOffset() {
