@@ -3126,6 +3126,104 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     btn.textContent = `✅ Đã cập nhật giấy ${ok}/${rows.length} dòng${skip ? ` (bỏ qua ${skip})` : ''}`;
     setTimeout(() => (btn.textContent = '🔄 Load lại giá giấy mới'), 6000);
   }
+  // ---------- ⚙️ Cho giá tự động Offset: từng dòng Offset → bấm số lượng → "Tính giá offset" → bấm "Cộng tề biên" 2 lần
+  // (CRM tính lại giá theo giấy / máy in mới) → Lưu → dòng kế; xong hết thì bấm "Cập nhật" lưu báo giá ----------
+  async function autoPriceOffset(btn) {
+    const pt = productTable();
+    if (!pt) return (btn.textContent = '⚠️ Không thấy bảng hàng hóa');
+    const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && /offset/i.test(tr.innerText || ''));
+    if (!rows.length) {
+      btn.textContent = '✓ Không có dòng Offset';
+      return setTimeout(() => (btn.textContent = '⚙️ Cho giá tự động Offset'), 3000);
+    }
+    let ok = 0;
+    let skip = 0;
+    for (const [i, tr] of rows.entries()) {
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: mở…`;
+      const qCell = tr.cells[pt.iQty]?.querySelector('button, a') ? tr.cells[pt.iQty] : [...tr.cells].find((td) => td.querySelector('button, a') && /^\s*[\d.]+\s*$/.test(td.innerText || ''));
+      const qb = qCell?.querySelector('button, a') || tr.cells[pt.iQty]?.querySelector('span');
+      if (!qb) {
+        skip++;
+        continue;
+      }
+      qb.click();
+      const modal = await waitFor(() => visModalsTop().find((m) => /Tính giá offset/i.test(m.innerText)), 8000, 200);
+      if (!modal) {
+        skip++;
+        continue;
+      }
+      await sleep(1200);
+      // ô "Cộng tề biên": bấm 2 lần (bỏ rồi chọn lại) để CRM tính lại giá
+      const lbl = [...modal.querySelectorAll('label, span')].find((e) => /^Cộng tề biên$/i.test((e.textContent || '').trim()));
+      const cb = lbl?.closest('label')?.querySelector('input[type="checkbox"]') || lbl?.parentElement?.querySelector('input[type="checkbox"]') || lbl?.closest('.ant-checkbox-wrapper')?.querySelector('input');
+      const target = cb?.closest('.ant-checkbox-wrapper') || cb || lbl;
+      if (!target) {
+        skip++;
+        ([...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Đóng') || modal.querySelector('.ant-modal-close'))?.click();
+        await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 4000, 200);
+        continue;
+      }
+      const before = cb?.checked;
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: tính lại (tề biên)…`;
+      (cb || target).click();
+      await sleep(700);
+      (cb || target).click();
+      await sleep(1500);
+      if (cb && cb.checked !== before) {
+        cb.click(); // giữ đúng trạng thái ban đầu
+        await sleep(800);
+      }
+      const save = [...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lưu');
+      if (!save) {
+        skip++;
+        continue;
+      }
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: lưu…`;
+      save.click();
+      const closed = await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 10000, 200);
+      if (closed) ok++;
+      else skip++;
+      await sleep(700);
+    }
+    // xong các dòng → bấm "Cập nhật" (góc phải trên) lưu báo giá
+    if (ok) {
+      btn.textContent = '⏳ Lưu báo giá (Cập nhật)…';
+      const upd = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Cập nhật' && !b.closest('.ant-modal-wrap'));
+      if (upd) {
+        upd.click();
+        await confirmIfAsked();
+        await waitFor(() => document.querySelector('.ant-message-success, .ant-notification-notice-success'), 8000, 250);
+      }
+    }
+    btn.textContent = `✅ Đã cho giá ${ok}/${rows.length} dòng Offset${skip ? ` (bỏ qua ${skip})` : ''}${ok ? ' · đã lưu' : ''}`;
+    setTimeout(() => (btn.textContent = '⚙️ Cho giá tự động Offset'), 6000);
+  }
+  function injectAutoOffset() {
+    if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-auto-offset')) return;
+    const anchor = document.querySelector('.dg-paper-reload');
+    if (!anchor) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ant-btn dg-auto-offset';
+    b.textContent = '⚙️ Cho giá tự động Offset';
+    b.title = 'Từng dòng Offset: bấm số lượng → bấm "Cộng tề biên" 2 lần để tính lại giá → Lưu; xong hết bấm "Cập nhật" lưu báo giá';
+    b.setAttribute('style', 'margin-left:8px;height:32px;padding:0 14px;border-radius:6px;font-weight:700;cursor:pointer;color:#fff;border:0;background:linear-gradient(90deg,#9333ea,#4f46e5);');
+    b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.dataset.busy) return;
+      b.dataset.busy = '1';
+      try {
+        await autoPriceOffset(b);
+      } catch (err) {
+        b.textContent = `⚠️ ${err.message}`;
+      } finally {
+        delete b.dataset.busy;
+      }
+    });
+    anchor.after(b);
+  }
+  if (IS_TOP) setInterval(() => injectAutoOffset(), 2000);
   function injectPaperReload() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-paper-reload')) return;
     const off = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Offset' && b.closest('.ant-btn, button'));
