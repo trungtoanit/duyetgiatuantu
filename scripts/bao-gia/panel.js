@@ -2544,11 +2544,64 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- ±1% giá thực bán (bảng sản phẩm của báo giá) ----------
   // Mỗi dòng: nút −1% / +1% dưới ô "Giá thực bán" → điền giá mới như gõ tay (CRM tự tính lại thành tiền).
   // Không tự lưu: quản lý xem lại rồi bấm "Cập nhật".
+  // ⚙️ Cài đặt nút chỉnh Giá thực bán (kv 'nudgeCfg', đồng bộ): các mức %, số tiền nhanh, làm tròn, ẩn/hiện nút
+  const NUDGE_DEF = { steps: [1], amounts: [100, 200, 300, 500, 1000, -100, -200, -500], round: 0, showAmt: true, showLast: true };
+  const nudgeCfg = () => ({ ...NUDGE_DEF, ...(state.nudgeCfg || {}) });
+  if (IS_TOP) kvGet('nudgeCfg').then((v) => (state.nudgeCfg = v.main || null)).catch(() => {});
+  const roundPrice = (v) => {
+    const r = Number(nudgeCfg().round) || 0;
+    return r > 0 ? Math.max(0, Math.round(v / r) * r) : Math.round(v);
+  };
+  function openNudgeCfg() {
+    document.getElementById('dg-nudge-cfg')?.remove();
+    const c = nudgeCfg();
+    const m = document.createElement('div');
+    m.id = 'dg-nudge-cfg';
+    const row = (label, html, hint = '') => `<label style="display:grid;gap:4px;font-size:13px"><b>${label}</b>${html}${hint ? `<span style="font-size:11.5px;color:#64748b">${hint}</span>` : ''}</label>`;
+    const inp = 'height:34px;border:1px solid #cbd5e1;border-radius:8px;padding:0 10px;font:inherit;font-size:14px';
+    m.innerHTML = `<div style="position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;font-family:inherit">
+      <div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.25);width:min(460px,94vw);overflow:hidden">
+        <div style="padding:12px 16px;background:linear-gradient(90deg,#2563eb,#7c3aed);color:#fff;font-weight:800;font-size:15px">⚙️ Cài đặt nút chỉnh Giá thực bán</div>
+        <div style="padding:14px 16px;display:grid;gap:12px">
+          ${row('Các mức % tăng / giảm', `<input data-k="steps" value="${esc(c.steps.join(', '))}" placeholder="vd. 1, 2, 5" style="${inp}">`, 'Mỗi mức tạo 2 nút −x% và +x%. Cách nhau bằng dấu phẩy.')}
+          ${row('Số tiền cộng nhanh (nút ＋đ)', `<input data-k="amounts" value="${esc(c.amounts.join(', '))}" placeholder="vd. 100, 200, 500, -100" style="${inp}">`, 'Các nút chọn nhanh trong hộp ＋đ; số âm = trừ bớt.')}
+          ${row('Làm tròn giá sau khi chỉnh', `<select data-k="round" style="${inp}">${[[0, 'Không làm tròn'], [10, 'Tròn 10đ'], [50, 'Tròn 50đ'], [100, 'Tròn 100đ'], [500, 'Tròn 500đ'], [1000, 'Tròn 1.000đ']].map(([v, l]) => `<option value="${v}" ${Number(c.round) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`, 'Áp dụng cho nút % và ＋đ.')}
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" data-k="showAmt" ${c.showAmt ? 'checked' : ''}> Hiện nút <b>＋đ</b></label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" data-k="showLast" ${c.showLast ? 'checked' : ''}> Hiện nút <b>⟲ Gần nhất</b></label>
+          <div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px"><button data-a="reset" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 12px;color:#64748b">↺ Mặc định</button>
+            <span style="display:flex;gap:8px"><button data-a="x" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 14px">Huỷ</button><button data-a="ok" style="cursor:pointer;border:0;background:#2563eb;color:#fff;border-radius:8px;padding:6px 16px;font-weight:700">💾 Lưu</button></span></div>
+        </div></div></div>`;
+    document.body.append(m);
+    const nums = (txt, allowNeg) => [...new Set(String(txt).split(/[,;\s]+/).map((x) => Number(x.replace(',', '.'))).filter((x) => Number.isFinite(x) && x !== 0 && (allowNeg || x > 0)))];
+    m.addEventListener('click', async (e) => {
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (!a) return;
+      if (a === 'x') return m.remove();
+      let v;
+      if (a === 'reset') v = { ...NUDGE_DEF };
+      else {
+        const g = (k) => m.querySelector(`[data-k="${k}"]`);
+        v = {
+          steps: nums(g('steps').value, false).slice(0, 4).sort((x, y) => x - y),
+          amounts: nums(g('amounts').value, true).slice(0, 12),
+          round: Number(g('round').value) || 0,
+          showAmt: g('showAmt').checked,
+          showLast: g('showLast').checked,
+        };
+        if (!v.steps.length) v.steps = [1];
+      }
+      state.nudgeCfg = { ...v, at: Date.now(), by: meName };
+      await kvMerge('nudgeCfg', { main: state.nudgeCfg }).catch(() => {});
+      m.remove();
+      document.querySelectorAll('.dg-nudge-head').forEach((x) => x.remove()); // vẽ lại các nút theo cài đặt mới
+      injectPriceNudges();
+    });
+  }
   function nudgePrice(input, pct) {
     const raw = String(input.value || '');
     const n = Number(raw.replace(/[^\d]/g, ''));
     if (!n) return;
-    const next = Math.max(0, Math.round(n * (1 + pct / 100)));
+    const next = roundPrice(Math.max(0, n * (1 + pct / 100)));
     const text = /[.,]/.test(raw) ? next.toLocaleString('vi-VN') : String(next);
     input.focus();
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
@@ -2592,9 +2645,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const idx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
       if (idx < 0) continue;
       const th = heads[idx];
-      if (th.querySelector('.dg-nudge-head')) continue;
+      const cfg = nudgeCfg();
+      const sig = JSON.stringify([cfg.steps, cfg.showAmt, cfg.showLast]);
+      const old = th.querySelector('.dg-nudge-head');
+      if (old && old.dataset.sig === sig) continue;
+      old?.remove();
       const box = document.createElement('span');
       box.className = 'dg-nudge-head';
+      box.dataset.sig = sig;
       // nằm riêng 1 hàng dưới chữ "Giá thực bán", các nút không bị bẻ chữ
       box.setAttribute('style', 'display:flex;flex-wrap:wrap;justify-content:center;gap:3px;margin-top:3px;');
       if (!document.getElementById('dg-nudge-css')) {
@@ -2606,15 +2664,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 .dg-nudge-head .m{background:#fee2e2!important;color:#b91c1c!important;border-color:#fecaca!important}
 .dg-nudge-head .p{background:#dcfce7!important;color:#15803d!important;border-color:#bbf7d0!important}
 .dg-nudge-head .d{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}
-.dg-nudge-head .g{background:#fffbeb!important;color:#b45309!important;border-color:#fde68a!important}`;
+.dg-nudge-head .g{background:#fffbeb!important;color:#b45309!important;border-color:#fde68a!important}
+.dg-nudge-head .s{background:#f8fafc!important;color:#475569!important;border-color:#e2e8f0!important;padding:0 5px!important}`;
         document.head.append(st);
       }
       const btns = [];
-      for (const [label, pct, bg] of [['−1%', -1, '#fee2e2;color:#b91c1c;border-color:#fecaca'], ['+1%', 1, '#dcfce7;color:#15803d;border-color:#bbf7d0']]) {
+      const fmtP = (x) => String(x).replace('.', ',');
+      for (const [label, pct] of [...cfg.steps.map((x) => [`−${fmtP(x)}%`, -x]), ...cfg.steps.map((x) => [`+${fmtP(x)}%`, x])]) {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
-        b.title = `${pct > 0 ? 'Tăng' : 'Giảm'} 1% giá thực bán của TẤT CẢ các dòng (chưa lưu – bấm Cập nhật để lưu)`;
+        b.title = `${pct > 0 ? 'Tăng' : 'Giảm'} ${fmtP(Math.abs(pct))}% giá thực bán của TẤT CẢ các dòng (chưa lưu – bấm Cập nhật để lưu)`;
         b.className = pct > 0 ? 'p' : 'm';
         // không để bấm nút làm bảng sắp xếp theo cột
         for (const ev of ['mousedown', 'mouseup', 'pointerdown']) b.addEventListener(ev, (e) => e.stopPropagation());
@@ -2638,7 +2698,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         e.stopPropagation();
         openAddAmount(t, idx, [...btns, plus]);
       });
-      box.append(plus);
+      if (cfg.showAmt) box.append(plus);
       // ⟲ Giá gần nhất: lấy cột "Giá gần nhất" của từng dòng điền vào "Giá thực bán" (dòng giá gần nhất = 0 thì bỏ qua)
       const last = document.createElement('button');
       last.type = 'button';
@@ -2672,7 +2732,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         last.textContent = `✓ ${n} dòng`;
         setTimeout(() => (last.textContent = '⟲ Gần nhất'), 2500);
       });
-      box.append(last);
+      if (cfg.showLast) box.append(last);
+      // ⚙️ cài đặt các nút
+      const gear = document.createElement('button');
+      gear.type = 'button';
+      gear.textContent = '⚙️';
+      gear.title = 'Cài đặt các nút chỉnh giá (mức %, số tiền nhanh, làm tròn, ẩn/hiện nút)';
+      gear.className = 's';
+      for (const ev of ['mousedown', 'mouseup', 'pointerdown']) gear.addEventListener(ev, (e) => e.stopPropagation());
+      gear.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openNudgeCfg();
+      });
+      box.append(gear);
       th.append(box);
     }
   }
@@ -2685,7 +2758,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.25);padding:18px 20px;width:340px">
         <div style="font-weight:800;font-size:15px;margin-bottom:10px">＋ Cộng thêm vào Giá thực bán</div>
         <div style="display:flex;align-items:center;gap:6px"><input class="amt" inputmode="numeric" placeholder="vd. 200" style="flex:1;height:36px;border:1px solid #cbd5e1;border-radius:8px;padding:0 10px;font-size:15px;font-weight:700;text-align:right"><b>đ</b></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${[100, 200, 300, 500, 1000, -100, -200, -500].map((v) => `<button data-v="${v}" style="cursor:pointer;border:1px solid ${v > 0 ? '#bbf7d0' : '#fecaca'};background:${v > 0 ? '#f0fdf4' : '#fef2f2'};color:${v > 0 ? '#15803d' : '#b91c1c'};border-radius:999px;padding:2px 10px;font-weight:700;font-size:12px">${v > 0 ? '+' : ''}${v.toLocaleString('vi-VN')}</button>`).join('')}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${nudgeCfg().amounts.map((v) => `<button data-v="${v}" style="cursor:pointer;border:1px solid ${v > 0 ? '#bbf7d0' : '#fecaca'};background:${v > 0 ? '#f0fdf4' : '#fef2f2'};color:${v > 0 ? '#15803d' : '#b91c1c'};border-radius:999px;padding:2px 10px;font-weight:700;font-size:12px">${v > 0 ? '+' : ''}${v.toLocaleString('vi-VN')}</button>`).join('')}</div>
         <div style="font-size:12px;color:#64748b;margin-bottom:12px">Áp cho tất cả các dòng của báo giá (số âm = trừ bớt). Chưa lưu – xem lại rồi bấm "Cập nhật".</div>
         <div style="display:flex;justify-content:flex-end;gap:8px"><button data-a="x" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 14px">Huỷ</button><button data-a="ok" style="cursor:pointer;border:0;background:#2563eb;color:#fff;border-radius:8px;padding:6px 16px;font-weight:700">Áp dụng</button></div>
       </div></div>`;
@@ -2708,7 +2781,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           if (!cell) continue;
           const cur = Number(String(cell.querySelector('input')?.value || cell.innerText).replace(/[^\d]/g, '')) || 0;
           if (!cur) continue;
-          await setCellPrice(cell, Math.max(0, cur + amt));
+          await setCellPrice(cell, roundPrice(Math.max(0, cur + amt)));
           await sleep(150);
         }
       } finally {

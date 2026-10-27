@@ -1,5 +1,5 @@
 {
-  "version": "1.2.395",
+  "version": "1.2.396",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -88,8 +88,9 @@
     "hotPinned",
     "notifRead",
     "notifs",
-    "popupPrefs",
+    "nudgeCfg",
     "perms",
+    "popupPrefs",
     "qbank",
     "quickLearn",
     "reports",
