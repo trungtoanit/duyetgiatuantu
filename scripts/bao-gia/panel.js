@@ -2733,19 +2733,46 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         setTimeout(() => (last.textContent = '⟲ Gần nhất'), 2500);
       });
       if (cfg.showLast) box.append(last);
-      // ⚙️ cài đặt các nút
+      // Gọn: tiêu đề chỉ còn 1 nút "⚙️ Chỉnh giá" – bấm mở bảng các thao tác (−x% / +x% / ＋đ / ⟲ Gần nhất) + Cài đặt
+      const actions = [...box.children];
+      actions.forEach((b) => b.remove());
+      const menu = document.createElement('span');
+      menu.className = 'dg-nudge-menu';
+      menu.setAttribute('style', 'display:none;position:absolute;z-index:50;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.18);padding:8px;gap:5px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:260px');
+      actions.forEach((b) => menu.append(b));
+      const cfgBtn = document.createElement('button');
+      cfgBtn.type = 'button';
+      cfgBtn.textContent = '⚙️ Cài đặt';
+      cfgBtn.title = 'Cài đặt các thao tác (mức %, số tiền nhanh, làm tròn, ẩn/hiện)';
+      cfgBtn.className = 's';
+      for (const ev of ['mousedown', 'mouseup', 'pointerdown']) cfgBtn.addEventListener(ev, (e) => e.stopPropagation());
+      cfgBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        menu.style.display = 'none';
+        openNudgeCfg();
+      });
+      menu.append(cfgBtn);
       const gear = document.createElement('button');
       gear.type = 'button';
-      gear.textContent = '⚙️';
-      gear.title = 'Cài đặt các nút chỉnh giá (mức %, số tiền nhanh, làm tròn, ẩn/hiện nút)';
+      gear.textContent = '⚙️ Chỉnh giá';
+      gear.title = 'Chỉnh Giá thực bán cho tất cả các dòng: −% / +% / cộng tiền / giá gần nhất';
       gear.className = 's';
       for (const ev of ['mousedown', 'mouseup', 'pointerdown']) gear.addEventListener(ev, (e) => e.stopPropagation());
       gear.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openNudgeCfg();
+        menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
       });
-      box.append(gear);
+      // bấm 1 thao tác % / Gần nhất → đóng bảng (＋đ tự mở hộp nhập)
+      menu.addEventListener('click', (e) => {
+        if (e.target.closest('button') && e.target.closest('button') !== cfgBtn) setTimeout(() => (menu.style.display = 'none'), 50);
+      });
+      document.addEventListener('click', (e) => {
+        if (!box.contains(e.target)) menu.style.display = 'none';
+      });
+      box.style.position = 'relative';
+      box.append(gear, menu);
       th.append(box);
     }
   }
