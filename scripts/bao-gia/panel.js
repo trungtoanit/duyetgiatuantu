@@ -3183,7 +3183,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && isOldPaper(paperCell(tr, pt.iKc)));
     if (!rows.length) {
       btn.textContent = '✓ Không có giấy cũ';
-      return setTimeout(() => (btn.textContent = '🔄 Load lại giá giấy mới'), 3000);
+      return setTimeout(() => (btn.textContent = '🔄 Load giá'), 3000);
     }
     let ok = 0;
     let skip = 0;
@@ -3264,7 +3264,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       await sleep(600);
     }
     btn.textContent = `✅ Đã cập nhật giấy ${ok}/${rows.length} dòng${skip ? ` (bỏ qua ${skip})` : ''}`;
-    setTimeout(() => (btn.textContent = '🔄 Load lại giá giấy mới'), 6000);
+    setTimeout(() => (btn.textContent = '🔄 Load giá'), 6000);
   }
   // ---------- ⚙️ Cho giá tự động Offset: từng dòng Offset → bấm số lượng → "Tính giá offset" → bấm "Cộng tề biên" 2 lần
   // (CRM tính lại giá theo giấy / máy in mới) → Lưu → dòng kế; xong hết thì bấm "Cập nhật" lưu báo giá ----------
@@ -3274,7 +3274,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && /offset/i.test(tr.innerText || ''));
     if (!rows.length) {
       btn.textContent = '✓ Không có dòng Offset';
-      return setTimeout(() => (btn.textContent = '⚙️ Cho giá tự động Offset'), 3000);
+      return setTimeout(() => (btn.textContent = '⚙️ Giá offset TĐ'), 3000);
     }
     let ok = 0;
     let skip = 0;
@@ -3361,7 +3361,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
     }
     btn.textContent = `✅ Đã cho giá ${ok}/${rows.length} dòng Offset${skip ? ` (${skip} dòng chưa ra giá – kiểm tra tay)` : ''}${ok ? ' · đã lưu' : ''}`;
-    setTimeout(() => (btn.textContent = '⚙️ Cho giá tự động Offset'), 6000);
+    setTimeout(() => (btn.textContent = '⚙️ Giá offset TĐ'), 6000);
   }
   function injectAutoOffset() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-auto-offset')) return;
@@ -3370,7 +3370,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'ant-btn dg-auto-offset';
-    b.textContent = '⚙️ Cho giá tự động Offset';
+    b.textContent = '⚙️ Giá offset TĐ';
     b.title = 'Từng dòng Offset: bấm số lượng → bấm "Cộng tề biên" 2 lần để tính lại giá → Lưu; xong hết bấm "Cập nhật" lưu báo giá';
     b.setAttribute('style', 'margin-left:8px;height:32px;padding:0 14px;border-radius:6px;font-weight:700;cursor:pointer;color:#fff;border:0;background:linear-gradient(90deg,#9333ea,#4f46e5);');
     b.addEventListener('click', async (e) => {
@@ -3396,7 +3396,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'ant-btn dg-paper-reload';
-    b.textContent = '🔄 Load lại giá giấy mới';
+    b.textContent = '🔄 Load giá';
     b.title = 'Dòng có ⚠️ (giấy cũ chưa cập nhật): bấm số lượng → Đồng bộ giá carton mới → Lưu, lần lượt từng dòng';
     b.setAttribute('style', 'margin-left:8px;height:32px;padding:0 14px;border-radius:6px;font-weight:700;cursor:pointer;color:#fff;border:0;background:linear-gradient(90deg,#f59e0b,#ea580c);');
     b.addEventListener('click', async (e) => {
