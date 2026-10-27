@@ -2985,7 +2985,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
       if (!o.hist?.length) lines.push('(cộng trước khi có ghi chi tiết – không rõ cách tính)');
       if (rec.total) lines.push('', `Tổng chi phí đã cộng cho báo giá: ${f(rec.total)}đ`);
-      cell.title = lines.join('\n');
+      cell.dataset.dgCpTip = lines.join('\n');
+      cell.removeAttribute('title');
       if (!document.getElementById('dg-cp-css')) {
         const st = document.createElement('style');
         st.id = 'dg-cp-css';
@@ -2995,6 +2996,29 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     });
   }
   if (IS_TOP) setInterval(() => injectCostBadges().catch(() => {}), 2000);
+  // Hộp giải thích khi rê chuột vào ô có nhãn "+x CP" (ngoài ô nhập giá) – hộp tự vẽ, không phụ thuộc title của trình duyệt
+  if (IS_TOP) {
+    let tip = null;
+    document.addEventListener('mousemove', (e) => {
+      const td = e.target.closest?.('td[data-dg-cp]');
+      const show = td && !e.target.closest('input') && td.dataset.dgCpTip;
+      if (!show) {
+        if (tip) tip.style.display = 'none';
+        return;
+      }
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.setAttribute('style', 'position:fixed;z-index:2147483647;max-width:440px;background:#0f172a;color:#f8fafc;font-size:12px;line-height:1.5;padding:8px 10px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.3);white-space:pre-wrap;pointer-events:none;font-family:inherit');
+        document.body.append(tip);
+      }
+      tip.textContent = td.dataset.dgCpTip;
+      tip.style.display = 'block';
+      const w = tip.offsetWidth;
+      const h = tip.offsetHeight;
+      tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, e.clientX - w + 20))}px`;
+      tip.style.top = `${e.clientY + 18 + h > innerHeight ? e.clientY - h - 12 : e.clientY + 18}px`;
+    });
+  }
   // Hộp nhập số tiền cộng thêm (âm = trừ bớt) → áp cho mọi dòng
   function openAddAmount(t, idx, btns) {
     document.getElementById('dg-addamt')?.remove();
