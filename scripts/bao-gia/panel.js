@@ -2907,17 +2907,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cell = tr.cells[idx];
       const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
       const o = rec?.rows?.find((x) => x.i === i && x.name === name) || rec?.rows?.find((x) => x.name === name);
-      let b = cell.querySelector('.dg-costadd');
-      if (!o?.add) return b?.remove();
-      const txt = `${o.add > 0 ? '+' : '−'}${Math.abs(o.add).toLocaleString('vi-VN')}`;
-      if (!b) {
-        b = document.createElement('span');
-        b.className = 'dg-costadd';
-        b.setAttribute('style', 'display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:#ecfdf5;border:1px solid #a7f3d0;color:#047857;font-size:10.5px;font-weight:800;white-space:nowrap;vertical-align:middle');
-        cell.append(b);
+      // vẽ bằng CSS ::after (thuộc tính data-dg-cp) → không lẫn vào chữ của ô (các chức năng đọc giá không bị sai)
+      if (!o?.add) {
+        if (cell.hasAttribute('data-dg-cp')) cell.removeAttribute('data-dg-cp');
+        return;
       }
-      if (b.textContent !== `${txt} CP`) b.textContent = `${txt} CP`;
-      b.title = `Đã cộng chi phí vào đơn giá dòng này: ${txt}đ/cái${rec.total ? ` (tổng chi phí đã cộng ${Number(rec.total).toLocaleString('vi-VN')}đ)` : ''}`;
+      const txt = `${o.add > 0 ? '+' : '−'}${Math.abs(o.add).toLocaleString('vi-VN')} CP`;
+      if (cell.getAttribute('data-dg-cp') !== txt) cell.setAttribute('data-dg-cp', txt);
+      cell.title = `Đã cộng chi phí vào đơn giá dòng này: ${txt.replace(' CP', '')}đ/cái${rec.total ? ` (tổng chi phí đã cộng ${Number(rec.total).toLocaleString('vi-VN')}đ)` : ''}`;
+      if (!document.getElementById('dg-cp-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-cp-css';
+        st.textContent = 'td[data-dg-cp]{white-space:nowrap}td[data-dg-cp]::after{content:attr(data-dg-cp);display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:#ecfdf5;border:1px solid #a7f3d0;color:#047857;font-size:10.5px;font-weight:800;vertical-align:middle}';
+        document.head.append(st);
+      }
     });
   }
   if (IS_TOP) setInterval(() => injectCostBadges().catch(() => {}), 2000);
