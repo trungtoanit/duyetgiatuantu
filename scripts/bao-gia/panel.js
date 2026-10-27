@@ -7302,7 +7302,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Nhận diện bình luận "khách cho giá" / "làm được không" (khách đưa giá mục tiêu, hỏi bên mình làm được không)
   // Gồm: "làm (giá này) được không", "là được giá này không", "deal", "khách cho/báo/trả giá…", "giá mục tiêu"
   const TARGET_PRICE_RE =
-    /(làm|lam|là|la)\s*((giá|gia)\s*(này|nay|đó|do|vậy|vay)\s*)?(được|duoc|đc|dc)\s*((giá|gia)\s*(này|nay|đó|do)\s*)?(không|khong|ko|k)\b|\bdeal\b|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot|trả|tra)\s*(giá|gia)(?![\p{L}])|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/iu;
+    /(làm|lam|là|la)\s*((giá|gia)\s*(này|nay|đó|do|vậy|vay)\s*)?(được|duoc|đc|dc)\s*((giá|gia)\s*(này|nay|đó|do)\s*)?(không|khong|ko|k)\b|(khách|kh|khach)\s*(hàng\s*)?deal|\bdeal\s*(giá|gia|xuống|xuong|lại\s*giá)(?![\p{L}])|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot|trả|tra)\s*(giá|gia)(?![\p{L}])|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/iu;
   function targetPriceInfo(c) {
     let hit = null;
     const walk = (t) => {
@@ -7315,7 +7315,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     (c?.threads || []).forEach(walk);
     if (!hit) return null;
     // Mức giá nếu có: "3.500đ", "3500 đ/thùng", "3,5k", "3.500/thùng"
-    const m = hit.text.match(/(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?\s*k\b|\d{3,})\s*(đ|vnđ|vnd|\/\s*(thùng|hộp|cái|tấm))?/i);
+    // bỏ ngày / tháng / năm ("05/2026", "01/12/2025", "năm 2026") và số % (chiết khấu) trước khi tìm mức giá
+    const clean = hit.text
+      .replace(/\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4}/g, ' ')
+      .replace(/\d{1,2}\s*\/\s*(19|20)\d{2}/g, ' ')
+      .replace(/(năm|tháng|nam|thang)\s*\d+/gi, ' ')
+      .replace(/\d+(?:[.,]\d+)?\s*%/g, ' ');
+    const m = clean.match(/(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?\s*k\b|(?!(?:19|20)\d{2}(?!\s*(?:đ|vnđ|vnd)))\d{3,})\s*(đ|vnđ|vnd|\/\s*(thùng|hộp|cái|tấm))?/i);
     return { at: hit.createdAt, by: hit.staff?.name, text: hit.text, price: m ? m[0].trim() : '' };
   }
   const targetTag = (c) => {
