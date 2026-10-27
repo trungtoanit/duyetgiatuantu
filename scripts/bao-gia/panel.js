@@ -2733,6 +2733,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         setTimeout(() => (last.textContent = '⟲ Gần nhất'), 2500);
       });
       if (cfg.showLast) box.append(last);
+      // 💸 Cộng chi phí: chi phí cố định cộng vào đơn giá (chia theo số lượng của dòng)
+      const cost = document.createElement('button');
+      cost.type = 'button';
+      cost.textContent = '💸 Cộng chi phí';
+      cost.title = 'Cộng 1 khoản chi phí (vd. vận chuyển, khuôn) vào đơn giá: chia theo số lượng của từng dòng';
+      cost.className = 'd';
+      for (const ev of ['mousedown', 'mouseup', 'pointerdown']) cost.addEventListener(ev, (e) => e.stopPropagation());
+      cost.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openAddCost(t, idx, [...btns, plus, last, cost]);
+      });
+      box.append(cost);
       // Gọn: tiêu đề chỉ còn 1 nút "⚙️ Chỉnh giá" – bấm mở bảng các thao tác (−x% / +x% / ＋đ / ⟲ Gần nhất) + Cài đặt
       const actions = [...box.children];
       actions.forEach((b) => b.remove());
@@ -2781,6 +2794,89 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       box.append(gear);
       th.append(box);
     }
+  }
+  // 💸 Cộng chi phí cố định vào đơn giá:
+  //  1. Mỗi dòng cộng đủ chi phí: đơn giá dòng += chi phí ÷ số lượng dòng (vd. 1.000.000 ÷ 1.000 cái = +1.000đ/cái)
+  //  2. Chia chi phí cho cả báo giá theo thành tiền từng dòng: phần của dòng ÷ số lượng dòng
+  function openAddCost(t, idx, btns) {
+    document.getElementById('dg-addcost')?.remove();
+    const heads = [...t.querySelectorAll('thead th')];
+    const qIdx = heads.findIndex((th) => /^Số lượng$/i.test(th.innerText.trim()));
+    const rows = [...t.querySelectorAll('.ant-table-tbody tr')]
+      .filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.cells[idx])
+      .map((tr, i) => {
+        const cell = tr.cells[idx];
+        const price = Number(String(cell.querySelector('input')?.value || cell.innerText).replace(/[^\d]/g, '')) || 0;
+        const qty = qIdx >= 0 ? Number(String(tr.cells[qIdx]?.querySelector('input')?.value || tr.cells[qIdx]?.innerText || '').replace(/[^\d]/g, '')) || 0 : 0;
+        const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
+        return { tr, cell, price, qty, name, i };
+      })
+      .filter((r) => r.price && r.qty);
+    const m = document.createElement('div');
+    m.id = 'dg-addcost';
+    m.innerHTML = `<div style="position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;font-family:inherit">
+      <div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.25);width:min(560px,94vw);overflow:hidden">
+        <div style="padding:12px 16px;background:linear-gradient(90deg,#2563eb,#7c3aed);color:#fff;font-weight:800;font-size:15px">💸 Cộng chi phí vào đơn giá</div>
+        <div style="padding:14px 16px;display:grid;gap:10px;font-size:13px">
+          <div style="display:flex;align-items:center;gap:6px"><b style="white-space:nowrap">Chi phí</b><input class="amt" inputmode="numeric" placeholder="vd. 1.000.000" style="flex:1;height:36px;border:1px solid #cbd5e1;border-radius:8px;padding:0 10px;font-size:15px;font-weight:700;text-align:right"><b>đ</b></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${[500000, 1000000, 2000000, 3000000, 5000000].map((v) => `<button data-v="${v}" style="cursor:pointer;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:2px 10px;font-weight:700;font-size:12px">${v.toLocaleString('vi-VN')}</button>`).join('')}</div>
+          <label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer"><input type="radio" name="cm" value="each" checked style="margin-top:3px"><span><b>1. Mỗi dòng cộng đủ chi phí</b><br><span style="color:#64748b">Đơn giá dòng + chi phí ÷ số lượng dòng (vd. 1.000.000 ÷ 1.000 cái = +1.000đ/cái)</span></span></label>
+          <label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer"><input type="radio" name="cm" value="split" style="margin-top:3px"><span><b>2. Chia chi phí cho cả báo giá</b><br><span style="color:#64748b">Tổng chi phí chia theo thành tiền từng dòng, rồi ÷ số lượng dòng</span></span></label>
+          <div class="pv" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;max-height:220px;overflow:auto"></div>
+          <div style="font-size:12px;color:#64748b">Chưa lưu – xem lại rồi bấm "Cập nhật".</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><button data-a="x" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 14px">Huỷ</button><button data-a="ok" style="cursor:pointer;border:0;background:#2563eb;color:#fff;border-radius:8px;padding:6px 16px;font-weight:700">Áp dụng</button></div>
+        </div></div></div>`;
+    document.body.append(m);
+    const inp = m.querySelector('.amt');
+    const amt = () => Number(inp.value.replace(/[^\d]/g, '')) || 0;
+    const mode = () => m.querySelector('input[name="cm"]:checked')?.value || 'each';
+    const plan = () => {
+      const c = amt();
+      const tot = rows.reduce((a, r) => a + r.price * r.qty, 0) || 1;
+      return rows.map((r) => {
+        const share = mode() === 'each' ? c : (c * r.price * r.qty) / tot;
+        const add = Math.ceil(share / r.qty);
+        return { ...r, add, next: roundPrice(r.price + add) };
+      });
+    };
+    const preview = () => {
+      const pv = m.querySelector('.pv');
+      if (!rows.length) return (pv.innerHTML = '<span style="color:#b91c1c">Không đọc được giá / số lượng các dòng.</span>');
+      const p = plan();
+      const extra = p.reduce((a, r) => a + (r.next - r.price) * r.qty, 0);
+      pv.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">${p
+        .map((r) => `<tr><td style="padding:2px 4px;color:#64748b">${r.i + 1}</td><td style="padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">${esc(r.name)}</td><td style="padding:2px 4px;text-align:right">${r.qty.toLocaleString('vi-VN')}</td><td style="padding:2px 4px;text-align:right">${r.price.toLocaleString('vi-VN')}</td><td style="padding:2px 4px;text-align:right;color:#15803d;font-weight:700">+${r.add.toLocaleString('vi-VN')}</td><td style="padding:2px 4px;text-align:right;font-weight:800">${r.next.toLocaleString('vi-VN')}</td></tr>`)
+        .join('')}</table><div style="margin-top:4px;text-align:right;font-weight:700">Tổng cộng thêm vào báo giá: <span style="color:#15803d">${extra.toLocaleString('vi-VN')}đ</span></div>`;
+    };
+    inp.focus();
+    preview();
+    m.addEventListener('input', preview);
+    m.addEventListener('change', preview);
+    m.addEventListener('click', async (e) => {
+      const v = e.target.closest('[data-v]')?.dataset.v;
+      if (v) {
+        inp.value = Number(v).toLocaleString('vi-VN');
+        return preview();
+      }
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a === 'x') return m.remove();
+      if (a !== 'ok') return;
+      if (!amt() || !rows.length) return inp.focus();
+      const p = plan();
+      m.remove();
+      if (nudging) return;
+      nudging = true;
+      btns.forEach((b) => (b.disabled = true));
+      try {
+        for (const r of p) {
+          await setCellPrice(r.cell, r.next);
+          await sleep(150);
+        }
+      } finally {
+        nudging = false;
+        btns.forEach((b) => (b.disabled = false));
+      }
+    });
   }
   // Hộp nhập số tiền cộng thêm (âm = trừ bớt) → áp cho mọi dòng
   function openAddAmount(t, idx, btns) {
