@@ -3595,17 +3595,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       e.stopPropagation();
       if (!b.textContent.startsWith('⏳') && !b.textContent.startsWith('📸')) printQuoteToComment(b);
     });
-    // 📄 In báo giá → xuất PDF (tải file về máy)
-    const pdfB = document.createElement('span');
-    pdfB.className = 'dg-printpdf';
-    pdfB.textContent = '📄 In báo giá → PDF';
-    pdfB.title = 'In báo giá (không mở hộp thoại in), che SĐT khách, xuất file PDF khổ A4 và tải về máy';
-    pdfB.setAttribute('style', 'display:inline-block;margin-left:8px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#dc2626,#f97316);border-radius:999px;padding:3px 12px');
-    pdfB.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!/^[⏳📸📄]/u.test(pdfB.textContent) || pdfB.textContent === '📄 In báo giá → PDF') printQuoteToPdf(pdfB);
-    });
     // Nút bật / tắt ký tên trên ảnh báo giá (nhớ trên máy)
     const sg = document.createElement('span');
     sg.className = 'dg-signtg';
@@ -3622,17 +3611,37 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       lsSet('dgSignOn', signOn() ? '0' : '1');
       paintSg();
     });
-    if (h) h.append(b, pdfB, sg);
+    if (h) h.append(b, sg);
     else {
       // không thấy tiêu đề → đặt nút ngay trên ô nhập bình luận
       const holder = document.createElement('div');
       holder.setAttribute('style', 'margin:0 0 6px');
-      holder.append(b, pdfB, sg);
+      holder.append(b, sg);
       const anchor = box.closest('.ant-comment, .ant-form-item, .ant-row') || box.parentElement;
       anchor.parentElement.insertBefore(holder, anchor);
     }
   }
   if (IS_TOP) setInterval(() => injectPrintButton(), 2000);
+  // Nút "📄 In PDF" (màu cam) ngay sau nút "In" trên thanh nút phía trên của báo giá
+  function injectPdfTopButton() {
+    if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-pdf-top')) return;
+    const inBtn = [...document.querySelectorAll('button')].find((x) => x.innerText.trim() === 'In' && !x.closest('.ant-modal-wrap, #dg-root'));
+    if (!inBtn) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `${inBtn.className} dg-pdf-top`;
+    const label = '📄 In PDF';
+    b.textContent = label;
+    b.title = 'In báo giá (không mở hộp thoại in), che SĐT khách, xuất file PDF khổ A4 và tải về máy';
+    b.setAttribute('style', 'margin-left:8px;background:linear-gradient(90deg,#f97316,#ea580c);border-color:#ea580c;color:#fff;font-weight:700');
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.textContent === label) printQuoteToPdf(b);
+    });
+    inBtn.after(b);
+  }
+  if (IS_TOP) setInterval(() => injectPdfTopButton(), 2000);
 
   // ---------- Trang chi tiết báo giá: trang trí lại nhóm nút "Tình trạng báo giá" ----------
   const ST_LOOK = {
