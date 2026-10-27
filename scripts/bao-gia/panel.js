@@ -2738,7 +2738,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       actions.forEach((b) => b.remove());
       const menu = document.createElement('span');
       menu.className = 'dg-nudge-menu';
-      menu.setAttribute('style', 'display:none;position:absolute;z-index:50;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.18);padding:8px;gap:5px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:260px');
+      menu.setAttribute('style', 'display:none;position:fixed;z-index:2147483000;transform:translateX(-50%);background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.18);padding:8px;gap:5px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:260px');
       actions.forEach((b) => menu.append(b));
       const cfgBtn = document.createElement('button');
       cfgBtn.type = 'button';
@@ -2762,6 +2762,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       gear.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        // bảng nổi theo vị trí nút (gắn vào body để không bị khung bảng cắt mất)
+        const r = gear.getBoundingClientRect();
+        menu.style.left = `${r.left + r.width / 2}px`;
+        menu.style.top = `${r.bottom + 4}px`;
         menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
       });
       // bấm 1 thao tác % / Gần nhất → đóng bảng (＋đ tự mở hộp nhập)
@@ -2769,10 +2773,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         if (e.target.closest('button') && e.target.closest('button') !== cfgBtn) setTimeout(() => (menu.style.display = 'none'), 50);
       });
       document.addEventListener('click', (e) => {
-        if (!box.contains(e.target)) menu.style.display = 'none';
+        if (!box.contains(e.target) && !menu.contains(e.target)) menu.style.display = 'none';
       });
-      box.style.position = 'relative';
-      box.append(gear, menu);
+      window.addEventListener('scroll', () => (menu.style.display = 'none'), true);
+      document.querySelectorAll('.dg-nudge-menu').forEach((x) => !x.isConnected || x.remove());
+      document.body.append(menu);
+      box.append(gear);
       th.append(box);
     }
   }
