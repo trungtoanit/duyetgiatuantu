@@ -1684,12 +1684,32 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     if (!input) throw new Error('Không mở được ô "Giá thực bán" để điền giá.');
     const raw = String(input.value || '');
-    const text = /[.,]/.test(raw) ? Math.round(value).toLocaleString('vi-VN') : String(Math.round(value));
-    input.focus();
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    input.blur();
+    const want = Math.round(value);
+    const text = /[.,]/.test(raw) ? want.toLocaleString('vi-VN') : String(want);
+    const put = (el) => {
+      el.focus();
+      el.select?.();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, text);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      el.blur();
+    };
+    put(input);
+    // kiểm tra CRM đã nhận giá (ô hiện đúng số); chưa thì điền lại 1 lần
+    const shown = () => Number(String(cell.querySelector('input')?.value || cell.innerText || '').replace(/[^\d]/g, '')) || 0;
+    await sleep(350);
+    if (shown() !== want) {
+      let el = cell.querySelector('input');
+      if (!el) {
+        const tg = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent)) || cell;
+        for (const t of ['mousedown', 'mouseup', 'click', 'dblclick']) tg.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
+        el = await waitFor(() => cell.querySelector('input'), 1500, 100);
+      }
+      if (el) put(el);
+      await sleep(400);
+    }
+    return shown() === want;
   }
   function openOffsetPriceDialog(q) {
     root.querySelector('.pdlg')?.remove();
@@ -2873,11 +2893,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (nudging) return;
       nudging = true;
       btns.forEach((b) => (b.disabled = true));
+      const failed = [];
       try {
         for (const r of p) {
-          await setCellPrice(r.cell, r.next);
+          const ok = await setCellPrice(r.cell, r.next).catch(() => false);
+          if (!ok) failed.push(r);
           await sleep(150);
         }
+        if (failed.length) alert(`⚠️ ${failed.length} dòng chưa nhận giá mới (dòng ${failed.map((r) => r.i + 1).join(', ')}) – hãy kiểm tra / điền tay rồi bấm Cập nhật.`);
+        p.splice(0, p.length, ...p.filter((r) => !failed.includes(r))); // chỉ ghi nhận dòng đã nhận giá
         // ghi nhận đã cộng bao nhiêu trên từng dòng (cộng dồn nếu cộng nhiều lần) → hiện sau Giá thực bán
         const code = renderCtx.quotes?.[currentQuoteId()]?.code;
         if (code) {
@@ -2918,10 +2942,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cell = tr.cells[idx];
       const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
       const o = rec?.rows?.find((x) => x.i === i && x.name === name) || rec?.rows?.find((x) => x.name === name);
-      if (o && !nudging) {
+      if (o && !nudging && Date.now() - (rec.at || 0) > 30e3) {
         const cur = Number(String(cell.querySelector('input')?.value || cell.innerText || '').replace(/[^\d]/g, '')) || 0;
         const last = o.hist?.length ? o.hist[o.hist.length - 1].to : null;
-        if (cur && (last == null || cur !== last)) stale.push(o);
+        const key = `${code}|${i}`;
+        state.cpMiss ||= {};
+        // lệch 3 lần liền (≈ 6 giây) mới coi là giá đã được tính lại – tránh xoá nhầm lúc ô đang vẽ lại
+        if (last != null && cur && cur !== last) state.cpMiss[key] = (state.cpMiss[key] || 0) + 1;
+        else delete state.cpMiss[key];
+        if (state.cpMiss[key] >= 3) {
+          stale.push(o);
+          delete state.cpMiss[key];
+        }
       }
     });
     if (stale.length && rec) {
