@@ -8322,7 +8322,33 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return ` <span class="byr" title="${esc(`${other ? `Từ ${h.code} cùng khách · ` : ''}${h.by ? `${h.by}: ` : ''}${h.text || ''}`.slice(0, 300))}">🤝 Thu mua ${esc(h.val)}${other ? ' *' : ''}</span>`;
   };
   // Báo giá còn mở mà chưa đề cập % / tiền cho thu mua (cả báo giá này lẫn các báo giá khác của khách)
-  const noBuyer = (q, c) => !!q && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !buyerPctInfo(q, c);
+  // "thu mua không lấy %", "không nhận chiết khấu", "khách không lấy hoa hồng"… → đã rõ, không gắn "Chưa cho thu mua"
+  const NO_BUYER_RE = /(thu\s*mua|(?<![\p{L}])tm(?![\p{L}])|người\s*mua|khách(\s*hàng)?|bên\s*(đó|kia|khách)|anh\s*ấy|chị\s*ấy|họ)\s*(cũng\s*)?(không|ko|k|chẳng|chả|hông)\s*(có\s*)?(lấy|nhận|cần|muốn|ăn|đòi|xin)\s*(gì\s*)?(%|phần\s*trăm|hoa\s*hồng|(?<![\p{L}])hh(?![\p{L}])|chiết\s*khấu|(?<![\p{L}])ck(?![\p{L}])|tiền|com|commission)|(không|ko|k|chẳng|chả)\s*(nhận|lấy|cần|có|đòi)\s*(%|phần\s*trăm|hoa\s*hồng|(?<![\p{L}])hh(?![\p{L}])|chiết\s*khấu|(?<![\p{L}])ck(?![\p{L}]))/iu;
+  const noBuyerSaid = (q, c) => {
+    if (NO_BUYER_RE.test(q?.name || '')) return true;
+    let hit = false;
+    const walk = (t) => {
+      if (!hit && NO_BUYER_RE.test(t.text || '')) hit = true;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit;
+  };
+  // theo khách: có báo giá nào của khách đã nói thu mua không lấy % chưa
+  const noBuyerCust = { q: null, c: null, set: new Set() };
+  const custNoBuyer = (q) => {
+    if (noBuyerCust.q !== renderCtx.quotes || noBuyerCust.c !== renderCtx.comments) {
+      noBuyerCust.q = renderCtx.quotes;
+      noBuyerCust.c = renderCtx.comments;
+      noBuyerCust.set = new Set();
+      for (const x of Object.values(renderCtx.quotes || {})) {
+        const k = custKey(x);
+        if (k && noBuyerSaid(x, renderCtx.comments?.[x.id])) noBuyerCust.set.add(k);
+      }
+    }
+    return noBuyerCust.set.has(custKey(q));
+  };
+  const noBuyer = (q, c) => !!q && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !buyerPctInfo(q, c) && !noBuyerSaid(q, c) && !custNoBuyer(q);
   const noBuyerTag = (q, c) => (noBuyer(q, c) ? ' <span class="nobyr" title="Chưa thấy đề cập % / tiền cho thu mua (hoa hồng, chiết khấu) trong báo giá này và các báo giá khác của khách">🚫 Chưa cho thu mua</span>' : '');
   function buyerPctInfo(q, c) {
     if (buyerInfo(q, c)) return true;
