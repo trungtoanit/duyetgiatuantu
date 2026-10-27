@@ -2912,6 +2912,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const idx = heads.findIndex((th) => /^Giá thực bán/i.test(th.innerText.trim()));
     if (idx < 0) return;
     const rows = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.cells[idx]);
+    // Giá đã được tính lại (khác giá sau lần cộng chi phí gần nhất) → xoá ghi nhận chi phí của dòng đó
+    const stale = [];
+    rows.forEach((tr, i) => {
+      const cell = tr.cells[idx];
+      const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
+      const o = rec?.rows?.find((x) => x.i === i && x.name === name) || rec?.rows?.find((x) => x.name === name);
+      if (o && !nudging) {
+        const cur = Number(String(cell.querySelector('input')?.value || cell.innerText || '').replace(/[^\d]/g, '')) || 0;
+        const last = o.hist?.length ? o.hist[o.hist.length - 1].to : null;
+        if (cur && (last == null || cur !== last)) stale.push(o);
+      }
+    });
+    if (stale.length && rec) {
+      const keep = rec.rows.filter((x) => !stale.includes(x));
+      const next = keep.length ? { ...rec, rows: keep, at: Date.now() } : { rows: [], total: 0, at: Date.now(), cleared: true };
+      state.costAdds.all = { ...state.costAdds.all, [code]: next };
+      kvMerge('costAdds', { [code]: next }).catch(() => {});
+      return injectCostBadges();
+    }
     rows.forEach((tr, i) => {
       const cell = tr.cells[idx];
       const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
