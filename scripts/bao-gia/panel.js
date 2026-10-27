@@ -3359,6 +3359,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // Bộ lọc nhãn trên trang danh sách CRM (lọc các dòng đang hiện của trang)
   const CRM_F = [
+    // 🆕 Mới tạo: báo giá tạo trong 7 ngày gần nhất (giống nhãn NEW ở cột Ngày tạo)
+    ['fresh', '🆕', 'Mới tạo 7 ngày', '#0891b2', (q) => !!q.createdAt && hoursSince(q.createdAt) < 7 * 24],
     ['prio', '🔥', 'Ưu tiên', '#ea580c', (q, c) => renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c)],
     ['flexo', '🟦', 'Flexo', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
     ['offset', '🟪', 'Offset', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
