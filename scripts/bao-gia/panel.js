@@ -5741,15 +5741,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .dg-hotpin.on { animation: none; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; cursor: default; }
       .dg-hotpin.on .fl { animation: none; }
       .dg-hotpin.busy { opacity: .7; cursor: wait; }
+      .dg-hotpin .rm { margin-left: 6px; padding: 0 8px; border-radius: 999px; background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; cursor: pointer; font-size: 11.5px; }
+      .dg-hotpin .rm:hover { background: #dc2626; color: #fff; }
       @media (prefers-reduced-motion: reduce) { .dg-hotpin, .dg-hotpin .fl { animation: none; } }`;
     document.head.append(st);
   }
   function hotHas(qid) {
     const pin = renderCtx.hotPinned?.[qid];
     if (pin && !pin.off) return 'pin';
+    if (state.hotDoneIds?.has(Number(qid))) return null; // đã gỡ / đã hoàn thành
     return (renderCtx.aiHot?.items || []).some((x) => x.id === qid) ? 'ai' : null;
   }
+  // Gỡ báo giá khỏi Gợi ý chốt đơn: bỏ ghim tay (hotPinned.off) + đánh dấu ẩn khỏi danh sách AI (aiHotDone)
+  async function hotRemove(qid, code) {
+    const pin = renderCtx.hotPinned?.[qid];
+    if (pin && !pin.off) await kvMerge('hotPinned', { [qid]: { ...pin, off: true, offAt: Date.now(), offBy: meName } });
+    await kvMerge('aiHotDone', { [qid]: { at: Date.now(), by: meName, removed: true, code } });
+    renderCtx.hotPinned = await kvGet('hotPinned');
+    (state.hotDoneIds ||= new Set()).add(Number(qid));
+  }
   function injectHotPin(qid, q) {
+    if (!state.hotDoneIds && !state.hotDoneLoading) {
+      state.hotDoneLoading = true;
+      kvGet('aiHotDone').then((d) => (state.hotDoneIds = new Set(Object.entries(d).filter(([, v]) => v).map(([k]) => Number(k))))).catch(() => {});
+    }
     const anchor = document.querySelector('.dg-signtg') || document.querySelector('.dg-setprice-head') || document.querySelector('.dg-printq');
     if (!anchor) return;
     lightStyle();
@@ -5759,7 +5774,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (b.dataset.st === String(has)) return; // không vẽ lại → hiệu ứng không bị khởi động lại
       b.dataset.st = String(has);
       b.classList.toggle('on', !!has);
-      b.innerHTML = has ? `✓ Đã có trong gợi ý chốt đơn${has === 'pin' ? ' 📌' : ''}` : '<span class="fl">🔥</span> Thêm vào gợi ý chốt đơn';
+      b.innerHTML = has
+        ? `✓ Đã có trong gợi ý chốt đơn${has === 'pin' ? ' 📌' : ''} <span class="rm" title="Gỡ báo giá này khỏi Gợi ý chốt đơn">✕ Gỡ</span>`
+        : '<span class="fl">🔥</span> Thêm vào gợi ý chốt đơn';
       b.title = has
         ? has === 'pin' ? 'Đã thêm tay – giữ trong Gợi ý chốt đơn tới khi lên đơn' : 'AI đã chọn báo giá này trong Gợi ý chốt đơn'
         : 'Thêm báo giá này vào tab "Gợi ý chốt đơn" – giữ tới khi lên đơn, AI phân tích lại vẫn giữ';
@@ -5770,12 +5787,26 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       b.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (hotHas(qid) || b.classList.contains('busy')) return;
+        if (b.classList.contains('busy')) return;
+        const cur = renderCtx.quotes?.[qid] || q;
+        if (hotHas(qid)) {
+          if (!e.target.closest('.rm')) return;
+          if (!confirm(`Gỡ ${cur.code || 'báo giá này'} khỏi Gợi ý chốt đơn?`)) return;
+          b.classList.add('busy');
+          try {
+            await hotRemove(qid, cur.code);
+          } finally {
+            b.classList.remove('busy');
+            paint();
+          }
+          return;
+        }
         b.classList.add('busy');
         try {
-          const cur = renderCtx.quotes?.[qid] || q;
           await kvMerge('hotPinned', { [qid]: { code: cur.code, at: Date.now(), by: meName } });
           renderCtx.hotPinned = await kvGet('hotPinned');
+          state.hotDoneIds?.delete(Number(qid)); // thêm lại sau khi đã gỡ
+          if ((await kvGet('aiHotDone'))[qid]?.removed) await kvMerge('aiHotDone', { [qid]: null });
         } finally {
           b.classList.remove('busy');
           paint();
