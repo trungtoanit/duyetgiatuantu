@@ -5886,19 +5886,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       pb.textContent = '🖨 In báo giá → dán';
       pb.title = 'In báo giá, chụp ảnh (che SĐT khách) rồi dán vào ô trả lời của bình luận này';
       pb.setAttribute('style', 'cursor:pointer;color:#fff;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px');
-      const replyBox = async () => {
-        let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
-        if (!ta) {
-          const reply = [...actions.querySelectorAll('*')].reverse().find((x) => x.textContent.trim() === 'Trả lời');
-          reply?.click();
-          ta = await waitFor(() => cm.querySelector('textarea'), 3000, 100);
-        }
-        return ta || findCommentBox();
+      // Bấm "Trả lời" TRƯỚC khi chụp → ô trả lời của bình luận này mở ra; nhận ô mới xuất hiện (có thể nằm ngoài khối bình luận)
+      let box = null;
+      const openReply = async () => {
+        if (box?.isConnected) return box;
+        const own = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
+        if (own) return (box = own);
+        const before = new Set(document.querySelectorAll('textarea'));
+        const reply = [...actions.querySelectorAll('*')].reverse().find((x) => !x.closest('.dg-printq-reply, .dg-setprice') && x.childElementCount <= 1 && x.textContent.trim() === 'Trả lời');
+        reply?.click();
+        box = await waitFor(() => cm.querySelector('textarea') || [...document.querySelectorAll('textarea')].find((t) => !before.has(t) && t.offsetParent), 4000, 100);
+        return box;
       };
-      pb.addEventListener('click', (e) => {
+      const replyBox = async () => {
+        const ta = await openReply();
+        if (!ta) throw new Error('Không mở được ô "Trả lời" của bình luận này – bấm Trả lời rồi thử lại.');
+        return ta;
+      };
+      pb.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!/^[⏳📸📋]/u.test(pb.textContent)) printQuoteToComment(pb, replyBox);
+        if (/^[⏳📸📋]/u.test(pb.textContent)) return;
+        box = null;
+        await openReply().catch(() => {});
+        printQuoteToComment(pb, replyBox);
       });
       li2.append(pb);
       actions.append(li2);
