@@ -1650,7 +1650,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const x = prods.find((p) => !used.has(p) && offRowFor([txt], p.spec, p.qty));
       if (x) used.add(x);
       const cell = tr.cells[pIdx];
-      const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
+      const cur = sellPriceOf(cell); // bỏ chữ nhãn NVL / ±1% trong ô
       return { i, tr, cell, x, cur, offset: /offset/i.test(txt) || !!x, name: (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C[^,]*/i) || [x?.spec || `Dòng ${i + 1}`])[0] };
     }).filter((r) => r.offset);
   }
@@ -1668,7 +1668,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const txt = tr.innerText.replace(/\s+/g, ' ');
         const cell = tr.cells[pIdx];
         const qty = qIdx >= 0 ? Number(String(tr.cells[qIdx]?.querySelector('input')?.value || tr.cells[qIdx]?.innerText || '').replace(/[^\d]/g, '')) || 0 : 0;
-        const cur = Number(String(cell?.querySelector('input')?.value || cell?.innerText || '').replace(/[^\d]/g, '')) || 0;
+        const cur = sellPriceOf(cell); // bỏ chữ nhãn NVL / ±1% trong ô
         const name = (txt.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\d]{0,60}[\d]+D\s*x\s*\d+R\s*x\s*\d+C/i) || [txt.slice(0, 60)])[0];
         const tp = ((tIdx >= 0 ? tr.cells[tIdx]?.innerText : txt) || '').match(/TP\d{3,}/)?.[0] || '';
         return { i, tr, cell, cur, qty, tp, name, offset: /offset/i.test(txt) };
@@ -4716,6 +4716,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (flexoN) await kvMerge('flexoNvl', { [q.code]: { at: Date.now(), amountAt: q.amount || 0, rows, n: flexoN } });
     state.flexoNvl = null;
   }
+  // Giá trong ô (ô nhập hoặc chữ) – bỏ chữ của nhãn NVL / nút ±1% do extension gắn vào ô
+  function sellPriceOf(cell) {
+    const inp = cell?.querySelector('input');
+    const raw = inp ? inp.value : (cell?.innerText || '').replace(/[✓]?\s*NVL[^\n]*/g, '').replace(/[−+-]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
+    return Number(((raw.match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
+  }
   function nvlCss() {
     if (!document.getElementById('dg-nvlw-css')) {
       const st = document.createElement('style');
@@ -4760,7 +4766,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const trs = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row') && isFlexoRow(x));
     nvlCss();
     // Offset: NVL 1 thùng = dòng "Tổng" bảng Nguyên liệu của chiết giá (đã đọc sẵn, margins.products.nvlUnit)
-    if (pt.iSell >= 0) for (const r of offsetRowsForDialog(q)) if (!isFlexoRow(r.tr)) nvlBadge(r.cell, r.x?.nvlUnit, r.cur);
+    if (pt.iSell >= 0) for (const r of offsetRowsForDialog(q)) if (!isFlexoRow(r.tr)) nvlBadge(r.cell, r.x?.nvlUnit, sellPriceOf(r.cell));
     if (!trs.length) return;
     if (!state.flexoNvl || Date.now() - state.flexoNvl.at > 10e3) state.flexoNvl = { at: Date.now(), all: await kvGet('flexoNvl') };
     const c = state.flexoNvl.all?.[q.code];
@@ -4771,9 +4777,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const cell = tr.cells[pt.iSell >= 0 ? pt.iSell : pt.iDeal];
       if (!cell) continue;
       const nvl = c?.rows?.[rowTp(tr)];
-      const inp = cell.querySelector('input');
-      const raw = inp ? inp.value : cell.innerText.replace(/NVL[^\n]*/g, '').replace(/[−+]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
-      const deal = Number(((raw.match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
+      const deal = sellPriceOf(cell);
       nvlBadge(cell, nvl, deal);
     }
   }
