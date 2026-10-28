@@ -5946,8 +5946,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       // Chiếm đúng chỗ băng cũ (cùng bề rộng / co giãn), tự trang trí
       const cs = getComputedStyle(host);
       const w = host.getBoundingClientRect().width;
-      box.setAttribute('style', `flex:${cs.flex};width:${w ? `${Math.round(w)}px` : 'auto'};max-width:100%;margin:${cs.margin};align-self:stretch;min-width:0;box-sizing:border-box`);
+      // thu nhỏ bớt 132px để chừa chỗ ô 🔧 Bảo trì bên phải
+      const MT_W = 124;
+      box.setAttribute('style', `flex:${cs.flex === '0 1 auto' ? '1 1 auto' : cs.flex};width:${w ? `${Math.round(w - MT_W - 8)}px` : 'auto'};max-width:calc(100% - ${MT_W + 8}px);margin:${cs.margin};align-self:stretch;min-width:0;box-sizing:border-box`);
       host.after(box);
+      // 🔧 Bảo trì: số báo cáo chưa xử lý (khẩn cấp / cao nổi bật) – bấm mở trang Bảo trì → Báo cáo
+      const mt = document.createElement('a');
+      mt.setAttribute('data-dg-mtbox', '1');
+      mt.href = '/bao-tri/bao-cao';
+      mt.setAttribute('style', `flex:none;width:${MT_W}px;margin:${cs.margin};margin-left:8px;align-self:stretch;box-sizing:border-box;border-radius:10px;border:1px solid #fecaca;background:linear-gradient(135deg,#fff1f2,#fef2f2);display:grid;place-items:center;text-align:center;text-decoration:none;color:#9f1239;font-family:inherit;padding:4px;cursor:pointer`);
+      mt.innerHTML = '<div style="font-size:22px;line-height:1">🔧</div><div style="font-size:10px;font-weight:800;text-transform:uppercase">Bảo trì</div><div data-mtn style="font-size:11px;font-weight:700"></div>';
+      box.after(mt);
+      const paintMt = async () => {
+        const all = Object.values(await kvGet('maintReports')).filter(Boolean);
+        const open = all.filter((r) => !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || ''));
+        const urgent = open.filter((r) => /CRITICAL|HIGH/i.test(r.level || ''));
+        const el = mt.querySelector('[data-mtn]');
+        el.innerHTML = all.length ? `<b style="font-size:16px">${open.length}</b> chưa xử lý${urgent.length ? `<br><span style="color:#dc2626">🚨 ${urgent.length} khẩn / cao</span>` : ''}` : '<span style="color:#94a3b8">chưa có dữ liệu</span>';
+        mt.title = `Báo cáo bảo trì chưa xử lý: ${open.length}${urgent.length ? ` (khẩn cấp / cao: ${urgent.length})` : ''} – bấm để mở trang Bảo trì → Báo cáo`;
+      };
+      paintMt().catch(() => {});
+      setInterval(() => mt.isConnected && paintMt().catch(() => {}), 60e3);
       if (!document.getElementById('dgh-css')) {
         const st = document.createElement('style');
         st.id = 'dgh-css';
