@@ -8239,8 +8239,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   ];
   // Sếp bảo lấy / chốt đơn mà chưa lên đơn
   // "Giữ giá cũ" (đơn tái bản giữ nguyên giá) cũng là sếp cho lấy đơn → nhãn "🔁 Tái đơn"
-  const KEEP_PRICE_RE = /giữ\s*(nguyên\s*)?giá\s*(cũ|như cũ)?/iu;
-  const BOSS_ORDER_RE = /(lấy|chốt|lên|làm)\s*(cái\s*)?đơn\s*(này|đi|luôn|nha|nhé|em)|(nhập|đồng ý|ok)\s*(giá\s*)?(lấy|chốt)\s*đơn|giữ\s*(nguyên\s*)?giá\s*(cũ|như cũ)/iu;
+  const KEEP_PRICE_RE = /giữ\s*(nguyên\s*)?giá(\s*(cũ|như cũ))?|giữ\s*(\d+|một|1)?\s*đơn\s*(này|đó|nha|nhé|em|đi)/iu;
+  const BOSS_ORDER_RE = /(lấy|chốt|lên|làm)\s*(cái\s*)?đơn\s*(này|đi|luôn|nha|nhé|em)|(nhập|đồng ý|ok)\s*(giá\s*)?(lấy|chốt)\s*đơn|giữ\s*(nguyên\s*)?giá(?![\p{L}])|giữ\s*(\d+|một|1)?\s*đơn\s*(này|đó|nha|nhé|em|đi)/iu;
   function bossOrderInfo(c) {
     let hit = null;
     const walk = (t) => {
