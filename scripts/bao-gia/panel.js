@@ -4740,6 +4740,69 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
     }, true);
   }
+  // 📨 Nhắc bảo trì qua Zalo: chọn ngẫu nhiên 1 việc đang tồn đọng (ưu tiên khẩn / cao, để lâu), soạn tin + câu hỏi gợi ý, gửi Zalo
+  // Người nhận (nhóm / người bảo trì) cài 1 lần (kv maintCfg, đồng bộ); mỗi báo cáo nhắc tối đa 1 lần / 24 giờ (kv maintAsked)
+  async function maintZalo(btn) {
+    // mở tab Zalo ngay lúc bấm (trình duyệt chặn mở cửa sổ sau khi chờ)
+    let w = null;
+    try {
+      w = window.open('', 'dg-zalo');
+    } catch {}
+    const cfg = (await kvGet('maintCfg')).main || {};
+    let to = cfg.to;
+    if (!to) {
+      to = (prompt('Tên nhóm / người nhận Zalo của bảo trì (đúng như trên Zalo):', '') || '').trim();
+      if (!to) {
+        try {
+          if (w && w.location.href === 'about:blank') w.close();
+        } catch {}
+        return;
+      }
+      await kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } });
+    }
+    try {
+      if (w) w.location.href = 'https://chat.zalo.me/';
+      w?.focus();
+    } catch {}
+    const [all, asked, names] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked'), kvGet('zaloNames')]);
+    const now = Date.now() / 1000;
+    const open = Object.values(all).filter((r) => r && !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || ''));
+    const pool = open.filter((r) => Date.now() - (asked[r.id]?.at || 0) > 24 * 3600e3);
+    if (!pool.length) {
+      btn.textContent = open.length ? '✓ Đã nhắc hết trong 24h' : '✓ Không có việc tồn';
+      setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 3000);
+      return;
+    }
+    // ngẫu nhiên có trọng số: khẩn cấp ×4, cao ×3, trung bình ×2, thấp ×1; để càng lâu càng dễ được chọn
+    const wt = (r) => ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2 }[r.level] || 1) * (1 + Math.min(60, Math.max(0, (now - (r.createdAt || now)) / 86400)));
+    const sum = pool.reduce((a, r) => a + wt(r), 0);
+    let x = Math.random() * sum;
+    const r = pool.find((p0) => (x -= wt(p0)) <= 0) || pool[0];
+    const days = Math.max(0, Math.floor((now - (r.createdAt || now)) / 86400));
+    const ask = (await kvGet('maintAsk'))[r.id]?.text || maintPick(r, all).text;
+    const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
+    const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
+    const lines = [
+      `🔧 Nhắc việc bảo trì – Báo cáo #${r.id}`,
+      `Máy: ${mach}`,
+      `Lỗi: ${r.desc || ''}`,
+      `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`,
+      '',
+      ask,
+    ];
+    const text = lines.join('\n');
+    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: ${esc(r.desc || '')}</div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
+    const old = await kvGet('zaloJobs');
+    const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+    keep[`${Date.now()}-maint`] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, status: 'pending', at: Date.now(), maint: r.id };
+    await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {}
+    btn.textContent = `📨 Đã gửi #${r.id}`;
+    setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 4000);
+  }
   // Lấy ngầm báo cáo bảo trì: 30 phút / lần mở trang Bảo trì → Báo cáo trong khung ẩn, đọc lần lượt các trang (hook.js lưu)
   async function collectMaint() {
     if (!IS_TOP || !MY_ADMIN || SITE.key !== 'tuantu') return;
@@ -5955,7 +6018,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       mt.setAttribute('data-dg-mtbox', '1');
       mt.href = '/bao-tri/bao-cao';
       mt.setAttribute('style', `flex:none;width:${MT_W}px;margin:${cs.margin};margin-left:8px;align-self:stretch;box-sizing:border-box;border-radius:10px;border:1px solid #fecaca;background:linear-gradient(135deg,#fff1f2,#fef2f2);display:grid;place-items:center;text-align:center;text-decoration:none;color:#9f1239;font-family:inherit;padding:4px;cursor:pointer`);
-      mt.innerHTML = '<div style="font-size:22px;line-height:1">🔧</div><div style="font-size:10px;font-weight:800;text-transform:uppercase">Bảo trì</div><div data-mtn style="font-size:11px;font-weight:700"></div>';
+      mt.innerHTML = '<div style="font-size:18px;line-height:1">🔧</div><div style="font-size:10px;font-weight:800;text-transform:uppercase">Bảo trì</div><div data-mtn style="font-size:11px;font-weight:700"></div>' +
+        (MY_ADMIN ? '<button data-mtz title="Chọn ngẫu nhiên 1 việc bảo trì đang tồn đọng, soạn tin + câu hỏi rồi gửi Zalo (Shift+bấm: đổi người nhận)" style="margin-top:2px;border:0;cursor:pointer;border-radius:999px;padding:1px 8px;font:inherit;font-size:10px;font-weight:800;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed)">📨 Nhắc Zalo</button>' : '');
+      mt.addEventListener('click', async (e) => {
+        const z = e.target.closest('[data-mtz]');
+        if (!z) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) {
+          const cur = (await kvGet('maintCfg')).main?.to || '';
+          const v = prompt('Tên nhóm / người nhận Zalo của bảo trì:', cur);
+          if (v != null && v.trim()) await kvMerge('maintCfg', { main: { to: v.trim(), at: Date.now(), by: meName } });
+          return;
+        }
+        if (z.textContent.startsWith('⏳')) return;
+        z.textContent = '⏳ Đang soạn…';
+        maintZalo(z).catch((err) => (z.textContent = `⚠️ ${err.message}`));
+      });
       box.after(mt);
       const paintMt = async () => {
         const all = Object.values(await kvGet('maintReports')).filter(Boolean);
