@@ -1678,7 +1678,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   async function setCellPrice(cell, value) {
     let input = cell.querySelector('input');
     if (!input) {
-      const target = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent) && !e.closest('.dg-nudge')) || cell;
+      const target = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent) && !e.closest('.dg-nudge, [class*="dg-"]')) || cell;
       for (const t of ['mousedown', 'mouseup', 'click', 'dblclick']) target.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
       input = await waitFor(() => cell.querySelector('input'), 1500, 100);
     }
@@ -1697,7 +1697,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     put(input);
     // kiểm tra CRM đã nhận giá (ô hiện đúng số); chưa thì điền lại 1 lần
-    const shown = () => Number(String(cell.querySelector('input')?.value || cell.innerText || '').replace(/[^\d]/g, '')) || 0;
+    const shown = () => sellPriceOf(cell);
     await sleep(350);
     if (shown() !== want) {
       let el = cell.querySelector('input');
@@ -2717,7 +2717,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   async function nudgeCell(cell, pct) {
     let input = cell.querySelector('input');
     if (!input) {
-      const target = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent) && !e.closest('.dg-nudge')) || cell;
+      const target = [...cell.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && /\d/.test(e.textContent) && !e.closest('.dg-nudge, [class*="dg-"]')) || cell;
       for (const t of ['mousedown', 'mouseup', 'click', 'dblclick']) target.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }));
       input = await waitFor(() => cell.querySelector('input'), 1500, 100);
     }
@@ -2916,7 +2916,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.cells[idx])
       .map((tr, i) => {
         const cell = tr.cells[idx];
-        const price = Number(String(cell.querySelector('input')?.value || cell.innerText).replace(/[^\d]/g, '')) || 0;
+        const price = sellPriceOf(cell);
         const qty = qIdx >= 0 ? Number(String(tr.cells[qIdx]?.querySelector('input')?.value || tr.cells[qIdx]?.innerText || '').replace(/[^\d]/g, '')) || 0 : 0;
         const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
         return { tr, cell, price, qty, name, i };
@@ -3027,7 +3027,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const name = (tr.innerText.match(/(Thùng|Hộp|Túi|Tem|Tờ|Vách|Giấy)[^\n]{0,40}/i) || [`Dòng ${i + 1}`])[0];
       const o = rec?.rows?.find((x) => x.i === i && x.name === name) || rec?.rows?.find((x) => x.name === name);
       if (o && !nudging && Date.now() - (rec.at || 0) > 30e3) {
-        const cur = Number(String(cell.querySelector('input')?.value || cell.innerText || '').replace(/[^\d]/g, '')) || 0;
+        const cur = sellPriceOf(cell);
         const last = o.hist?.length ? o.hist[o.hist.length - 1].to : null;
         const key = `${code}|${i}`;
         state.cpMiss ||= {};
@@ -3133,7 +3133,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         for (const tr of rows) {
           const cell = tr.cells[idx];
           if (!cell) continue;
-          const cur = Number(String(cell.querySelector('input')?.value || cell.innerText).replace(/[^\d]/g, '')) || 0;
+          const cur = sellPriceOf(cell);
           if (!cur) continue;
           await setCellPrice(cell, roundPrice(Math.max(0, cur + amt)));
           await sleep(150);
@@ -4749,7 +4749,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Giá trong ô (ô nhập hoặc chữ) – bỏ chữ của nhãn NVL / nút ±1% do extension gắn vào ô
   function sellPriceOf(cell) {
     const inp = cell?.querySelector('input');
-    const raw = inp ? inp.value : (cell?.innerText || '').replace(/[✓]?\s*NVL[^\n]*/g, '').replace(/[−+-]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
+    // chỉ lấy chữ của CRM: bỏ mọi phần tử do extension gắn (class dg-…)
+    let txt = '';
+    if (!inp && cell) {
+      const w = cell.ownerDocument.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) if (!n.parentElement?.closest('[class*="dg-"]')) txt += `${n.nodeValue}\n`;
+    }
+    const raw = inp ? inp.value : txt.replace(/[✓]?\s*NVL[^\n]*/g, '').replace(/[−+-]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
     return Number(((raw.match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
   }
   function nvlCss() {
