@@ -4662,7 +4662,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectNewBadges(), 2000);
 
-  // ---------- ⚠️ Flexo: NVL ≥ 85% giá deal → hiện giá NVL cạnh "Giá deal", chớp đỏ ----------
+  // ---------- ⚠️ Flexo: NVL ≥ 85% giá thực bán → hiện giá NVL ở ô "Giá thực bán", chớp đỏ ----------
   // NVL 1 thùng lấy từ hộp "Tính giá carton" (dòng "NVL: 3.807đ") của từng dòng Flexo – mở trong khung ẩn (không lưu gì),
   // lưu kv 'flexoNvl' { [mã BG]: { at, amountAt, rows: { TPxxxx: nvl } } }; đọc lại khi giá trị báo giá đổi hoặc quá 1 ngày
   const NVL_WARN = 0.85;
@@ -4672,8 +4672,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (t.closest('.ant-modal-wrap, #dg-root')) continue;
       const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
       const iDeal = hs.findIndex((h) => /^Giá deal/i.test(h));
+      const iSell = hs.findIndex((h) => /^Giá thực bán/i.test(h));
       const iQty = hs.indexOf('Số lượng');
-      if (iDeal >= 0 && iQty >= 0) return { t, iDeal, iQty };
+      if (iDeal >= 0 && iQty >= 0) return { t, iDeal, iSell, iQty };
     }
     return null;
   }
@@ -4734,11 +4735,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 @keyframes dgNvlw{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6);opacity:1;transform:scale(1)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.55;transform:scale(1.1)}}`;
       document.head.append(st);
     }
+    // so với cột "Giá thực bán" (ô nhập giá hoặc chữ); không có cột đó thì so với "Giá deal"
     for (const tr of trs) {
-      const cell = tr.cells[pt.iDeal];
+      const cell = tr.cells[pt.iSell >= 0 ? pt.iSell : pt.iDeal];
       if (!cell) continue;
       const nvl = c?.rows?.[rowTp(tr)];
-      const deal = Number(((cell.innerText.replace(/NVL[^\n]*/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '').match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
+      const inp = cell.querySelector('input');
+      const raw = inp ? inp.value : cell.innerText.replace(/NVL[^\n]*/g, '').replace(/[−+]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
+      const deal = Number(((raw.match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
       let b = cell.querySelector('.dg-nvlw');
       if (!nvl || !deal || nvl < NVL_WARN * deal) {
         b?.remove();
@@ -4752,7 +4756,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
       const txt = `NVL ${nvl.toLocaleString('vi-VN')} · ${Math.round((nvl / deal) * 100)}%`;
       if (b.textContent !== txt) b.textContent = txt;
-      b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ ≥ ${Math.round(NVL_WARN * 100)}% giá deal ${deal.toLocaleString('vi-VN')}đ – lãi mỏng, xem lại giá`;
+      b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ ≥ ${Math.round(NVL_WARN * 100)}% giá thực bán ${deal.toLocaleString('vi-VN')}đ – lãi mỏng, xem lại giá`;
     }
   }
   if (IS_TOP) setInterval(() => injectNvlWarn().catch(() => {}), 2000);
