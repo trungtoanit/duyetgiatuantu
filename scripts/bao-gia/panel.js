@@ -4716,18 +4716,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (flexoN) await kvMerge('flexoNvl', { [q.code]: { at: Date.now(), amountAt: q.amount || 0, rows, n: flexoN } });
     state.flexoNvl = null;
   }
-  async function injectNvlWarn() {
-    if (!IS_TOP) return;
-    const qid = currentQuoteId();
-    const q = qid && renderCtx.quotes?.[qid];
-    const pt = q && dealTable();
-    if (!pt) return;
-    const trs = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row') && isFlexoRow(x));
-    if (!trs.length) return;
-    if (!state.flexoNvl || Date.now() - state.flexoNvl.at > 10e3) state.flexoNvl = { at: Date.now(), all: await kvGet('flexoNvl') };
-    const c = state.flexoNvl.all?.[q.code];
-    const stale = !c || Date.now() - c.at > 24 * 3600e3 || (q.amount && Math.abs((c.amountAt || 0) - q.amount) > 1) || (c.n != null && c.n !== trs.length);
-    if (stale && !nvlScanning && !(c && Date.now() - c.at < 60e3)) scanFlexoNvl(q).catch(() => {});
+  function nvlCss() {
     if (!document.getElementById('dg-nvlw-css')) {
       const st = document.createElement('style');
       st.id = 'dg-nvlw-css';
@@ -4739,6 +4728,44 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
 @keyframes dgNvlw{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6);opacity:1;transform:scale(1)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.55;transform:scale(1.1)}}`;
       document.head.append(st);
     }
+  }
+  // Nhãn NVL trong ô Giá thực bán: ≥ 85% đỏ chớp · 80–85% vàng cam · < 80% xanh dương · < 70% xanh lá ✓
+  function nvlBadge(cell, nvl, deal) {
+    if (!cell) return;
+      let b = cell.querySelector('.dg-nvlw');
+    if (!nvl || !deal) {
+      b?.remove();
+      return;
+    }
+    if (!b) {
+      b = document.createElement('span');
+      cell.append(b);
+      cell.style.whiteSpace = 'nowrap';
+    }
+    // mức: ≥ 85% đỏ chớp · 80–85% vàng cam · < 80% xanh dương · < 70% xanh lá ✓
+    const r = nvl / deal;
+    const lv = r >= NVL_WARN ? 'hot' : r >= 0.8 ? 'warn' : r >= 0.7 ? 'ok' : 'good';
+    const cls = `dg-nvlw ${lv}`;
+    if (b.className !== cls) b.className = cls;
+    const txt = `${lv === 'good' ? '✓ ' : ''}NVL ${nvl.toLocaleString('vi-VN')} · ${Math.round(r * 100)}%`;
+    if (b.textContent !== txt) b.textContent = txt;
+    b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ = ${Math.round(r * 100)}% giá thực bán ${deal.toLocaleString('vi-VN')}đ${lv === 'hot' ? ' – lãi mỏng, xem lại giá' : lv === 'good' ? ' – lãi tốt' : ''}`;
+  }
+  async function injectNvlWarn() {
+    if (!IS_TOP) return;
+    const qid = currentQuoteId();
+    const q = qid && renderCtx.quotes?.[qid];
+    const pt = q && dealTable();
+    if (!pt) return;
+    const trs = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row') && isFlexoRow(x));
+    nvlCss();
+    // Offset: NVL 1 thùng = dòng "Tổng" bảng Nguyên liệu của chiết giá (đã đọc sẵn, margins.products.nvlUnit)
+    if (pt.iSell >= 0) for (const r of offsetRowsForDialog(q)) if (!isFlexoRow(r.tr)) nvlBadge(r.cell, r.x?.nvlUnit, r.cur);
+    if (!trs.length) return;
+    if (!state.flexoNvl || Date.now() - state.flexoNvl.at > 10e3) state.flexoNvl = { at: Date.now(), all: await kvGet('flexoNvl') };
+    const c = state.flexoNvl.all?.[q.code];
+    const stale = !c || Date.now() - c.at > 24 * 3600e3 || (q.amount && Math.abs((c.amountAt || 0) - q.amount) > 1) || (c.n != null && c.n !== trs.length);
+    if (stale && !nvlScanning && !(c && Date.now() - c.at < 60e3)) scanFlexoNvl(q).catch(() => {});
     // so với cột "Giá thực bán" (ô nhập giá hoặc chữ); không có cột đó thì so với "Giá deal"
     for (const tr of trs) {
       const cell = tr.cells[pt.iSell >= 0 ? pt.iSell : pt.iDeal];
@@ -4747,24 +4774,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const inp = cell.querySelector('input');
       const raw = inp ? inp.value : cell.innerText.replace(/NVL[^\n]*/g, '').replace(/[−+]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
       const deal = Number(((raw.match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
-      let b = cell.querySelector('.dg-nvlw');
-      if (!nvl || !deal) {
-        b?.remove();
-        continue;
-      }
-      if (!b) {
-        b = document.createElement('span');
-        cell.append(b);
-        cell.style.whiteSpace = 'nowrap';
-      }
-      // mức: ≥ 85% đỏ chớp · 80–85% vàng cam · < 80% xanh dương · < 70% xanh lá ✓
-      const r = nvl / deal;
-      const lv = r >= NVL_WARN ? 'hot' : r >= 0.8 ? 'warn' : r >= 0.7 ? 'ok' : 'good';
-      const cls = `dg-nvlw ${lv}`;
-      if (b.className !== cls) b.className = cls;
-      const txt = `${lv === 'good' ? '✓ ' : ''}NVL ${nvl.toLocaleString('vi-VN')} · ${Math.round(r * 100)}%`;
-      if (b.textContent !== txt) b.textContent = txt;
-      b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ = ${Math.round(r * 100)}% giá thực bán ${deal.toLocaleString('vi-VN')}đ${lv === 'hot' ? ' – lãi mỏng, xem lại giá' : lv === 'good' ? ' – lãi tốt' : ''}`;
+      nvlBadge(cell, nvl, deal);
     }
   }
   if (IS_TOP) setInterval(() => injectNvlWarn().catch(() => {}), 2000);
