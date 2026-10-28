@@ -4680,6 +4680,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return null;
   }
   const rowTp = (tr) => (tr.innerText.match(/TP\d{3,}/) || [])[0];
+  // khoá dòng: mã TP; sản phẩm mới chưa có mã ("Chưa có") → theo thứ tự dòng Flexo
+  const rowKey = (tr, i) => rowTp(tr) || `#${i}`;
+  const NVL_VER = 2;
   const isFlexoRow = (tr) => [...tr.querySelectorAll('.ant-tag, span')].some((e) => !e.children.length && e.textContent.trim() === 'Flexo');
   async function scanFlexoNvl(q) {
     if (nvlScanning === q.code) return;
@@ -4694,8 +4697,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const vis = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => f.contentWindow.getComputedStyle(m).display !== 'none');
         const fx = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row') && isFlexoRow(x));
         flexoN = fx.length;
-        for (const tr of fx) {
-          const tp = rowTp(tr);
+        for (const [i, tr] of fx.entries()) {
+          const tp = rowKey(tr, i);
           const qb = tr.cells[pt.iQty]?.querySelector('button, a') || [...tr.cells].map((td) => td.querySelector('button, a')).find((b) => b && /^\s*[\d.]+\s*$/.test(b.innerText || ''));
           if (!tp || !qb) continue;
           qb.click();
@@ -4714,7 +4717,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     } finally {
       nvlScanning = '';
     }
-    if (flexoN) await kvMerge('flexoNvl', { [q.code]: { at: Date.now(), amountAt: q.amount || 0, rows, n: flexoN } });
+    if (flexoN) await kvMerge('flexoNvl', { [q.code]: { at: Date.now(), amountAt: q.amount || 0, rows, n: flexoN, v: NVL_VER } });
     state.flexoNvl = null;
   }
   // Giá trong ô (ô nhập hoặc chữ) – bỏ chữ của nhãn NVL / nút ±1% do extension gắn vào ô
@@ -4771,13 +4774,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!trs.length) return;
     if (!state.flexoNvl || Date.now() - state.flexoNvl.at > 10e3) state.flexoNvl = { at: Date.now(), all: await kvGet('flexoNvl') };
     const c = state.flexoNvl.all?.[q.code];
-    const stale = !c || Date.now() - c.at > 24 * 3600e3 || (q.amount && Math.abs((c.amountAt || 0) - q.amount) > 1) || (c.n != null && c.n !== trs.length);
+    const stale = !c || Date.now() - c.at > 24 * 3600e3 || (q.amount && Math.abs((c.amountAt || 0) - q.amount) > 1) || (c.n != null && c.n !== trs.length) || c.v !== NVL_VER;
     if (stale && !nvlScanning && !(c && Date.now() - c.at < 60e3)) scanFlexoNvl(q).catch(() => {});
     // so với cột "Giá thực bán" (ô nhập giá hoặc chữ); không có cột đó thì so với "Giá deal"
-    for (const tr of trs) {
+    for (const [i, tr] of trs.entries()) {
       const cell = tr.cells[pt.iSell >= 0 ? pt.iSell : pt.iDeal];
       if (!cell) continue;
-      const nvl = c?.rows?.[rowTp(tr)];
+      const nvl = c?.rows?.[rowKey(tr, i)];
       const deal = sellPriceOf(cell);
       nvlBadge(cell, nvl, deal);
     }
