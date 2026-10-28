@@ -4527,7 +4527,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         return `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${neg ? '#fef2f2' : '#f5f3ff'};border:1.5px solid ${neg ? '#fecaca' : '#ddd6fe'};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
           <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">📈 ${lab}</span>
           <b style="font-size:18px;font-weight:900;color:${neg ? '#b91c1c' : '#7c3aed'};white-space:nowrap;font-variant-numeric:tabular-nums">${k.dn ? `${neg ? '−' : ''}${big(Math.abs(k.dsum))}` : '–'}</b>
-          <span style="font-size:11px;font-weight:700;white-space:nowrap;color:${gap > 0 ? '#b45309' : '#047857'}">${gap > 0 ? `→ còn thiếu ${big(gap)}` : `✓ vượt ${big(-gap)}`} <span style="color:#94a3b8;font-weight:600">(mục tiêu ${big(goal)}/ngày)</span></span></div>`;
+          <span style="font-size:11px;font-weight:700;white-space:nowrap;color:${gap > 0 ? '#b45309' : '#047857'}">${gap > 0 ? `→ còn thiếu ${big(gap)}` : `✓ vượt ${big(-gap)}`}</span></div>`;
       })() +
       // Chênh lệch tháng + dự báo cả tháng theo ngày công (gộp 1 ô, giống ô Doanh thu tháng)
       (() => {
