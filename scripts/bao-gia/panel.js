@@ -4731,7 +4731,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!document.getElementById('dg-nvlw-css')) {
       const st = document.createElement('style');
       st.id = 'dg-nvlw-css';
-      st.textContent = `.dg-nvlw{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;vertical-align:middle;animation:dgNvlw .7s ease-in-out infinite}
+      st.textContent = `.dg-nvlw{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;vertical-align:middle}
+.dg-nvlw.hot{animation:dgNvlw .7s ease-in-out infinite}
+.dg-nvlw.warn{background:#ea580c}
+.dg-nvlw.ok{background:#2563eb}
+.dg-nvlw.good{background:#16a34a}
 @keyframes dgNvlw{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6);opacity:1;transform:scale(1)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.55;transform:scale(1.1)}}`;
       document.head.append(st);
     }
@@ -4744,19 +4748,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const raw = inp ? inp.value : cell.innerText.replace(/NVL[^\n]*/g, '').replace(/[−+]\s*\d+\s*%/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '');
       const deal = Number(((raw.match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
       let b = cell.querySelector('.dg-nvlw');
-      if (!nvl || !deal || nvl < NVL_WARN * deal) {
+      if (!nvl || !deal) {
         b?.remove();
         continue;
       }
       if (!b) {
         b = document.createElement('span');
-        b.className = 'dg-nvlw';
         cell.append(b);
         cell.style.whiteSpace = 'nowrap';
       }
-      const txt = `NVL ${nvl.toLocaleString('vi-VN')} · ${Math.round((nvl / deal) * 100)}%`;
+      // mức: ≥ 85% đỏ chớp · 80–85% cam · < 80% xanh dương · < 70% xanh lá ✓
+      const r = nvl / deal;
+      const lv = r >= NVL_WARN ? 'hot' : r >= 0.8 ? 'warn' : r >= 0.7 ? 'ok' : 'good';
+      const cls = `dg-nvlw ${lv}`;
+      if (b.className !== cls) b.className = cls;
+      const txt = `${lv === 'good' ? '✓ ' : ''}NVL ${nvl.toLocaleString('vi-VN')} · ${Math.round(r * 100)}%`;
       if (b.textContent !== txt) b.textContent = txt;
-      b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ ≥ ${Math.round(NVL_WARN * 100)}% giá thực bán ${deal.toLocaleString('vi-VN')}đ – lãi mỏng, xem lại giá`;
+      b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ = ${Math.round(r * 100)}% giá thực bán ${deal.toLocaleString('vi-VN')}đ${lv === 'hot' ? ' – lãi mỏng, xem lại giá' : lv === 'good' ? ' – lãi tốt' : ''}`;
     }
   }
   if (IS_TOP) setInterval(() => injectNvlWarn().catch(() => {}), 2000);
