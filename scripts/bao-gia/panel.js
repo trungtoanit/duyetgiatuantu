@@ -3913,7 +3913,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
   function crmTagCss() {
     if (document.getElementById('dg-tagcol-css') || !root) return;
-    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|conn|dl-hotbadge)([.:][\w-]+)*\s*$/;
+    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|conn|tmai|dl-hotbadge)([.:][\w-]+)*\s*$/;
     let css = '';
     for (const st of root.querySelectorAll('style')) {
       for (const r of st.sheet?.cssRules || []) {
@@ -3938,6 +3938,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
     ['nobuyer', '🚫', 'Chưa cho thu mua', '#64748b', (q, c) => noBuyer(q, c)],
+    ['tmai', '🏪', 'TMAI', '#0e7490', (q, c) => isTmai(q, c)],
     ['noreply', '⏸', 'Chưa phản hồi', '#a16207', (q, c) => !CLOSED.has(q.quoteStatus) && !q.hasOrder && !!noReplyInfo(q, c)],
     ['connect', '🔗', 'Kết nối', '#0e7490', (q, c) => !CLOSED.has(q.quoteStatus) && !q.hasOrder && !!connectInfo(q, c)],
     ['promise', '🤝', 'Hứa lên đơn', '#d97706', (q, c) => promiseInfo(q, c)],
@@ -5125,7 +5126,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const q = code && byCode[code];
         const c = q && renderCtx.comments?.[q.id];
         const hot = q && renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c);
-        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
+        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${tmaiTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
         if (td.dataset.k !== `${code}|${html.length}`) {
           td.dataset.k = `${code}|${html.length}`;
           // 1 dòng, dài quá thì "…"; rê chuột vào ô thấy đủ các nhãn
@@ -7108,6 +7109,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .fchip.green { --c: #16a34a; --bg: #dcfce7; }
     .byr { margin-left: 6px; display: inline-block; background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
     .it-main .byr { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
+    .tmai { margin-left: 6px; display: inline-block; background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
+    .it-main .tmai { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .norep { margin-left: 6px; display: inline-block; background: #fefce8; color: #a16207; border: 1px solid #fde047; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
     .it-main .norep { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .conn { margin-left: 6px; display: inline-block; background: #ecfeff; color: #0e7490; border: 1px solid #67e8f9; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
@@ -8586,7 +8589,47 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     return noBuyerCust.set.has(custKey(q));
   };
-  const noBuyer = (q, c) => !!q && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !buyerPctInfo(q, c) && !noBuyerSaid(q, c) && !custNoBuyer(q);
+  // 🏪 TMAI: bình luận nói khách là bên thương mại (mua đi bán lại) – không tính chữ "THƯƠNG MẠI" viết hoa trong tên công ty
+  const tmaiHit = (text) => {
+    const re = /thương\s*mại/giu;
+    let m;
+    while ((m = re.exec(String(text || '')))) {
+      const before = String(text).slice(Math.max(0, m.index - 14), m.index);
+      if (m[0] === m[0].toUpperCase() || /(tnhh|cổ\s*phần|công\s*ty|cty|dntn|tm\s*-?\s*dv)\s*$/i.test(before)) continue;
+      return true;
+    }
+    return false;
+  };
+  function tmaiInfo(q, c) {
+    let hit = null;
+    const walk = (t) => {
+      if (tmaiHit(t.text) && (!hit || (t.createdAt || 0) > (hit.createdAt || 0))) hit = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    return hit;
+  }
+  // theo khách: báo giá nào của khách đã nói là thương mại
+  const tmaiCust = { q: null, c: null, set: new Set() };
+  const custTmai = (q) => {
+    if (tmaiCust.q !== renderCtx.quotes || tmaiCust.c !== renderCtx.comments) {
+      tmaiCust.q = renderCtx.quotes;
+      tmaiCust.c = renderCtx.comments;
+      tmaiCust.set = new Set();
+      for (const x of Object.values(renderCtx.quotes || {})) {
+        const k = custKey(x);
+        if (k && tmaiInfo(x, renderCtx.comments?.[x.id])) tmaiCust.set.add(k);
+      }
+    }
+    return tmaiCust.set.has(custKey(q));
+  };
+  const isTmai = (q, c) => !!tmaiInfo(q, c) || custTmai(q);
+  const tmaiTag = (q, c) => {
+    const t = tmaiInfo(q, c);
+    if (!t && !custTmai(q)) return '';
+    return ` <span class="tmai" title="${esc(t ? `${t.staff?.name || ''}: ${t.text}`.slice(0, 300) : 'Khách được ghi nhận là bên thương mại ở báo giá khác')}">🏪 TMAI</span>`;
+  };
+  const noBuyer = (q, c) => !!q && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !buyerPctInfo(q, c) && !noBuyerSaid(q, c) && !custNoBuyer(q) && !isTmai(q, c);
   const noBuyerTag = (q, c) => (noBuyer(q, c) ? ' <span class="nobyr" title="Chưa thấy đề cập % / tiền cho thu mua (hoa hồng, chiết khấu) trong báo giá này và các báo giá khác của khách">🚫 Chưa cho thu mua</span>' : '');
   function buyerPctInfo(q, c) {
     if (buyerInfo(q, c)) return true;
@@ -10785,7 +10828,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const sg = suggests[qid];
       const last = lastComment(c);
       const mode = followMode(q, c);
-      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
+      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${tmaiTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
       current = `
         <div class="side-info">
           <div class="si-name">${esc(q?.name || '')}</div>
@@ -10961,7 +11004,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <span class="it-no">${i + 1}</span>
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${tmaiTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-cust">${custTag(q).trim()}${occ > 1 ? `<i class="kh-occ" title="Khách này xuất hiện lần thứ ${occ} trong bảng (đã có báo giá phía trên)">${occ}</i>` : ''}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
@@ -12315,7 +12358,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         i + 1,
         q?.createdAt ? new Date(q.createdAt * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
         q?.code || c?.code || '',
-        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
+        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${buyerTag(q, c)}${tmaiTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${connectTag(q, c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.customer?.code || '',
         q?.customer?.name || '',
         q?.name || '',
