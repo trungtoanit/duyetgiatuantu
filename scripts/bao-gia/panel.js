@@ -4733,7 +4733,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       st.id = 'dg-nvlw-css';
       st.textContent = `.dg-nvlw{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;vertical-align:middle}
 .dg-nvlw.hot{animation:dgNvlw .7s ease-in-out infinite}
-.dg-nvlw.warn{background:#ea580c}
+.dg-nvlw.warn{background:#f59e0b;color:#fff}
 .dg-nvlw.ok{background:#2563eb}
 .dg-nvlw.good{background:#16a34a}
 @keyframes dgNvlw{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6);opacity:1;transform:scale(1)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.55;transform:scale(1.1)}}`;
@@ -4757,7 +4757,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         cell.append(b);
         cell.style.whiteSpace = 'nowrap';
       }
-      // mức: ≥ 85% đỏ chớp · 80–85% cam · < 80% xanh dương · < 70% xanh lá ✓
+      // mức: ≥ 85% đỏ chớp · 80–85% vàng cam · < 80% xanh dương · < 70% xanh lá ✓
       const r = nvl / deal;
       const lv = r >= NVL_WARN ? 'hot' : r >= 0.8 ? 'warn' : r >= 0.7 ? 'ok' : 'good';
       const cls = `dg-nvlw ${lv}`;
