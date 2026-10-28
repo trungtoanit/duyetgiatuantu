@@ -6206,7 +6206,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const urgent = open.filter((r) => /CRITICAL|HIGH/i.test(r.level || ''));
         const el = mt.querySelector('[data-mtn]');
         el.innerHTML = all.length ? `<b style="font-size:16px">${open.length}</b> chưa xử lý${urgent.length ? `<br><span style="color:#dc2626">🚨 ${urgent.length} khẩn / cao</span>` : ''}` : '<span style="color:#94a3b8">chưa có dữ liệu</span>';
-        mt.title = `Báo cáo bảo trì chưa xử lý: ${open.length}${urgent.length ? ` (khẩn cấp / cao: ${urgent.length})` : ''} – bấm để mở trang Bảo trì → Báo cáo`;
+        // còn lỗi Khẩn cấp → khung chớp mạnh (đỏ rực ↔ trắng, phát sáng, nảy)
+        const crit = open.filter((r) => /CRITICAL/i.test(r.level || '')).length;
+        if (!document.getElementById('dg-mt-css')) {
+          const st = document.createElement('style');
+          st.id = 'dg-mt-css';
+          st.textContent = `@keyframes dgMtBlink{0%,100%{background:#fff1f2;color:inherit;box-shadow:0 0 0 0 rgba(220,38,38,0);transform:scale(1)}
+            45%{background:#dc2626;color:#fff;box-shadow:0 0 0 6px rgba(220,38,38,.45),0 0 28px 10px rgba(239,68,68,.85);transform:scale(1.08)}
+            55%{background:#b91c1c;color:#fff;box-shadow:0 0 0 8px rgba(220,38,38,.35),0 0 36px 14px rgba(239,68,68,.9);transform:scale(1.1)}}
+            [data-dg-mtbox][data-crit]{animation:dgMtBlink .7s ease-in-out infinite;border-color:#dc2626!important;position:relative;z-index:5}
+            [data-dg-mtbox][data-crit] *{color:inherit!important}`;
+          document.head.append(st);
+        }
+        crit ? mt.setAttribute('data-crit', String(crit)) : mt.removeAttribute('data-crit');
+        mt.title = `${crit ? `🚨 Còn ${crit} lỗi KHẨN CẤP chưa xử lý! ` : ''}Báo cáo bảo trì chưa xử lý: ${open.length}${urgent.length ? ` (khẩn cấp / cao: ${urgent.length})` : ''} – bấm để mở trang Bảo trì → Báo cáo`;
       };
       paintMt().catch(() => {});
       setInterval(() => mt.isConnected && paintMt().catch(() => {}), 60e3);
