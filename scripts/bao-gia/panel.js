@@ -8367,7 +8367,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return ` <span class="byr" title="${esc(`${other ? `Từ ${h.code} cùng khách · ` : ''}${h.by ? `${h.by}: ` : ''}${h.text || ''}`.slice(0, 300))}">🤝 Thu mua ${esc(h.val)}${other ? ' *' : ''}</span>`;
   };
   // ⏸ Chưa phản hồi: bình luận MỚI NHẤT của NVKD nói khách chưa phản hồi / chưa trả lời / đang chờ khách
-  const NO_REPLY_RE = /chưa\s*(có\s*)?(phản\s*hồi|trả\s*lời|rep|reply|báo\s*lại|hồi\s*âm|feedback|xác\s*nhận|chốt)|(khách|kh|bên\s*(đó|kia|khách)|họ|anh\s*ấy|chị\s*ấy)\s*(vẫn\s*)?(chưa|ko|không|k)\s*(rep|trả\s*lời|phản\s*hồi|báo|nghe\s*máy|bắt\s*máy|liên\s*lạc)|đang\s*(chờ|đợi)\s*(khách|kh|phản\s*hồi|bên\s*(đó|kia))|(khách|kh)\s*(im|lặn|bơ|seen)/iu;
+  const NO_REPLY_RE = /chưa\s*(có\s*)?(phản\s*hồi|trả\s*lời|rep|reply|báo\s*lại|hồi\s*âm|feedback|xác\s*nhận|chốt)|(khách|kh|bên\s*(đó|kia|khách)|họ|anh\s*ấy|chị\s*ấy)\s*(vẫn\s*)?(chưa|ko|không|k)\s*(rep|trả\s*lời|phản\s*hồi|báo|nghe\s*máy|bắt\s*máy|liên\s*lạc)|đang\s*(chờ|đợi)\s*(khách|kh|phản\s*hồi|bên\s*(đó|kia))|(khách|kh)\s*(im|lặn|bơ|seen)|có\s*(thông\s*tin|tin\s*(tức|gì)?|kết\s*quả|phản\s*hồi)\s*(gì\s*)?(thì\s*)?(em|e|chị|c|anh|a|mình)?\s*(sẽ\s*)?(báo|bao|cập\s*nhật|update)\s*(lại)?|(khách|kh|bên\s*(đó|kia|khách))\s*(hàng\s*)?(đang|còn)\s*(xem|cân\s*nhắc|so\s*sánh|tham\s*khảo|suy\s*nghĩ|tính|bàn|trình|xin\s*ý\s*kiến)|(áp|gửi|báo)\s*giá\s*(gửi\s*|cho\s*)?(khách|khác)\s*hàng|chờ\s*(khách|kh)\s*(báo|phản\s*hồi|xác\s*nhận|trả\s*lời|duyệt|chốt)/iu;
   function noReplyInfo(q, c) {
     let last = null;
     const walk = (t) => {
