@@ -437,6 +437,20 @@
     if (!d) return;
 
     // Người đang đăng nhập (để gợi ý bình luận xưng hô cho đúng)
+    // Báo cáo bảo trì (/admin/workMachineReport – trang Bảo trì → Báo cáo): lưu lên máy chủ để theo dõi / hỏi bảo trì
+    if (/\/admin\/workMachineReport(\?|$)/.test(url) && Array.isArray(d?.workMachineReports)) {
+      const nm = (x) => x?.name || x?.fullName || '';
+      const list = d.workMachineReports.map((r) => ({
+        id: r.id, createdAt: r.createdAt, updatedAt: r.updatedAt, date: r.date, type: r.type, status: r.status, level: r.level,
+        desc: r.description || '', reporter: r.reporterName || nm(r.createdStaff), image: r.image || '', resultImage: r.resultImage || '',
+        resolvedAt: r.resolvedAt || 0, resolvedBy: nm(r.resolvedBy),
+        machine: { id: r.workMachine?.id, name: r.workMachine?.name || '', code: r.workMachine?.code || '', area: r.workMachine?.area?.name || '' },
+        component: nm(r.workMachineComponent),
+        proposals: (r.proposals || []).length, repairTickets: (r.repairTickets || []).length,
+      }));
+      if (list.length) emit('maintReports', list);
+      return;
+    }
     // Danh sách nhân sự (/admin/staff): lấy ảnh chữ ký (signImage) của từng người → đồng bộ để chèn vào ảnh báo giá
     if (/\/admin\/staff(\?|$)/.test(url) && Array.isArray(d?.data)) {
       const list = d.data.filter((s) => s?.name && s.signImage).map((s) => ({ id: s.id, code: s.code, name: s.name, sign: s.signImage }));

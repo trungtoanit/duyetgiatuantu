@@ -337,6 +337,17 @@
       if (IS_TOP || data.ok) await call({ type: 'kv.set', key: 'auth', value: data }).catch(() => {});
       return was !== loggedOut || loggedOut ? render() : undefined;
     }
+    if (kind === 'maintReports') {
+      // báo cáo bảo trì: chỉ ghi dòng mới / có thay đổi (đồng bộ máy chủ)
+      const cur = await kvGet('maintReports');
+      const patch = {};
+      for (const r of data) {
+        const o = cur[r.id];
+        if (!o || o.updatedAt !== r.updatedAt || o.status !== r.status) patch[r.id] = { ...r, seenAt: Date.now() };
+      }
+      if (Object.keys(patch).length) await kvMerge('maintReports', patch);
+      return;
+    }
     if (kind === 'staffSigns') {
       // chỉ lưu đường dẫn ảnh (đồng bộ); ảnh dạng data (signImgs) do công cụ tools/sync_signs.py tải về vì máy chủ ảnh chặn CORS
       const cur = await kvGet('staffSigns');
@@ -4622,6 +4633,141 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       box.innerHTML = html;
     }
   }
+  // ---------- 🔧 Trang Bảo trì → Báo cáo: cột "💬 Hỏi bảo trì" (câu gợi ý theo tình huống, chép / sửa từng câu) ----------
+  const MT_LEVEL = { CRITICAL: 'khẩn cấp', HIGH: 'cao', MEDIUM: 'trung bình', LOW: 'thấp' };
+  function maintPick(r, all, salt = 0) {
+    const days = Math.max(0, Math.floor((Date.now() / 1000 - (r.createdAt || 0)) / 86400));
+    const same = Object.values(all).filter((x) => x?.machine?.code && x.machine.code === r.machine?.code && Date.now() / 1000 - (x.createdAt || 0) < 30 * 86400).length;
+    const done = /DONE|RESOLVED|COMPLETE|FINISH/i.test(r.status || '') || r.resolvedAt > 0;
+    const doing = /PROCESS|DOING|IN_?PROGRESS|HANDL/i.test(r.status || '');
+    const bank = done ? 'mtDone' : same >= 2 ? 'mtRepeat' : /CRITICAL|HIGH/i.test(r.level || '') ? 'mtUrgent' : r.proposals > 0 ? 'mtProposal' : doing ? 'mtDoing' : days >= 2 ? 'mtLate' : 'mtLate';
+    const tpl = pickFor(qbank(bank), r.id, salt);
+    const text = String(tpl)
+      .replaceAll('{may}', r.machine?.name || r.machine?.code || 'máy')
+      .replaceAll('{ma}', r.machine?.code || '')
+      .replaceAll('{mota}', (r.desc || '').trim().slice(0, 120))
+      .replaceAll('{ngay}', String(days))
+      .replaceAll('{nguoi}', r.reporter || '')
+      .replaceAll('{muc}', MT_LEVEL[r.level] || (r.level || '').toLowerCase())
+      .replaceAll('{id}', String(r.id))
+      .replaceAll('{k}', String(same));
+    return { bank, text };
+  }
+  let mtBusy = false;
+  async function injectMaintAsk() {
+    if (!IS_TOP || mtBusy || !/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
+    mtBusy = true;
+    try {
+      const t = [...document.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Người báo cáo/i.test(th.innerText.trim())));
+      if (!t) return;
+      const [all, edits] = await Promise.all([kvGet('maintReports'), kvGet('maintAsk')]);
+      let th = t.querySelector('th[data-dg-mtask]');
+      const heads = [...t.querySelectorAll('thead th')].filter((x) => !x.hasAttribute('data-dg-mtask'));
+      const iDesc = heads.findIndex((x) => /^Mô tả/i.test(x.innerText.trim()));
+      if (!th && iDesc >= 0) {
+        th = document.createElement('th');
+        th.className = heads[iDesc].className;
+        th.setAttribute('data-dg-mtask', '1');
+        th.textContent = '💬 Hỏi bảo trì';
+        heads[iDesc].after(th);
+        for (const cg of t.querySelectorAll('colgroup')) {
+          const cols = cg.querySelectorAll('col:not([data-dg-mtask])');
+          const col = document.createElement('col');
+          col.setAttribute('data-dg-mtask', '1');
+          col.style.width = '300px';
+          cols[iDesc] ? cols[iDesc].after(col) : cg.append(col);
+        }
+      }
+      if (iDesc < 0) return;
+      const trs = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.classList.contains('ant-table-placeholder'));
+      for (const tr of trs) {
+        const own = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-mtask'));
+        const id = Number((own[0]?.innerText || '').replace(/[^\d]/g, '')) || Number((tr.innerText.match(/^\s*(\d+)/) || [])[1]);
+        let td = tr.querySelector(':scope > td[data-dg-mtask]');
+        if (!td) {
+          td = document.createElement('td');
+          td.className = own[iDesc]?.className || '';
+          td.setAttribute('data-dg-mtask', '1');
+          own[iDesc]?.after(td);
+        }
+        const r = all[id];
+        const pick = r ? maintPick(r, all, Number(edits[id]?.salt) || 0) : null;
+        const text = edits[id]?.text || pick?.text || '';
+        const h = text
+          ? `<div style="font-size:12px;line-height:1.4;color:#3730a3;font-style:italic">“${esc(text)}”${edits[id]?.text ? ' <span style="color:#94a3b8;font-style:normal">(đã sửa)</span>' : ''}</div>
+             <div style="display:flex;gap:4px;margin-top:3px"><button data-mt="copy" data-id="${id}" style="cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:0 8px;font-size:11px;font-weight:700">📋 Chép</button>
+             <button data-mt="edit" data-id="${id}" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:999px;padding:0 8px;font-size:11px;font-weight:700">✏️ Sửa</button>
+             <button data-mt="next" data-id="${id}" title="Đổi câu khác cùng bộ" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:999px;padding:0 8px;font-size:11px;font-weight:700">🔄</button></div>`
+          : '<span style="color:#cbd5e1;font-size:11px">đang đọc…</span>';
+        if (td.dataset.h !== h) {
+          td.dataset.h = h;
+          td.innerHTML = h;
+          td.dataset.text = text;
+          td.dataset.bank = pick?.bank || '';
+        }
+      }
+    } finally {
+      mtBusy = false;
+    }
+  }
+  if (IS_TOP) {
+    setInterval(() => injectMaintAsk().catch(() => {}), 2000);
+    document.addEventListener('click', async (e) => {
+      const b = e.target.closest?.('[data-mt]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const td = b.closest('td');
+      const id = b.dataset.id;
+      if (b.dataset.mt === 'copy') {
+        try {
+          await navigator.clipboard.writeText(td.dataset.text || '');
+          b.textContent = '✅ Đã chép';
+          setTimeout(() => (b.textContent = '📋 Chép'), 1500);
+        } catch {}
+      } else if (b.dataset.mt === 'edit') {
+        const v = prompt('Sửa câu hỏi cho báo cáo này (để trống = dùng câu gợi ý):', td.dataset.text || '');
+        if (v == null) return;
+        await kvMerge('maintAsk', { [id]: v.trim() ? { text: v.trim(), at: Date.now(), by: meName } : { text: '', at: Date.now() } });
+        td.dataset.h = '';
+        injectMaintAsk();
+      } else if (b.dataset.mt === 'next') {
+        // đổi sang câu kế tiếp trong cùng bộ (bỏ câu đã sửa tay nếu có)
+        const cur = (await kvGet('maintAsk'))[id] || {};
+        await kvMerge('maintAsk', { [id]: { text: '', salt: (Number(cur.salt) || 0) + 1, at: Date.now(), by: meName } });
+        td.dataset.h = '';
+        injectMaintAsk();
+      }
+    }, true);
+  }
+  // Lấy ngầm báo cáo bảo trì: 30 phút / lần mở trang Bảo trì → Báo cáo trong khung ẩn, đọc lần lượt các trang (hook.js lưu)
+  async function collectMaint() {
+    if (!IS_TOP || !MY_ADMIN || SITE.key !== 'tuantu') return;
+    if (Date.now() - Number(lsGet('dgMaintAt') || 0) < 30 * 60e3) return;
+    lsSet('dgMaintAt', String(Date.now()));
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = '/bao-tri/bao-cao';
+    document.documentElement.append(f);
+    try {
+      const first = () => (f.contentDocument?.querySelector('.ant-table-tbody')?.innerText.match(/^\s*\d+/) || [''])[0];
+      for (let i = 0; i < 40 && !first(); i++) await sleep(500);
+      for (let page = 2; page <= 10; page++) {
+        const li = f.contentDocument?.querySelector(`.ant-pagination-item-${page}`);
+        if (!li) break;
+        const prev = first();
+        li.click();
+        for (let i = 0; i < 25 && first() === prev; i++) await sleep(400);
+        await sleep(600);
+      }
+    } finally {
+      f.remove();
+    }
+  }
+  setTimeout(() => collectMaint().catch(() => {}), 120e3);
+  setInterval(() => collectMaint().catch(() => {}), 10 * 60e3);
   // Viên "chênh lệch" màu theo mức: <5tr tím · <10tr cam · <30tr xanh dương · <50tr xanh đậm · còn lại xanh lá · âm đỏ
   // Chênh lệch từ 30 tr nhấp nháy – tiền càng lớn nháy càng nhanh / sáng / phồng mạnh (CSS chèn vào trang CRM)
   function blinkCss() {
@@ -8673,6 +8819,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   ];
   // ---------- Bộ câu hỏi (tab 💬 Bộ câu hỏi): câu mặc định ở đây, quản trị sửa được → lưu kv 'qbank' (đồng bộ mọi máy) ----------
   // Thứ tự = thứ tự ưu tiên khi chọn câu hỏi nhanh cho 1 báo giá (điều kiện nào khớp trước thì dùng bộ đó)
+  // ---------- 🔧 Câu hỏi bảo trì (trang Bảo trì → Báo cáo) – sửa được trong tab 💬 Bộ câu hỏi ----------
+  // Biến: {may} tên máy · {ma} mã máy · {mota} mô tả lỗi · {ngay} số ngày từ lúc báo · {nguoi} người báo · {muc} mức độ · {id} số báo cáo · {k} số lần báo cùng máy
+  const MAINT_BANKS = [
+    { id: 'mtLate', icon: '🔧', title: 'Bảo trì: báo cáo mới quá 2 ngày chưa xử lý', when: 'Báo cáo bảo trì trạng thái Mới, đã quá 2 ngày chưa có người xử lý.',
+      def: ['Báo cáo #{id} – {may}: “{mota}” đã {ngay} ngày chưa xử lý, bảo trì kiểm tra giúp anh khi nào xử lý được?', '{may} báo lỗi “{mota}” từ {ngay} ngày trước, đã ai xuống xem chưa em?', 'Lỗi {may} ({nguoi} báo) vẫn ở trạng thái mới, bảo trì sắp xếp xử lý trong hôm nay được không?'] },
+    { id: 'mtUrgent', icon: '🚨', title: 'Bảo trì: lỗi khẩn cấp / cao', when: 'Báo cáo mức Khẩn cấp hoặc Cao, chưa xử lý xong.',
+      def: ['Lỗi {muc} ở {may}: “{mota}” – đang ảnh hưởng sản xuất không, cần anh hỗ trợ gì để xử lý ngay?', '{may} đang lỗi {muc}, bảo trì cho anh biết dự kiến mấy giờ khắc phục xong?', 'Lỗi “{mota}” ở {may} cần ưu tiên xử lý trước, cần mua vật tư gì báo anh duyệt luôn nhé.'] },
+    { id: 'mtProposal', icon: '📝', title: 'Bảo trì: đã có đề nghị sửa / mua vật tư', when: 'Báo cáo đã có đề nghị (đề xuất sửa / mua vật tư), chưa xử lý xong.',
+      def: ['Đề nghị sửa {may} cần những gì, chi phí bao nhiêu, dự kiến bao giờ xong em?', 'Vật tư cho {may} đã đặt chưa, khi nào về để thay?', '{may}: đề nghị đã có rồi, còn vướng gì để anh duyệt cho nhanh?'] },
+    { id: 'mtDoing', icon: '⏳', title: 'Bảo trì: đang xử lý', when: 'Báo cáo đang xử lý.',
+      def: ['{may} đang xử lý tới đâu rồi em, khi nào chạy lại bình thường?', 'Lỗi “{mota}” ở {may} sửa xong chưa, có cần thêm người hỗ trợ không?'] },
+    { id: 'mtRepeat', icon: '🔁', title: 'Bảo trì: máy báo lỗi lặp lại', when: 'Cùng 1 máy có từ 2 báo cáo trở lên trong 30 ngày.',
+      def: ['{may} báo lỗi {k} lần trong 30 ngày, bảo trì kiểm tra tổng thể nguyên nhân gốc giúp anh nhé.', '{may} hay hư quá ({k} lần/30 ngày), có cần thay linh kiện / đại tu không em?'] },
+    { id: 'mtDone', icon: '✅', title: 'Bảo trì: đã xử lý xong', when: 'Báo cáo đã xử lý xong (hỏi lại nguyên nhân, cách phòng tránh).',
+      def: ['{may} sửa xong rồi, nguyên nhân do đâu em, cần làm gì để không lặp lại?', 'Lỗi “{mota}” ở {may} đã xử lý – chi phí bao nhiêu, đã hướng dẫn tổ máy vận hành đúng chưa?'] },
+  ];
   const QBANKS = [
     { id: 'monthly', icon: '📅', title: 'Khách cũ tháng này chưa nhập', when: 'Khách cũ (đã từng có đơn), từ ngày 10 của tháng mà tháng này chưa có báo giá / đơn mới.', def: ['Tháng này khách hàng này sao chưa nhập vậy {p}?'] },
     { id: 'handover', icon: '🔁', title: 'Đã bàn giao khách, NVKD chưa phản hồi', when: 'Có bình luận "Bàn giao khách hàng …" cho NVKD mới, quá 12 giờ chưa thấy NVKD đó phản hồi.', def: ['{P} liên hệ khách này được chưa, báo cáo lại cho anh'] },
@@ -8692,6 +8854,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     { id: 'zalo', icon: '💬', title: 'Hỏi NVKD qua Zalo (tab Gợi ý chốt đơn)', when: 'Bấm 💬 ở 1 deal trong tab 🔥 Gợi ý chốt đơn – câu hỏi thăm đặt trước dòng deal (mỗi deal 1 lần, mỗi NVKD 1 tin / 30 phút).', def: ZALO_ASK },
   ];
   let QB = {}; // bản đã sửa (kv 'qbank')
+  QBANKS.push(...MAINT_BANKS);
   const qbank = (id) => {
     const o = QB[id]?.lines?.map((x) => String(x).trim()).filter(Boolean);
     return o?.length ? o : QBANKS.find((b) => b.id === id)?.def || [''];
