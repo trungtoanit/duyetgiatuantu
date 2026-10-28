@@ -3913,7 +3913,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
   function crmTagCss() {
     if (document.getElementById('dg-tagcol-css') || !root) return;
-    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|dl-hotbadge)([.:][\w-]+)*\s*$/;
+    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|dl-hotbadge)([.:][\w-]+)*\s*$/;
     let css = '';
     for (const st of root.querySelectorAll('style')) {
       for (const r of st.sheet?.cssRules || []) {
@@ -3938,6 +3938,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
     ['nobuyer', '🚫', 'Chưa cho thu mua', '#64748b', (q, c) => noBuyer(q, c)],
+    ['noreply', '⏸', 'Chưa phản hồi', '#a16207', (q, c) => !CLOSED.has(q.quoteStatus) && !q.hasOrder && !!noReplyInfo(q, c)],
     ['promise', '🤝', 'Hứa lên đơn', '#d97706', (q, c) => promiseInfo(q, c)],
     ['contract', '📝', 'Hợp đồng', '#0284c7', (q, c) => contractInfo(c)],
     ['sample', '✂️', 'Cắt mẫu', '#db2777', (q, c) => sampleInfo(c)],
@@ -4967,7 +4968,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const q = code && byCode[code];
         const c = q && renderCtx.comments?.[q.id];
         const hot = q && renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c);
-        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
+        const html = q ? `${hot ? '<span class="dl-hotbadge sm">🔥 Ưu tiên</span>' : ''}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}` : '';
         if (td.dataset.k !== `${code}|${html.length}`) {
           td.dataset.k = `${code}|${html.length}`;
           // 1 dòng, dài quá thì "…"; rê chuột vào ô thấy đủ các nhãn
@@ -6939,6 +6940,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .fchip.green { --c: #16a34a; --bg: #dcfce7; }
     .byr { margin-left: 6px; display: inline-block; background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
     .it-main .byr { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
+    .norep { margin-left: 6px; display: inline-block; background: #fefce8; color: #a16207; border: 1px solid #fde047; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
+    .it-main .norep { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .nobyr { margin-left: 6px; display: inline-block; background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
     .it-main .nobyr { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .bok.reo { background: #e0f2fe; color: #075985; border-color: #7dd3fc; }
@@ -8351,6 +8354,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!h) return '';
     const other = h.code && h.code !== q?.code;
     return ` <span class="byr" title="${esc(`${other ? `Từ ${h.code} cùng khách · ` : ''}${h.by ? `${h.by}: ` : ''}${h.text || ''}`.slice(0, 300))}">🤝 Thu mua ${esc(h.val)}${other ? ' *' : ''}</span>`;
+  };
+  // ⏸ Chưa phản hồi: bình luận MỚI NHẤT của NVKD nói khách chưa phản hồi / chưa trả lời / đang chờ khách
+  const NO_REPLY_RE = /chưa\s*(có\s*)?(phản\s*hồi|trả\s*lời|rep|reply|báo\s*lại|hồi\s*âm|feedback|xác\s*nhận|chốt)|(khách|kh|bên\s*(đó|kia|khách)|họ|anh\s*ấy|chị\s*ấy)\s*(vẫn\s*)?(chưa|ko|không|k)\s*(rep|trả\s*lời|phản\s*hồi|báo|nghe\s*máy|bắt\s*máy|liên\s*lạc)|đang\s*(chờ|đợi)\s*(khách|kh|phản\s*hồi|bên\s*(đó|kia))|(khách|kh)\s*(im|lặn|bơ|seen)/iu;
+  function noReplyInfo(q, c) {
+    let last = null;
+    const walk = (t) => {
+      if (t.staff?.name && t.staff.name !== meName && t.text && (!last || (t.createdAt || 0) > (last.createdAt || 0))) last = t;
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    if (!last || !NO_REPLY_RE.test(last.text)) return null;
+    return last;
+  }
+  const noReplyTag = (q, c) => {
+    if (!q || CLOSED.has(q.quoteStatus) || q.hasOrder) return '';
+    const t = noReplyInfo(q, c);
+    return t ? ` <span class="norep" title="${esc(`${t.staff?.name || ''} (${fmtTime(t.createdAt)}): ${t.text}`.slice(0, 300))}">⏸ Chưa phản hồi</span>` : '';
   };
   // Báo giá còn mở mà chưa đề cập % / tiền cho thu mua (cả báo giá này lẫn các báo giá khác của khách)
   // "thu mua không lấy %", "không nhận chiết khấu", "khách không lấy hoa hồng"… → đã rõ, không gắn "Chưa cho thu mua"
@@ -10578,7 +10598,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const sg = suggests[qid];
       const last = lastComment(c);
       const mode = followMode(q, c);
-      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
+      const tags = `${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}`;
       current = `
         <div class="side-info">
           <div class="si-name">${esc(q?.name || '')}</div>
@@ -10754,7 +10774,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <span class="it-no">${i + 1}</span>
       ${dateCell(q?.createdAt)}
       <span class="it-code">${esc(q?.code || c.code)}</span>
-      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
+      <span class="it-main">${badge}${kindTag(q)}${noSheetTag(q)}${bossOkTag(q, c)}${targetTag(c)}${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)}${highPriceTag(c)}${creditTag(c)}${promiseTag(q, c)}${contractTag(c)}${sampleTag(q, c)}${noDepositTag(c)}</span>
       <span class="it-cust">${custTag(q).trim()}${occ > 1 ? `<i class="kh-occ" title="Khách này xuất hiện lần thứ ${occ} trong bảng (đã có báo giá phía trên)">${occ}</i>` : ''}</span>
       <span class="it-name" title="${esc(q?.name || '')}">${esc(q?.name || '')}</span>
       <span class="it-who" title="${esc(staff || '')}">${avatarHtml(staff, 20)}<span>${esc(shortName(staff) || '?')}</span></span>
@@ -12108,7 +12128,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         i + 1,
         q?.createdAt ? new Date(q.createdAt * 1000).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
         q?.code || c?.code || '',
-        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${buyerTag(q, c)}${noBuyerTag(q, c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
+        htmlText(`${kindTag(q)} ${noSheetTag(q)} ${bossOkTag(q, c)} ${targetTag(c)} ${buyerTag(q, c)}${noBuyerTag(q, c)}${noReplyTag(q, c)} ${highPriceTag(c)} ${creditTag(c)} ${promiseTag(q, c)} ${contractTag(c)} ${sampleTag(q, c)} ${noDepositTag(c)}`),
         q?.customer?.code || '',
         q?.customer?.name || '',
         q?.name || '',
