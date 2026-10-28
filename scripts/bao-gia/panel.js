@@ -4651,110 +4651,96 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .replaceAll('{k}', String(same));
     return { bank, text };
   }
+  // ---------- 💬 Hỏi bảo trì (trang Bảo trì → Báo cáo): 1 khung cạnh tiêu đề "Khắc phục" ----------
+  // Chọn ngẫu nhiên 1 việc đang tồn đọng (ưu tiên khẩn / cao, để lâu; bỏ việc đã nhắc trong 24 giờ) → soạn tin: thông tin báo cáo + 1 câu hỏi
+  // ngẫu nhiên trong bộ câu hỏi dùng chung (⚙️ cài đặt, kv 'qbank' → mtAsk) → 📋 Chép / 📨 Gửi Zalo (người nhận cài 1 lần, kv maintCfg)
+  const mtOpen = (r) => r && !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || '');
+  function maintChoose(all, asked, skip) {
+    const now = Date.now() / 1000;
+    const open = Object.values(all).filter(mtOpen);
+    let pool = open.filter((r) => Date.now() - (asked[r.id]?.at || 0) > 24 * 3600e3 && r.id !== skip);
+    if (!pool.length) pool = open.filter((r) => r.id !== skip);
+    if (!pool.length) return null;
+    // ngẫu nhiên có trọng số: khẩn cấp ×4, cao ×3, trung bình ×2, thấp ×1; để càng lâu càng dễ được chọn
+    const wt = (r) => ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2 }[r.level] || 1) * (1 + Math.min(60, Math.max(0, (now - (r.createdAt || now)) / 86400)));
+    let x = Math.random() * pool.reduce((a, r) => a + wt(r), 0);
+    return pool.find((p0) => (x -= wt(p0)) <= 0) || pool[0];
+  }
+  function maintCompose(r, ask) {
+    const days = Math.max(0, Math.floor((Date.now() / 1000 - (r.createdAt || Date.now() / 1000)) / 86400));
+    const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
+    const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
+    const text = [`🔧 Nhắc việc bảo trì – Báo cáo #${r.id}`, `Máy: ${mach}`, `Lỗi: ${r.desc || ''}`, `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`, '', ask].join('\n');
+    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: ${esc(r.desc || '')}</div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
+    return { text, html, days, lv, mach };
+  }
+  const mtAskOf = (r, salt = Math.floor(Math.random() * 1e6)) => maintPick(r, {}, salt).text;
+  const MT = { r: null, ask: '', edited: false }; // việc + câu đang hiện trong khung
+  async function maintNew(skip) {
+    const [all, asked] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked')]);
+    MT.r = maintChoose(all, asked, skip);
+    MT.ask = MT.r ? mtAskOf(MT.r) : '';
+    MT.edited = false;
+  }
+  const mtBtn = (t, label, bg, title = '') =>
+    `<button data-mtc="${t}" title="${esc(title)}" style="cursor:pointer;border:0;border-radius:999px;padding:4px 12px;font:inherit;font-size:12px;font-weight:800;${bg}">${label}</button>`;
+  function paintMaintCard(card) {
+    const r = MT.r;
+    if (!r) {
+      card.innerHTML = `<b style="color:#3730a3">💬 Hỏi bảo trì</b> <span style="color:#64748b;font-size:12px">${Object.keys(state.mtAll || {}).length ? '✓ Không có việc tồn đọng' : 'đang đọc báo cáo…'}</span> ${mtBtn('cfg', '⚙️ Câu hỏi', 'background:#fff;color:#475569;border:1px solid #e2e8f0')}`;
+      return;
+    }
+    const m = maintCompose(r, MT.ask);
+    const lvc = /CRITICAL|HIGH/.test(r.level) ? '#dc2626' : r.level === 'MEDIUM' ? '#d97706' : '#16a34a';
+    card.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <b style="color:#3730a3;font-size:13px">💬 Hỏi bảo trì</b>
+        <span style="font-size:12px;color:#334155"><b>#${esc(String(r.id))}</b> · ${esc(r.machine?.name || r.machine?.code || '')}: <i>“${esc((r.desc || '').slice(0, 90))}”</i> · ${m.days} ngày · <b style="color:${lvc}">${esc(m.lv)}</b></span></div>
+      <div data-mtask contenteditable="true" title="Bấm vào để sửa câu hỏi trước khi gửi" style="margin:6px 0;padding:6px 10px;border-radius:8px;background:#fff;border:1px dashed #a5b4fc;color:#3730a3;font-size:14px;font-weight:600;outline:none">${esc(MT.ask)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${mtBtn('ask', '🔄 Đổi câu', 'background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe', 'Đổi sang câu hỏi khác trong bộ câu hỏi')}
+        ${mtBtn('job', '🎲 Việc khác', 'background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe', 'Chọn ngẫu nhiên 1 việc tồn đọng khác')}
+        ${mtBtn('copy', '📋 Chép', 'background:#fff;color:#475569;border:1px solid #e2e8f0', 'Chép cả tin nhắn (thông tin báo cáo + câu hỏi)')}
+        ${MY_ADMIN ? mtBtn('zalo', '📨 Gửi Zalo', 'color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed)', 'Gửi tin này qua Zalo (Shift+bấm: đổi người nhận)') : ''}
+        ${mtBtn('cfg', '⚙️ Câu hỏi', 'background:#fff;color:#475569;border:1px solid #e2e8f0', 'Cài đặt bộ câu hỏi dùng chung')}
+        <span data-mtmsg style="font-size:12px;color:#047857;font-weight:700"></span></div>`;
+  }
   let mtBusy = false;
-  async function injectMaintAsk() {
+  async function injectMaintCard() {
     if (!IS_TOP || mtBusy || !/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
     mtBusy = true;
     try {
-      const t = [...document.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Người báo cáo/i.test(th.innerText.trim())));
-      if (!t) return;
-      const [all, edits] = await Promise.all([kvGet('maintReports'), kvGet('maintAsk')]);
-      let th = t.querySelector('th[data-dg-mtask]');
-      const heads = [...t.querySelectorAll('thead th')].filter((x) => !x.hasAttribute('data-dg-mtask'));
-      const iDesc = heads.findIndex((x) => /^Mô tả/i.test(x.innerText.trim()));
-      if (!th && iDesc >= 0) {
-        th = document.createElement('th');
-        th.className = heads[iDesc].className;
-        th.setAttribute('data-dg-mtask', '1');
-        th.textContent = '💬 Hỏi bảo trì';
-        heads[iDesc].after(th);
-        for (const cg of t.querySelectorAll('colgroup')) {
-          const cols = cg.querySelectorAll('col:not([data-dg-mtask])');
-          const col = document.createElement('col');
-          col.setAttribute('data-dg-mtask', '1');
-          col.style.width = '300px';
-          cols[iDesc] ? cols[iDesc].after(col) : cg.append(col);
-        }
-      }
-      if (iDesc < 0) return;
-      const trs = [...t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.classList.contains('ant-table-placeholder'));
-      for (const tr of trs) {
-        const own = [...tr.cells].filter((c) => !c.hasAttribute('data-dg-mtask'));
-        const id = Number((own[0]?.innerText || '').replace(/[^\d]/g, '')) || Number((tr.innerText.match(/^\s*(\d+)/) || [])[1]);
-        let td = tr.querySelector(':scope > td[data-dg-mtask]');
-        if (!td) {
-          td = document.createElement('td');
-          td.className = own[iDesc]?.className || '';
-          td.setAttribute('data-dg-mtask', '1');
-          own[iDesc]?.after(td);
-        }
-        const r = all[id];
-        const pick = r ? maintPick(r, all, Number(edits[id]?.salt) || 0) : null;
-        const text = edits[id]?.text || pick?.text || '';
-        const h = text
-          ? `<div style="font-size:12px;line-height:1.4;color:#3730a3;font-style:italic">“${esc(text)}”${edits[id]?.text ? ' <span style="color:#94a3b8;font-style:normal">(đã sửa)</span>' : ''}</div>
-             <div style="display:flex;gap:4px;margin-top:3px"><button data-mt="copy" data-id="${id}" style="cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:0 8px;font-size:11px;font-weight:700">📋 Chép</button>
-             <button data-mt="edit" data-id="${id}" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:999px;padding:0 8px;font-size:11px;font-weight:700">✏️ Sửa</button>
-             <button data-mt="next" data-id="${id}" title="Đổi câu khác cùng bộ" style="cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:999px;padding:0 8px;font-size:11px;font-weight:700">🔄</button></div>`
-          : '<span style="color:#cbd5e1;font-size:11px">đang đọc…</span>';
-        if (td.dataset.h !== h) {
-          td.dataset.h = h;
-          td.innerHTML = h;
-          td.dataset.text = text;
-          td.dataset.bank = pick?.bank || '';
-        }
-      }
+      state.mtAll = await kvGet('maintReports');
+      if (document.querySelector('[data-dg-mtcard]')) return;
+      const title = [...document.querySelectorAll('h1,h2,h3,h4,h5,.ant-typography,.ant-page-header-heading-title,div,span')].find(
+        (x) => !x.children.length && x.textContent.trim() === 'Khắc phục' && !x.closest('.ant-menu,nav,[role="menu"],.ant-tabs-nav,.ant-breadcrumb') && x.getBoundingClientRect().width > 0
+      );
+      if (!title) return;
+      const card = document.createElement('div');
+      card.setAttribute('data-dg-mtcard', '1');
+      card.setAttribute('style', 'display:inline-block;vertical-align:middle;margin-left:28px;max-width:min(980px,70vw);padding:8px 12px;border-radius:12px;background:linear-gradient(90deg,#eef2ff,#f5f3ff);border:1px solid #c7d2fe;font-size:13px;font-weight:400;line-height:1.45;text-align:left;box-shadow:0 2px 8px rgba(79,70,229,.08)');
+      title.style.display = 'inline-block';
+      title.style.verticalAlign = 'middle';
+      title.after(card);
+      if (!MT.r || !mtOpen(state.mtAll[MT.r.id])) await maintNew();
+      paintMaintCard(card);
     } finally {
       mtBusy = false;
     }
   }
-  if (IS_TOP) {
-    setInterval(() => injectMaintAsk().catch(() => {}), 2000);
-    document.addEventListener('click', async (e) => {
-      const b = e.target.closest?.('[data-mt]');
-      if (!b) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const td = b.closest('td');
-      const id = b.dataset.id;
-      if (b.dataset.mt === 'copy') {
-        try {
-          await navigator.clipboard.writeText(td.dataset.text || '');
-          b.textContent = '✅ Đã chép';
-          setTimeout(() => (b.textContent = '📋 Chép'), 1500);
-        } catch {}
-      } else if (b.dataset.mt === 'edit') {
-        const v = prompt('Sửa câu hỏi cho báo cáo này (để trống = dùng câu gợi ý):', td.dataset.text || '');
-        if (v == null) return;
-        await kvMerge('maintAsk', { [id]: v.trim() ? { text: v.trim(), at: Date.now(), by: meName } : { text: '', at: Date.now() } });
-        td.dataset.h = '';
-        injectMaintAsk();
-      } else if (b.dataset.mt === 'next') {
-        // đổi sang câu kế tiếp trong cùng bộ (bỏ câu đã sửa tay nếu có)
-        const cur = (await kvGet('maintAsk'))[id] || {};
-        await kvMerge('maintAsk', { [id]: { text: '', salt: (Number(cur.salt) || 0) + 1, at: Date.now(), by: meName } });
-        td.dataset.h = '';
-        injectMaintAsk();
-      }
-    }, true);
-  }
-  // 📨 Nhắc bảo trì qua Zalo: chọn ngẫu nhiên 1 việc đang tồn đọng (ưu tiên khẩn / cao, để lâu), soạn tin + câu hỏi gợi ý, gửi Zalo
-  // Người nhận (nhóm / người bảo trì) cài 1 lần (kv maintCfg, đồng bộ); mỗi báo cáo nhắc tối đa 1 lần / 24 giờ (kv maintAsked)
-  async function maintZalo(btn) {
+  async function maintZalo(btn, r, text, html) {
     // mở tab Zalo ngay lúc bấm (trình duyệt chặn mở cửa sổ sau khi chờ)
     let w = null;
     try {
       w = window.open('', 'dg-zalo');
     } catch {}
-    const cfg = (await kvGet('maintCfg')).main || {};
-    let to = cfg.to;
+    let to = (await kvGet('maintCfg')).main?.to;
     if (!to) {
       to = (prompt('Tên nhóm / người nhận Zalo của bảo trì (đúng như trên Zalo):', '') || '').trim();
       if (!to) {
         try {
           if (w && w.location.href === 'about:blank') w.close();
         } catch {}
-        return;
+        return false;
       }
       await kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } });
     }
@@ -4762,44 +4748,224 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (w) w.location.href = 'https://chat.zalo.me/';
       w?.focus();
     } catch {}
-    const [all, asked, names] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked'), kvGet('zaloNames')]);
-    const now = Date.now() / 1000;
-    const open = Object.values(all).filter((r) => r && !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || ''));
-    const pool = open.filter((r) => Date.now() - (asked[r.id]?.at || 0) > 24 * 3600e3);
-    if (!pool.length) {
-      btn.textContent = open.length ? '✓ Đã nhắc hết trong 24h' : '✓ Không có việc tồn';
-      setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 3000);
-      return;
-    }
-    // ngẫu nhiên có trọng số: khẩn cấp ×4, cao ×3, trung bình ×2, thấp ×1; để càng lâu càng dễ được chọn
-    const wt = (r) => ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2 }[r.level] || 1) * (1 + Math.min(60, Math.max(0, (now - (r.createdAt || now)) / 86400)));
-    const sum = pool.reduce((a, r) => a + wt(r), 0);
-    let x = Math.random() * sum;
-    const r = pool.find((p0) => (x -= wt(p0)) <= 0) || pool[0];
-    const days = Math.max(0, Math.floor((now - (r.createdAt || now)) / 86400));
-    const ask = (await kvGet('maintAsk'))[r.id]?.text || maintPick(r, all, Math.floor(Math.random() * 1e6)).text;
-    const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
-    const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
-    const lines = [
-      `🔧 Nhắc việc bảo trì – Báo cáo #${r.id}`,
-      `Máy: ${mach}`,
-      `Lỗi: ${r.desc || ''}`,
-      `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`,
-      '',
-      ask,
-    ];
-    const text = lines.join('\n');
-    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: ${esc(r.desc || '')}</div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
-    const old = await kvGet('zaloJobs');
+    const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     keep[`${Date.now()}-maint`] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, status: 'pending', at: Date.now(), maint: r.id };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {}
+    if (btn) btn.textContent = `📨 Đã gửi #${r.id} → ${to}`;
+    return true;
+  }
+  // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi gửi luôn
+  async function maintZaloQuick(btn) {
+    const [all, asked] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked')]);
+    const r = maintChoose(all, asked);
+    if (!r) {
+      btn.textContent = '✓ Không có việc tồn';
+      setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 3000);
+      return;
+    }
+    const m = maintCompose(r, mtAskOf(r));
+    await maintZalo(null, r, m.text, m.html);
     btn.textContent = `📨 Đã gửi #${r.id}`;
     setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 4000);
+  }
+  // ⚙️ Cài đặt bộ câu hỏi hỏi bảo trì: danh sách (Enter thêm dòng, 🗑 xoá) hoặc soạn hàng loạt; xem trước tin Zalo
+  async function openMaintTpl() {
+    document.getElementById('dg-mt-tpl')?.remove();
+    const box = document.createElement('div');
+    box.id = 'dg-mt-tpl';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.4);display:grid;place-items:center;font-family:inherit');
+    const list = qbank('mtAsk').slice();
+    const cfg = (await kvGet('maintCfg')).main || {};
+    let bulk = false;
+    let pv = 0;
+    const draw = () => {
+      box.innerHTML = `<div style="width:min(1180px,96vw);height:min(90vh,900px);display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+        <div style="padding:12px 18px;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px;flex:none"><b style="font-size:16px">⚙️ Bộ câu hỏi hỏi bảo trì</b>
+          <span style="opacity:.85;font-size:12px">${list.filter((x) => x.trim()).length} câu · dùng chung cho mọi báo cáo</span><button data-t="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px">×</button></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 18px;border-bottom:1px solid #e2e8f0;font-size:13px;flex:none">
+          <label style="display:flex;gap:6px;align-items:center">📨 Người nhận Zalo: <input data-to value="${esc(cfg.to || '')}" placeholder="Tên nhóm / người bảo trì trên Zalo" style="font:inherit;border:1px solid #cbd5e1;border-radius:6px;padding:3px 8px;width:260px"></label>
+          <button data-t="bulk" style="margin-left:auto;border:1px solid #c7d2fe;background:${bulk ? '#4f46e5;color:#fff' : '#eef2ff;color:#3730a3'};border-radius:999px;padding:4px 12px;cursor:pointer;font:inherit;font-weight:700">${bulk ? '✅ Xong, về dạng danh sách' : '✍️ Soạn hàng loạt (mỗi dòng 1 câu)'}</button></div>
+        <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)">
+          <div style="min-height:0;overflow:auto;padding:10px 14px;border-right:1px solid #e2e8f0">
+            ${bulk
+              ? `<textarea data-bulk style="width:100%;height:100%;min-height:400px;box-sizing:border-box;font:inherit;font-size:13px;line-height:1.7;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;resize:none">${esc(list.join('\n'))}</textarea>`
+              : `<div style="display:grid;gap:3px">${list
+                  .map((t, i) => `<div style="display:grid;grid-template-columns:26px minmax(0,1fr) 26px 26px;gap:4px;align-items:center">
+                    <span style="color:#94a3b8;font-size:11px;font-weight:800;text-align:right">${i + 1}</span>
+                    <input data-i="${i}" value="${esc(t)}" placeholder="Nhập câu…" style="font:inherit;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;height:28px;box-sizing:border-box;min-width:0">
+                    <button data-t="pv" data-i="${i}" title="Xem trước câu này" style="all:unset;cursor:pointer;text-align:center">👁</button>
+                    <button data-t="del" data-i="${i}" title="Xoá câu này" style="all:unset;cursor:pointer;color:#b91c1c;font-size:13px;text-align:center">🗑</button></div>`)
+                  .join('')}</div>
+                <button data-t="add" style="margin-top:8px;border:1px dashed #94a3b8;background:#f8fafc;border-radius:8px;padding:4px 12px;cursor:pointer;font:inherit">＋ Thêm câu</button>`}
+          </div>
+          <div style="min-height:0;display:flex;flex-direction:column;padding:10px 14px;gap:6px;background:#f8fafc">
+            <b style="font-size:13px">📱 Tin sẽ gửi qua Zalo (ví dụ 1 việc đang tồn):</b>
+            <div style="flex:1;min-height:0;overflow:auto;background:#e5efff;border-radius:12px;padding:10px">
+              <div data-pv style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);font-size:13px;line-height:1.5;color:#111"></div></div>
+            <span style="color:#64748b;font-size:12px">Có thể chèn {may} {ma} {mota} {ngay} {nguoi} {muc} {id} nếu muốn câu nhắc cụ thể.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
+          <span style="color:#64748b;font-size:12px;margin-right:auto">Mỗi lần soạn tin sẽ chọn ngẫu nhiên 1 câu trong danh sách. Enter = thêm dòng mới.</span>
+          <button data-t="reset" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit">↺ Câu mặc định</button>
+          <button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
+          <button data-t="save" style="border:0;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div></div>`;
+      preview();
+    };
+    const read = () => {
+      const bt = box.querySelector('textarea[data-bulk]');
+      if (bt) list.splice(0, list.length, ...bt.value.split('\n').map((x) => x.trim()).filter(Boolean));
+      else box.querySelectorAll('input[data-i]').forEach((ta) => (list[Number(ta.dataset.i)] = ta.value));
+      return list.map((x) => x.trim()).filter(Boolean);
+    };
+    const preview = () => {
+      const el = box.querySelector('[data-pv]');
+      if (!el) return;
+      const ls = read();
+      const r = MT.r || Object.values(state.mtAll || {}).find(mtOpen);
+      const tpl = ls[Math.min(pv, ls.length - 1)] || '';
+      if (!r) return (el.textContent = tpl || '(chưa có câu)');
+      const keep = QB.mtAsk;
+      QB.mtAsk = { lines: [tpl] };
+      el.innerHTML = maintCompose(r, mtAskOf(r, 0)).html;
+      QB.mtAsk = keep;
+    };
+    box.addEventListener('keydown', (e) => {
+      const inp = e.target.closest?.('input[data-i]');
+      if (!inp || e.key !== 'Enter' || e.isComposing) return;
+      e.preventDefault();
+      read();
+      const i = Number(inp.dataset.i) + 1;
+      list.splice(i, 0, '');
+      pv = i;
+      draw();
+      const nx = box.querySelector(`input[data-i="${i}"]`);
+      nx?.focus();
+      nx?.scrollIntoView({ block: 'nearest' });
+    });
+    box.addEventListener('focusin', (e) => {
+      const inp = e.target.closest?.('input[data-i]');
+      if (inp) {
+        pv = Number(inp.dataset.i);
+        preview();
+      }
+    });
+    box.addEventListener('input', preview);
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const b = e.target.closest('[data-t]');
+      if (!b) return;
+      const t = b.dataset.t;
+      if (t === 'x') return box.remove();
+      if (t === 'bulk') {
+        read();
+        bulk = !bulk;
+        return draw();
+      }
+      if (t === 'pv') {
+        pv = Number(b.dataset.i);
+        return preview();
+      }
+      if (t === 'add') {
+        read();
+        list.push('');
+        pv = list.length - 1;
+        draw();
+        const ins = box.querySelectorAll('input[data-i]');
+        ins[ins.length - 1]?.focus();
+        return;
+      }
+      if (t === 'del') {
+        read();
+        list.splice(Number(b.dataset.i), 1);
+        pv = Math.max(0, Math.min(pv, list.length - 1));
+        return draw();
+      }
+      if (t === 'reset') {
+        if (!confirm('Thay danh sách bằng các câu mặc định?')) return;
+        list.splice(0, list.length, ...MAINT_BANKS[0].def);
+        return draw();
+      }
+      if (t === 'save') {
+        const lines = read();
+        const to = box.querySelector('input[data-to]').value.trim();
+        QB.mtAsk = { lines, at: Date.now(), by: meName };
+        await kvMerge('qbank', { mtAsk: QB.mtAsk });
+        if (to && to !== cfg.to) await kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } });
+        box.remove();
+        const card = document.querySelector('[data-dg-mtcard]');
+        if (card && MT.r && !MT.edited) {
+          MT.ask = mtAskOf(MT.r);
+          paintMaintCard(card);
+        }
+      }
+    });
+    draw();
+    document.body.append(box);
+  }
+  if (IS_TOP) {
+    setInterval(() => injectMaintCard().catch(() => {}), 2000);
+    document.addEventListener('input', (e) => {
+      if (e.target.closest?.('[data-dg-mtcard] [data-mtask]')) {
+        MT.ask = e.target.innerText.trim();
+        MT.edited = true;
+      }
+    });
+    document.addEventListener('click', async (e) => {
+      const b = e.target.closest?.('[data-mtc]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const card = b.closest('[data-dg-mtcard]');
+      const msg = (t) => {
+        const el = card.querySelector('[data-mtmsg]');
+        if (el) el.textContent = t;
+      };
+      const t = b.dataset.mtc;
+      if (t === 'cfg') return openMaintTpl();
+      if (t === 'ask' && MT.r) {
+        const cur = MT.ask;
+        for (let i = 0; i < 6 && MT.ask === cur; i++) MT.ask = mtAskOf(MT.r);
+        MT.edited = false;
+        return paintMaintCard(card);
+      }
+      if (t === 'job') {
+        await maintNew(MT.r?.id);
+        return paintMaintCard(card);
+      }
+      if (!MT.r) return;
+      const m = maintCompose(MT.r, MT.ask);
+      if (t === 'copy') {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([m.text], { type: 'text/plain' }), 'text/html': new Blob([m.html], { type: 'text/html' }) })]);
+        } catch {
+          await navigator.clipboard.writeText(m.text).catch(() => {});
+        }
+        return msg('✅ Đã chép tin nhắn');
+      }
+      if (t === 'zalo') {
+        if (e.shiftKey) {
+          const cur = (await kvGet('maintCfg')).main?.to || '';
+          const v = prompt('Tên nhóm / người nhận Zalo của bảo trì:', cur);
+          if (v != null && v.trim()) await kvMerge('maintCfg', { main: { to: v.trim(), at: Date.now(), by: meName } });
+          return;
+        }
+        if (b.disabled) return;
+        b.disabled = true;
+        b.textContent = '⏳ Đang gửi…';
+        try {
+          const ok = await maintZalo(null, MT.r, m.text, m.html);
+          if (ok) msg(`📨 Đã gửi #${MT.r.id} qua Zalo`);
+          b.textContent = '📨 Gửi Zalo';
+        } catch (err) {
+          b.textContent = `⚠️ ${err.message}`;
+        } finally {
+          b.disabled = false;
+        }
+      }
+    }, true);
   }
   // Lấy ngầm báo cáo bảo trì: 30 phút / lần mở trang Bảo trì → Báo cáo trong khung ẩn, đọc lần lượt các trang (hook.js lưu)
   async function collectMaint() {
@@ -6031,7 +6197,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         }
         if (z.textContent.startsWith('⏳')) return;
         z.textContent = '⏳ Đang soạn…';
-        maintZalo(z).catch((err) => (z.textContent = `⚠️ ${err.message}`));
+        maintZaloQuick(z).catch((err) => (z.textContent = `⚠️ ${err.message}`));
       });
       box.after(mt);
       const paintMt = async () => {
