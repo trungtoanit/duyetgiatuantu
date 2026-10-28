@@ -4469,11 +4469,37 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     k = { n: list.length, sum: list.reduce((t, x) => t + (x.total || 0), 0), dsum: 0, dn: 0 };
     // Chênh lệch theo DOANH THU THỰC của đơn: tỷ lệ chênh lệch của báo giá × tổng tiền đơn
     // (1 báo giá lên nhiều đơn / đơn lấy 1 phần → không cộng trùng cả báo giá)
+    // Chênh lệch của 1 đơn được CHỐT SỐ lần đầu tính được (kv 'orderDiff' theo mã DH, đồng bộ) → tổng ngày / tháng
+    // không tự nhảy khi báo giá được đọc lại sau đó (PO thật, chiết giá offset, sửa giá…) mà không có đơn mới
+    if (!state.orderDiff || Date.now() - state.orderDiffAt > 30e3) {
+      state.orderDiffAt = Date.now();
+      kvGet('orderDiff')
+        .then((x) => {
+          state.orderDiff = { ...(x || {}), ...(state.orderDiffNew || {}) };
+          state.orderDiffLoaded = true;
+        })
+        .catch(() => {});
+      state.orderDiff ||= {};
+    }
     const orderDiff = (o, q) => {
-      const v = q && !q.noSheet ? diffVal(q) : null;
-      if (v == null) return null;
+      const fz = o?.dh && state.orderDiff?.[o.dh];
+      if (fz && fz.v != null) return fz.v;
+      const v0 = q && !q.noSheet ? diffVal(q) : null;
+      if (v0 == null) return null;
       const amt = Number(q.amount) || 0;
-      return amt > 0 && o.total > 0 ? (v * o.total) / amt : v;
+      const v = amt > 0 && o.total > 0 ? (v0 * o.total) / amt : v0;
+      if (o?.dh && state.orderDiffLoaded) {
+        const rec = { v: Math.round(v), bg: o.bg || '', at: Date.now() };
+        state.orderDiff[o.dh] = rec;
+        (state.orderDiffNew ||= {})[o.dh] = rec;
+        clearTimeout(state.orderDiffT);
+        state.orderDiffT = setTimeout(() => {
+          const patch = state.orderDiffNew;
+          state.orderDiffNew = {};
+          if (patch && Object.keys(patch).length) kvMerge('orderDiff', patch).catch(() => {});
+        }, 3000);
+      }
+      return v;
     };
     for (const x of list) {
       const v = orderDiff(x, x.q);

@@ -89,6 +89,7 @@
     "hotPinned",
     "notifRead",
     "notifs",
+    "orderDiff",
     "nudgeCfg",
     "perms",
     "popupPrefs",
