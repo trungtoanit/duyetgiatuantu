@@ -4662,6 +4662,101 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectNewBadges(), 2000);
 
+  // ---------- ⚠️ Flexo: NVL ≥ 85% giá deal → hiện giá NVL cạnh "Giá deal", chớp đỏ ----------
+  // NVL 1 thùng lấy từ hộp "Tính giá carton" (dòng "NVL: 3.807đ") của từng dòng Flexo – mở trong khung ẩn (không lưu gì),
+  // lưu kv 'flexoNvl' { [mã BG]: { at, amountAt, rows: { TPxxxx: nvl } } }; đọc lại khi giá trị báo giá đổi hoặc quá 1 ngày
+  const NVL_WARN = 0.85;
+  let nvlScanning = '';
+  function dealTable(doc = document) {
+    for (const t of doc.querySelectorAll('.ant-table')) {
+      if (t.closest('.ant-modal-wrap, #dg-root')) continue;
+      const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+      const iDeal = hs.findIndex((h) => /^Giá deal/i.test(h));
+      const iQty = hs.indexOf('Số lượng');
+      if (iDeal >= 0 && iQty >= 0) return { t, iDeal, iQty };
+    }
+    return null;
+  }
+  const rowTp = (tr) => (tr.innerText.match(/TP\d{3,}/) || [])[0];
+  const isFlexoRow = (tr) => [...tr.querySelectorAll('.ant-tag, span')].some((e) => !e.children.length && e.textContent.trim() === 'Flexo');
+  async function scanFlexoNvl(q) {
+    if (nvlScanning === q.code) return;
+    nvlScanning = q.code;
+    const rows = {};
+    let flexoN = 0;
+    try {
+      await loadInFrame(q.id, undefined, undefined, async (f) => {
+        const doc = f.contentDocument;
+        const pt = await waitFor(() => dealTable(doc), 15000, 300);
+        if (!pt) return;
+        const vis = () => [...doc.querySelectorAll('.ant-modal-wrap')].filter((m) => f.contentWindow.getComputedStyle(m).display !== 'none');
+        const fx = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row') && isFlexoRow(x));
+        flexoN = fx.length;
+        for (const tr of fx) {
+          const tp = rowTp(tr);
+          const qb = tr.cells[pt.iQty]?.querySelector('button, a') || [...tr.cells].map((td) => td.querySelector('button, a')).find((b) => b && /^\s*[\d.]+\s*$/.test(b.innerText || ''));
+          if (!tp || !qb) continue;
+          qb.click();
+          const modal = await waitFor(() => vis().find((m) => /Tính giá carton/i.test(m.innerText) && /NVL:\s*[\d.,]+/.test(m.innerText)), 8000, 200);
+          if (modal) {
+            await sleep(400);
+            const m = modal.innerText.match(/NVL:\s*([\d.,]+)/);
+            const v = m ? Number(m[1].replace(/[.,]/g, '')) : 0;
+            if (v) rows[tp] = v;
+            ([...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Đóng') || modal.querySelector('.ant-modal-close'))?.click();
+            await waitFor(() => !vis().includes(modal), 4000, 200);
+            await sleep(300);
+          }
+        }
+      });
+    } finally {
+      nvlScanning = '';
+    }
+    if (flexoN) await kvMerge('flexoNvl', { [q.code]: { at: Date.now(), amountAt: q.amount || 0, rows, n: flexoN } });
+    state.flexoNvl = null;
+  }
+  async function injectNvlWarn() {
+    if (!IS_TOP) return;
+    const qid = currentQuoteId();
+    const q = qid && renderCtx.quotes?.[qid];
+    const pt = q && dealTable();
+    if (!pt) return;
+    const trs = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((x) => !x.classList.contains('ant-table-measure-row') && isFlexoRow(x));
+    if (!trs.length) return;
+    if (!state.flexoNvl || Date.now() - state.flexoNvl.at > 10e3) state.flexoNvl = { at: Date.now(), all: await kvGet('flexoNvl') };
+    const c = state.flexoNvl.all?.[q.code];
+    const stale = !c || Date.now() - c.at > 24 * 3600e3 || (q.amount && Math.abs((c.amountAt || 0) - q.amount) > 1) || (c.n != null && c.n !== trs.length);
+    if (stale && !nvlScanning && !(c && Date.now() - c.at < 60e3)) scanFlexoNvl(q).catch(() => {});
+    if (!document.getElementById('dg-nvlw-css')) {
+      const st = document.createElement('style');
+      st.id = 'dg-nvlw-css';
+      st.textContent = `.dg-nvlw{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;vertical-align:middle;animation:dgNvlw .7s ease-in-out infinite}
+@keyframes dgNvlw{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6);opacity:1;transform:scale(1)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.55;transform:scale(1.1)}}`;
+      document.head.append(st);
+    }
+    for (const tr of trs) {
+      const cell = tr.cells[pt.iDeal];
+      if (!cell) continue;
+      const nvl = c?.rows?.[rowTp(tr)];
+      const deal = Number(((cell.innerText.replace(/NVL[^\n]*/g, '').replace(/\d+(?:[.,]\d+)?\s*%/g, '').match(/[\d.,]+/) || ['0'])[0]).replace(/[.,]/g, '')) || 0;
+      let b = cell.querySelector('.dg-nvlw');
+      if (!nvl || !deal || nvl < NVL_WARN * deal) {
+        b?.remove();
+        continue;
+      }
+      if (!b) {
+        b = document.createElement('span');
+        b.className = 'dg-nvlw';
+        cell.append(b);
+        cell.style.whiteSpace = 'nowrap';
+      }
+      const txt = `NVL ${nvl.toLocaleString('vi-VN')} · ${Math.round((nvl / deal) * 100)}%`;
+      if (b.textContent !== txt) b.textContent = txt;
+      b.title = `NVL 1 thùng ${nvl.toLocaleString('vi-VN')}đ ≥ ${Math.round(NVL_WARN * 100)}% giá deal ${deal.toLocaleString('vi-VN')}đ – lãi mỏng, xem lại giá`;
+    }
+  }
+  if (IS_TOP) setInterval(() => injectNvlWarn().catch(() => {}), 2000);
+
   // Danh sách Báo giá của CRM: báo giá chưa có bình luận nào (bộ thu thập đã xem, không thấy luồng nào) → icon 💬 nhấp nháy
   // cuối ô "Tên cơ hội", bấm để mở báo giá và bình luận giải quyết
   function noCmtCss() {
