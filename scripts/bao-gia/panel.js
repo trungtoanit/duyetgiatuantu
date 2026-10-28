@@ -4638,9 +4638,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   function maintPick(r, all, salt = 0) {
     const days = Math.max(0, Math.floor((Date.now() / 1000 - (r.createdAt || 0)) / 86400));
     const same = Object.values(all).filter((x) => x?.machine?.code && x.machine.code === r.machine?.code && Date.now() / 1000 - (x.createdAt || 0) < 30 * 86400).length;
-    const done = /DONE|RESOLVED|COMPLETE|FINISH/i.test(r.status || '') || r.resolvedAt > 0;
-    const doing = /PROCESS|DOING|IN_?PROGRESS|HANDL/i.test(r.status || '');
-    const bank = done ? 'mtDone' : same >= 2 ? 'mtRepeat' : /CRITICAL|HIGH/i.test(r.level || '') ? 'mtUrgent' : r.proposals > 0 ? 'mtProposal' : doing ? 'mtDoing' : days >= 2 ? 'mtLate' : 'mtLate';
+    const bank = 'mtAsk';
     const tpl = pickFor(qbank(bank), r.id, salt);
     const text = String(tpl)
       .replaceAll('{may}', r.machine?.name || r.machine?.code || 'máy')
@@ -4779,7 +4777,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     let x = Math.random() * sum;
     const r = pool.find((p0) => (x -= wt(p0)) <= 0) || pool[0];
     const days = Math.max(0, Math.floor((now - (r.createdAt || now)) / 86400));
-    const ask = (await kvGet('maintAsk'))[r.id]?.text || maintPick(r, all).text;
+    const ask = (await kvGet('maintAsk'))[r.id]?.text || maintPick(r, all, Math.floor(Math.random() * 1e6)).text;
     const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
     const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
     const lines = [
@@ -8919,19 +8917,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Thứ tự = thứ tự ưu tiên khi chọn câu hỏi nhanh cho 1 báo giá (điều kiện nào khớp trước thì dùng bộ đó)
   // ---------- 🔧 Câu hỏi bảo trì (trang Bảo trì → Báo cáo) – sửa được trong tab 💬 Bộ câu hỏi ----------
   // Biến: {may} tên máy · {ma} mã máy · {mota} mô tả lỗi · {ngay} số ngày từ lúc báo · {nguoi} người báo · {muc} mức độ · {id} số báo cáo · {k} số lần báo cùng máy
+  // Bộ câu hỏi bảo trì: soạn sẵn, dùng chung cho mọi báo cáo (thông tin máy / lỗi được ghép kèm khi gửi Zalo)
   const MAINT_BANKS = [
-    { id: 'mtLate', icon: '🔧', title: 'Bảo trì: báo cáo mới quá 2 ngày chưa xử lý', when: 'Báo cáo bảo trì trạng thái Mới, đã quá 2 ngày chưa có người xử lý.',
-      def: ['Báo cáo #{id} – {may}: “{mota}” đã {ngay} ngày chưa xử lý, bảo trì kiểm tra giúp anh khi nào xử lý được?', '{may} báo lỗi “{mota}” từ {ngay} ngày trước, đã ai xuống xem chưa em?', 'Lỗi {may} ({nguoi} báo) vẫn ở trạng thái mới, bảo trì sắp xếp xử lý trong hôm nay được không?'] },
-    { id: 'mtUrgent', icon: '🚨', title: 'Bảo trì: lỗi khẩn cấp / cao', when: 'Báo cáo mức Khẩn cấp hoặc Cao, chưa xử lý xong.',
-      def: ['Lỗi {muc} ở {may}: “{mota}” – đang ảnh hưởng sản xuất không, cần anh hỗ trợ gì để xử lý ngay?', '{may} đang lỗi {muc}, bảo trì cho anh biết dự kiến mấy giờ khắc phục xong?', 'Lỗi “{mota}” ở {may} cần ưu tiên xử lý trước, cần mua vật tư gì báo anh duyệt luôn nhé.'] },
-    { id: 'mtProposal', icon: '📝', title: 'Bảo trì: đã có đề nghị sửa / mua vật tư', when: 'Báo cáo đã có đề nghị (đề xuất sửa / mua vật tư), chưa xử lý xong.',
-      def: ['Đề nghị sửa {may} cần những gì, chi phí bao nhiêu, dự kiến bao giờ xong em?', 'Vật tư cho {may} đã đặt chưa, khi nào về để thay?', '{may}: đề nghị đã có rồi, còn vướng gì để anh duyệt cho nhanh?'] },
-    { id: 'mtDoing', icon: '⏳', title: 'Bảo trì: đang xử lý', when: 'Báo cáo đang xử lý.',
-      def: ['{may} đang xử lý tới đâu rồi em, khi nào chạy lại bình thường?', 'Lỗi “{mota}” ở {may} sửa xong chưa, có cần thêm người hỗ trợ không?'] },
-    { id: 'mtRepeat', icon: '🔁', title: 'Bảo trì: máy báo lỗi lặp lại', when: 'Cùng 1 máy có từ 2 báo cáo trở lên trong 30 ngày.',
-      def: ['{may} báo lỗi {k} lần trong 30 ngày, bảo trì kiểm tra tổng thể nguyên nhân gốc giúp anh nhé.', '{may} hay hư quá ({k} lần/30 ngày), có cần thay linh kiện / đại tu không em?'] },
-    { id: 'mtDone', icon: '✅', title: 'Bảo trì: đã xử lý xong', when: 'Báo cáo đã xử lý xong (hỏi lại nguyên nhân, cách phòng tránh).',
-      def: ['{may} sửa xong rồi, nguyên nhân do đâu em, cần làm gì để không lặp lại?', 'Lỗi “{mota}” ở {may} đã xử lý – chi phí bao nhiêu, đã hướng dẫn tổ máy vận hành đúng chưa?'] },
+    { id: 'mtAsk', icon: '🔧', title: 'Hỏi bảo trì (dùng chung mọi báo cáo)', when: 'Câu hỏi soạn sẵn dùng chung cho tất cả báo cáo bảo trì: cột 💬 Hỏi bảo trì và nút 📨 Nhắc Zalo chọn ngẫu nhiên 1 câu. Có thể dùng {may} {ma} {mota} {ngay} {nguoi} {muc} {id} nếu muốn.',
+      def: ["Báo lại anh chỗ này xử lý như nào rồi em?", "Việc này tới đâu rồi em, báo anh tình hình nhé.", "Chỗ này xử lý xong chưa em?", "Cái này đang vướng gì không em, cần anh hỗ trợ gì không?", "Khi nào xử lý xong việc này em, báo anh thời gian dự kiến nhé.", "Chỗ này đã có người xuống xem chưa em?", "Việc này cần mua vật tư gì không em, báo anh duyệt luôn.", "Cập nhật giúp anh tình trạng việc này nhé em.", "Lỗi này nguyên nhân do đâu em, xử lý ra sao rồi?", "Việc này còn tồn chưa xử lý, em sắp xếp làm trong hôm nay được không?", "Chỗ này để lâu rồi, báo anh lý do chưa xử lý được nhé em.", "Xử lý xong nhớ cập nhật trạng thái trên hệ thống giúp anh nha em."] },
   ];
   const QBANKS = [
     { id: 'monthly', icon: '📅', title: 'Khách cũ tháng này chưa nhập', when: 'Khách cũ (đã từng có đơn), từ ngày 10 của tháng mà tháng này chưa có báo giá / đơn mới.', def: ['Tháng này khách hàng này sao chưa nhập vậy {p}?'] },
