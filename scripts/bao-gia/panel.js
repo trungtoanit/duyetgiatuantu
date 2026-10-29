@@ -5086,10 +5086,46 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     });
     document.body.append(box);
   }
+  // Báo cáo bảo trì lên TRONG NGÀY HÔM NAY → nhãn Trạng thái chớp (theo cột Ngày: "x phút / giờ trước" hoặc dd/mm/yyyy)
+  function markMaintToday() {
+    if (!/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
+    const t = [...document.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Người báo cáo/i.test(th.innerText.trim())));
+    if (!t) return;
+    const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+    const iSt = hs.findIndex((h) => /^Trạng thái$/i.test(h));
+    const iDay = hs.findIndex((h) => /^Ngày$/i.test(h));
+    if (iSt < 0 || iDay < 0) return;
+    if (!document.getElementById('dg-mt-today-css')) {
+      const st = document.createElement('style');
+      st.id = 'dg-mt-today-css';
+      st.textContent = `@keyframes dgMtToday{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.7);transform:scale(1);filter:brightness(1)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0),0 0 12px 2px rgba(59,130,246,.8);transform:scale(1.12);filter:brightness(1.25) saturate(1.4)}}
+[data-dg-today]{animation:dgMtToday 1s ease-in-out infinite;display:inline-block}`;
+      document.head.append(st);
+    }
+    const now = new Date();
+    const sameDay = (d) => d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+      if (tr.cells.length <= Math.max(iSt, iDay)) continue;
+      const txt = (tr.cells[iDay].innerText || '').trim();
+      let today = /vừa xong|giây trước|phút trước/i.test(txt);
+      const h = txt.match(/(\d+)\s*giờ trước/i);
+      if (h) today = sameDay(new Date(Date.now() - Number(h[1]) * 3600e3));
+      const dm = txt.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (dm) today = sameDay(new Date(+dm[3], +dm[2] - 1, +dm[1]));
+      const tag = tr.cells[iSt].querySelector('.ant-tag, span') || null;
+      if (!tag) continue;
+      // đã xử lý / từ chối thì thôi chớp
+      const on = today && !/đã xử lý|từ chối|hoàn thành/i.test(tag.innerText || '');
+      if (on !== tag.hasAttribute('data-dg-today')) on ? tag.setAttribute('data-dg-today', '1') : tag.removeAttribute('data-dg-today');
+    }
+  }
   if (IS_TOP) {
     setInterval(() => {
       try {
         injectMaintRows();
+      } catch {}
+      try {
+        markMaintToday();
       } catch {}
     }, 2000);
     document.addEventListener('click', (e) => {
