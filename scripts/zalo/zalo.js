@@ -28,6 +28,59 @@
       .trim();
   const TAB = Math.random().toString(36).slice(2);
 
+  // Zalo chưa đăng nhập (chuyển sang id.zalo.me): chụp mã QR đăng nhập gửi về trang CRM (kv zaloLogin) để quét ngay trên thông báo,
+  // cập nhật mã mới mỗi 2 giây (tự bấm "lấy mã mới" khi hết hạn). Việc đang chờ giữ nguyên – quét xong Zalo vào chat.zalo.me thì tự gửi tiếp.
+  if (location.hostname === 'id.zalo.me') {
+    const qrNow = () => {
+      const vis = (e) => e.getClientRects().length && e.getBoundingClientRect().width >= 100;
+      const sq = (w, h) => w >= 100 && Math.abs(w - h) / w < 0.15;
+      const c = [...document.querySelectorAll('canvas')].find((x) => vis(x) && sq(x.width, x.height));
+      if (c) {
+        try {
+          return c.toDataURL('image/png');
+        } catch {}
+      }
+      const im = [...document.querySelectorAll('img')].find((x) => vis(x) && sq(x.naturalWidth, x.naturalHeight) && !/logo/i.test(x.src + x.className));
+      if (!im) return '';
+      if (/^data:/.test(im.src)) return im.src;
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = im.naturalWidth;
+        cv.height = im.naturalHeight;
+        cv.getContext('2d').drawImage(im, 0, 0);
+        return cv.toDataURL('image/png');
+      } catch {
+        return im.src;
+      }
+    };
+    (async () => {
+      const start = Date.now();
+      let first = true;
+      while (Date.now() - start < 10 * 60e3 && location.hostname === 'id.zalo.me') {
+        const jobs = await kvGet('zaloJobs').catch(() => ({}));
+        const wait = Object.keys(jobs).filter((k) => ['pending', 'sending'].includes(jobs[k]?.status) && Date.now() - (jobs[k].at || 0) < 10 * 60e3);
+        for (const k of wait) if (jobs[k].status === 'sending') await kvMerge('zaloJobs', { [k]: { ...jobs[k], status: 'pending', tab: '' } }).catch(() => {});
+        // mã hết hạn → bấm lấy mã mới
+        const exp = [...document.querySelectorAll('a, button, span, div')].find((e) => !e.children.length && /lấy mã mới|làm mới mã|mã qr (đã )?hết hạn/i.test(e.textContent || ''));
+        if (exp) exp.click();
+        await call({ type: 'kv.set', key: 'zaloLogin', value: { at: start, n: wait.length, qr: qrNow(), qrAt: Date.now(), done: false } }).catch(() => {});
+        if (first) {
+          first = false;
+          // trả lại màn hình CRM (tab Zalo vẫn mở ngầm để giữ mã QR)
+          try {
+            window.opener?.focus();
+          } catch {}
+        }
+        await sleep(2000);
+      }
+    })();
+    return;
+  }
+  // Vào được chat.zalo.me sau khi quét QR → báo trang CRM đóng thông báo đăng nhập
+  kvGet('zaloLogin')
+    .then((z) => z.at && !z.done && call({ type: 'kv.set', key: 'zaloLogin', value: { ...z, qr: '', done: true, doneAt: Date.now() } }))
+    .catch(() => {});
+
   // Nhịp tim: bảng CRM biết đã có tab Zalo đang mở thì không mở thêm tab mới
   const beat = () => call({ type: 'kv.set', key: 'zaloAlive', value: { tab: TAB, at: Date.now(), url: location.href } }).catch(() => {});
   beat();

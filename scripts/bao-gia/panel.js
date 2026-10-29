@@ -4795,6 +4795,47 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     btn.textContent = `📨 Đã gửi #${r.id}`;
     setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 4000);
   }
+  // Zalo chưa đăng nhập (kv zaloLogin do tab id.zalo.me gửi về): thông báo kèm mã QR đăng nhập (cập nhật liên tục) để quét bằng app Zalo
+  // + đường dẫn mở Zalo Web ở tab mới; quét xong (Zalo vào chat.zalo.me) tự báo ✅ và đóng
+  if (IS_TOP) {
+    const zlBoot = Date.now();
+    let zlClosed = 0; // phiên đăng nhập người dùng đã bấm Đóng
+    setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      const z = await kvGet('zaloLogin').catch(() => ({}));
+      let box = document.getElementById('dg-zalo-login');
+      if (box && z.done) {
+        box.querySelector('[data-zlb]').innerHTML = '<div style="font-size:40px">✅</div><b style="color:#047857">Đã đăng nhập Zalo – đang gửi tin…</b>';
+        setTimeout(() => box.remove(), 2500);
+        return;
+      }
+      if (!z.at || z.done || z.at === zlClosed || Date.now() - (z.qrAt || z.at) > 20e3 || (z.at < zlBoot - 10 * 60e3)) return;
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'dg-zalo-login';
+        box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.45);display:grid;place-items:center;font-family:inherit');
+        box.innerHTML = `<div style="width:min(440px,92vw);background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden;text-align:center">
+          <div style="padding:14px 18px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;font-size:16px;font-weight:800">⚠️ Zalo chưa đăng nhập</div>
+          <div data-zlb style="padding:16px 18px;font-size:14px;line-height:1.6;color:#334155">Mở app Zalo trên điện thoại → <b>Quét mã QR</b> bên dưới để đăng nhập Zalo Web.
+            <div style="margin:10px auto;width:240px;height:240px;border:1px solid #e2e8f0;border-radius:12px;display:grid;place-items:center;background:#fff"><img data-zlq style="width:220px;height:220px;image-rendering:pixelated" alt="Mã QR Zalo"></div>
+            <div data-zln style="color:#64748b;font-size:12px"></div>
+            <a href="https://chat.zalo.me/" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:999px;background:#0068ff;color:#fff;font-weight:800;text-decoration:none">💬 Mở Zalo Web ở tab mới</a></div>
+          <div style="padding:0 18px 14px"><button data-zl="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 18px;cursor:pointer;font:inherit">Đóng</button></div></div>`;
+        box.addEventListener('click', (e) => {
+          if (e.target === box || e.target.closest('[data-zl]')) {
+            zlClosed = Number(box.dataset.at) || 0;
+            box.remove();
+          }
+        });
+        document.body.append(box);
+      }
+      box.dataset.at = String(z.at);
+      const q = box.querySelector('[data-zlq]');
+      if (q && z.qr && q.getAttribute('src') !== z.qr) q.src = z.qr;
+      const n = box.querySelector('[data-zln]');
+      if (n) n.textContent = `${z.qr ? 'Mã QR tự làm mới khi hết hạn.' : 'Đang lấy mã QR…'}${z.n ? ` · ${z.n} tin đang chờ sẽ tự gửi sau khi đăng nhập.` : ''}`;
+    }, 2000);
+  }
   // ⚙️ Cài đặt bộ câu hỏi hỏi bảo trì: danh sách (Enter thêm dòng, 🗑 xoá) hoặc soạn hàng loạt; xem trước tin Zalo
   async function openMaintTpl() {
     document.getElementById('dg-mt-tpl')?.remove();

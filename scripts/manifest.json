@@ -1,5 +1,5 @@
 {
-  "version": "1.2.427",
+  "version": "1.2.428",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -34,7 +34,8 @@
         "zalo/zalo.js"
       ],
       "matches": [
-        "https://chat.zalo.me/*"
+        "https://chat.zalo.me/*",
+        "https://id.zalo.me/*"
       ],
       "runAt": "document_idle",
       "world": "USER_SCRIPT",
