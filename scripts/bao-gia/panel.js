@@ -4002,10 +4002,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       });
       (wrap.closest('.ant-table-wrapper') || wrap).before(bar);
     }
+    // Chuyển tab của CRM (Tất cả → Duyệt lên đơn…) thì bảng là phần tử khác: kéo thanh lọc về trước bảng đang hiện
+    const anchor = wrap.closest('.ant-table-wrapper') || wrap;
+    if (bar.nextElementSibling !== anchor) anchor.before(bar);
     const html = `<b style="color:#475569;flex:0 0 100px;width:100px">🏷️ Lọc nhãn:</b>${CRM_F.filter(([k]) => counts[k] || sel === k)
       .map(([k, ic, label, col]) => `<span data-f="${k}" style="cursor:pointer;border-radius:999px;padding:2px 10px;font-weight:700;border:1px solid ${col}55;${sel === k ? `background:${col};color:#fff` : `background:${col}12;color:${col}`}">${ic} ${label} <b>${counts[k] || 0}</b></span>`)
       .join('')}${sel ? '<span data-f="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc</span>' : ''}<span style="color:#94a3b8;margin-left:auto">lọc trong ${total} dòng của trang này</span>
-      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;flex:0 0 100px;width:100px">👤 NVKD:</b>${Object.entries(staffN)
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;flex:0 0 100px;width:100px">👤 NVKD:</b>${Object.entries(selS && !staffN[selS] ? { ...staffN, [selS]: 0 } : staffN)
         .sort((a, b) => b[1] - a[1])
         .map(([n, k]) => `<span data-s="${esc(n)}" title="${esc(n)}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 10px 1px 2px;font-weight:700;border:1px solid ${selS === n ? '#1e293b' : '#e2e8f0'};${selS === n ? 'background:#1e293b;color:#fff' : 'background:#fff;color:#334155'}">${avatarHtml(n, 18)}${esc(shortName(n))} <b style="opacity:.7">${k}</b></span>`)
         .join('')}${selS ? '<span data-s="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc NVKD</span>' : ''}</div>
@@ -5849,6 +5852,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const head = [...wrap.querySelectorAll('thead th')];
       const idx = head.findIndex((th) => th.innerText.trim() === 'Tên cơ hội');
       if (idx < 0) continue;
+      // ant-tabs giữ bảng của tab trước (Tất cả…) trong DOM dưới dạng ẩn: bỏ qua, chỉ làm với bảng đang hiện
+      if (wrap.closest('.ant-tabs-tabpane-hidden') || !wrap.getClientRects().length) continue;
       if (!wrap.querySelector('th[data-dg-tagcol]')) {
         const th = document.createElement('th');
         th.className = head[idx].className;
@@ -5942,6 +5947,33 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (match && lv) dCounts[lv] = (dCounts[lv] || 0) + 1;
         if (selD && lv !== selD) match = false;
         tr.style.display = match ? '' : 'none';
+      }
+      // Bộ lọc (giữ qua F5 / qua tab) ẩn hết các dòng → hiện 1 dòng báo kèm nút Bỏ lọc, không để bảng trống trơn
+      {
+        const tb = wrap.querySelector('tbody');
+        let ph = tb?.querySelector(':scope > tr[data-dg-filtered]');
+        const shown = [...wrap.querySelectorAll('tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.hasAttribute('data-dg-filtered') && tr.style.display !== 'none').length;
+        const why = [selS && `NVKD “${selS}”`, sel && `nhãn “${CRM_F.find((f) => f[0] === sel)?.[2] || sel}”`, selD && `chênh lệch “${DIFF_LV.find((d) => d[0] === selD)?.[1] || selD}”`].filter(Boolean).join(', ');
+        if (tb && total && !shown && why) {
+          if (!ph) {
+            ph = document.createElement('tr');
+            ph.className = 'ant-table-placeholder';
+            ph.setAttribute('data-dg-filtered', '1');
+            tb.append(ph);
+          }
+          const ncol = wrap.querySelectorAll('thead th').length || 1;
+          const h = `<td colspan="${ncol}" style="padding:14px 12px;text-align:center;background:#fffbeb;color:#92400e;font-size:13px">🙈 Extension đang ẩn <b>${total}</b> dòng của trang này vì bộ lọc ${esc(why)}.<button type="button" data-dg-clearf style="margin-left:10px;border:1px solid #f59e0b;background:#fff;color:#b45309;border-radius:999px;padding:2px 12px;cursor:pointer;font:inherit;font-weight:700">✕ Bỏ lọc</button></td>`;
+          if (ph.dataset.h !== h) {
+            ph.dataset.h = h;
+            ph.innerHTML = h;
+            ph.querySelector('[data-dg-clearf]').addEventListener('click', () => {
+              lsSet('dgCrmF', '');
+              lsSet('dgCrmS', '');
+              lsSet('dgCrmD', '');
+              crmListTags();
+            });
+          }
+        } else ph?.remove();
       }
       crmFilterBar(wrap, counts, total, staffN, dCounts);
       stickReq();
