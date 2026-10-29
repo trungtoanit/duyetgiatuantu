@@ -8239,6 +8239,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .osim-rw .osim-range { flex: 1; }
     .osim-bub { position: absolute; top: 0; transform: translateX(-50%); background: #7c3aed; color: #fff; font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 6px; white-space: nowrap; pointer-events: none; }
     .osim-bub::after { content: ''; position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); border: 4px solid transparent; border-top-color: #7c3aed; border-bottom: 0; }
+    .osim-eql { display: inline-flex; align-items: center; gap: 4px; margin: 2px 0 4px; color: #4c1d95; cursor: pointer; } .osim-eql input { accent-color: #7c3aed; }
     .osim-sl { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-weight: 700; color: #4c1d95; }
     .osim-range { flex: 1; accent-color: #7c3aed; } .osim-rv { min-width: 120px; text-align: right; color: #7c2d12; }
     .osim-hint { font-size: 11.5px; color: #6d28d9; background: #f5f3ff; } .osim-reset { border: 1px solid #c4b5fd; background: #fff; color: #6d28d9; border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
@@ -8861,16 +8862,33 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     );
     // Thử giá Offset trong bảng Giải thích
     root.querySelector('.side').addEventListener('input', (e) => {
-      const rg = e.target.closest?.('input.osim-range');
+      const eq = e.target.closest?.('input.osim-eq');
+      let rg = e.target.closest?.('input.osim-range');
+      if (eq) {
+        (state.offEq ||= {})[eq.dataset.code] = eq.checked;
+        rg = eq.closest('table')?.querySelector('input.osim-range');
+        if (!eq.checked) {
+          // bỏ đồng giá → về giá gốc từng dòng
+          if (state.offSim) delete state.offSim[eq.dataset.code];
+          lastSideHtml = '';
+          return render();
+        }
+      }
       if (rg) {
         // Kéo tỷ lệ NVL / đơn giá → giá 1 thùng mỗi sản phẩm = NVL 1 thùng ÷ tỷ lệ (làm tròn lên 5đ)
+        // ☑ Đồng giá: tổng NVL ÷ tỷ lệ = tổng tiền → chia đều cho tổng số lượng → cùng 1 giá cho mọi dòng
         const r = 1 - Number(rg.value) / 100; // thanh kéo là % bán → tỷ lệ NVL / đơn giá
         const tb = rg.closest('table');
         state.offSim = state.offSim || {};
         const sv = { ...(state.offSim[rg.dataset.code] || {}) };
-        for (const ip of tb.querySelectorAll('input.osim')) {
+        const ips = [...tb.querySelectorAll('input.osim')];
+        const same = state.offEq?.[rg.dataset.code];
+        const nvlAll = ips.reduce((t, ip) => t + Number(ip.dataset.nvl), 0);
+        const qtyAll = ips.reduce((t, ip) => t + Number(ip.dataset.qty), 0);
+        const eqPrice = qtyAll ? Math.ceil(nvlAll / r / qtyAll / 5) * 5 : 0;
+        for (const ip of ips) {
           const unit = Number(ip.dataset.nvl) / Number(ip.dataset.qty);
-          const price = Math.ceil(unit / r / 5) * 5;
+          const price = same && eqPrice ? eqPrice : Math.ceil(unit / r / 5) * 5;
           ip.value = price.toLocaleString('vi-VN');
           if (price === Number(ip.dataset.orig)) delete sv[ip.dataset.key];
           else sv[ip.dataset.key] = price;
@@ -10660,7 +10678,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const a = rows.reduce((t, r) => t + r.n, 0);
         const b2 = rows.reduce((t, r) => t + r.p, 0);
         return b2 ? Math.round((1 - a / b2) * 200) / 2 : 40; // % bán = 1 − NVL ÷ đơn giá
-      })()}"></span><b class="osim-rv"></b></div>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
+      })()}"></span><b class="osim-rv"></b></div><label class="osim-eql" title="Tổng nguyên liệu ÷ (1 − % bán) = tổng tiền, chia đều cho tổng số lượng → mọi dòng cùng 1 giá"><input type="checkbox" class="osim-eq" data-code="${esc(q.code)}"${state.offEq?.[q.code] ? ' checked' : ''}> <b>Tính đồng giá</b> – tổng NVL ÷ (1 − % bán) rồi chia đều cho tổng số lượng${(() => {
+        const rows = offs.map(([k, x]) => ({ n: x.nvlTotal, q: numOf(x.qty) })).filter((r) => r.n && r.q);
+        const n = rows.reduce((t, r) => t + r.n, 0);
+        const qt = rows.reduce((t, r) => t + r.q, 0);
+        return qt ? ` <span class="muted">(NVL ${money(Math.round(n))} · ${qt.toLocaleString('vi-VN')} thùng · NVL bình quân ${money(Math.round(n / qt))}/thùng)</span>` : '';
+      })()}</label><br>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
       ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
   };
