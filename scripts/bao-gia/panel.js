@@ -4154,7 +4154,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const out = {};
     for (const tr of t.querySelectorAll('tbody tr')) {
       const txt = tr.innerText || '';
-      const dh = txt.match(/DH\d{5,}/)?.[0];
+      const dh = txt.match(/DH\d{7}/)?.[0]; // mã đơn = DH + 7 số (số dính phía sau, vd. DH001206700, không phải đơn khác)
       const tm = txt.match(/(\d{1,2}):(\d{2}),\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       if (!dh || !tm || tr.cells.length < hs.length) continue; // chỉ hàng đầu của mỗi đơn (đủ ô)
       const at = Date.UTC(+tm[5], +tm[4] - 1, +tm[3], +tm[1], +tm[2]) - 7 * 3600e3;
@@ -4165,6 +4165,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return Object.keys(out).length ? out : null;
   }
   let dayOrdersSig = '';
+  const DH_RE = /^DH\d{7}$/; // mã đơn hợp lệ – mã dài hơn (đọc dính số) là đơn trùng, bỏ
   async function saveDayOrders(doc, path) {
     const got = scrapeDayOrders(doc);
     if (!got) return false;
@@ -4174,7 +4175,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const keepFrom = Date.now() - 62 * 86400e3; // giữ 2 tháng để xem lại các ngày trước
     const old = await kvGet('dayOrders');
     const patch = { ...Object.fromEntries(Object.entries(got).filter(([, o]) => o.at >= keepFrom)), _src: { path, at: Date.now() } };
-    for (const [k2, o] of Object.entries(old)) if (k2 !== '_src' && !(o?.at >= keepFrom)) patch[k2] = null;
+    for (const [k2, o] of Object.entries(old)) if (k2 !== '_src' && (!(o?.at >= keepFrom) || !DH_RE.test(k2))) patch[k2] = null;
     await kvMerge('dayOrders', patch).catch(() => {});
     return true;
   }
@@ -4187,7 +4188,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   let dayOrdersBusy = false;
   const loadDayState = async () => {
     const all = await kvGet('dayOrders');
-    state.dayOrders = Object.fromEntries(Object.entries(all).filter(([k2, o]) => k2 !== '_src' && o));
+    state.dayOrders = Object.fromEntries(Object.entries(all).filter(([k2, o]) => k2 !== '_src' && o && DH_RE.test(k2)));
     return all;
   };
   const tabLock = (key, ms) => {
@@ -4209,7 +4210,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     f.src = '/misa-order/list';
     document.documentElement.append(f);
     const doc = () => f.contentDocument;
-    const firstDh = () => (doc()?.querySelector('.ant-table-tbody')?.innerText.match(/DH\d{5,}/) || [])[0] || '';
+    const firstDh = () => (doc()?.querySelector('.ant-table-tbody')?.innerText.match(/DH\d{7}/) || [])[0] || '';
     const waitChange = async (prev) => {
       for (let i = 0; i < 40; i++) {
         await sleep(400);
@@ -4251,7 +4252,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (Object.keys(got).length) {
         const keepFrom = Date.now() - 62 * 86400e3;
         const patch = { ...Object.fromEntries(Object.entries(got).filter(([, o]) => o.at >= keepFrom)), _src: { path: '/misa-order/list', at: Date.now() } };
-        for (const [k2, o] of Object.entries(all)) if (k2 !== '_src' && o && !(o.at >= keepFrom)) patch[k2] = null;
+        for (const [k2, o] of Object.entries(all)) if (k2 !== '_src' && o && (!(o.at >= keepFrom) || !DH_RE.test(k2))) patch[k2] = null;
         await kvMerge('dayOrders', patch).catch(() => {});
       }
     } finally {
@@ -4366,7 +4367,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     box.innerHTML = `<div style="width:min(1040px,96vw);max-height:84vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
       <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:linear-gradient(90deg,#fdf2f8,#fce7f3);border-bottom:1px solid #fbcfe8">
         <b style="font-size:15px">🗓️ Chênh lệch tháng – ${okRows.length}/${rows.length} đơn · Σ ${money(Math.round(sum))}${revOk ? ` · ${Math.round((sum / revOk) * 100)}%` : ''}</b>${nRed ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800">🔴 ${nRed} đơn &gt; 40%</span>` : ''}
-        <button data-x style="margin-left:auto;all:unset;cursor:pointer;font-size:20px;color:#64748b;padding:0 6px">×</button></div>
+        ${rows.length - okRows.length ? `<button data-miss style="margin-left:auto;cursor:pointer;border:1px solid #fcd34d;background:#fffbeb;color:#b45309;border-radius:999px;padding:2px 12px;font:inherit;font-size:12px;font-weight:800">⏳ Tính ${rows.length - okRows.length} đơn còn thiếu</button>` : ''}
+        <button data-x style="${rows.length - okRows.length ? '' : 'margin-left:auto;'}all:unset;cursor:pointer;font-size:20px;color:#64748b;padding:0 6px">×</button></div>
       <div style="overflow:auto;padding:8px 12px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <tr style="color:#64748b;text-align:left;position:sticky;top:0;background:#fff"><th style="padding:4px 6px">Ngày</th><th>Đơn hàng</th><th>Báo giá</th><th>Loại</th><th style="text-align:right">Tiền đơn</th><th style="text-align:right" title="Flexo: giấy tấm · Offset: NVL sau VAT (theo tỷ lệ tiền đơn / tiền BG)">NVL</th><th style="text-align:right">Chênh lệch</th><th style="text-align:right">% chênh lệch</th><th></th></tr>
       ${rows
@@ -4375,22 +4377,28 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const id = q?.id || o.qid;
           const p = pct(v, o);
           const red = p != null && p > 40;
-          const nvl = v != null && o.total > 0 ? o.total - v : null;
+          const tot = o.total > 0 ? o.total : 0;
+          const nvl = v != null && tot > 0 ? tot - v : null;
+          const why = v != null || b ? '' : !o.bg ? 'đơn không gắn báo giá' : !q ? 'báo giá chưa có trong dữ liệu đã đọc' : q.noSheet ? '😡 chưa có giá giấy tấm' : !(Number(q.amount) > 0) ? 'BG 0đ – chưa cho giá' : `⏳ chưa đọc ${kindOf(q) === 'Offset' ? 'chiết giá NVL' : 'PO giấy tấm'}`;
           return `<tr style="border-bottom:1px solid #f1f5f9${b || red ? ';background:#fef2f2' : ''}"><td style="padding:5px 6px;white-space:nowrap;color:#64748b">${new Date(o.at + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })}</td>
             <td style="font-weight:700">${esc(o.dh || '')}</td>
             <td>${id && o.bg ? `<a href="/bao-gia/update/${id}" target="_blank" style="font-weight:800;color:#1d4ed8">${esc(o.bg)}</a>` : esc(o.bg || '–')}</td>
             <td style="color:#64748b;white-space:nowrap">${kindOf(q)}</td>
-            <td style="text-align:right;white-space:nowrap">${money(o.total || 0)}</td>
+            <td style="text-align:right;white-space:nowrap" title="${tot ? 'Tổng tiền đơn (Danh sách đơn)' : 'Danh sách đơn chưa có Tổng tiền – tạm hiện giá trị báo giá'}">${tot ? money(tot) : Number(q?.amount) > 0 ? `<span style="color:#94a3b8">≈ ${money(q.amount)}</span>` : '<span style="color:#cbd5e1">chưa có</span>'}</td>
             <td style="text-align:right;white-space:nowrap;color:#475569">${nvl == null ? '–' : money(Math.round(nvl))}</td>
             <td style="text-align:right;white-space:nowrap;font-weight:800;color:${v == null ? '#94a3b8' : v < 0 || red ? '#b91c1c' : '#be185d'}">${v == null ? '–' : money(Math.round(v))}</td>
             <td style="text-align:right;white-space:nowrap;font-weight:${red ? 900 : 600};color:${red ? '#dc2626' : '#64748b'}">${p == null ? '' : `${red ? '🔴 ' : ''}${Math.round(p)}%`}</td>
-            <td style="padding-left:8px;font-size:11.5px">${b ? `<span style="color:#b91c1c;font-weight:700">⚠️ vô lý ${money(Math.round(b.v))}${o.total > 0 ? ` (${Math.round((b.v / o.total) * 100)}%)` : ''} – không cộng</span>` : ''}</td></tr>`;
+            <td style="padding-left:8px;font-size:11.5px">${why ? `<span style="color:#d97706">${why}</span>` : ''}${b ? `<span style="color:#b91c1c;font-weight:700">⚠️ vô lý ${money(Math.round(b.v))}${o.total > 0 ? ` (${Math.round((b.v / o.total) * 100)}%)` : ''} – không cộng</span>` : ''}</td></tr>`;
         })
         .join('')}</table></div>
-      <div style="padding:8px 16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">Số chênh lệch mỗi đơn được chốt lần đầu tính được. Đơn có chênh lệch &gt; 90% tiền đơn (đọc sai NVL / giấy tấm / giá) bị loại khỏi tổng và tính lại khi báo giá được đọc đúng.</div></div>`;
+      <div style="padding:8px 16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">Số chênh lệch mỗi đơn tính từ PO giấy tấm / chiết giá đọc mới nhất. Đơn có chênh lệch &gt; 90% tiền đơn (đọc sai NVL / giấy tấm / giá) bị loại khỏi tổng và tính lại khi báo giá được đọc đúng.</div></div>`;
     document.body.append(box);
     box.addEventListener('click', (e) => {
       if (e.target === box || e.target.closest('[data-x]')) box.remove();
+      if (e.target.closest('[data-miss]')) {
+        box.remove();
+        openMissDiff('month');
+      }
     });
   }
   function openMissDiff(scope) {
