@@ -4671,17 +4671,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
     const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
     const text = [`🔧 Nhắc việc bảo trì – Báo cáo #${r.id}`, `Máy: ${mach}`, `Lỗi: ${r.desc || ''}`, `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`, '', ask].join('\n');
-    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: <b><span style="color:#b91c1c"><font color="#b91c1c">${esc(r.desc || '')}</font></span></b></div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
+    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: <b><span style="color:#b91c1c"><font color="#b91c1c">${esc(r.desc || '')}</font></span></b></div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div><b><span style="color:#15a85f"><font color="#15a85f">${esc(ask)}</font></span></b></div>`;
     return { text, html, days, lv, mach };
   }
   // Ảnh trong báo cáo (r.image = các đường dẫn cách nhau dấu phẩy) → tải qua background (máy chủ ảnh chặn CORS), thu nhỏ ≤1600px JPEG để gửi Zalo
   const mtImgs = (r) => String(r?.image || '').split(',').map((x) => x.trim()).filter((x) => /^https?:\/\//.test(x)).slice(0, 6);
-  async function maintImages(r) {
+  async function maintImages(r, log = () => {}) {
     const out = [];
     for (const url of mtImgs(r)) {
+      const t0 = Date.now();
       try {
-        const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(20000).then(() => null)]);
-        if (!du) continue;
+        const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(40000).then(() => 'timeout')]);
+        log(`tải ảnh ${url.slice(-20)}: ${du === 'timeout' ? 'QUÁ 40s' : `${Math.round(String(du).length / 1024)}KB`} · ${Date.now() - t0}ms`);
+        if (!du || du === 'timeout') continue;
         const im = new Image();
         im.src = du;
         await im.decode();
@@ -4691,7 +4693,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         c.height = Math.round(im.naturalHeight * k);
         c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
         out.push(c.toDataURL('image/jpeg', 0.85));
-      } catch {}
+        log(`thu nhỏ ${c.width}x${c.height} → ${Math.round(out[out.length - 1].length / 1024)}KB`);
+      } catch (e) {
+        log(`ảnh lỗi: ${e?.message || e} · ${Date.now() - t0}ms`);
+      }
     }
     return out;
   }
@@ -4753,6 +4758,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Người nhận Zalo của bảo trì (kv maintCfg) giữ sẵn trong bộ nhớ: phải hỏi tên (prompt) TRƯỚC khi mở tab Zalo –
   // mở tab trước thì trang CRM thành tab nền, Chrome chặn prompt (trả rỗng) → tab Zalo bị đóng ngay
   if (IS_TOP) kvGet('maintCfg').then((c) => (state.mtTo = c.main?.to || '')).catch(() => {});
+  if (IS_TOP) setInterval(() => kvGet('zaloAlive').then((z) => (state.zaloAliveAt = /chat\.zalo\.me/.test(z.url || '') ? z.at || 0 : 0)).catch(() => {}), 2000);
   const MT_TEST_TO = 'My Documents'; // 🧪 Gửi test: gửi vào chat Zalo "My Documents" của mình để xem trước tin
   function mtOpenZalo(test) {
     let to = test ? MT_TEST_TO : state.mtTo;
@@ -4764,7 +4770,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     let w = null;
     try {
-      w = window.open('https://chat.zalo.me/', 'dg-zalo');
+      // tab Zalo đang mở (nhịp tim zaloAlive < 6 giây) thì chỉ chuyển tới, không tải lại (tránh cắt ngang việc đang gửi)
+      const alive = Date.now() - (state.zaloAliveAt || 0) < 6000;
+      w = window.open(alive ? '' : 'https://chat.zalo.me/', 'dg-zalo');
       w?.focus();
     } catch {}
     return { w, to, test: !!test };
@@ -4778,7 +4786,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     mtLog(run, `bắt đầu #${r.id} → ${to} · tab Zalo=${!!pre.w}`);
     // có ảnh trong báo cáo → gửi kèm (Zalo gửi chữ trước rồi tới từng ảnh); tải tối đa 25 giây, quá thì gửi chữ
     if (btn && mtImgs(r).length) btn.textContent = `⏳ Tải ${mtImgs(r).length} ảnh…`;
-    const images = (await Promise.race([maintImages(r), sleep(25000).then(() => null)])) || [];
+    const images = (await Promise.race([maintImages(r, (t) => mtLog(run, t)), sleep(90000).then(() => null)])) || [];
     mtLog(run, `ảnh: ${images.length}/${mtImgs(r).length}`);
     const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
