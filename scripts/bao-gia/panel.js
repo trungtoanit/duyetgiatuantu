@@ -4671,7 +4671,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
     const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
     const text = [`🔧 Nhắc việc bảo trì – Báo cáo #${r.id}`, `Máy: ${mach}`, `Lỗi: ${r.desc || ''}`, `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`, '', ask].join('\n');
-    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: ${esc(r.desc || '')}</div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
+    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: <b><span style="color:#b91c1c"><font color="#b91c1c">${esc(r.desc || '')}</font></span></b></div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
     return { text, html, days, lv, mach };
   }
   // Ảnh trong báo cáo (r.image = các đường dẫn cách nhau dấu phẩy) → tải qua background (máy chủ ảnh chặn CORS), thu nhỏ ≤1600px JPEG để gửi Zalo
@@ -4749,30 +4749,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       mtBusy = false;
     }
   }
-  async function maintZalo(btn, r, text, html) {
-    // mở tab Zalo ngay lúc bấm (trình duyệt chặn mở cửa sổ sau khi chờ)
-    let w = null;
-    try {
-      w = window.open('', 'dg-zalo');
-    } catch {}
-    let to = (await kvGet('maintCfg')).main?.to;
+  // Người nhận Zalo của bảo trì (kv maintCfg) giữ sẵn trong bộ nhớ: phải hỏi tên (prompt) TRƯỚC khi mở tab Zalo –
+  // mở tab trước thì trang CRM thành tab nền, Chrome chặn prompt (trả rỗng) → tab Zalo bị đóng ngay
+  if (IS_TOP) kvGet('maintCfg').then((c) => (state.mtTo = c.main?.to || '')).catch(() => {});
+  function mtOpenZalo() {
+    let to = state.mtTo;
     if (!to) {
       to = (prompt('Tên nhóm / người nhận Zalo của bảo trì (đúng như trên Zalo):', '') || '').trim();
-      if (!to) {
-        try {
-          if (w && w.location.href === 'about:blank') w.close();
-        } catch {}
-        return false;
-      }
-      await kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } });
+      if (!to) return null;
+      state.mtTo = to;
+      kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } }).catch(() => {});
     }
+    let w = null;
     try {
-      if (w) w.location.href = 'https://chat.zalo.me/';
+      w = window.open('https://chat.zalo.me/', 'dg-zalo');
       w?.focus();
     } catch {}
-    // có ảnh trong báo cáo → gửi kèm (Zalo gửi chữ trước rồi tới từng ảnh)
-    if (btn && mtImgs(r).length) btn.textContent = `⏳ Tải ${mtImgs(r).length} ảnh…`;
-    const images = await maintImages(r);
+    return { w, to };
+  }
+  async function maintZalo(btn, r, text, html, pre) {
+    const to = pre?.to;
+    if (!to) return false;
     const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     keep[`${Date.now()}-maint`] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, images, status: 'pending', at: Date.now(), maint: r.id };
@@ -4783,6 +4780,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi gửi luôn
   async function maintZaloQuick(btn) {
+    const pre = mtOpenZalo(); // mở Zalo ngay lúc bấm (trước mọi bước chờ)
+    if (!pre) return (btn.textContent = '📨 Nhắc Zalo');
     const [all, asked] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked')]);
     const r = maintChoose(all, asked);
     if (!r) {
@@ -4791,7 +4790,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return;
     }
     const m = maintCompose(r, mtAskOf(r));
-    await maintZalo(null, r, m.text, m.html);
+    await maintZalo(null, r, m.text, m.html, pre);
     btn.textContent = `📨 Đã gửi #${r.id}`;
     setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 4000);
   }
@@ -4959,6 +4958,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const to = box.querySelector('input[data-to]').value.trim();
         QB.mtAsk = { lines, at: Date.now(), by: meName };
         await kvMerge('qbank', { mtAsk: QB.mtAsk });
+        if (to) state.mtTo = to;
         if (to && to !== cfg.to) await kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } });
         box.remove();
         const card = document.querySelector('[data-dg-mtcard]');
@@ -5015,14 +5015,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (e.shiftKey) {
           const cur = (await kvGet('maintCfg')).main?.to || '';
           const v = prompt('Tên nhóm / người nhận Zalo của bảo trì:', cur);
-          if (v != null && v.trim()) await kvMerge('maintCfg', { main: { to: v.trim(), at: Date.now(), by: meName } });
+          if (v != null && v.trim()) {
+            state.mtTo = v.trim();
+            await kvMerge('maintCfg', { main: { to: v.trim(), at: Date.now(), by: meName } });
+          }
           return;
         }
         if (b.disabled) return;
+        const pre = mtOpenZalo();
+        if (!pre) return;
         b.disabled = true;
         b.textContent = '⏳ Đang gửi…';
         try {
-          const ok = await maintZalo(b, MT.r, m.text, m.html);
+          const ok = await maintZalo(b, MT.r, m.text, m.html, pre);
           const ni = mtImgs(MT.r).length;
           if (ok) msg(`📨 Đã gửi #${MT.r.id} qua Zalo${ni ? ` (kèm ${ni} ảnh)` : ''}`);
           b.textContent = '📨 Gửi Zalo';
@@ -6259,7 +6264,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (e.shiftKey) {
           const cur = (await kvGet('maintCfg')).main?.to || '';
           const v = prompt('Tên nhóm / người nhận Zalo của bảo trì:', cur);
-          if (v != null && v.trim()) await kvMerge('maintCfg', { main: { to: v.trim(), at: Date.now(), by: meName } });
+          if (v != null && v.trim()) {
+            state.mtTo = v.trim();
+            await kvMerge('maintCfg', { main: { to: v.trim(), at: Date.now(), by: meName } });
+          }
           return;
         }
         if (z.textContent.startsWith('⏳')) return;
