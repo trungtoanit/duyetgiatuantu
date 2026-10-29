@@ -4347,29 +4347,43 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // 🗓️ Chi tiết chênh lệch tháng: từng đơn, số đã chốt, % so với tiền đơn (soát số bất thường)
   function openMonthDiff() {
     document.getElementById('dg-mdiff')?.remove();
-    const rows = [...(state.mDiffRows || [])].sort((a, b) => (b.v ?? -1e15) - (a.v ?? -1e15));
+    // sắp theo % chênh lệch (cao nhất trước) để soát đơn bất thường
+    const rk = (r) => (r.v != null && r.o.total > 0 ? r.v / r.o.total : -1e9);
+    const rows = [...(state.mDiffRows || [])].sort((a, b) => rk(b) - rk(a));
     const bad = state.diffBad || {};
     const sum = rows.reduce((t, r) => t + (r.v || 0), 0);
     const box = document.createElement('div');
     box.id = 'dg-mdiff';
     box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.35);display:grid;place-items:center;font-family:inherit');
-    const pct = (v, o) => (o.total > 0 && v != null ? `${Math.round((v / o.total) * 100)}%` : '');
-    box.innerHTML = `<div style="width:min(860px,94vw);max-height:84vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+    const pct = (v, o) => (o.total > 0 && v != null ? (v / o.total) * 100 : null);
+    const kindOf = (q) => {
+      const k = q?.kinds || (q?.offset ? ['offset'] : []);
+      return k.includes('flexo') && k.includes('offset') ? 'Flexo + Offset' : k.includes('flexo') ? 'Flexo' : k.includes('offset') ? 'Offset' : '';
+    };
+    const okRows = rows.filter((r) => r.v != null);
+    const revOk = okRows.reduce((t, r) => t + (r.o.total || 0), 0);
+    const nRed = okRows.filter((r) => pct(r.v, r.o) > 40).length;
+    box.innerHTML = `<div style="width:min(1040px,96vw);max-height:84vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
       <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:linear-gradient(90deg,#fdf2f8,#fce7f3);border-bottom:1px solid #fbcfe8">
-        <b style="font-size:15px">🗓️ Chênh lệch tháng – ${rows.filter((r) => r.v != null).length}/${rows.length} đơn · Σ ${money(Math.round(sum))}</b>
+        <b style="font-size:15px">🗓️ Chênh lệch tháng – ${okRows.length}/${rows.length} đơn · Σ ${money(Math.round(sum))}${revOk ? ` · ${Math.round((sum / revOk) * 100)}%` : ''}</b>${nRed ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800">🔴 ${nRed} đơn &gt; 40%</span>` : ''}
         <button data-x style="margin-left:auto;all:unset;cursor:pointer;font-size:20px;color:#64748b;padding:0 6px">×</button></div>
       <div style="overflow:auto;padding:8px 12px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <tr style="color:#64748b;text-align:left"><th style="padding:4px 6px">Ngày</th><th>Đơn</th><th>Báo giá</th><th style="text-align:right">Tiền đơn</th><th style="text-align:right">Chênh lệch</th><th style="text-align:right">%</th><th></th></tr>
+      <tr style="color:#64748b;text-align:left;position:sticky;top:0;background:#fff"><th style="padding:4px 6px">Ngày</th><th>Đơn hàng</th><th>Báo giá</th><th>Loại</th><th style="text-align:right">Tiền đơn</th><th style="text-align:right" title="Flexo: giấy tấm · Offset: NVL sau VAT (theo tỷ lệ tiền đơn / tiền BG)">NVL</th><th style="text-align:right">Chênh lệch</th><th style="text-align:right">% chênh lệch</th><th></th></tr>
       ${rows
         .map(({ o, q, v }) => {
           const b = bad[o.dh];
           const id = q?.id || o.qid;
-          return `<tr style="border-bottom:1px solid #f1f5f9${b ? ';background:#fef2f2' : ''}"><td style="padding:5px 6px;white-space:nowrap;color:#64748b">${new Date(o.at + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })}</td>
+          const p = pct(v, o);
+          const red = p != null && p > 40;
+          const nvl = v != null && o.total > 0 ? o.total - v : null;
+          return `<tr style="border-bottom:1px solid #f1f5f9${b || red ? ';background:#fef2f2' : ''}"><td style="padding:5px 6px;white-space:nowrap;color:#64748b">${new Date(o.at + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })}</td>
             <td style="font-weight:700">${esc(o.dh || '')}</td>
             <td>${id && o.bg ? `<a href="/bao-gia/update/${id}" target="_blank" style="font-weight:800;color:#1d4ed8">${esc(o.bg)}</a>` : esc(o.bg || '–')}</td>
+            <td style="color:#64748b;white-space:nowrap">${kindOf(q)}</td>
             <td style="text-align:right;white-space:nowrap">${money(o.total || 0)}</td>
-            <td style="text-align:right;white-space:nowrap;font-weight:800;color:${v == null ? '#94a3b8' : v < 0 ? '#b91c1c' : '#be185d'}">${v == null ? '–' : money(Math.round(v))}</td>
-            <td style="text-align:right;color:#64748b">${pct(v, o)}</td>
+            <td style="text-align:right;white-space:nowrap;color:#475569">${nvl == null ? '–' : money(Math.round(nvl))}</td>
+            <td style="text-align:right;white-space:nowrap;font-weight:800;color:${v == null ? '#94a3b8' : v < 0 || red ? '#b91c1c' : '#be185d'}">${v == null ? '–' : money(Math.round(v))}</td>
+            <td style="text-align:right;white-space:nowrap;font-weight:${red ? 900 : 600};color:${red ? '#dc2626' : '#64748b'}">${p == null ? '' : `${red ? '🔴 ' : ''}${Math.round(p)}%`}</td>
             <td style="padding-left:8px;font-size:11.5px">${b ? `<span style="color:#b91c1c;font-weight:700">⚠️ vô lý ${money(Math.round(b.v))}${o.total > 0 ? ` (${Math.round((b.v / o.total) * 100)}%)` : ''} – không cộng</span>` : ''}</td></tr>`;
         })
         .join('')}</table></div>
