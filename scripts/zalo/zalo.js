@@ -125,6 +125,8 @@
       if (!visible(e) || norm(e.textContent) !== want) continue;
       if ([...e.children].some((c) => norm(c.textContent) === want)) continue; // còn con khớp → lấy con
       if (e.closest('#richInput, [contenteditable="true"], input')) continue;
+      // phần chữ tô sáng của kết quả tìm kiếm (vd. "Documents" trong "My Documents") → không phải tên đầy đủ, bỏ qua
+      if (/highlight/i.test(String(e.className)) && norm(e.parentElement?.textContent) !== want) continue;
       const r = e.getBoundingClientRect();
       if (r.left > window.innerWidth * 0.45) continue; // kết quả nằm ở cột trái
       out.push(e);

@@ -4753,7 +4753,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Người nhận Zalo của bảo trì (kv maintCfg) giữ sẵn trong bộ nhớ: phải hỏi tên (prompt) TRƯỚC khi mở tab Zalo –
   // mở tab trước thì trang CRM thành tab nền, Chrome chặn prompt (trả rỗng) → tab Zalo bị đóng ngay
   if (IS_TOP) kvGet('maintCfg').then((c) => (state.mtTo = c.main?.to || '')).catch(() => {});
-  const MT_TEST_TO = 'Documents'; // 🧪 Gửi test: gửi vào chat Zalo "Documents" của mình để xem trước tin
+  const MT_TEST_TO = 'My Documents'; // 🧪 Gửi test: gửi vào chat Zalo "My Documents" của mình để xem trước tin
   function mtOpenZalo(test) {
     let to = test ? MT_TEST_TO : state.mtTo;
     if (!to) {
