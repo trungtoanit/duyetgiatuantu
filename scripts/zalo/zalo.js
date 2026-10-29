@@ -164,7 +164,22 @@
   };
 
   // Ô soạn của Zalo (#richInput + dòng #input_line_0) là trình soạn tự viết: thử lần lượt nhiều cách điền, cách nào ra chữ thì dừng
+  // Zalo chỉ giữ màu chữ đúng bảng màu của công cụ định dạng (đỏ / cam / vàng / xanh lá) → đổi mã màu về màu gần nhất trong bảng
+  const ZPAL = { red: '#db342e', orange: '#f27806', yellow: '#f7b503', green: '#15a85f' };
+  const zColor = (hex) => {
+    const m = String(hex).replace('#', '');
+    const full = m.length === 3 ? m.replace(/./g, '$&$&') : m;
+    if (!/^[0-9a-f]{6}$/i.test(full)) return hex;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (d < 0.15) return hex; // xám / đen: giữ nguyên
+    let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+    return h < 18 || h >= 330 ? ZPAL.red : h < 42 ? ZPAL.orange : h < 65 ? ZPAL.yellow : h < 170 ? ZPAL.green : hex;
+  };
+  const zalofyHtml = (html) => String(html || '').replace(/(color\s*[:=]\s*["']?)(#[0-9a-f]{3,6})/gi, (_, p1, c) => p1 + zColor(c));
   async function pasteText(el, text, html, log = () => {}) {
+    html = zalofyHtml(html);
     const ed = chatInput() || el;
     const r = ed.getBoundingClientRect();
     const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + 20, clientY: r.top + Math.min(20, r.height / 2), button: 0 };
