@@ -4674,6 +4674,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: ${esc(r.desc || '')}</div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div>${esc(ask)}</div>`;
     return { text, html, days, lv, mach };
   }
+  // Ảnh trong báo cáo (r.image = các đường dẫn cách nhau dấu phẩy) → tải qua background (máy chủ ảnh chặn CORS), thu nhỏ ≤1600px JPEG để gửi Zalo
+  const mtImgs = (r) => String(r?.image || '').split(',').map((x) => x.trim()).filter((x) => /^https?:\/\//.test(x)).slice(0, 6);
+  async function maintImages(r) {
+    const out = [];
+    for (const url of mtImgs(r)) {
+      try {
+        const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(20000).then(() => null)]);
+        if (!du) continue;
+        const im = new Image();
+        im.src = du;
+        await im.decode();
+        const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.round(im.naturalWidth * k);
+        c.height = Math.round(im.naturalHeight * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        out.push(c.toDataURL('image/jpeg', 0.85));
+      } catch {}
+    }
+    return out;
+  }
   const mtAskOf = (r, salt = Math.floor(Math.random() * 1e6)) => maintPick(r, {}, salt).text;
   const MT = { r: null, ask: '', edited: false }; // việc + câu đang hiện trong khung
   async function maintNew(skip) {
@@ -4694,6 +4715,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const lvc = /CRITICAL|HIGH/.test(r.level) ? '#dc2626' : r.level === 'MEDIUM' ? '#d97706' : '#16a34a';
     card.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <b style="color:#3730a3;font-size:13px">💬 Hỏi bảo trì</b>
+        ${mtImgs(r).map((u) => `<a href="${esc(u)}" target="_blank" title="Ảnh trong báo cáo – gửi kèm tin Zalo"><img src="${esc(u)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid #c7d2fe;vertical-align:middle"></a>`).join('')}
         <span style="font-size:12px;color:#334155"><b>#${esc(String(r.id))}</b> · ${esc(r.machine?.name || r.machine?.code || '')}: <i>“${esc((r.desc || '').slice(0, 90))}”</i> · ${m.days} ngày · <b style="color:${lvc}">${esc(m.lv)}</b></span></div>
       <div data-mtask contenteditable="true" title="Bấm vào để sửa câu hỏi trước khi gửi" style="margin:6px 0;padding:6px 10px;border-radius:8px;background:#fff;border:1px dashed #a5b4fc;color:#3730a3;font-size:14px;font-weight:600;outline:none">${esc(MT.ask)}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -4748,9 +4770,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (w) w.location.href = 'https://chat.zalo.me/';
       w?.focus();
     } catch {}
+    // có ảnh trong báo cáo → gửi kèm (Zalo gửi chữ trước rồi tới từng ảnh)
+    if (btn && mtImgs(r).length) btn.textContent = `⏳ Tải ${mtImgs(r).length} ảnh…`;
+    const images = await maintImages(r);
     const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
-    keep[`${Date.now()}-maint`] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, status: 'pending', at: Date.now(), maint: r.id };
+    keep[`${Date.now()}-maint`] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, images, status: 'pending', at: Date.now(), maint: r.id };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
     if (btn) btn.textContent = `📨 Đã gửi #${r.id} → ${to}`;
@@ -4956,8 +4981,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         b.disabled = true;
         b.textContent = '⏳ Đang gửi…';
         try {
-          const ok = await maintZalo(null, MT.r, m.text, m.html);
-          if (ok) msg(`📨 Đã gửi #${MT.r.id} qua Zalo`);
+          const ok = await maintZalo(b, MT.r, m.text, m.html);
+          const ni = mtImgs(MT.r).length;
+          if (ok) msg(`📨 Đã gửi #${MT.r.id} qua Zalo${ni ? ` (kèm ${ni} ảnh)` : ''}`);
           b.textContent = '📨 Gửi Zalo';
         } catch (err) {
           b.textContent = `⚠️ ${err.message}`;

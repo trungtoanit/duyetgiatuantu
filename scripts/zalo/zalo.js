@@ -393,9 +393,29 @@
       return fail('Đã dán nội dung nhưng chưa gửi được – bấm nút gửi trong Zalo.');
     }
     tr('đã gửi');
+    // Ảnh kèm (vd. ảnh trong báo cáo bảo trì): dán từng ảnh (như Ctrl+V) rồi bấm Gửi ở khung xem trước
+    for (const [i, src] of (job.images || []).entries()) {
+      try {
+        const blob = await (await fetch(src)).blob();
+        const file = new File([blob], `anh-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' });
+        const el = chatInput() || input;
+        el.focus();
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        await sleep(1800);
+        const sendBtn = [...document.querySelectorAll('[data-translate-inner="STR_SEND"], [title="Gửi"], button')].find((b) => visible(b) && /^Gửi$/i.test((b.innerText || '').trim()));
+        if (sendBtn) sendBtn.click();
+        else pressSend(chatInput() || el);
+        await sleep(2200);
+        tr(`đã gửi ảnh ${i + 1}/${job.images.length}`);
+      } catch (e) {
+        tr(`ảnh ${i + 1} lỗi: ${e}`);
+      }
+    }
     await markSent(job, false);
     await markTeam(job, false);
-    await setStatus(id, { ...job, status: 'sent', doneAt: Date.now(), via: used });
+    await setStatus(id, { ...job, images: job.images ? job.images.length : undefined, status: 'sent', doneAt: Date.now(), via: used });
     // Tin nhắc cả đội: gửi xong tự đóng tab Zalo do trợ lý mở (không còn việc nào chờ)
     if (job.team) {
       await sleep(2000);
