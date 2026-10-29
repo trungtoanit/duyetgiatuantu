@@ -5003,6 +5003,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <label style="display:flex;gap:8px;align-items:center">👤 Người nhận: <input data-to value="${esc(state.mtTo || '')}" placeholder="Tên nhóm / người bảo trì trên Zalo" style="flex:1;font:inherit;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px"></label>
         <label style="display:flex;gap:8px;align-items:center">💬 Câu hỏi: <select data-ask style="flex:1;font:inherit;border:1px solid #cbd5e1;border-radius:6px;padding:4px 6px">${lines.map((l, i) => `<option value="${i}">${esc(l)}</option>`).join('')}</select>
           <button data-s="rnd" title="Câu ngẫu nhiên" style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:8px;padding:3px 10px;cursor:pointer">🔄</button></label>
+        <label style="display:flex;gap:8px;align-items:center">✏️ Sửa câu: <input data-askt placeholder="Chọn câu ở trên rồi sửa tại đây (hoặc gõ câu mới)" style="flex:1;font:inherit;border:1px solid #86efac;background:#f0fdf4;color:#166534;font-weight:700;border-radius:6px;padding:4px 8px"></label>
       </div>
       <div style="flex:1;min-height:0;overflow:auto;padding:12px 18px;background:#e5efff">
         <div style="font-size:12px;color:#475569;margin-bottom:6px">📱 Tin sẽ gửi – bấm vào để sửa trực tiếp:</div>
@@ -5016,6 +5017,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <button data-s="send" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">📨 Gửi Zalo</button></div></div>`;
     const pv = box.querySelector('[data-pv]');
     const sel = box.querySelector('[data-ask]');
+    const askt = box.querySelector('[data-askt]');
     const draw = () => {
       pv.innerHTML = maintCompose(r, ask).html;
       edited = false;
@@ -5027,10 +5029,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       QB.mtAsk = { lines: [tpl] };
       ask = mtAskOf(r, 0);
       QB.mtAsk = keep;
+      askt.value = ask;
     };
     fill(lines[Number(sel.value) || 0] || '');
     draw();
     pv.addEventListener('input', () => (edited = true));
+    // sửa câu hỏi sau khi chọn → ghép lại tin theo câu đã sửa
+    askt.addEventListener('focus', () => {
+      if (edited && !confirm('Sửa câu sẽ bỏ phần đã sửa trong tin. Tiếp tục?')) askt.blur();
+    });
+    askt.addEventListener('input', () => {
+      ask = askt.value;
+      draw();
+    });
     sel.addEventListener('change', () => {
       if (edited && !confirm('Đổi câu sẽ bỏ phần đã sửa trong tin. Tiếp tục?')) return;
       fill(lines[Number(sel.value)] || '');
