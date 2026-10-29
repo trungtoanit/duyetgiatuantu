@@ -4344,6 +4344,41 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .filter((o) => !(o.q && !(Number(o.q.amount) > 0))) // BG 0đ (chưa cho giá) → bỏ qua
       .sort((a, b) => b.at - a.at);
   }
+  // 🗓️ Chi tiết chênh lệch tháng: từng đơn, số đã chốt, % so với tiền đơn (soát số bất thường)
+  function openMonthDiff() {
+    document.getElementById('dg-mdiff')?.remove();
+    const rows = [...(state.mDiffRows || [])].sort((a, b) => (b.v ?? -1e15) - (a.v ?? -1e15));
+    const bad = state.diffBad || {};
+    const sum = rows.reduce((t, r) => t + (r.v || 0), 0);
+    const box = document.createElement('div');
+    box.id = 'dg-mdiff';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.35);display:grid;place-items:center;font-family:inherit');
+    const pct = (v, o) => (o.total > 0 && v != null ? `${Math.round((v / o.total) * 100)}%` : '');
+    box.innerHTML = `<div style="width:min(860px,94vw);max-height:84vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:linear-gradient(90deg,#fdf2f8,#fce7f3);border-bottom:1px solid #fbcfe8">
+        <b style="font-size:15px">🗓️ Chênh lệch tháng – ${rows.filter((r) => r.v != null).length}/${rows.length} đơn · Σ ${money(Math.round(sum))}</b>
+        <button data-x style="margin-left:auto;all:unset;cursor:pointer;font-size:20px;color:#64748b;padding:0 6px">×</button></div>
+      <div style="overflow:auto;padding:8px 12px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <tr style="color:#64748b;text-align:left"><th style="padding:4px 6px">Ngày</th><th>Đơn</th><th>Báo giá</th><th style="text-align:right">Tiền đơn</th><th style="text-align:right">Chênh lệch</th><th style="text-align:right">%</th><th></th></tr>
+      ${rows
+        .map(({ o, q, v }) => {
+          const b = bad[o.dh];
+          const id = q?.id || o.qid;
+          return `<tr style="border-bottom:1px solid #f1f5f9${b ? ';background:#fef2f2' : ''}"><td style="padding:5px 6px;white-space:nowrap;color:#64748b">${new Date(o.at + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })}</td>
+            <td style="font-weight:700">${esc(o.dh || '')}</td>
+            <td>${id && o.bg ? `<a href="/bao-gia/update/${id}" target="_blank" style="font-weight:800;color:#1d4ed8">${esc(o.bg)}</a>` : esc(o.bg || '–')}</td>
+            <td style="text-align:right;white-space:nowrap">${money(o.total || 0)}</td>
+            <td style="text-align:right;white-space:nowrap;font-weight:800;color:${v == null ? '#94a3b8' : v < 0 ? '#b91c1c' : '#be185d'}">${v == null ? '–' : money(Math.round(v))}</td>
+            <td style="text-align:right;color:#64748b">${pct(v, o)}</td>
+            <td style="padding-left:8px;font-size:11.5px">${b ? `<span style="color:#b91c1c;font-weight:700">⚠️ vô lý ${money(Math.round(b.v))}${o.total > 0 ? ` (${Math.round((b.v / o.total) * 100)}%)` : ''} – không cộng</span>` : ''}</td></tr>`;
+        })
+        .join('')}</table></div>
+      <div style="padding:8px 16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">Số chênh lệch mỗi đơn được chốt lần đầu tính được. Đơn có chênh lệch &gt; 90% tiền đơn (đọc sai NVL / giấy tấm / giá) bị loại khỏi tổng và tính lại khi báo giá được đọc đúng.</div></div>`;
+    document.body.append(box);
+    box.addEventListener('click', (e) => {
+      if (e.target === box || e.target.closest('[data-x]')) box.remove();
+    });
+  }
   function openMissDiff(scope) {
     document.getElementById('dg-miss')?.remove();
     const tried = () => JSON.parse(lsGet('dgDayDiffTry') || '{}');
@@ -4459,6 +4494,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           e.stopPropagation();
           return openMissDiff(ms.dataset.dgMiss);
         }
+        if (e.target.closest('[data-dg-mdet]')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return openMonthDiff();
+        }
         const b = e.target.closest('[data-dg-kd]');
         if (!b || b.disabled) return;
         e.preventDefault();
@@ -4493,13 +4533,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         .catch(() => {});
       state.orderDiff ||= {};
     }
+    // Chênh lệch hợp lý: −100% … +90% tổng tiền đơn (lớn hơn = đọc sai NVL / giấy tấm / giá → không cộng, không chốt)
+    const diffOk = (v, o, q) => {
+      const base = o?.total > 0 ? o.total : Number(q?.amount) || 0;
+      return base > 0 && Number.isFinite(v) && v <= base * 0.9 && v >= -base;
+    };
+    state.diffBad = {};
     const orderDiff = (o, q) => {
       const fz = o?.dh && state.orderDiff?.[o.dh];
-      if (fz && fz.v != null) return fz.v;
+      if (fz && fz.v != null && diffOk(fz.v, o, q)) return fz.v;
       const v0 = q && !q.noSheet ? diffVal(q) : null;
       if (v0 == null) return null;
       const amt = Number(q.amount) || 0;
       const v = amt > 0 && o.total > 0 ? (v0 * o.total) / amt : v0;
+      if (!diffOk(v, o, q)) {
+        if (o?.dh) state.diffBad[o.dh] = { o, v, fz: fz?.v };
+        return null;
+      }
       if (o?.dh && state.orderDiffLoaded) {
         const rec = { v: Math.round(v), bg: o.bg || '', at: Date.now() };
         state.orderDiff[o.dh] = rec;
@@ -4527,6 +4577,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     let mSum = 0;
     let mDn = 0;
     let mRev = 0;
+    const mRows = [];
     for (const o of mList) {
       mRev += o.total || 0;
       const q = o.bg ? byCode[o.bg] : null;
@@ -4535,7 +4586,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         mSum += v;
         mDn++;
       }
+      mRows.push({ o, q, v });
     }
+    state.mDiffRows = mRows;
     const mMiss = mList.filter((o) => !(o.bg && byCode[o.bg] && !(Number(byCode[o.bg].amount) > 0))).length - mDn;
     const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total || 0)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
@@ -4583,7 +4636,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const fc = done && mDn ? (mSum / done) * total : null;
         const neg = mSum < 0;
         const tip = `Chênh lệch tháng ${mo + 1}/${y} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${money(Math.round(mSum))} – ${mDn}/${mList.length} đơn đã tính được\nDự báo cả tháng = ${money(Math.round(mSum))} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật)${fc != null ? ` = ${money(Math.round(fc))}` : ''}`;
-        return `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${neg ? '#fef2f2' : '#fdf2f8'};border:1.5px solid ${neg ? '#fecaca' : '#fbcfe8'};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
+        const nBad = Object.values(state.diffBad || {}).filter((x) => x.o.at >= m0 && x.o.at < vn1).length;
+        return `<div data-dg-mdet title="${esc(`${tip}${nBad ? `\n⚠️ ${nBad} đơn có số chênh lệch vô lý (> 90% tiền đơn) – không cộng` : ''}\nBấm để xem chi tiết từng đơn`)}" style="cursor:pointer;display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${neg ? '#fef2f2' : '#fdf2f8'};border:1.5px solid ${neg ? '#fecaca' : '#fbcfe8'};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
           <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">🗓️ Chênh lệch T${mo + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}</span>
           <b style="font-size:18px;font-weight:900;color:${neg ? '#b91c1c' : '#be185d'};white-space:nowrap;font-variant-numeric:tabular-nums">${mDn ? `${neg ? '−' : ''}${big(Math.abs(mSum))}` : '–'}</b>
           <span style="font-size:10.5px;font-weight:700;color:#0e7490;white-space:nowrap">→ dự báo ${fc != null ? `${fc < 0 ? '−' : ''}${big(Math.abs(fc))}` : '–'} <span style="color:#94a3b8;font-weight:600">(${done}/${total} ngày công)</span></span></div>`;
