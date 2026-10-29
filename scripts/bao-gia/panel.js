@@ -6087,7 +6087,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           </div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
-          <span style="color:#64748b;font-size:12px;margin-right:auto">Gửi thành từng tin riêng: câu mở đầu + tổng, rồi mỗi NVKD 1 tin.</span>
+          <span data-tst style="color:#64748b;font-size:12px;margin-right:auto">Gửi thành từng tin riêng: câu mở đầu + tổng, rồi mỗi NVKD 1 tin.</span>
+          <button data-t="test" title="Gửi thử đúng các tin này (theo câu đang soạn) vào chat Zalo “My Documents” – không tính là đã nhắc ca này" style="border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit;font-weight:700">🧪 Gửi test</button>
           <button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
           <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div></div>`;
       preview();
@@ -6154,6 +6155,39 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!list.length) list.push(TEAM_TPL_DEFAULT[0]);
         pick = Math.min(pick, list.length - 1);
         draw();
+        return;
+      }
+      if (b.dataset.t === 'test') {
+        // 🧪 gửi thử vào My Documents: cùng cách gửi thật (từng tin riêng), chỉ khác người nhận
+        if (!(state.teamItems || []).length) return alert('Chưa có danh sách Gợi ý chốt đơn trên trang này – mở trang Báo giá rồi thử lại.');
+        const pre = mtOpenZalo(true);
+        const keepTpl = state.teamTpl;
+        state.teamTpl = read();
+        const { parts, n } = buildTeamMsg();
+        state.teamTpl = keepTpl;
+        const st = box.querySelector('[data-tst]');
+        st.style.color = '#c2410c';
+        st.textContent = '⏳ Đang xếp việc gửi test…';
+        const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
+        const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+        const jobId = `${Date.now()}-teamtest`;
+        keep[jobId] = { draft: false, n, to: pre.to, zaloName: names[norm(pre.to)]?.name || pre.to, text: parts[0].text, html: parts[0].html, more: parts.slice(1), status: 'pending', at: Date.now(), test: true };
+        await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+        for (let i = 0; i < 200 && box.isConnected; i++) {
+          await sleep(1500);
+          const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
+          if (!j) break;
+          if (j.status === 'pending') st.textContent = `⏳ Chờ tab Zalo nhận việc… (${Math.round((i + 1) * 1.5)}s)`;
+          else if (j.status === 'sending') st.textContent = `⏳ Zalo đang gửi ${parts.length} tin vào “${pre.to}”…`;
+          else if (j.status === 'sent') {
+            st.style.color = '#047857';
+            st.textContent = `✅ Đã gửi test ${parts.length} tin vào ${pre.to}`;
+            break;
+          } else if (j.status === 'error') {
+            st.textContent = `⚠️ ${j.error || 'Lỗi gửi Zalo'}`;
+            break;
+          }
+        }
         return;
       }
       if (b.dataset.t === 'save') {
