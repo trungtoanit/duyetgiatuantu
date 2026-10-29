@@ -4856,7 +4856,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!j) return;
         if (j.status === 'pending') show(`⏳ Chờ tab Zalo nhận việc… (${Math.round((i + 1) * 1.5)}s)`);
         else if (j.status === 'sending') show(`⏳ Zalo đang tìm “${to}” và gửi…`);
-        else if (j.status === 'sent') return show(`✅ Đã gửi #${r.id} cho ${j.via || to}${images.length ? ` (kèm ${images.length} ảnh)` : ''}`), mtLog(run, 'đã gửi');
+        else if (j.status === 'sent') {
+          // ghi nhận lượt gửi thành công (đồng bộ) → ô 🔧 Bảo trì đếm ngược 1 tiếng tới lượt nhắc kế
+          if (!pre.test) await kvMerge('maintSent', { [jobId]: { at: j.doneAt || Date.now(), id: r.id, by: meName, to: j.via || to, img: images.length } }).catch(() => {});
+          state.mtPaint?.();
+          return show(`✅ Đã gửi #${r.id} cho ${j.via || to}${images.length ? ` (kèm ${images.length} ảnh)` : ''}`), mtLog(run, 'đã gửi');
+        }
         else if (j.status === 'error') return show(`⚠️ ${j.error || 'Lỗi gửi Zalo'}`), mtLog(run, `lỗi: ${j.error}`);
       }
     })();
@@ -6518,6 +6523,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       mt.href = '/bao-tri/bao-cao';
       mt.setAttribute('style', `flex:none;width:${MT_W}px;margin:${cs.margin};margin-left:8px;align-self:stretch;box-sizing:border-box;border-radius:10px;border:1px solid #fecaca;background:linear-gradient(135deg,#fff1f2,#fef2f2);display:grid;place-items:center;text-align:center;text-decoration:none;color:#9f1239;font-family:inherit;padding:4px;cursor:pointer`);
       mt.innerHTML = '<div style="font-size:18px;line-height:1">🔧</div><div style="font-size:10px;font-weight:800;text-transform:uppercase">Bảo trì</div><div data-mtn style="font-size:11px;font-weight:700"></div>' +
+        (MY_ADMIN ? '<div data-mtcd style="font-size:10px;font-weight:800;font-variant-numeric:tabular-nums"></div>' : '') +
         (MY_ADMIN ? '<button data-mtz title="Chọn ngẫu nhiên 1 việc bảo trì đang tồn đọng, soạn tin + câu hỏi rồi gửi Zalo (Shift+bấm: đổi người nhận)" style="margin-top:2px;border:0;cursor:pointer;border-radius:999px;padding:1px 8px;font:inherit;font-size:10px;font-weight:800;color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed)">📨 Nhắc Zalo</button>' : '');
       mt.addEventListener('click', async (e) => {
         const z = e.target.closest('[data-mtz]');
@@ -6538,7 +6544,25 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         maintZaloQuick(z).catch((err) => (z.textContent = `⚠️ ${err.message}`));
       });
       box.after(mt);
+      const MT_EVERY = 3600e3; // nhắc bảo trì qua Zalo mỗi 1 tiếng
+      const tickMt = () => {
+        const cd = mt.querySelector('[data-mtcd]');
+        if (!cd) return;
+        const last = state.mtLastSent || 0;
+        const left = last + MT_EVERY - Date.now();
+        const over = left <= 0;
+        over ? mt.setAttribute('data-over', '1') : mt.removeAttribute('data-over');
+        cd.innerHTML = !last ? '⏰ chưa nhắc lần nào' : over ? `⏰ quá hạn <b>${fmtCd(-left)}</b>` : `⏳ nhắc tiếp <b>${fmtCd(left)}</b>`;
+        cd.style.color = over ? '#dc2626' : '#047857';
+        cd.title = last ? `Lần gửi Zalo thành công gần nhất: ${new Date(last).toLocaleString('vi-VN')}${state.mtLastInfo ? ` – #${state.mtLastInfo.id} cho ${state.mtLastInfo.to} (${state.mtLastInfo.by || ''})` : ''} · ${state.mtSentN || 0} lượt đã gửi` : 'Chưa có lượt gửi Zalo bảo trì thành công nào';
+      };
       const paintMt = async () => {
+        const sent = Object.values(await kvGet('maintSent').catch(() => ({}))).filter((x) => x?.at);
+        const lastS = sent.reduce((a, x) => (x.at > (a?.at || 0) ? x : a), null);
+        state.mtLastSent = lastS?.at || 0;
+        state.mtLastInfo = lastS;
+        state.mtSentN = sent.length;
+        tickMt();
         const all = Object.values(await kvGet('maintReports')).filter(Boolean);
         const open = all.filter((r) => !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || ''));
         const urgent = open.filter((r) => /CRITICAL|HIGH/i.test(r.level || ''));
@@ -6552,15 +6576,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           st.textContent = `@keyframes dgMtBlink{0%,100%{background:#fff1f2;color:inherit;box-shadow:0 0 0 0 rgba(220,38,38,0);transform:scale(1)}
             45%{background:#dc2626;color:#fff;box-shadow:0 0 0 6px rgba(220,38,38,.45),0 0 28px 10px rgba(239,68,68,.85);transform:scale(1.08)}
             55%{background:#b91c1c;color:#fff;box-shadow:0 0 0 8px rgba(220,38,38,.35),0 0 36px 14px rgba(239,68,68,.9);transform:scale(1.1)}}
-            [data-dg-mtbox][data-crit]{animation:dgMtBlink .7s ease-in-out infinite;border-color:#dc2626!important;position:relative;z-index:5}
-            [data-dg-mtbox][data-crit] *{color:inherit!important}`;
+            [data-dg-mtbox][data-over]{animation:dgMtBlink .7s ease-in-out infinite;border-color:#dc2626!important;position:relative;z-index:5}
+            [data-dg-mtbox][data-over] *{color:inherit!important}`;
           document.head.append(st);
         }
         crit ? mt.setAttribute('data-crit', String(crit)) : mt.removeAttribute('data-crit');
         mt.title = `${crit ? `🚨 Còn ${crit} lỗi KHẨN CẤP chưa xử lý! ` : ''}Báo cáo bảo trì chưa xử lý: ${open.length}${urgent.length ? ` (khẩn cấp / cao: ${urgent.length})` : ''} – bấm để mở trang Bảo trì → Báo cáo`;
       };
+      state.mtPaint = () => mt.isConnected && paintMt().catch(() => {});
       paintMt().catch(() => {});
       setInterval(() => mt.isConnected && paintMt().catch(() => {}), 60e3);
+      setInterval(() => mt.isConnected && tickMt(), 1000);
       if (!document.getElementById('dgh-css')) {
         const st = document.createElement('style');
         st.id = 'dgh-css';

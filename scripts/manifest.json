@@ -92,6 +92,7 @@
     "maintAsked",
     "maintCfg",
     "maintReports",
+    "maintSent",
     "notifRead",
     "notifs",
     "nudgeCfg",
