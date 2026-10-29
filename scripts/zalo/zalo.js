@@ -431,6 +431,34 @@
       await markTeam({ ...job, wasImage: true }, !!job.draft);
       return setStatus(id, { ...job, image: null, status: 'sent', drafted: !!job.draft, doneAt: Date.now(), via: used });
     }
+    // Ảnh kèm (vd. ảnh trong báo cáo bảo trì): dán ảnh vào ô soạn TRƯỚC (như Ctrl+V), chờ Zalo hiện đủ "N ảnh" và ảnh nhỏ tải xong,
+    // rồi mới dán chữ và gửi 1 lần (Zalo gửi ảnh + tin cùng lúc) – tránh bấm gửi khi ảnh chưa tải kịp
+    const nImg = (job.images || []).length;
+    const attCount = () => {
+      const e = [...(chatBox() || document).querySelectorAll('div, span')].find((x) => !x.children.length && /^\d+\s*ảnh$/i.test((x.textContent || '').trim()));
+      return e ? parseInt(e.textContent, 10) : 0;
+    };
+    const thumbsReady = () => [...(chatBox() || document).querySelectorAll('img')].filter((im) => /^blob:|^data:/.test(im.src) && visible(im)).every((im) => im.complete && im.naturalWidth > 0);
+    if (nImg) {
+      for (const [i, src] of job.images.entries()) {
+        try {
+          const blob = await (await fetch(src)).blob();
+          const file = new File([blob], `anh-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' });
+          const el = chatInput() || input;
+          el.focus();
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+          await waitFor(() => (attCount() >= i + 1 ? true : null), 15000);
+          tr(`đã dán ảnh ${i + 1}/${nImg} · Zalo đếm ${attCount()} ảnh`);
+        } catch (e) {
+          tr(`ảnh ${i + 1} lỗi: ${e}`);
+        }
+      }
+      await waitFor(() => (attCount() >= nImg && thumbsReady() ? true : null), 20000);
+      await sleep(1500); // cho Zalo xử lý xong ảnh
+      tr(`ảnh sẵn sàng: ${attCount()}/${nImg} · ảnh nhỏ tải xong=${thumbsReady()}`);
+    }
     const how = await pasteText(chatInput() || input, job.text, job.html, tr);
     const rich = document.querySelector('#richInput');
     const edn = chatInput();
@@ -446,8 +474,9 @@
     }
     pressSend(chatInput() || input, tr);
     await sleep(1500);
+    if (nImg) await waitFor(() => (attCount() === 0 ? true : null), 15000); // ảnh tải lên xong thì khung "N ảnh" mới biến mất
     // Gửi thành công = vẫn đúng khung chat người nhận + ô soạn còn đó và đã trống
-    const sentOk = () => headerHas(used) && !!chatInput() && typed(chatInput()).length < 10;
+    const sentOk = () => headerHas(used) && !!chatInput() && typed(chatInput()).length < 10 && (!nImg || attCount() === 0);
     if (!sentOk() && headerHas(used) && chatInput()) {
       // thử Enter trực tiếp vào ô soạn
       const el2 = chatInput();
@@ -463,26 +492,6 @@
       return fail('Đã dán nội dung nhưng chưa gửi được – bấm nút gửi trong Zalo.');
     }
     tr('đã gửi');
-    // Ảnh kèm (vd. ảnh trong báo cáo bảo trì): dán từng ảnh (như Ctrl+V) rồi bấm Gửi ở khung xem trước
-    for (const [i, src] of (job.images || []).entries()) {
-      try {
-        const blob = await (await fetch(src)).blob();
-        const file = new File([blob], `anh-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' });
-        const el = chatInput() || input;
-        el.focus();
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-        await sleep(1800);
-        const sendBtn = [...document.querySelectorAll('[data-translate-inner="STR_SEND"], [title="Gửi"], button')].find((b) => visible(b) && /^Gửi$/i.test((b.innerText || '').trim()));
-        if (sendBtn) sendBtn.click();
-        else pressSend(chatInput() || el);
-        await sleep(2200);
-        tr(`đã gửi ảnh ${i + 1}/${job.images.length}`);
-      } catch (e) {
-        tr(`ảnh ${i + 1} lỗi: ${e}`);
-      }
-    }
     await markSent(job, false);
     await markTeam(job, false);
     await setStatus(id, { ...job, images: job.images ? job.images.length : undefined, status: 'sent', doneAt: Date.now(), via: used });
