@@ -271,7 +271,7 @@
     if (!box) return null;
     const ok = (e) => visible(e) && !e.closest('[contenteditable="true"], [class*="leftbar"]');
     const attrs = (e) => `${String(e.className?.baseVal ?? e.className)} ${e.getAttribute('icon') || ''} ${e.getAttribute('title') || ''} ${e.getAttribute('data-translate-title') || ''} ${e.getAttribute('data-id') || ''}`;
-    const hit = [...box.querySelectorAll('*')].find((e) => ok(e) && /send|sent|paper-plane|(^|\s)gửi(\s|$)/i.test(attrs(e)) && !/sticker|emoji|file|image|ảnh/i.test(attrs(e)));
+    const hit = [...box.querySelectorAll('*')].find((e) => ok(e) && /send|sent|paper-plane|(^|\s)gửi(\s|$)/i.test(attrs(e)) && !/sticker|emoji|file|image|ảnh|suggest|translat/i.test(attrs(e)));
     if (hit) return hit.closest('[class*="btn"], [role="button"], button') || hit;
     // dự phòng: nút ngoài cùng bên phải ở hàng dưới cùng khung soạn (bên phải nút emoji)
     const r = box.getBoundingClientRect();
@@ -434,11 +434,16 @@
     // Ảnh kèm (vd. ảnh trong báo cáo bảo trì): dán ảnh vào ô soạn TRƯỚC (như Ctrl+V), chờ Zalo hiện đủ "N ảnh" và ảnh nhỏ tải xong,
     // rồi mới dán chữ và gửi 1 lần (Zalo gửi ảnh + tin cùng lúc) – tránh bấm gửi khi ảnh chưa tải kịp
     const nImg = (job.images || []).length;
+    // khung ảnh chờ gửi dưới ô soạn ("3 ảnh" + ảnh nhỏ + ô "+") – tìm cả trang (nằm ngoài vùng chatBox), chỉ bên phải cột trái
+    const attEl = () =>
+      [...document.querySelectorAll('div, span, p')]
+        .filter((x) => (x.textContent || '').length < 16 && /^\d+\s*ảnh$/i.test((x.textContent || '').normalize('NFC').replace(/\s+/g, ' ').trim()) && visible(x) && x.getBoundingClientRect().left > LEFT_COL())
+        .sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length)[0] || null;
     const attCount = () => {
-      const e = [...(chatBox() || document).querySelectorAll('div, span')].find((x) => !x.children.length && /^\d+\s*ảnh$/i.test((x.textContent || '').trim()));
-      return e ? parseInt(e.textContent, 10) : 0;
+      const e = attEl();
+      return e ? parseInt(e.textContent, 10) || 0 : 0;
     };
-    const thumbsReady = () => [...(chatBox() || document).querySelectorAll('img')].filter((im) => /^blob:|^data:/.test(im.src) && visible(im)).every((im) => im.complete && im.naturalWidth > 0);
+    const thumbsReady = () => [...document.querySelectorAll('img')].filter((im) => /^blob:|^data:/.test(im.src) && visible(im)).every((im) => im.complete && im.naturalWidth > 0);
     if (nImg) {
       for (const [i, src] of job.images.entries()) {
         try {
@@ -451,6 +456,10 @@
           el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
           await waitFor(() => (attCount() >= i + 1 ? true : null), 15000);
           tr(`đã dán ảnh ${i + 1}/${nImg} · Zalo đếm ${attCount()} ảnh`);
+          if (i === 0) {
+            const a = attEl();
+            call({ type: 'remote.push', ns: 'zaloDebug', patch: { att: { at: Date.now(), html: (a?.parentElement?.parentElement?.outerHTML || 'KHÔNG THẤY').slice(0, 6000) } } }).catch(() => {});
+          }
         } catch (e) {
           tr(`ảnh ${i + 1} lỗi: ${e}`);
         }
