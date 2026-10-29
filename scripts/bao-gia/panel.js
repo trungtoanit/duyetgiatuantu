@@ -4670,8 +4670,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const days = Math.max(0, Math.floor((Date.now() / 1000 - (r.createdAt || Date.now() / 1000)) / 86400));
     const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
     const mach = `${r.machine?.code ? `${r.machine.code} – ` : ''}${r.machine?.name || ''}${r.machine?.area ? ` (${r.machine.area})` : ''}`;
-    const text = [`🔧 Nhắc việc bảo trì – Báo cáo #${r.id}`, `Máy: ${mach}`, `Lỗi: ${r.desc || ''}`, `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`, '', ask].join('\n');
-    const html = `<div><b>🔧 Nhắc việc bảo trì – Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: <b><span style="color:#b91c1c"><font color="#b91c1c">${esc(r.desc || '')}</font></span></b></div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div><b><span style="color:#15a85f"><font color="#15a85f">${esc(ask)}</font></span></b></div>`;
+    const text = [`🔧 Báo cáo #${r.id}`, `Máy: ${mach}`, `Lỗi: ${r.desc || ''}`, `Người báo: ${r.reporter || '–'} · ${days} ngày trước · Mức: ${lv}`, '', ask].join('\n');
+    const html = `<div><b>🔧 Báo cáo #${esc(String(r.id))}</b></div><div>Máy: <b>${esc(mach)}</b></div><div>Lỗi: <b><span style="color:#b91c1c"><font color="#b91c1c">${esc(r.desc || '')}</font></span></b></div><div>Người báo: ${esc(r.reporter || '–')} · ${days} ngày trước · Mức: <b><span style="color:#dc2626"><font color="#dc2626">${esc(lv)}</font></span></b></div><div><br></div><div><b><span style="color:#15a85f"><font color="#15a85f">${esc(ask)}</font></span></b></div>`;
     return { text, html, days, lv, mach };
   }
   // Ảnh trong báo cáo (r.image = các đường dẫn cách nhau dấu phẩy) → tải qua background (máy chủ ảnh chặn CORS), thu nhỏ ≤1600px JPEG để gửi Zalo
