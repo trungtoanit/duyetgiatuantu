@@ -266,26 +266,29 @@
     }
     return box;
   }
+  // Nút gửi (máy bay giấy) – luôn nằm sát mép phải khung soạn, ngang/dưới ô soạn.
+  // Chỉ xét các nút ở mép phải (≤ 140px) để không bấm nhầm nút trên thanh công cụ (vd. "Gửi danh thiếp", gợi ý dịch)
   function findSend() {
-    const box = chatBox();
-    if (!box) return null;
-    const ok = (e) => visible(e) && !e.closest('[contenteditable="true"], [class*="leftbar"]');
+    const ed = chatInput();
+    if (!ed) return null;
+    const er = ed.getBoundingClientRect();
     const attrs = (e) => `${String(e.className?.baseVal ?? e.className)} ${e.getAttribute('icon') || ''} ${e.getAttribute('title') || ''} ${e.getAttribute('data-translate-title') || ''} ${e.getAttribute('data-id') || ''}`;
-    const hit = [...box.querySelectorAll('*')].find((e) => ok(e) && /send|sent|paper-plane|(^|\s)gửi(\s|$)/i.test(attrs(e)) && !/sticker|emoji|file|image|ảnh|suggest|translat/i.test(attrs(e)));
-    if (hit) return hit.closest('[class*="btn"], [role="button"], button') || hit;
-    // dự phòng: nút ngoài cùng bên phải ở hàng dưới cùng khung soạn (bên phải nút emoji)
-    const r = box.getBoundingClientRect();
-    const leaf = [...box.querySelectorAll('i, svg, img, [class*="btn"], [role="button"], button')]
-      .filter((e) => ok(e) && !/emoji|sticker/i.test(attrs(e)))
+    const BAD = /sticker|emoji|danh thiếp|card|contact|suggest|translat|SentMsg|like|reaction|expand|fullscreen|redo|undo/i;
+    const right = Math.max(er.right, (chatBox() || ed).getBoundingClientRect().right);
+    const cands = [...document.querySelectorAll('i, svg, button, [role="button"], [class*="btn"], [icon]')]
+      .filter((e) => visible(e) && !e.closest('[contenteditable="true"]') && !BAD.test(attrs(e)))
       .map((e) => [e, e.getBoundingClientRect()])
-      .filter(([, br]) => br.width > 8 && br.width < 64 && r.right - br.right < 60 && r.bottom - br.bottom < 60)
-      .sort((x, y) => y[1].right - x[1].right || y[1].bottom - x[1].bottom)[0]?.[0];
-    return leaf ? leaf.closest('[class*="btn"], [role="button"], button') || leaf : null;
+      .filter(([, r]) => r.width > 8 && r.width < 72 && right - r.right < 140 && r.left > LEFT_COL() && r.top > er.top - 90 && r.bottom < innerHeight + 2);
+    const named = cands.find(([e]) => /(^|[\s_-])(send|sent)([\s_-]|$)|paper.?plane|(^|\s)gửi(\s|$)/i.test(attrs(e)));
+    const pick = named || cands.sort((x, y) => y[1].right - x[1].right || y[1].bottom - x[1].bottom)[0];
+    const el = pick?.[0];
+    return el ? el.closest('button, [role="button"], [class*="btn"]') || el : null;
   }
   function pressSend(el, log = () => {}) {
     const btn = findSend();
     if (btn) {
       log(`bấm nút gửi: ${btn.tagName}.${String(btn.className?.baseVal ?? btn.className).slice(0, 60)} ${btn.getAttribute('title') || btn.getAttribute('icon') || ''}`);
+      call({ type: 'remote.push', ns: 'zaloDebug', patch: { sendbtn: { at: Date.now(), html: (btn.parentElement?.outerHTML || btn.outerHTML || '').slice(0, 3000) } } }).catch(() => {});
       for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
       return;
     }
