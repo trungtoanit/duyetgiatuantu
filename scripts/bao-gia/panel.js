@@ -4723,6 +4723,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${mtBtn('job', '🎲 Việc khác', 'background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe', 'Chọn ngẫu nhiên 1 việc tồn đọng khác')}
         ${mtBtn('copy', '📋 Chép', 'background:#fff;color:#475569;border:1px solid #e2e8f0', 'Chép cả tin nhắn (thông tin báo cáo + câu hỏi)')}
         ${MY_ADMIN ? mtBtn('zalo', '📨 Gửi Zalo', 'color:#fff;background:linear-gradient(90deg,#0068ff,#7c3aed)', 'Gửi tin này qua Zalo (Shift+bấm: đổi người nhận)') : ''}
+        ${MY_ADMIN ? mtBtn('test', '🧪 Gửi test', 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa', `Gửi thử tin này vào chat Zalo “${MT_TEST_TO}” của mình (không tính là đã nhắc)`) : ''}
         ${mtBtn('cfg', '⚙️ Câu hỏi', 'background:#fff;color:#475569;border:1px solid #e2e8f0', 'Cài đặt bộ câu hỏi dùng chung')}
         <span data-mtmsg style="font-size:12px;color:#047857;font-weight:700"></span></div>`;
   }
@@ -4752,8 +4753,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Người nhận Zalo của bảo trì (kv maintCfg) giữ sẵn trong bộ nhớ: phải hỏi tên (prompt) TRƯỚC khi mở tab Zalo –
   // mở tab trước thì trang CRM thành tab nền, Chrome chặn prompt (trả rỗng) → tab Zalo bị đóng ngay
   if (IS_TOP) kvGet('maintCfg').then((c) => (state.mtTo = c.main?.to || '')).catch(() => {});
-  function mtOpenZalo() {
-    let to = state.mtTo;
+  const MT_TEST_TO = 'Documents'; // 🧪 Gửi test: gửi vào chat Zalo "Documents" của mình để xem trước tin
+  function mtOpenZalo(test) {
+    let to = test ? MT_TEST_TO : state.mtTo;
     if (!to) {
       to = (prompt('Tên nhóm / người nhận Zalo của bảo trì (đúng như trên Zalo):', '') || '').trim();
       if (!to) return null;
@@ -4765,7 +4767,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       w = window.open('https://chat.zalo.me/', 'dg-zalo');
       w?.focus();
     } catch {}
-    return { w, to };
+    return { w, to, test: !!test };
   }
   // nhật ký gửi (đẩy lên máy chủ zaloDebug 'maint-…') để dò lỗi khi tin không tới Zalo
   const mtLog = (run, t) => call({ type: 'remote.push', ns: 'zaloDebug', patch: { [`maint-${run}-${Date.now()}`]: { at: Date.now(), t } } }).catch(() => {});
@@ -4801,7 +4803,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         else if (j.status === 'error') return show(`⚠️ ${j.error || 'Lỗi gửi Zalo'}`), mtLog(run, `lỗi: ${j.error}`);
       }
     })();
-    await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
+    if (!pre.test) await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
     return true;
   }
   // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi gửi luôn
@@ -5035,6 +5037,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           await navigator.clipboard.writeText(m.text).catch(() => {});
         }
         return msg('✅ Đã chép tin nhắn');
+      }
+      if (t === 'test') {
+        if (b.disabled) return;
+        const pre = mtOpenZalo(true);
+        b.disabled = true;
+        try {
+          await maintZalo(null, MT.r, m.text, m.html, pre);
+        } catch (err) {
+          msg(`⚠️ ${err.message}`);
+        } finally {
+          b.disabled = false;
+        }
+        return;
       }
       if (t === 'zalo') {
         if (e.shiftKey) {
