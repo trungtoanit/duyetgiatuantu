@@ -63,10 +63,27 @@ function render(data) {
   for (const [k, v] of Object.entries(config)) {
     if (form.elements[k] && document.activeElement !== form.elements[k]) form.elements[k].value = v;
   }
+  showSecretTails();
   $('teamInfo').textContent = [
     data.hasTeamFile ? '✅ Kết nối đồng bộ lấy sẵn từ gói cài (team.json).' : '',
     data.teamShared ? '✅ Đang dùng Anthropic key chung của nhóm.' : '',
   ].filter(Boolean).join(' ');
+}
+
+// Ô mật khẩu / key: hiện vài ký tự cuối (…abcd · N ký tự) để biết đang lưu key nào mà không lộ cả key
+function showSecretTails() {
+  for (const inp of form.querySelectorAll('input[type="password"]')) {
+    let tip = inp.parentElement.querySelector('.tail');
+    if (!tip) {
+      tip = document.createElement('span');
+      tip.className = 'tail';
+      tip.style.cssText = 'margin-left:6px;font-weight:600;color:#0f766e;font-family:ui-monospace,Menlo,monospace;font-size:11px';
+      inp.before(tip);
+      inp.addEventListener('input', showSecretTails);
+    }
+    const v = inp.value || '';
+    tip.textContent = v ? `…${v.slice(-4)} · ${v.length} ký tự` : '(trống)';
+  }
 }
 
 async function send(type) {
