@@ -4370,7 +4370,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${rows.length - okRows.length ? `<button data-miss style="margin-left:auto;cursor:pointer;border:1px solid #fcd34d;background:#fffbeb;color:#b45309;border-radius:999px;padding:2px 12px;font:inherit;font-size:12px;font-weight:800">⏳ Tính ${rows.length - okRows.length} đơn còn thiếu</button>` : ''}
         <button data-x style="${rows.length - okRows.length ? '' : 'margin-left:auto;'}all:unset;cursor:pointer;font-size:20px;color:#64748b;padding:0 6px">×</button></div>
       <div style="overflow:auto;padding:8px 12px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <tr style="color:#64748b;text-align:left;position:sticky;top:0;background:#fff"><th style="padding:4px 6px">Ngày</th><th>Đơn hàng</th><th>Báo giá</th><th>Loại</th><th style="text-align:right">Tiền đơn</th><th style="text-align:right" title="Flexo: giấy tấm · Offset: NVL sau VAT (theo tỷ lệ tiền đơn / tiền BG)">NVL</th><th style="text-align:right">Chênh lệch</th><th style="text-align:right">% chênh lệch</th><th></th></tr>
+      <tr style="color:#64748b;text-align:left;position:sticky;top:0;background:#fff"><th style="padding:4px 6px">Ngày</th><th>Đơn hàng</th><th>Báo giá</th><th>Khách hàng</th><th>Loại</th><th style="text-align:right">Tiền đơn</th><th style="text-align:right" title="Flexo: giấy tấm · Offset: NVL sau VAT (theo tỷ lệ tiền đơn / tiền BG)">NVL</th><th style="text-align:right">Chênh lệch</th><th style="text-align:right">% chênh lệch</th><th></th></tr>
       ${rows
         .map(({ o, q, v }) => {
           const b = bad[o.dh];
@@ -4383,6 +4383,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           return `<tr style="border-bottom:1px solid #f1f5f9${b || red ? ';background:#fef2f2' : ''}"><td style="padding:5px 6px;white-space:nowrap;color:#64748b">${new Date(o.at + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })}</td>
             <td style="font-weight:700">${esc(o.dh || '')}</td>
             <td>${id && o.bg ? `<a href="/bao-gia/update/${id}" target="_blank" style="font-weight:800;color:#1d4ed8">${esc(o.bg)}</a>` : esc(o.bg || '–')}</td>
+            <td style="white-space:nowrap;font-weight:700;color:#0f766e" title="${esc(q?.customer?.name || '')}">${esc(q?.customer?.code || '')}</td>
             <td style="color:#64748b;white-space:nowrap">${kindOf(q)}</td>
             <td style="text-align:right;white-space:nowrap" title="${tot ? 'Tổng tiền đơn (Danh sách đơn)' : 'Danh sách đơn chưa có Tổng tiền – tạm hiện giá trị báo giá'}">${tot ? money(tot) : Number(q?.amount) > 0 ? `<span style="color:#94a3b8">≈ ${money(q.amount)}</span>` : '<span style="color:#cbd5e1">chưa có</span>'}</td>
             <td style="text-align:right;white-space:nowrap;color:#475569">${nvl == null ? '–' : money(Math.round(nvl))}</td>
