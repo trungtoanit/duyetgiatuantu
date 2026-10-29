@@ -6083,11 +6083,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           <div style="min-height:0;display:flex;flex-direction:column;padding:10px 14px;gap:6px;background:#f8fafc">
             <b style="font-size:13px">📱 Tin sẽ gửi vào nhóm Zalo “${esc(TEAM_GROUP)}” (ca này):</b>
             <div style="flex:1;min-height:0;overflow:auto;background:#e5efff;border-radius:12px;padding:10px">
-              <div data-pv style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);font-size:13px;line-height:1.5;color:#111"></div></div>
+              <div data-pv style="font-size:13px;line-height:1.5;color:#111"></div></div>
           </div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
-          <span style="color:#64748b;font-size:12px;margin-right:auto">Câu mở đầu tin nhắn; phía dưới là danh sách khách theo từng NVKD.</span>
+          <span style="color:#64748b;font-size:12px;margin-right:auto">Gửi thành từng tin riêng: câu mở đầu + tổng, rồi mỗi NVKD 1 tin.</span>
           <button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
           <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div></div>`;
       preview();
@@ -6107,7 +6107,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const pv = box.querySelector('[data-pv]');
       if (pv) {
         // giống hệt tin gửi: câu mở đầu + mỗi NVKD 1 dòng (tên xanh đậm, mã khách in đậm), cách 1 dòng
-        if ((state.teamItems || []).length) pv.innerHTML = buildTeamMsg().html;
+        // mỗi tin 1 bong bóng (giống lúc gửi: tách từng tin riêng)
+        if ((state.teamItems || []).length) pv.innerHTML = buildTeamMsg().parts.map((p0) => `<div style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);margin-bottom:8px">${p0.html}</div>`).join('');
         else pv.innerHTML = `<div>${esc(teamHead())}</div><div style="color:#94a3b8;margin-top:6px">(chưa có danh sách Gợi ý chốt đơn trên trang này – mở trang Báo giá để xem đủ tin)</div>`;
       }
       state.teamTpl = keep;
@@ -6196,7 +6197,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const totalLine = `Tổng có thể có đơn: ${sumTxt(allSum)}`;
     const text = [`${head}\n${totalLine}`, ...groups.map(([who, cs]) => [`${shortName(who)} (${cs.length}) – có thể có đơn ${sumTxt(gSum(cs))}:`, ...cs.map((c) => `• ${c.code} (${val(c.amt)})`)].join('\n'))].join('\n\n');
     const html = `<div>${esc(head)}</div><div>${esc('Tổng có thể có đơn: ')}<b><span style="color:#047857"><font color="#047857">${esc(sumTxt(allSum))}</font></span></b></div><div><br></div>${groups.map(([who, cs]) => `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}) – có thể có đơn <b><span style="color:#047857"><font color="#047857">${esc(sumTxt(gSum(cs)))}</font></span></b>:</div>${cs.map((c) => `<div>• <b>${esc(c.code)}</b> (${esc(val(c.amt))})</div>`).join('')}`).join('<div><br></div>')}`;
-    return { text, html, n: byCust.size, groups, head, val };
+    // Tách từng tin riêng: tin 1 = câu mở đầu + tổng; sau đó mỗi NVKD 1 tin (gửi lần lượt vào nhóm)
+    const parts = [
+      { text: `${head}\n${totalLine}`, html: `<div>${esc(head)}</div><div>${esc('Tổng có thể có đơn: ')}<b><span style="color:#047857"><font color="#047857">${esc(sumTxt(allSum))}</font></span></b></div>` },
+      ...groups.map(([who, cs]) => ({
+        text: [`${shortName(who)} (${cs.length}) – có thể có đơn ${sumTxt(gSum(cs))}:`, ...cs.map((c) => `• ${c.code} (${val(c.amt)})`)].join('\n'),
+        html: `<div><b><span style="color:#1d4ed8"><font color="#1d4ed8">${esc(shortName(who))}</font></span></b> (${cs.length}) – có thể có đơn <b><span style="color:#047857"><font color="#047857">${esc(sumTxt(gSum(cs)))}</font></span></b>:</div>${cs.map((c) => `<div>• <b>${esc(c.code)}</b> (${esc(val(c.amt))})</div>`).join('')}`,
+      })),
+    ];
+    return { text, html, parts, n: byCust.size, groups, head, val };
   }
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
   async function drawTeamImage() {
@@ -6360,14 +6369,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (w) w.location.href = 'https://chat.zalo.me/';
       w?.focus();
     } catch {}
-    const { text, html } = buildTeamMsg();
+    const { text, html, parts } = buildTeamMsg();
     const image = asImage ? await drawTeamImage() : null;
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-team`;
     state.teamJob = { id: jobId, at: Date.now() };
-    keep[jobId] = { draft: false, slot: teamSlot() || '', n: buildTeamMsg().n, to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text, html, image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
+    keep[jobId] = { draft: false, slot: teamSlot() || '', n: buildTeamMsg().n, to: TEAM_GROUP, zaloName: names[norm(TEAM_GROUP)]?.name || TEAM_GROUP, text: image ? text : parts[0].text, html: image ? html : parts[0].html, more: image ? [] : parts.slice(1), image, caption: image ? buildTeamMsg().head.replace(/:\s*$/, '') : '', status: 'pending', at: Date.now(), team: true };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     try {
       await navigator.clipboard.writeText(text);

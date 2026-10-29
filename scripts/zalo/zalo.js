@@ -504,9 +504,32 @@
       return fail('Đã dán nội dung nhưng chưa gửi được – bấm nút gửi trong Zalo.');
     }
     tr('đã gửi');
+    // Các tin tiếp theo (vd. Nhắc cả đội tách mỗi NVKD 1 tin): dán + gửi lần lượt trong cùng khung chat, chờ ô soạn trống rồi mới tin kế
+    for (const [i, p] of (job.more || []).entries()) {
+      await sleep(900);
+      if (!headerHas(used)) {
+        tr('khung chat đổi người → dừng gửi các tin sau');
+        break;
+      }
+      const how2 = await pasteText(chatInput() || input, p.text, p.html, () => {});
+      if (!how2) {
+        tr(`tin ${i + 2}: không dán được`);
+        break;
+      }
+      await sleep(400);
+      pressSend(chatInput() || input);
+      const okN = await waitFor(() => (chatInput() && typed(chatInput()).length < 10 ? true : null), 6000);
+      if (!okN) {
+        const el2 = chatInput();
+        el2?.focus();
+        for (const t of ['keydown', 'keypress', 'keyup']) el2?.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+        await sleep(1500);
+      }
+      tr(`đã gửi tin ${i + 2}/${job.more.length + 1}`);
+    }
     await markSent(job, false);
     await markTeam(job, false);
-    await setStatus(id, { ...job, images: job.images ? job.images.length : undefined, status: 'sent', doneAt: Date.now(), via: used });
+    await setStatus(id, { ...job, images: job.images ? job.images.length : undefined, more: job.more ? job.more.length : undefined, status: 'sent', doneAt: Date.now(), via: used });
     // Tin nhắc cả đội: gửi xong tự đóng tab Zalo do trợ lý mở (không còn việc nào chờ)
     if (job.team) {
       await sleep(2000);
