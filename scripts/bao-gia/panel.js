@@ -4840,6 +4840,129 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await maintZalo(btn, r, m.text, m.html, pre);
     setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 60000);
   }
+  // ---------- 📨 Nút gửi Zalo riêng trên từng dòng báo cáo: mở khung xem lại tin (sửa được) rồi mới gửi ----------
+  function injectMaintRows() {
+    if (!IS_TOP || !MY_ADMIN || !/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
+    const t = [...document.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Người báo cáo/i.test(th.innerText.trim())));
+    if (!t) return;
+    for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
+      if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
+      const td = tr.cells[0];
+      if (!td) continue;
+      const id = Number((td.innerText || '').replace(/[^\d]/g, ''));
+      const old = td.querySelector('[data-mtrow]');
+      if (old && Number(old.dataset.mtrow) === id) continue;
+      old?.remove();
+      if (!id) continue;
+      const b = document.createElement('button');
+      b.setAttribute('data-mtrow', String(id));
+      b.title = 'Xem lại tin nhắn (sửa được) rồi gửi Zalo cho bảo trì';
+      b.textContent = '📨';
+      b.setAttribute('style', 'margin-left:6px;cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;border-radius:999px;padding:0 6px;font-size:12px;line-height:18px;vertical-align:middle');
+      td.append(b);
+    }
+  }
+  async function openMaintSend(id) {
+    const all = await kvGet('maintReports');
+    const r = all[id];
+    if (!r) return alert(`Chưa có dữ liệu báo cáo #${id} – đợi trợ lý đọc xong danh sách rồi thử lại.`);
+    document.getElementById('dg-mt-send')?.remove();
+    const lines = qbank('mtAsk').filter(Boolean);
+    let ask = '';
+    let edited = false;
+    const box = document.createElement('div');
+    box.id = 'dg-mt-send';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.4);display:grid;place-items:center;font-family:inherit');
+    const imgs = mtImgs(r);
+    box.innerHTML = `<div style="width:min(760px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      <div style="padding:12px 18px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px;flex:none"><b style="font-size:16px">📨 Gửi Zalo – Báo cáo #${esc(String(r.id))}</b><button data-s="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px">×</button></div>
+      <div style="padding:10px 18px;display:grid;gap:8px;border-bottom:1px solid #e2e8f0;font-size:13px;flex:none">
+        <label style="display:flex;gap:8px;align-items:center">👤 Người nhận: <input data-to value="${esc(state.mtTo || '')}" placeholder="Tên nhóm / người bảo trì trên Zalo" style="flex:1;font:inherit;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px"></label>
+        <label style="display:flex;gap:8px;align-items:center">💬 Câu hỏi: <select data-ask style="flex:1;font:inherit;border:1px solid #cbd5e1;border-radius:6px;padding:4px 6px">${lines.map((l, i) => `<option value="${i}">${esc(l)}</option>`).join('')}</select>
+          <button data-s="rnd" title="Câu ngẫu nhiên" style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:8px;padding:3px 10px;cursor:pointer">🔄</button></label>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:12px 18px;background:#e5efff">
+        <div style="font-size:12px;color:#475569;margin-bottom:6px">📱 Tin sẽ gửi – bấm vào để sửa trực tiếp:</div>
+        <div data-pv contenteditable="true" style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.08);font-size:14px;line-height:1.55;color:#111;outline:none;border:1px dashed #a5b4fc"></div>
+        ${imgs.length ? `<div style="margin-top:8px;font-size:12px;color:#475569">🖼 Gửi kèm ${imgs.length} ảnh:</div><div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">${imgs.map((u) => `<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #c7d2fe"></a>`).join('')}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
+        <span data-st style="font-size:12px;font-weight:700;color:#047857;margin-right:auto"></span>
+        <button data-s="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit">Đóng</button>
+        <button data-s="test" style="border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit;font-weight:700">🧪 Gửi test</button>
+        <button data-s="send" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">📨 Gửi Zalo</button></div></div>`;
+    const pv = box.querySelector('[data-pv]');
+    const sel = box.querySelector('[data-ask]');
+    const draw = () => {
+      pv.innerHTML = maintCompose(r, ask).html;
+      edited = false;
+    };
+    sel.value = String(Math.floor(Math.random() * Math.max(1, lines.length))); // mở ra với 1 câu ngẫu nhiên
+    // chọn câu trong danh sách → ghép lại tin (thay biến {may} {mota}… nếu có)
+    const fill = (tpl) => {
+      const keep = QB.mtAsk;
+      QB.mtAsk = { lines: [tpl] };
+      ask = mtAskOf(r, 0);
+      QB.mtAsk = keep;
+    };
+    fill(lines[Number(sel.value) || 0] || '');
+    draw();
+    pv.addEventListener('input', () => (edited = true));
+    sel.addEventListener('change', () => {
+      if (edited && !confirm('Đổi câu sẽ bỏ phần đã sửa trong tin. Tiếp tục?')) return;
+      fill(lines[Number(sel.value)] || '');
+      draw();
+    });
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const b = e.target.closest('[data-s]');
+      if (!b) return;
+      const k = b.dataset.s;
+      if (k === 'x') return box.remove();
+      if (k === 'rnd') {
+        if (edited && !confirm('Đổi câu sẽ bỏ phần đã sửa trong tin. Tiếp tục?')) return;
+        let i = Math.floor(Math.random() * lines.length);
+        if (lines.length > 1 && String(i) === sel.value) i = (i + 1) % lines.length;
+        sel.value = String(i);
+        fill(lines[i] || '');
+        return draw();
+      }
+      if (k === 'send' || k === 'test') {
+        if (b.disabled) return;
+        const to = box.querySelector('[data-to]').value.trim();
+        if (k === 'send' && to && to !== state.mtTo) {
+          state.mtTo = to;
+          kvMerge('maintCfg', { main: { to, at: Date.now(), by: meName } }).catch(() => {});
+        }
+        const pre = mtOpenZalo(k === 'test'); // mở tab Zalo ngay lúc bấm
+        if (!pre) return;
+        b.disabled = true;
+        const st = box.querySelector('[data-st]');
+        try {
+          await maintZalo(st, r, pv.innerText.trim(), pv.innerHTML, pre);
+        } catch (err) {
+          st.textContent = `⚠️ ${err.message}`;
+        } finally {
+          b.disabled = false;
+        }
+      }
+    });
+    document.body.append(box);
+  }
+  if (IS_TOP) {
+    setInterval(() => {
+      try {
+        injectMaintRows();
+      } catch {}
+    }, 2000);
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest?.('[data-mtrow]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openMaintSend(Number(b.dataset.mtrow)).catch((err) => alert(err.message));
+    }, true);
+  }
   // Zalo chưa đăng nhập (kv zaloLogin do tab id.zalo.me gửi về): thông báo kèm mã QR đăng nhập (cập nhật liên tục) để quét bằng app Zalo
   // + đường dẫn mở Zalo Web ở tab mới; quét xong (Zalo vào chat.zalo.me) tự báo ✅ và đóng
   if (IS_TOP) {
