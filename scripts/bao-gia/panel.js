@@ -4735,13 +4735,50 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${mtBtn('cfg', '⚙️ Câu hỏi', 'background:#fff;color:#475569;border:1px solid #e2e8f0', 'Cài đặt bộ câu hỏi dùng chung')}
         <span data-mtmsg style="font-size:12px;color:#047857;font-weight:700"></span></div>`;
   }
+  // ⚠️ Cảnh báo việc tồn lâu nhất (chưa xử lý) – khung đỏ cạnh khung Hỏi bảo trì; quá 30 ngày thì chớp
+  function paintMaintOld(card) {
+    const now = Date.now() / 1000;
+    const open = Object.values(state.mtAll || {}).filter(mtOpen).sort((a, b) => (a.createdAt || now) - (b.createdAt || now));
+    let el = document.querySelector('[data-dg-mtold]');
+    if (!open.length) return el?.remove();
+    if (!el) {
+      el = document.createElement('div');
+      el.setAttribute('data-dg-mtold', '1');
+      el.setAttribute('style', 'display:inline-block;vertical-align:middle;margin-left:14px;max-width:min(520px,40vw);padding:8px 12px;border-radius:12px;background:linear-gradient(135deg,#fef2f2,#fff1f2);border:1px solid #fca5a5;font-size:13px;line-height:1.45;text-align:left');
+      card.after(el);
+      if (!document.getElementById('dg-mtold-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-mtold-css';
+        st.textContent = `@keyframes dgMtOld{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 5px rgba(220,38,38,.35),0 0 18px 4px rgba(239,68,68,.55)}}[data-dg-mtold][data-hot]{animation:dgMtOld 1.1s ease-in-out infinite}`;
+        document.head.append(st);
+      }
+    }
+    const r = open[0];
+    const days = Math.max(0, Math.floor((now - (r.createdAt || now)) / 86400));
+    const over30 = open.filter((x) => now - (x.createdAt || now) > 30 * 86400).length;
+    const lv = { CRITICAL: 'Khẩn cấp', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' }[r.level] || r.level || '';
+    const sig = `${r.id}|${days}|${over30}|${open.length}`;
+    if (el.dataset.sig === sig) return;
+    el.dataset.sig = sig;
+    days > 30 ? el.setAttribute('data-hot', '1') : el.removeAttribute('data-hot');
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="color:#b91c1c">⚠️ Việc tồn lâu nhất chưa xử lý</b>
+        <span style="background:#dc2626;color:#fff;border-radius:999px;padding:0 8px;font-weight:800;font-size:12px">${days} ngày</span></div>
+      <div style="margin-top:3px;color:#334155"><b>#${esc(String(r.id))}</b> · ${esc(r.machine?.name || r.machine?.code || '')}: <i>“${esc((r.desc || '').slice(0, 80))}”</i> · ${esc(r.reporter || '')} · <b style="color:#b91c1c">${esc(lv)}</b></div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+        ${MY_ADMIN ? `<button data-mtrow="${esc(String(r.id))}" style="cursor:pointer;border:0;border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(90deg,#dc2626,#7c3aed)">📨 Nhắc việc này</button>` : ''}
+        <span style="font-size:12px;color:#7f1d1d">${open.length} việc tồn${over30 ? ` · <b>${over30}</b> việc quá 30 ngày` : ''}</span></div>`;
+  }
   let mtBusy = false;
   async function injectMaintCard() {
     if (!IS_TOP || mtBusy || !/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
     mtBusy = true;
     try {
       state.mtAll = await kvGet('maintReports');
-      if (document.querySelector('[data-dg-mtcard]')) return;
+      const have = document.querySelector('[data-dg-mtcard]');
+      if (have) {
+        paintMaintOld(have);
+        return;
+      }
       const title = [...document.querySelectorAll('h1,h2,h3,h4,h5,.ant-typography,.ant-page-header-heading-title,div,span')].find(
         (x) => !x.children.length && x.textContent.trim() === 'Khắc phục' && !x.closest('.ant-menu,nav,[role="menu"],.ant-tabs-nav,.ant-breadcrumb') && x.getBoundingClientRect().width > 0
       );
@@ -4754,6 +4791,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       title.after(card);
       if (!MT.r || !mtOpen(state.mtAll[MT.r.id])) await maintNew();
       paintMaintCard(card);
+      paintMaintOld(card);
     } finally {
       mtBusy = false;
     }
