@@ -4676,13 +4676,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // Ảnh trong báo cáo (r.image = các đường dẫn cách nhau dấu phẩy) → tải qua background (máy chủ ảnh chặn CORS), thu nhỏ ≤1600px JPEG để gửi Zalo
   const mtImgs = (r) => String(r?.image || '').split(',').map((x) => x.trim()).filter((x) => /^https?:\/\//.test(x)).slice(0, 6);
+  let mtNoDataUrl = false;
   async function maintImages(r, log = () => {}) {
     const out = [];
     for (const url of mtImgs(r)) {
       const t0 = Date.now();
       try {
-        const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(40000).then(() => 'timeout')]);
-        log(`tải ảnh ${url.slice(-20)}: ${du === 'timeout' ? 'QUÁ 40s' : `${Math.round(String(du).length / 1024)}KB`} · ${Date.now() - t0}ms`);
+        const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(mtNoDataUrl ? 1 : 8000).then(() => 'timeout')]);
+        if (du === 'timeout') mtNoDataUrl = true; // background không trả lời (extension cũ < 1.7.2) → các ảnh sau khỏi chờ
+        log(`tải ảnh ${url.slice(-20)}: ${du === 'timeout' ? 'KHÔNG TRẢ LỜI' : `${Math.round(String(du).length / 1024)}KB`} · ${Date.now() - t0}ms`);
         if (!du || du === 'timeout') continue;
         const im = new Image();
         im.src = du;
@@ -4786,8 +4788,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     mtLog(run, `bắt đầu #${r.id} → ${to} · tab Zalo=${!!pre.w}`);
     // có ảnh trong báo cáo → gửi kèm (Zalo gửi chữ trước rồi tới từng ảnh); tải tối đa 25 giây, quá thì gửi chữ
     if (btn && mtImgs(r).length) btn.textContent = `⏳ Tải ${mtImgs(r).length} ảnh…`;
-    const images = (await Promise.race([maintImages(r, (t) => mtLog(run, t)), sleep(90000).then(() => null)])) || [];
+    const images = (await Promise.race([maintImages(r, (t) => mtLog(run, t)), sleep(30000).then(() => null)])) || [];
     mtLog(run, `ảnh: ${images.length}/${mtImgs(r).length}`);
+    // không tải được ảnh → vẫn gửi chữ, kèm đường dẫn ảnh để bảo trì bấm xem
+    const miss = mtImgs(r).length && !images.length ? mtImgs(r) : [];
+    if (miss.length) {
+      text += `\n\nẢnh báo cáo:\n${miss.join('\n')}`;
+      html += `<div><br></div><div>Ảnh báo cáo:</div>${miss.map((u) => `<div>${esc(u)}</div>`).join('')}`;
+      const el = document.querySelector('[data-dg-mtcard] [data-mtmsg]');
+      if (el) el.textContent = '⚠️ Không tải được ảnh (cần cài lại extension ≥ 1.7.2) – gửi kèm đường dẫn ảnh';
+    }
     const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-maint`;
