@@ -4553,17 +4553,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return base > 0 && Number.isFinite(v) && v <= base * 0.9 && v >= -base;
     };
     state.diffBad = {};
+    // Ưu tiên số tính từ dữ liệu hiện tại (PO giấy tấm / chiết giá đọc mới nhất – khớp % trên trang báo giá);
+    // số đã lưu chỉ dùng khi báo giá chưa đọc được (để tổng không tụt) và được cập nhật theo số mới.
     const orderDiff = (o, q) => {
       const fz = o?.dh && state.orderDiff?.[o.dh];
-      if (fz && fz.v != null && diffOk(fz.v, o, q)) return fz.v;
+      const frozen = fz && fz.v != null && diffOk(fz.v, o, q) ? fz.v : null;
       const v0 = q && !q.noSheet ? diffVal(q) : null;
-      if (v0 == null) return null;
+      if (v0 == null) return frozen;
       const amt = Number(q.amount) || 0;
       const v = amt > 0 && o.total > 0 ? (v0 * o.total) / amt : v0;
       if (!diffOk(v, o, q)) {
         if (o?.dh) state.diffBad[o.dh] = { o, v, fz: fz?.v };
-        return null;
+        return frozen;
       }
+      if (frozen != null && Math.abs(frozen - v) < 1000) return frozen;
       if (o?.dh && state.orderDiffLoaded) {
         const rec = { v: Math.round(v), bg: o.bg || '', at: Date.now() };
         state.orderDiff[o.dh] = rec;
