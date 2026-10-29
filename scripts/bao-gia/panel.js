@@ -4767,15 +4767,41 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     } catch {}
     return { w, to };
   }
+  // nhật ký gửi (đẩy lên máy chủ zaloDebug 'maint-…') để dò lỗi khi tin không tới Zalo
+  const mtLog = (run, t) => call({ type: 'remote.push', ns: 'zaloDebug', patch: { [`maint-${run}-${Date.now()}`]: { at: Date.now(), t } } }).catch(() => {});
   async function maintZalo(btn, r, text, html, pre) {
     const to = pre?.to;
     if (!to) return false;
+    const run = Date.now().toString(36);
+    mtLog(run, `bắt đầu #${r.id} → ${to} · tab Zalo=${!!pre.w}`);
+    // có ảnh trong báo cáo → gửi kèm (Zalo gửi chữ trước rồi tới từng ảnh); tải tối đa 25 giây, quá thì gửi chữ
+    if (btn && mtImgs(r).length) btn.textContent = `⏳ Tải ${mtImgs(r).length} ảnh…`;
+    const images = (await Promise.race([maintImages(r), sleep(25000).then(() => null)])) || [];
+    mtLog(run, `ảnh: ${images.length}/${mtImgs(r).length}`);
     const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
-    keep[`${Date.now()}-maint`] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, images, status: 'pending', at: Date.now(), maint: r.id };
+    const jobId = `${Date.now()}-maint`;
+    keep[jobId] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, images, status: 'pending', at: Date.now(), maint: r.id };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    mtLog(run, `đã xếp việc ${jobId} (zaloName=${keep[jobId].zaloName})`);
+    // theo dõi trạng thái việc gửi bên tab Zalo → hiện ngay trên khung / nút
+    (async () => {
+      const show = (t) => {
+        const el = document.querySelector('[data-dg-mtcard] [data-mtmsg]');
+        if (el) el.textContent = t;
+        if (btn && !btn.closest('[data-dg-mtcard]')) btn.textContent = t.slice(0, 40);
+      };
+      for (let i = 0; i < 200; i++) {
+        await sleep(1500);
+        const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
+        if (!j) return;
+        if (j.status === 'pending') show(`⏳ Chờ tab Zalo nhận việc… (${Math.round((i + 1) * 1.5)}s)`);
+        else if (j.status === 'sending') show(`⏳ Zalo đang tìm “${to}” và gửi…`);
+        else if (j.status === 'sent') return show(`✅ Đã gửi #${r.id} cho ${j.via || to}${images.length ? ` (kèm ${images.length} ảnh)` : ''}`), mtLog(run, 'đã gửi');
+        else if (j.status === 'error') return show(`⚠️ ${j.error || 'Lỗi gửi Zalo'}`), mtLog(run, `lỗi: ${j.error}`);
+      }
+    })();
     await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
-    if (btn) btn.textContent = `📨 Đã gửi #${r.id} → ${to}`;
     return true;
   }
   // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi gửi luôn
@@ -4790,9 +4816,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return;
     }
     const m = maintCompose(r, mtAskOf(r));
-    await maintZalo(null, r, m.text, m.html, pre);
-    btn.textContent = `📨 Đã gửi #${r.id}`;
-    setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 4000);
+    await maintZalo(btn, r, m.text, m.html, pre);
+    setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 60000);
   }
   // Zalo chưa đăng nhập (kv zaloLogin do tab id.zalo.me gửi về): thông báo kèm mã QR đăng nhập (cập nhật liên tục) để quét bằng app Zalo
   // + đường dẫn mở Zalo Web ở tab mới; quét xong (Zalo vào chat.zalo.me) tự báo ✅ và đóng
@@ -5027,12 +5052,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         b.disabled = true;
         b.textContent = '⏳ Đang gửi…';
         try {
-          const ok = await maintZalo(b, MT.r, m.text, m.html, pre);
-          const ni = mtImgs(MT.r).length;
-          if (ok) msg(`📨 Đã gửi #${MT.r.id} qua Zalo${ni ? ` (kèm ${ni} ảnh)` : ''}`);
+          await maintZalo(b, MT.r, m.text, m.html, pre);
           b.textContent = '📨 Gửi Zalo';
         } catch (err) {
-          b.textContent = `⚠️ ${err.message}`;
+          b.textContent = '📨 Gửi Zalo';
+          msg(`⚠️ ${err.message}`);
+          mtLog('err', `ngoại lệ: ${err.stack || err}`);
         } finally {
           b.disabled = false;
         }
