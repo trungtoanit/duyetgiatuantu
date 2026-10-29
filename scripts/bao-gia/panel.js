@@ -10683,7 +10683,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const n = rows.reduce((t, r) => t + r.n, 0);
         const qt = rows.reduce((t, r) => t + r.q, 0);
         return qt ? ` <span class="muted">(NVL ${money(Math.round(n))} · ${qt.toLocaleString('vi-VN')} thùng · NVL bình quân ${money(Math.round(n / qt))}/thùng)</span>` : '';
-      })()}</label><br>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
+      })()}</label><br>✏️ Kéo thanh hoặc sửa ô <b>Giá</b> để thử giá mới – % và chênh lệch tự tính lại (chỉ thử trên thẻ, <b>không lưu</b> vào báo giá)${Object.keys(simV).length ? ` · <button class="osim-reset" data-act="osim-reset" data-code="${esc(q.code)}">↺ Về giá gốc</button> <button class="osim-reset osim-apply" data-act="osim-apply" data-code="${esc(q.code)}" title="Điền các giá đang thử vào cột Giá thực bán của báo giá (chưa lưu – kiểm tra rồi bấm Cập nhật)">✅ Áp vào đơn giá</button><span class="osim-ast"></span>` : ''}</td></tr>` : ''}${nvlCol ? fxRows.replace(/(<td[^>]*>(?:(?!<td)[\s\S])*?<\/td><\/tr>)/g, '<td></td><td></td>$1') : fxRows}</table>` : (busy ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep || 'Đang tính…')}</div>` : '<div class="muted">Chưa có dữ liệu – bấm "↻ Tính ngay" để tính.</div>')}
       ${pct != null ? `<div class="muted">Flexo: % còn lại = 100% − tổng giấy tấm (mọi nhà cung cấp) / giá trị báo giá – đỏ khi dưới 30%. Offset: % = (1 − NVL sau VAT ÷ giá trị BG) × 100.</div>` : ''}
     </details>`;
   };
@@ -13770,6 +13770,30 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
         } catch {}
         setTimeout(() => row.classList.remove('qe-flash'), 2500);
       }, 120);
+    }
+    else if (act === 'osim-apply') {
+      // Điền giá đang thử (từng dòng Offset) vào ô "Giá thực bán" của bảng Hàng hóa – KHÔNG tự lưu
+      const code = b.dataset.code;
+      const st = b.parentElement.querySelector('.osim-ast');
+      const say = (t) => st && (st.innerHTML = ` ${t}`);
+      const q = currentQuoteId() && renderCtx.quotes?.[currentQuoteId()]?.code === code ? renderCtx.quotes[currentQuoteId()] : Object.values(renderCtx.quotes || {}).find((x) => x?.code === code);
+      const sim = state.offSim?.[code] || {};
+      const ents = offEntries(renderCtx.margins?.[code], code);
+      const rows = q ? offsetRowsForDialog(q) : [];
+      const todo = rows.map((r) => ({ r, price: sim[ents.find(([, x]) => x === r.x)?.[0]] })).filter((t) => t.price > 0);
+      if (!todo.length) return say('<span class="warnx">⚠️ Không thấy dòng Offset khớp trong bảng Hàng hóa (mở trang sửa báo giá).</span>');
+      if (!confirm(`Điền ${todo.length} giá mới vào cột "Giá thực bán" của ${code}?\n${todo.map((t) => `• ${t.r.name}: ${money(t.r.cur)} → ${money(t.price)}`).join('\n')}\n\nChưa lưu – kiểm tra rồi tự bấm Cập nhật.`)) return;
+      b.disabled = true;
+      (async () => {
+        let ok = 0;
+        for (const [i, t] of todo.entries()) {
+          say(`<span class="spinner"></span> điền dòng ${i + 1}/${todo.length}…`);
+          if (await setCellPrice(t.r.cell, t.price).catch(() => false)) ok++;
+          await sleep(300);
+        }
+        b.disabled = false;
+        say(ok === todo.length ? `<b class="pos">✓ Đã điền ${ok} dòng – kiểm tra rồi bấm <u>Cập nhật</u> để lưu</b>` : `<span class="warnx">⚠️ Điền được ${ok}/${todo.length} dòng – xem lại các dòng còn lại</span>`);
+      })();
     }
     else if (act === 'osim-reset') {
       if (state.offSim) delete state.offSim[b.dataset.code];
