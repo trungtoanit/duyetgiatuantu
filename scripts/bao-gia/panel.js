@@ -5589,7 +5589,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!document.getElementById('dg-nvlw-css')) {
       const st = document.createElement('style');
       st.id = 'dg-nvlw-css';
-      st.textContent = `.dg-nvlw{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;vertical-align:middle}
+      st.textContent = `.dg-nvlw{display:block;width:fit-content;margin:3px 0 0 auto;padding:1px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;line-height:16px}
 .dg-nvlw.hot{animation:dgNvlw .7s ease-in-out infinite}
 .dg-nvlw.warn{background:#f59e0b;color:#fff}
 .dg-nvlw.ok{background:#2563eb}
@@ -5602,15 +5602,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   function nvlBadge(cell, nvl, deal) {
     if (!cell) return;
     let b = cell.querySelector('.dg-nvlw');
-    // Ô đang ở chế độ nhập (có <input>): bỏ nhãn để ô nhập không bị ép hẹp (gõ giá không thấy số)
-    if (!nvl || !deal || cell.querySelector('input')) {
+    if (!nvl || !deal) {
       b?.remove();
       return;
     }
+    // Nhãn nằm dòng riêng dưới giá (cả lúc xem lẫn lúc nhập) → ô nhập giữ nguyên bề rộng, không gỡ/gắn lại nên không nhảy
     if (!b) {
       b = document.createElement('span');
       cell.append(b);
-      cell.style.whiteSpace = 'nowrap';
     }
     // mức: ≥ 85% đỏ chớp · 80–85% vàng cam · < 80% xanh dương · < 70% xanh lá ✓
     const r = nvl / deal;
