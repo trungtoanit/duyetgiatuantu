@@ -3962,8 +3962,6 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['prio', '🔥', 'Ưu tiên', '#ea580c', (q, c) => renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c)],
     ['flexo', '', 'F', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
     ['offset', '', 'O', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
-    // Loại sản phẩm (chỉ Đại Dương): thùng carton / Offset / băng keo in / băng keo / màng PE / xốp hơi
-    ...(PROD_TAGS_ON ? PROD_KINDS.map(([k, ic, label, col]) => [`pk_${k}`, ic, label, col, (q) => hasProdKind(q, k)]) : []),
     ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
@@ -3991,7 +3989,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (v == null) return 'none';
     return v < 0 ? 'neg' : v < 5e6 ? 'lt5' : v < 10e6 ? 'lt10' : v < 30e6 ? 'lt30' : v < 50e6 ? 'lt50' : 'ge50';
   }
-  function crmFilterBar(wrap, counts, total, staffN = {}, dCounts = {}) {
+  function crmFilterBar(wrap, counts, total, staffN = {}, dCounts = {}, pCounts = {}) {
+    const selP = lsGet('dgCrmP') || '';
     const selD = lsGet('dgCrmD') || '';
     const sel = lsGet('dgCrmF') || '';
     const selS = lsGet('dgCrmS') || '';
@@ -4014,6 +4013,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           lsSet('dgCrmS', lsGet('dgCrmS') === st.dataset.s ? '' : st.dataset.s);
           return crmListTags();
         }
+        const pk = e.target.closest('[data-p]');
+        if (pk) {
+          lsSet('dgCrmP', lsGet('dgCrmP') === pk.dataset.p ? '' : pk.dataset.p);
+          return crmListTags();
+        }
         const b = e.target.closest('[data-f]');
         if (!b) return;
         lsSet('dgCrmF', lsGet('dgCrmF') === b.dataset.f ? '' : b.dataset.f);
@@ -4031,6 +4035,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         .sort((a, b) => b[1] - a[1])
         .map(([n, k]) => `<span data-s="${esc(n)}" title="${esc(n)}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 10px 1px 2px;font-weight:700;border:1px solid ${selS === n ? '#1e293b' : '#e2e8f0'};${selS === n ? 'background:#1e293b;color:#fff' : 'background:#fff;color:#334155'}">${avatarHtml(n, 18)}${esc(shortName(n))} <b style="opacity:.7">${k}</b></span>`)
         .join('')}${selS ? '<span data-s="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc NVKD</span>' : ''}</div>
+      ${PROD_TAGS_ON && (selP || Object.keys(pCounts).length) ? `<div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;flex:0 0 100px;width:100px">📦 Sản phẩm:</b>${PROD_KINDS.filter(([k]) => pCounts[k] || selP === k)
+        .map(([k, ic, label, col]) => `<span data-p="${k}" style="cursor:pointer;border-radius:999px;padding:2px 10px;font-weight:700;border:1px solid ${col}55;${selP === k ? `background:${col};color:#fff` : `background:${col}12;color:${col}`}">${ic} ${label} <b style="opacity:.75">${pCounts[k] || 0}</b></span>`)
+        .join('')}${selP ? '<span data-p="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc sản phẩm</span>' : ''}</div>` : ''}
       <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px"><b style="color:#475569;flex:0 0 100px;width:100px">📈 Chênh lệch:</b>${DIFF_LV.filter(([k]) => dCounts[k] || selD === k)
         .map(([k, label, col]) => `<span data-dl="${k}" style="cursor:pointer;border-radius:999px;padding:2px 10px;font-weight:800;border:1px solid ${col}55;${selD === k ? `background:${col};color:#fff` : `background:${col}14;color:${col}`}">${label} <b style="opacity:.75">${dCounts[k] || 0}</b></span>`)
         .join('')}${selD ? '<span data-dl="" style="cursor:pointer;color:#64748b;text-decoration:underline;margin-left:6px">✕ Bỏ lọc chênh lệch</span>' : ''}</div>`;
@@ -5925,6 +5932,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
       const pos = [...wrap.querySelectorAll('thead th')].findIndex((th) => th.hasAttribute('data-dg-tagcol'));
       const khIdx = [...wrap.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-dg-tagcol')).findIndex((th) => th.innerText.trim() === 'Khách hàng');
+      if (/^pk_/.test(lsGet('dgCrmF') || '')) lsSet('dgCrmF', ''); // nhãn sản phẩm bản cũ (nay là hàng 📦 riêng)
       const sel = lsGet('dgCrmF') || '';
       const selF = CRM_F.find((f) => f[0] === sel)?.[4];
       const counts = {};
@@ -5932,6 +5940,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const dCounts = {};
       const selS = lsGet('dgCrmS') || '';
       const selD = lsGet('dgCrmD') || '';
+      const selP = PROD_TAGS_ON ? lsGet('dgCrmP') || '' : '';
+      const pCounts = {};
       let total = 0;
       for (const tr of wrap.querySelectorAll('tbody tr')) {
         if (tr.classList.contains('ant-table-measure-row') || tr.classList.contains('ant-table-placeholder')) continue;
@@ -5997,6 +6007,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const who = q ? staffOf(q, c) : '';
         if (who && !isExcluded(who)) staffN[who] = (staffN[who] || 0) + 1;
         if (selS && who !== selS) match = false;
+        // Lọc theo loại sản phẩm (hàng 📦 Sản phẩm – chỉ Đại Dương)
+        if (q && PROD_TAGS_ON && match) for (const [k] of PROD_KINDS) if (hasProdKind(q, k)) pCounts[k] = (pCounts[k] || 0) + 1;
+        if (selP && !hasProdKind(q, selP)) match = false;
         // Lọc theo mức chênh lệch (cùng màu với cột Chênh lệch)
         const lv = q ? diffLevel(q) : null;
         if (match && lv) dCounts[lv] = (dCounts[lv] || 0) + 1;
@@ -6008,7 +6021,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const tb = wrap.querySelector('tbody');
         let ph = tb?.querySelector(':scope > tr[data-dg-filtered]');
         const shown = [...wrap.querySelectorAll('tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.hasAttribute('data-dg-filtered') && tr.style.display !== 'none').length;
-        const why = [selS && `NVKD “${selS}”`, sel && `nhãn “${CRM_F.find((f) => f[0] === sel)?.[2] || sel}”`, selD && `chênh lệch “${DIFF_LV.find((d) => d[0] === selD)?.[1] || selD}”`].filter(Boolean).join(', ');
+        const why = [selS && `NVKD “${selS}”`, sel && `nhãn “${CRM_F.find((f) => f[0] === sel)?.[2] || sel}”`, selP && `sản phẩm “${PROD_KINDS.find((d) => d[0] === selP)?.[2] || selP}”`, selD && `chênh lệch “${DIFF_LV.find((d) => d[0] === selD)?.[1] || selD}”`].filter(Boolean).join(', ');
         if (tb && total && !shown && why) {
           if (!ph) {
             ph = document.createElement('tr');
@@ -6024,13 +6037,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             ph.querySelector('[data-dg-clearf]').addEventListener('click', () => {
               lsSet('dgCrmF', '');
               lsSet('dgCrmS', '');
+              lsSet('dgCrmP', '');
               lsSet('dgCrmD', '');
               crmListTags();
             });
           }
         } else ph?.remove();
       }
-      crmFilterBar(wrap, counts, total, staffN, dCounts);
+      crmFilterBar(wrap, counts, total, staffN, dCounts, pCounts);
       stickReq();
       // Cột "Số tiền" in đậm
       {
