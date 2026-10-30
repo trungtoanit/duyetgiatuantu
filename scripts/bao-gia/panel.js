@@ -2242,7 +2242,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return false;
     }
     // cỡ nét ngang chữ ký Trưởng bộ phận (nét cao ~52px, rộng ≤ 230px)
-    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i, { inkH: 52, maxW: 230, bold: 1.5, dy: 14 });
+    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i, { inkH: 52, maxW: 230, bold: 0.8, dy: 14 });
   }
   async function addSignature(root0, sig0 = globalThis.DG_SIGNATURE, labelRe = /^Trưởng bộ phận$/i, opt = {}) {
     let sig = sig0;
@@ -2481,7 +2481,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       }
     }
-    if (signOn() && SITE.bossSign) await addSignature(clone, undefined, undefined, { bold: 1.5, fadeBottom: 26 }); // nét đậm + nhạt dần chỗ ảnh gốc bị cắt mép dưới
+    if (signOn() && SITE.bossSign) await addSignature(clone, undefined, undefined, { bold: 0.8, fadeBottom: 26 }); // nét đậm + nhạt dần chỗ ảnh gốc bị cắt mép dưới
     // chữ ký NVKD (Người biên soạn) – tối đa 8s, quá thì chụp không có chữ ký (không để kẹt "Đang chụp…")
     await Promise.race([addSaleSignature(clone).catch(() => {}), sleep(8000)]);
     state.printDoc = doc; // trang in gốc (đã dàn trang) – để đo vị trí khung duyệt
