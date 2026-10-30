@@ -6221,8 +6221,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
     }
   }
+  // Tab "Duyệt lên đơn" của danh sách Báo giá: CRM giữ số trang của tab trước (đang trang 6 ở Tất cả → sang tab này trống)
+  // → mỗi lần tab này được mở (kể cả F5 vào thẳng ?t=APPROVE), nếu trang đang chọn không phải 1 thì bấm số 1 một lần
+  let crmTabSeen = '';
+  function crmApprovePage1() {
+    if (!/^\/bao-gia\/?$/.test(location.pathname)) return;
+    const tab = [...document.querySelectorAll('.ant-tabs-tab-active')].find((t) => !t.closest('#dg-root'));
+    const name = tab ? tab.innerText.replace(/\d+/g, '').trim() : new URLSearchParams(location.search).get('t') === 'APPROVE' ? 'Duyệt lên đơn' : '';
+    if (!name || name === crmTabSeen) return;
+    const pag = [...document.querySelectorAll('.ant-pagination')].find((x) => !x.closest('#dg-root') && x.getClientRects().length);
+    if (!pag) return; // phân trang chưa vẽ xong → lần sau xem lại
+    crmTabSeen = name;
+    if (name !== 'Duyệt lên đơn') return;
+    const p1 = pag.querySelector('.ant-pagination-item-1');
+    if (p1 && !p1.classList.contains('ant-pagination-item-active')) (p1.querySelector('a') || p1).click();
+  }
   if (IS_TOP) setInterval(() => {
     try {
+      crmApprovePage1();
       crmListTags();
     } catch (e) {
       console.warn('[DG] tagcol', e);
