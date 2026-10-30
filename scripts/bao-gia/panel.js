@@ -5601,8 +5601,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Nhãn NVL trong ô Giá thực bán: ≥ 85% đỏ chớp · 80–85% vàng cam · < 80% xanh dương · < 70% xanh lá ✓
   function nvlBadge(cell, nvl, deal) {
     if (!cell) return;
-      let b = cell.querySelector('.dg-nvlw');
-    if (!nvl || !deal) {
+    let b = cell.querySelector('.dg-nvlw');
+    // Ô đang ở chế độ nhập (có <input>): bỏ nhãn để ô nhập không bị ép hẹp (gõ giá không thấy số)
+    if (!nvl || !deal || cell.querySelector('input')) {
       b?.remove();
       return;
     }
