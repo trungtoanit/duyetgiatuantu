@@ -5224,6 +5224,43 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       openMaintSend(Number(b.dataset.mtrow)).catch((err) => alert(err.message));
     }, true);
   }
+  // ---------- 🤖 Tự gửi lệnh mới: báo cáo mới (tạo trong 24 giờ, chưa xử lý) chưa từng gửi cho bảo trì → tự gửi Zalo 1 lần
+  // với câu ĐẦU TIÊN trong bộ câu hỏi; ghi kv 'maintAuto' (đồng bộ) → lần sau không tự gửi lại việc đó nữa.
+  // Chỉ chạy khi tab Zalo đang mở (không tự bật cửa sổ được); mỗi lượt gửi 1 việc, cách 30 giây.
+  if (IS_TOP) {
+    let autoBusy = false;
+    setInterval(async () => {
+      if (!MY_ADMIN || autoBusy || Date.now() - (state.zaloAliveAt || 0) > 6000) return;
+      autoBusy = true;
+      try {
+        const [all, asked, done, cfg] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked'), kvGet('maintAuto'), kvGet('maintCfg')]);
+        const to = state.mtTo || cfg.main?.to || '';
+        const tpl = qbank('mtAsk').filter(Boolean)[0];
+        if (!to || !tpl) return;
+        const now = Date.now() / 1000;
+        const r = Object.values(all || {})
+          .filter((x) => mtOpen(x) && now - (x.createdAt || 0) < 86400 && !asked[x.id] && !done[x.id])
+          .sort((a, b) => a.id - b.id)[0];
+        if (!r) return;
+        // giữ chỗ trước (nhiều máy admin cùng mở) → đợi đồng bộ rồi xem có phải mình giữ không
+        const me = `${meName}-${Math.random().toString(36).slice(2, 7)}`;
+        await kvMerge('maintAuto', { [r.id]: { at: Date.now(), by: meName, key: me, state: 'claim' } });
+        await sleep(4000);
+        if ((await kvGet('maintAuto'))[r.id]?.key !== me || (await kvGet('maintAsked'))[r.id]) return;
+        const keep = QB.mtAsk;
+        QB.mtAsk = { lines: [tpl] };
+        const ask = mtAskOf(r, 0);
+        QB.mtAsk = keep;
+        const m = maintCompose(r, ask);
+        await maintZalo(null, r, m.text, m.html, { w: null, to, test: false });
+        await kvMerge('maintAuto', { [r.id]: { at: Date.now(), by: meName, key: me, state: 'sent', to, ask } });
+      } catch (e) {
+        console.warn('[DG] tự gửi lệnh mới bảo trì:', e.message);
+      } finally {
+        autoBusy = false;
+      }
+    }, 30000);
+  }
   // Zalo chưa đăng nhập (kv zaloLogin do tab id.zalo.me gửi về): thông báo kèm mã QR đăng nhập (cập nhật liên tục) để quét bằng app Zalo
   // + đường dẫn mở Zalo Web ở tab mới; quét xong (Zalo vào chat.zalo.me) tự báo ✅ và đóng
   if (IS_TOP) {
