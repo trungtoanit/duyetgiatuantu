@@ -2094,8 +2094,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     ctx.rotate((r(3) * Math.PI) / 180); // xoay ±3°
     ctx.transform(1, r(0.02), r(0.03), 1, 0, 0); // nghiêng nhẹ
     ctx.scale(S * (1 + r(0.03)), S * (1 + r(0.03))); // co giãn ±3%
+    let src0 = img;
+    // opt.fadeBottom: ảnh gốc bị cắt cụt nét ở mép dưới → nhạt dần nét trong fadeBottom px cuối như nhấc bút, không mất nét đột ngột
+    if (opt.fadeBottom) {
+      src0 = document.createElement('canvas');
+      src0.width = Math.round(iw);
+      src0.height = Math.round(ih);
+      const g0 = src0.getContext('2d');
+      g0.drawImage(img, 0, 0, iw, ih);
+      const gr = g0.createLinearGradient(0, ih - opt.fadeBottom, 0, ih);
+      gr.addColorStop(0, 'rgba(255,255,255,0)');
+      gr.addColorStop(0.55, 'rgba(255,255,255,0.45)');
+      gr.addColorStop(1, 'rgba(255,255,255,1)');
+      g0.fillStyle = gr;
+      g0.fillRect(0, ih - opt.fadeBottom, iw, opt.fadeBottom);
+    }
     ctx.filter = 'blur(0.35px)'; // mực thấm giấy
-    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
+    ctx.drawImage(src0, -iw / 2, -ih / 2, iw, ih);
     ctx.filter = 'none';
     // tô lại màu mực + đậm nhạt không đều
     const ink = [22 + r(8), 42 + r(10), 128 + r(16)]; // xanh mực bút bi
@@ -2121,6 +2136,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       px[i + 3] = Math.min(255, a * Math.pow(strength, 0.8) * dens * 1.1);
     }
     ctx.putImageData(d, 0, 0);
+    // opt.bold: vẽ chồng lệch ~1px nhiều hướng → nét dày, đậm hơn
+    if (opt.bold) {
+      const t = document.createElement('canvas');
+      t.width = w;
+      t.height = h;
+      t.getContext('2d').drawImage(c, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]]) ctx.drawImage(t, a * opt.bold, b * opt.bold);
+    }
     // opt.inkH: cắt bỏ lề trắng quanh nét (ảnh chữ ký NVKD thường thừa lề → nét bị nhỏ) rồi phóng cho phần nét cao inkH px
     if (opt.inkH) {
       let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -2143,10 +2167,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const c2 = document.createElement('canvas');
         c2.width = cw;
         c2.height = ch;
-        const g2 = c2.getContext('2d');
-        // opt.bold: vẽ chồng lệch ~1px nhiều hướng → nét dày, đậm hơn
-        const offs = opt.bold ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]].map(([a, b]) => [a * opt.bold, b * opt.bold]) : [[0, 0]];
-        for (const [ox, oy] of offs) g2.drawImage(c, x0, y0, cw, ch, ox, oy, cw, ch);
+        c2.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
         let dh = opt.inkH * (ch / (ch - 2 * m));
         if (opt.maxW && (dh * cw) / ch > opt.maxW) dh = (opt.maxW * ch) / cw; // chữ ký dài → giới hạn bề ngang
         return { src: c2.toDataURL('image/png'), height: Math.round(dh) };
@@ -2460,7 +2481,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       }
     }
-    if (signOn() && SITE.bossSign) await addSignature(clone);
+    if (signOn() && SITE.bossSign) await addSignature(clone, undefined, undefined, { bold: 1.5, fadeBottom: 26 }); // nét đậm + nhạt dần chỗ ảnh gốc bị cắt mép dưới
     // chữ ký NVKD (Người biên soạn) – tối đa 8s, quá thì chụp không có chữ ký (không để kẹt "Đang chụp…")
     await Promise.race([addSaleSignature(clone).catch(() => {}), sleep(8000)]);
     state.printDoc = doc; // trang in gốc (đã dàn trang) – để đo vị trí khung duyệt
