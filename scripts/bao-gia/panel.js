@@ -2143,7 +2143,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const c2 = document.createElement('canvas');
         c2.width = cw;
         c2.height = ch;
-        c2.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
+        const g2 = c2.getContext('2d');
+        // opt.bold: vẽ chồng lệch ~1px nhiều hướng → nét dày, đậm hơn
+        const offs = opt.bold ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]].map(([a, b]) => [a * opt.bold, b * opt.bold]) : [[0, 0]];
+        for (const [ox, oy] of offs) g2.drawImage(c, x0, y0, cw, ch, ox, oy, cw, ch);
         let dh = opt.inkH * (ch / (ch - 2 * m));
         if (opt.maxW && (dh * cw) / ch > opt.maxW) dh = (opt.maxW * ch) / cw; // chữ ký dài → giới hạn bề ngang
         return { src: c2.toDataURL('image/png'), height: Math.round(dh) };
@@ -2218,7 +2221,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return false;
     }
     // cỡ nét ngang chữ ký Trưởng bộ phận (nét cao ~52px, rộng ≤ 230px)
-    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i, { inkH: 52, maxW: 230 });
+    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i, { inkH: 52, maxW: 230, bold: 1.5, dy: 14 });
   }
   async function addSignature(root0, sig0 = globalThis.DG_SIGNATURE, labelRe = /^Trưởng bộ phận$/i, opt = {}) {
     let sig = sig0;
@@ -2241,7 +2244,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const doc = root0.ownerDocument;
     const img = doc.createElement('img');
     img.setAttribute('src', sig);
-    img.setAttribute('style', `position:absolute;left:50%;top:100%;transform:translateX(-50%);height:${sigH}px;width:auto;margin-top:-6px;pointer-events:none;`);
+    img.setAttribute('style', `position:absolute;left:50%;top:100%;transform:translateX(-50%);height:${sigH}px;width:auto;margin-top:${(opt.dy || 0) - 6}px;pointer-events:none;`);
     const pos = (col.getAttribute('style') || '');
     col.setAttribute('style', `${pos};position:relative;`);
     col.append(img);
