@@ -219,6 +219,23 @@
     return price && qty ? price * qty : 0;
   };
   const kindOfProduct = (p) => (/OFFSET/i.test(p.productType || '') ? 'offset' : /CARTON|FLEXO/i.test(p.productType || '') ? 'flexo' : 'other');
+  // Loại sản phẩm (nhãn lọc trên danh sách – chỉ Đại Dương): carton / offset / tapeprint (băng keo in) / tape (băng keo) / pe (màng PE) / bubble (xốp hơi)
+  // CRM Đại Dương chỉ có productType CARTON / BANG_KEO / BANG_KEO_IN / OTHER (PE, xốp hơi, thùng nhập tay… đều là OTHER) → xét thêm tên sản phẩm
+  const DD_SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname);
+  const ascii = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+  const prodKindOf = (p) => {
+    const t = String(p?.productType || '').toUpperCase();
+    const n = ascii(p?.name).trim();
+    if (/^(ban in|khuon|phi |truc in|dung cu|gia cong|giay tam|giay kraft|tam lot|dat )/.test(n)) return null; // phụ phí / vật tư đi kèm
+    if (/OFFSET/.test(t) || /\boffset\b/.test(n)) return 'offset';
+    if (t === 'BANG_KEO_IN' || /bang keo in\b/.test(n)) return 'tapeprint';
+    if (t === 'BANG_KEO' || /bang keo/.test(n)) return 'tape';
+    if (/\bPE\b/.test(t) || /mang pe\b|\bmang co\b|mang quan|\bpe\b/.test(n)) return 'pe';
+    if (/XOP|BUBBLE/.test(t) || /xop hoi|bubble/.test(n)) return 'bubble';
+    if (/CARTON|FLEXO/.test(t) || /\bthung\b|\bhop\b|carton/.test(n)) return 'carton';
+    return null;
+  };
+  const prodKindsOf = (products) => (DD_SITE && Array.isArray(products) ? [...new Set(products.map(prodKindOf).filter(Boolean))] : undefined);
   // Tỉ trọng thành tiền theo loại. Mẫu số gồm cả dòng "Khác" (chi phí bản in…) để phần Flexo / Offset không bị cộng lẫn.
   function kindShareOf(products) {
     if (!Array.isArray(products) || !products.length) return undefined;
@@ -265,6 +282,7 @@
       : undefined,
     // Tỉ trọng thành tiền theo loại hàng (báo giá vừa Flexo vừa Offset): % Flexo / Offset tính trên phần tiền của loại đó
     kindShare: kindShareOf(o.opportunityProducts),
+    pkinds: prodKindsOf(o.opportunityProducts),
     kindSup: kindSupOf(o.opportunityProducts),
     // NVKD = người phụ trách khách (cột Sale của ERP); creator = người tạo báo giá
     staff: person(saleOf(o)?.v || o.staff),

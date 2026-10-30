@@ -3924,7 +3924,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
   function crmTagCss() {
     if (document.getElementById('dg-tagcol-css') || !root) return;
-    const ok = /^\s*(\.it-main\s+)?\.(knd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|conn|tmai|dl-hotbadge)([.:][\w-]+)*\s*$/;
+    const ok = /^\s*(\.it-main\s+)?\.(knd|pkd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|conn|tmai|dl-hotbadge)([.:][\w-]+)*\s*$/;
     let css = '';
     for (const st of root.querySelectorAll('style')) {
       for (const r of st.sheet?.cssRules || []) {
@@ -3939,12 +3939,31 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     document.head.append(el);
   }
   // Bộ lọc nhãn trên trang danh sách CRM (lọc các dòng đang hiện của trang)
+  // Loại sản phẩm (hook.js: q.pkinds, từ productType + tên sản phẩm) – chỉ hiện trên Đại Dương
+  const PROD_KINDS = [
+    ['carton', '📦', 'Thùng carton', '#92400e'],
+    ['offset', '🖨️', 'Offset', '#7e22ce'],
+    ['tapeprint', '🏷️', 'Băng keo in', '#be185d'],
+    ['tape', '🎞️', 'Băng keo', '#0f766e'],
+    ['pe', '🧻', 'Màng PE', '#1d4ed8'],
+    ['bubble', '🫧', 'Xốp hơi', '#0369a1'],
+  ];
+  const PROD_TAGS_ON = SITE.key === 'daiduong';
+  const hasProdKind = (q, k) => (q?.pkinds || []).includes(k);
+  const prodTags = (q) =>
+    PROD_TAGS_ON
+      ? PROD_KINDS.filter(([k]) => hasProdKind(q, k))
+          .map(([, ic, label, col]) => ` <span class="pkd" style="color:${col};border-color:${col}55;background:${col}12" title="${label}">${ic} ${label}</span>`)
+          .join('')
+      : '';
   const CRM_F = [
     // 🆕 Mới tạo: báo giá tạo trong 7 ngày gần nhất (giống nhãn NEW ở cột Ngày tạo)
     ['fresh', '🆕', 'Mới tạo 7 ngày', '#0891b2', (q) => !!q.createdAt && hoursSince(q.createdAt) < 7 * 24],
     ['prio', '🔥', 'Ưu tiên', '#ea580c', (q, c) => renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c)],
     ['flexo', '', 'F', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
     ['offset', '', 'O', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
+    // Loại sản phẩm (chỉ Đại Dương): thùng carton / Offset / băng keo in / băng keo / màng PE / xốp hơi
+    ...(PROD_TAGS_ON ? PROD_KINDS.map(([k, ic, label, col]) => [`pk_${k}`, ic, label, col, (q) => hasProdKind(q, k)]) : []),
     ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
@@ -8060,6 +8079,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .knd.flexo { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
     .knd.offset { background: #faf5ff; color: #7e22ce; border-color: #e9d5ff; }
     .knd.both { background: linear-gradient(90deg, #eff6ff, #faf5ff); color: #5b21b6; border-color: #c4b5fd; }
+    .pkd { margin-left: 6px; display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 800; vertical-align: 1px; border: 1px solid; white-space: nowrap; }
     .prm { margin-left: 6px; display: inline-block; background: #fefce8; color: #a16207; border: 1px solid #fde68a; border-radius: 999px;
       padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: 1px; }
     .fea { margin-top: 4px; font-size: 13px; font-weight: 800; color: #1d4ed8; }
@@ -9119,7 +9139,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const KIND_LABEL = { flexo: 'F', offset: 'O', both: 'F+O' }; // ký hiệu ngắn: F = Flexo, O = Offset
   const kindTag = (q) => {
     const k = kindOf(q);
-    return k ? ` <span class="knd ${k}" title="${{ flexo: 'Flexo', offset: 'Offset', both: 'Flexo + Offset' }[k]}">${KIND_LABEL[k]}</span>` : '';
+    return (k ? ` <span class="knd ${k}" title="${{ flexo: 'Flexo', offset: 'Offset', both: 'Flexo + Offset' }[k]}">${KIND_LABEL[k]}</span>` : '') + prodTags(q);
   };
 
   // "Đang bán (X%)" từ bảng chiết giá Offset (Ctrl+Shift+G) – thấp nhất trong các sản phẩm của báo giá
