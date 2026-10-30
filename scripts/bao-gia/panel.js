@@ -5041,10 +5041,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!pre.test) await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
     return true;
   }
-  // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi gửi luôn
+  // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi mở khung xem lại tin (gửi trong khung)
   async function maintZaloQuick(btn) {
-    const pre = mtOpenZalo(); // mở Zalo ngay lúc bấm (trước mọi bước chờ)
-    if (!pre) return (btn.textContent = '📨 Nhắc Zalo');
     const [all, asked] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked')]);
     const r = maintChoose(all, asked);
     if (!r) {
@@ -5052,9 +5050,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 3000);
       return;
     }
-    const m = maintCompose(r, mtAskOf(r));
-    await maintZalo(btn, r, m.text, m.html, pre);
-    setTimeout(() => (btn.textContent = '📨 Nhắc Zalo'), 60000);
+    btn.textContent = '📨 Nhắc Zalo';
+    await openMaintSend(r.id, mtAskOf(r)); // mở khung xem lại tin rồi mới gửi
   }
   // ---------- 📨 Nút gửi Zalo riêng trên từng dòng báo cáo: mở khung xem lại tin (sửa được) rồi mới gửi ----------
   function injectMaintRows() {
@@ -5078,7 +5075,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       td.append(b);
     }
   }
-  async function openMaintSend(id) {
+  async function openMaintSend(id, ask0) {
     const all = await kvGet('maintReports');
     const r = all[id];
     if (!r) return alert(`Chưa có dữ liệu báo cáo #${id} – đợi trợ lý đọc xong danh sách rồi thử lại.`);
@@ -5125,6 +5122,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       askt.value = ask;
     };
     fill(lines[Number(sel.value) || 0] || '');
+    if (ask0) askt.value = ask = ask0; // mở từ khung Hỏi bảo trì: giữ đúng câu đang hiện ở đó
     draw();
     pv.addEventListener('input', () => (edited = true));
     // sửa câu hỏi sau khi chọn → ghép lại tin theo câu đã sửa
@@ -5466,21 +5464,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           }
           return;
         }
-        if (b.disabled) return;
-        const pre = mtOpenZalo();
-        if (!pre) return;
-        b.disabled = true;
-        b.textContent = '⏳ Đang gửi…';
-        try {
-          await maintZalo(b, MT.r, m.text, m.html, pre);
-          b.textContent = '📨 Gửi Zalo';
-        } catch (err) {
-          b.textContent = '📨 Gửi Zalo';
-          msg(`⚠️ ${err.message}`);
-          mtLog('err', `ngoại lệ: ${err.stack || err}`);
-        } finally {
-          b.disabled = false;
-        }
+        // mở khung xem lại tin (sửa được) rồi mới gửi – không gửi thẳng
+        return openMaintSend(MT.r.id, MT.ask).catch((err) => msg(`⚠️ ${err.message}`));
       }
     }, true);
   }
