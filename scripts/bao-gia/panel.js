@@ -3667,6 +3667,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   };
   function styleQuoteStatus() {
     if (!IS_TOP || !currentQuoteId()) return;
+    // Đại Dương: giữ nguyên giao diện gốc của CRM cho nhóm nút này (gỡ CSS / thuộc tính đã gắn nếu có)
+    if (SITE.key === 'daiduong') {
+      document.getElementById('dg-st-css3')?.remove();
+      for (const e of document.querySelectorAll('[data-dg-stbox]')) e.removeAttribute('data-dg-stbox');
+      for (const e of document.querySelectorAll('[data-dg-st]')) {
+        e.removeAttribute('data-dg-st');
+        e.removeAttribute('data-on');
+        e.style.removeProperty('--c');
+      }
+      return;
+    }
     document.querySelectorAll('.dg-sti').forEach((e) => e.remove()); // bỏ biểu tượng chèn kiểu cũ
     const lbl = [...document.querySelectorAll('label, span, div')].find((e) => e.childElementCount === 0 && e.textContent.trim() === 'Tình trạng báo giá' && !e.closest('#dg-root'));
     if (!lbl) return;
