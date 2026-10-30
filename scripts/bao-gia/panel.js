@@ -7008,6 +7008,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .dg-hotpin.busy { opacity: .7; cursor: wait; }
       .dg-hotpin .rm { margin-left: 6px; padding: 0 8px; border-radius: 999px; background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; cursor: pointer; font-size: 11.5px; }
       .dg-hotpin .rm:hover { background: #dc2626; color: #fff; }
+      /* báo giá trên 30 triệu chưa có trong gợi ý → chớp thật mạnh (đỏ rực ↔ vàng, phát sáng, nảy) */
+      @keyframes dgHotBig { 0%, 100% { background:#dc2626; color:#fff; box-shadow:0 0 0 0 rgba(220,38,38,.7); transform:scale(1); }
+        25% { background:#facc15; color:#7f1d1d; box-shadow:0 0 0 8px rgba(250,204,21,.45), 0 0 26px 10px rgba(239,68,68,.8); transform:scale(1.14); }
+        50% { background:#dc2626; color:#fff; box-shadow:0 0 0 12px rgba(220,38,38,.25), 0 0 34px 14px rgba(249,115,22,.85); transform:scale(1.06); }
+        75% { background:#fff; color:#dc2626; box-shadow:0 0 0 6px rgba(220,38,38,.5); transform:scale(1.14); } }
+      .dg-hotpin.big:not(.on) { animation: dgHotBig .55s ease-in-out infinite !important; position:relative; z-index:5; }
+      .dg-hotpin.big:not(.on) .fl { animation: dgHotFlame .25s ease-in-out infinite; }
       @media (prefers-reduced-motion: reduce) { .dg-hotpin, .dg-hotpin .fl { animation: none; } }`;
     document.head.append(st);
   }
@@ -7036,9 +7043,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     let b = document.querySelector('.dg-hotpin');
     const paint = () => {
       const has = hotHas(qid);
-      if (b.dataset.st === String(has)) return; // không vẽ lại → hiệu ứng không bị khởi động lại
-      b.dataset.st = String(has);
+      const big = (Number((renderCtx.quotes?.[qid] || q)?.amount) || 0) > 30e6; // báo giá trên 30 triệu
+      if (b.dataset.st === `${has}|${big}`) return; // không vẽ lại → hiệu ứng không bị khởi động lại
+      b.dataset.st = `${has}|${big}`;
       b.classList.toggle('on', !!has);
+      b.classList.toggle('big', big);
       b.innerHTML = has
         ? `✓ Đã có trong gợi ý chốt đơn${has === 'pin' ? ' 📌' : ''} <span class="rm" title="Gỡ báo giá này khỏi Gợi ý chốt đơn">✕ Gỡ</span>`
         : '<span class="fl">🔥</span> Thêm vào gợi ý chốt đơn';
