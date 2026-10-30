@@ -6703,17 +6703,36 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         maintZaloQuick(z).catch((err) => (z.textContent = `⚠️ ${err.message}`));
       });
       box.after(mt);
-      const MT_EVERY = 3600e3; // nhắc bảo trì qua Zalo mỗi 1 tiếng
+      // Lịch nhắc bảo trì qua Zalo: 7:30 và 12:30 hằng ngày (giờ VN), Chủ nhật nghỉ
+      const MT_SLOTS = [[7, 30], [12, 30]];
+      const mtSlots = (from, dir) => {
+        // các mốc nhắc gần `from` (dir −1: mốc đã qua gần nhất · +1: mốc kế tiếp)
+        const vn = new Date(from + 7 * 3600e3);
+        for (let d = 0; d <= 8; d++) {
+          const day = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate() + dir * d);
+          if (new Date(day).getUTCDay() === 0) continue; // Chủ nhật
+          const ts = MT_SLOTS.map(([h, m]) => day + (h * 60 + m) * 60e3 - 7 * 3600e3);
+          const hit = dir < 0 ? ts.filter((t) => t <= from).pop() : ts.find((t) => t > from);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const hm = (t) => new Date(t + 7 * 3600e3).toISOString().slice(11, 16).replace(/^0/, '');
       const tickMt = () => {
         const cd = mt.querySelector('[data-mtcd]');
         if (!cd) return;
+        const now = Date.now();
         const last = state.mtLastSent || 0;
-        const left = last + MT_EVERY - Date.now();
-        const over = left <= 0;
+        const prev = mtSlots(now, -1); // mốc nhắc vừa qua
+        const next = mtSlots(now, 1);
+        const over = prev != null && last < prev; // đã tới mốc mà chưa gửi lần nào kể từ mốc đó
         over ? mt.setAttribute('data-over', '1') : mt.removeAttribute('data-over');
-        cd.innerHTML = !last ? '⏰ chưa nhắc lần nào' : over ? `⏰ quá hạn <b>${fmtCd(-left)}</b>` : `⏳ nhắc tiếp <b>${fmtCd(left)}</b>`;
+        const dayN = (t) => Math.floor((t + 7 * 3600e3) / 86400e3);
+        const dd = next ? dayN(next) - dayN(now) : 0;
+        const nextLab = next ? `${dd === 1 ? 'mai ' : dd > 1 ? `${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][new Date(next + 7 * 3600e3).getUTCDay()]} ` : ''}${hm(next)}` : '';
+        cd.innerHTML = over ? `⏰ quá hạn ${hm(prev)} <b>${fmtCd(now - prev)}</b>` : `⏳ nhắc lúc ${nextLab} <b>${fmtCd(next - now)}</b>`;
         cd.style.color = over ? '#dc2626' : '#047857';
-        cd.title = last ? `Lần gửi Zalo thành công gần nhất: ${new Date(last).toLocaleString('vi-VN')}${state.mtLastInfo ? ` – #${state.mtLastInfo.id} cho ${state.mtLastInfo.to} (${state.mtLastInfo.by || ''})` : ''} · ${state.mtSentN || 0} lượt đã gửi` : 'Chưa có lượt gửi Zalo bảo trì thành công nào';
+        cd.title = `Lịch nhắc bảo trì: 7:30 và 12:30 hằng ngày (Chủ nhật nghỉ)\n${last ? `Lần gửi Zalo thành công gần nhất: ${new Date(last).toLocaleString('vi-VN')}${state.mtLastInfo ? ` – #${state.mtLastInfo.id} cho ${state.mtLastInfo.to} (${state.mtLastInfo.by || ''})` : ''} · ${state.mtSentN || 0} lượt đã gửi` : 'Chưa có lượt gửi Zalo bảo trì thành công nào'}`;
       };
       const paintMt = async () => {
         const sent = Object.values(await kvGet('maintSent').catch(() => ({}))).filter((x) => x?.at);
