@@ -2073,7 +2073,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Chữ ký dưới "Trưởng bộ phận (Ký và ghi rõ họ tên)": đặt nổi trong khoảng trống ký tên, không đẩy lệch bố cục
   // Chữ ký "mực thật", mỗi lần in khác nhau ±3%: xoay, co giãn, nghiêng, lệch nhẹ; tô lại màu mực xanh bút bi,
   // độ đậm nhạt không đều + viền loang nhẹ như mực thấm giấy
-  async function inkSignature(src) {
+  async function inkSignature(src, opt = {}) {
     const img = new Image();
     img.src = src;
     await img.decode();
@@ -2121,6 +2121,34 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       px[i + 3] = Math.min(255, a * Math.pow(strength, 0.8) * dens * 1.1);
     }
     ctx.putImageData(d, 0, 0);
+    // opt.inkH: cắt bỏ lề trắng quanh nét (ảnh chữ ký NVKD thường thừa lề → nét bị nhỏ) rồi phóng cho phần nét cao inkH px
+    if (opt.inkH) {
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++)
+          if (px[(y * w + x) * 4 + 3] > 24) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+      if (x1 > x0 && y1 > y0) {
+        const m = 4 * S;
+        x0 = Math.max(0, x0 - m);
+        y0 = Math.max(0, y0 - m);
+        x1 = Math.min(w - 1, x1 + m);
+        y1 = Math.min(h - 1, y1 + m);
+        const cw = x1 - x0 + 1;
+        const ch = y1 - y0 + 1;
+        const c2 = document.createElement('canvas');
+        c2.width = cw;
+        c2.height = ch;
+        c2.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
+        let dh = opt.inkH * (ch / (ch - 2 * m));
+        if (opt.maxW && (dh * cw) / ch > opt.maxW) dh = (opt.maxW * ch) / cw; // chữ ký dài → giới hạn bề ngang
+        return { src: c2.toDataURL('image/png'), height: Math.round(dh) };
+      }
+    }
     return { src: c.toDataURL('image/png'), height: Math.round((h / S) * (64 / ih)) };
   }
 
@@ -2189,14 +2217,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       console.warn('[DG] chữ ký NVKD: không thấy', { có: keys, staff });
       return false;
     }
-    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i);
+    // cỡ nét ngang chữ ký Trưởng bộ phận (nét cao ~52px, rộng ≤ 230px)
+    return addSignature(root0, imgs[name].img, /^Người biên soạn$/i, { inkH: 52, maxW: 230 });
   }
-  async function addSignature(root0, sig0 = globalThis.DG_SIGNATURE, labelRe = /^Trưởng bộ phận$/i) {
+  async function addSignature(root0, sig0 = globalThis.DG_SIGNATURE, labelRe = /^Trưởng bộ phận$/i, opt = {}) {
     let sig = sig0;
     if (!sig) return false;
     let sigH = 64;
     try {
-      const ink = await inkSignature(sig);
+      const ink = await inkSignature(sig, opt);
       sig = ink.src;
       sigH = ink.height; // giữ cỡ nét như bản gốc (64px) dù canvas có lề
     } catch {}
