@@ -11961,6 +11961,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const hd = await kvGet('aiHotDone');
       const pin = renderCtx.hotPinned || {};
       renderCtx.hotSet = new Set([...(renderCtx.aiHot?.items || []).filter((x) => !hd[x.id]).map((x) => x.id), ...Object.keys(pin).filter((id) => pin[id] && !pin[id].off && !hd[id]).map(Number)]);
+      // Báo giá gắn nhãn "✅ Lấy đơn / 🔁 Tái đơn" (sếp cho lấy đơn, chưa có đơn) → tự thêm vào Gợi ý chốt đơn (📌, đồng bộ)
+      // Đã từng ghim / đã gỡ (hotPinned.off, aiHotDone) thì không tự thêm lại; chỉ máy quản trị ghi
+      if (MY_ADMIN) {
+        const add = {};
+        for (const q of Object.values(quotes)) {
+          if (!q?.id || pin[q.id] || hd[q.id] || !bossOkInfo(q, comments[q.id])) continue;
+          add[q.id] = { code: q.code, at: Date.now(), by: meName, auto: 'bossok' };
+        }
+        if (Object.keys(add).length) {
+          await kvMerge('hotPinned', add);
+          Object.assign(pin, add);
+          renderCtx.hotPinned = pin;
+          for (const id of Object.keys(add)) renderCtx.hotSet.add(Number(id));
+        }
+      }
     }
     const all = Object.values(quotes);
     const btn = (act, key, label, busyLabel, attrs = '') =>
