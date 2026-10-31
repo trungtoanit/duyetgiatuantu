@@ -11961,13 +11961,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const hd = await kvGet('aiHotDone');
       const pin = renderCtx.hotPinned || {};
       renderCtx.hotSet = new Set([...(renderCtx.aiHot?.items || []).filter((x) => !hd[x.id]).map((x) => x.id), ...Object.keys(pin).filter((id) => pin[id] && !pin[id].off && !hd[id]).map(Number)]);
-      // Báo giá gắn nhãn "✅ Lấy đơn / 🔁 Tái đơn" (sếp cho lấy đơn, chưa có đơn) → tự thêm vào Gợi ý chốt đơn (📌, đồng bộ)
+      // Báo giá gắn nhãn "✅ Lấy đơn / 🔁 Tái đơn" (sếp cho lấy đơn, chưa có đơn) hoặc "💲 Khách cho giá" → tự thêm vào Gợi ý chốt đơn (📌, đồng bộ)
       // Đã từng ghim / đã gỡ (hotPinned.off, aiHotDone) thì không tự thêm lại; chỉ máy quản trị ghi
       if (MY_ADMIN) {
         const add = {};
         for (const q of Object.values(quotes)) {
-          if (!q?.id || pin[q.id] || hd[q.id] || !bossOkInfo(q, comments[q.id])) continue;
-          add[q.id] = { code: q.code, at: Date.now(), by: meName, auto: 'bossok' };
+          if (!q?.id || pin[q.id] || hd[q.id]) continue;
+          const c = comments[q.id];
+          // ✅ Lấy đơn / 🔁 Tái đơn, hoặc 💲 Khách cho giá (còn mở, chưa có đơn, chưa huỷ)
+          const why = bossOkInfo(q, c) ? 'bossok' : targetPriceInfo(c) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c) ? 'tgt' : '';
+          if (!why) continue;
+          add[q.id] = { code: q.code, at: Date.now(), by: meName, auto: why };
         }
         if (Object.keys(add).length) {
           await kvMerge('hotPinned', add);
