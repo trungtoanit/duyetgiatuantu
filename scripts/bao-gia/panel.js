@@ -8888,6 +8888,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .tk-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
     .tk-title { min-width: 200px; }
     .tk-ext { font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border-radius: 999px; padding: 1px 7px; }
+    .tk-amt { text-align: right; white-space: nowrap; font-weight: 800; color: #0f766e; }
     .tk-due { white-space: nowrap; }
     .tk-due div { font-size: 11px; color: #64748b; }
     .tk-row.over .tk-due div { color: #dc2626; font-weight: 700; }
@@ -12300,12 +12301,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const pool = view === 'mine' ? list.filter(tkMine) : list;
     const stChips = `<div class="tk-f tk-sts">${Object.entries(TK_ST).map(([k, v]) => `<button class="tk-c${stSel.includes(k) ? ' on' : ''}" style="--fg:${v[1]};--bg:${v[2]}" data-act="task-st" data-v="${k}">${stSel.includes(k) ? '✓ ' : ''}${v[0]} <b>${pool.filter((t) => t.status === k).length}</b></button>`).join('')}${stSel.length ? '<button class="tk-c clr" data-act="task-st" data-v="">✕ Bỏ chọn</button>' : `<span class="muted" style="font-size:12px">${view === 'mine' ? 'Đang hiện việc chưa xong' : 'Đang hiện mọi trạng thái'} – bấm để chọn một hoặc nhiều</span>`}</div>`;
     const sel = (k, opts) => `<select data-tkf="${k}"><option value="">${k === 'who' ? 'Mọi người' : 'Mọi mức'}</option>${opts.map(([v, l]) => `<option value="${esc(v)}"${F[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    // Số tiền của việc: lấy số "…đ" đầu tiên trong nội dung (báo giá, công nợ, đơn, đề nghị đều ghi sẵn)
+    const tkAmount = (t) => String(t.desc || '').match(/\d[\d.,]*đ/)?.[0] || '';
     const row = (t) => {
       const st = TK_ST[t.status] || TK_ST.assigned;
       const quick = tkMine(t) && t.status === 'assigned' ? `<button class="tk-q" data-act="task-accept" data-tk="${esc(t.id)}">✅ Nhận</button>` : '';
       return `<tr class="tk-row${tkOver(t, now) ? ' over' : ''}" data-act="task-open" data-tk="${esc(t.id)}">
         <td><span class="tk-dot" style="background:${TK_PRI[t.pri]?.[1] || '#2563eb'}" title="${esc(TK_PRI[t.pri]?.[0] || '')}"></span></td>
         <td class="tk-title"><b>${esc(t.title)}</b>${t.rep ? ` <span title="${esc(TK_REP[t.rep] || '')}">🔁</span>` : ''}${t.src ? ' <span title="Tự tạo từ CRM">⚡</span>' : ''}${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
+        <td class="tk-amt">${esc(tkAmount(t))}</td>
         <td>${avatarHtml(t.to, 18)} ${esc(t.to)}</td>
         <td class="tk-due">${esc(tkTime(t.due))}${open(t) && t.status !== 'submit' ? `<div>${esc(tkLeft(t))}</div>` : ''}</td>
         <td><span class="tk-st" style="color:${st[1]};background:${st[2]}">${st[0]}</span>${tkOver(t, now) ? '<span class="tk-st ov">Quá hạn</span>' : ''}</td>
@@ -12314,12 +12318,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     // Gom theo ngày đến hạn; việc đã xong / đã hủy gom riêng ở cuối
     const groupHead = (k, n) => {
-      if (k === 'closed') return `<tr class="tk-gh"><td colspan="7">✔️ Đã xong / đã hủy <b>${n}</b></td></tr>`;
+      if (k === 'closed') return `<tr class="tk-gh"><td colspan="8">✔️ Đã xong / đã hủy <b>${n}</b></td></tr>`;
       const d = new Date(`${k}T00:00:00Z`);
       const wd = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][d.getUTCDay()];
       const diff = Math.round((d.getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400e3);
       const name = diff === 0 ? 'Hôm nay' : diff === 1 ? 'Ngày mai' : diff === -1 ? 'Hôm qua' : '';
-      return `<tr class="tk-gh${diff < 0 ? ' past' : diff === 0 ? ' now' : ''}"><td colspan="7">${diff < 0 ? '🔴 ' : '📅 '}${name ? `${name} · ` : ''}${wd}, ${k.slice(8, 10)}/${k.slice(5, 7)} <b>${n}</b></td></tr>`;
+      return `<tr class="tk-gh${diff < 0 ? ' past' : diff === 0 ? ' now' : ''}"><td colspan="8">${diff < 0 ? '🔴 ' : '📅 '}${name ? `${name} · ` : ''}${wd}, ${k.slice(8, 10)}/${k.slice(5, 7)} <b>${n}</b></td></tr>`;
     };
     const groupKey = (t) => (open(t) ? tkDayKey(t.due) : 'closed');
     const groupN = {};
@@ -12335,7 +12339,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       </div>
       ${!tile && view === 'all' ? `<div class="tk-f"><input data-tkf="q" placeholder="Tìm tiêu đề / nội dung" value="${esc(F.q || '')}">${sel('who', whos.map((n) => [n, n]))}${sel('pri', Object.entries(TK_PRI).map(([k, v]) => [k, v[0]]))}</div>${stChips}` : ''}
       ${!tile && view === 'mine' ? stChips : ''}
-      ${rows.length ? `<table class="tk-t"><thead><tr><th></th><th>Việc</th><th>Phụ trách</th><th>Hạn</th><th>Trạng thái</th><th>Tiến độ</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table>` : `<div class="muted" style="padding:24px;text-align:center">${list.length ? 'Không có việc nào trong mục này.' : 'Chưa có việc nào. Bấm nút ➕ để bắt đầu.'}</div>`}
+      ${rows.length ? `<table class="tk-t"><thead><tr><th></th><th>Việc</th><th style="text-align:right">Số tiền</th><th>Phụ trách</th><th>Hạn</th><th>Trạng thái</th><th>Tiến độ</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table>` : `<div class="muted" style="padding:24px;text-align:center">${list.length ? 'Không có việc nào trong mục này.' : 'Chưa có việc nào. Bấm nút ➕ để bắt đầu.'}</div>`}
     </div>`;
   }
 
