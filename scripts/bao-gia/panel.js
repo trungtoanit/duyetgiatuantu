@@ -3241,6 +3241,114 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Giấy cũ: ô có dấu ⚠ (chữ) hoặc bất kỳ biểu tượng nào (hình / SVG / icon) – ô giấy mới chỉ có chữ + thanh
   const isOldPaper = (cell) =>
     !!cell && (/⚠/.test(cell.innerText || '') || !!cell.querySelector('svg, img, .anticon, [role="img"], i[class*="icon"], [class*="warning"], [class*="Warning"]'));
+  // ---------- ✅ Duyệt 5 lệnh (trang Đề nghị, quản trị): do người dùng bấm, xác nhận trước; mở lần lượt từ trên xuống → Duyệt → đóng form, đủ 5 lệnh thì dừng ----------
+  // Lệnh không có nút Duyệt (đã duyệt / chưa tới lượt) thì bỏ qua, không tính. Có gì bất thường thì dừng ngay và để nguyên form để người dùng xem.
+  const DN_MAX = 5;
+  const dnTable = () => [...document.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Mã đề nghị/i.test(th.innerText.trim())));
+  const dnRows = () => {
+    const t = dnTable();
+    if (!t) return [];
+    const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
+    const iName = heads.findIndex((h) => /^Tên đề nghị/i.test(h));
+    const iSum = heads.findIndex((h) => /^Tổng tiền/i.test(h));
+    return [...t.querySelectorAll('.ant-table-tbody tr')]
+      .filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.classList.contains('ant-table-placeholder'))
+      .map((tr) => {
+        const link = [...(tr.cells[1]?.querySelectorAll('*') || [])].find((e) => !e.children.length && /^[A-Z]{1,6}\d+$/.test(e.textContent.trim()));
+        return link && { tr, link, code: link.textContent.trim(), name: tr.cells[iName]?.innerText.trim() || '', sum: tr.cells[iSum]?.innerText.trim() || '' };
+      })
+      .filter(Boolean);
+  };
+  const DN = { run: false, stop: false };
+  async function dnApprove(btn, out) {
+    const list = dnRows();
+    if (!list.length) return (out.textContent = '⚠️ Không thấy lệnh nào trên trang');
+    const head = list.slice(0, DN_MAX).map((r) => `• ${r.code} – ${r.name.slice(0, 60)} – ${r.sum}đ`).join('\n');
+    if (!confirm(`Tự mở lần lượt và bấm DUYỆT đủ ${DN_MAX} lệnh từ trên xuống rồi dừng.\nLệnh chưa tới lượt / đã duyệt sẽ bỏ qua và lấy lệnh kế tiếp.\n\n${DN_MAX} lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
+    DN.run = true;
+    DN.stop = false;
+    btn.textContent = '⏹ Dừng';
+    const seen = new Set();
+    const done = [];
+    let skip = 0;
+    let err = '';
+    const shut = async (m) => {
+      m.querySelector('.ant-modal-close')?.click();
+      await waitFor(() => !m.isConnected || getComputedStyle(m).display === 'none', 4000, 150);
+      await sleep(500);
+    };
+    try {
+      while (done.length < DN_MAX && !DN.stop) {
+        const r = dnRows().find((x) => !seen.has(x.code));
+        if (!r) break;
+        seen.add(r.code);
+        out.textContent = `⏳ ${done.length}/${DN_MAX} · mở ${r.code}…`;
+        r.link.click();
+        const m = await waitFor(() => visModalsTop().find((x) => x.innerText.includes(`#${r.code}`)), 8000, 200);
+        if (!m) {
+          err = `Không mở được ${r.code}`;
+          break;
+        }
+        const findBtn = () => [...m.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Duyệt' && !b.disabled);
+        const ap = await waitFor(findBtn, 3000, 150);
+        if (!ap) {
+          skip++;
+          await shut(m);
+          continue;
+        }
+        out.textContent = `⏳ ${done.length}/${DN_MAX} · duyệt ${r.code}…`;
+        ap.click();
+        let asked = false;
+        const ok = await waitFor(() => {
+          if (!findBtn()) return true;
+          // CRM hỏi xác nhận (Popconfirm / Modal confirm) → đồng ý, đúng 1 lần
+          const yes = !asked && [...document.querySelectorAll('.ant-popconfirm .ant-btn-primary, .ant-modal-confirm .ant-btn-primary')].find((b) => b.getClientRects().length);
+          if (yes) {
+            asked = true;
+            yes.click();
+          }
+          return false;
+        }, 10000, 200);
+        if (!ok) {
+          err = `${r.code}: bấm Duyệt nhưng chưa thấy duyệt xong – đã dừng, form để nguyên`;
+          break;
+        }
+        done.push(r);
+        await sleep(400);
+        await shut(m);
+      }
+    } catch (e) {
+      err = e.message;
+    } finally {
+      DN.run = false;
+      btn.textContent = `✅ Duyệt ${DN_MAX} lệnh`;
+    }
+    out.textContent = `${err ? `⚠️ ${err} · ` : DN.stop ? '⏹ Đã dừng · ' : done.length < DN_MAX ? '⚠️ Hết lệnh trên trang · ' : '✅ '}Đã duyệt ${done.length}: ${done.map((r) => r.code).join(', ') || '–'}${skip ? ` · bỏ qua ${skip}` : ''}`;
+  }
+  if (IS_TOP) {
+    setInterval(() => {
+      if (!MY_ADMIN || !/^\/de-nghi/.test(location.pathname) || document.querySelector('[data-dg-dn5]')) return;
+      const anchor = [...document.querySelectorAll('.ant-picker-range')].pop()?.closest('.flex.items-end') || [...document.querySelectorAll('.ant-picker-range')].pop()?.parentElement;
+      if (!anchor || !dnTable()) return;
+      const wrap = document.createElement('div');
+      wrap.setAttribute('data-dg-dn5', '1');
+      wrap.setAttribute('style', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:12px');
+      wrap.innerHTML = `<button type="button" title="Mở lần lượt từ trên xuống, bấm Duyệt và đóng form; đủ ${DN_MAX} lệnh thì dừng (hỏi xác nhận trước)" style="cursor:pointer;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:800;color:#fff;background:linear-gradient(90deg,#16a34a,#0d9488)">✅ Duyệt ${DN_MAX} lệnh</button><span data-out style="font-size:12px;font-weight:700;color:#334155"></span>`;
+      const b = wrap.querySelector('button');
+      const out = wrap.querySelector('[data-out]');
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (DN.run) {
+          DN.stop = true;
+          b.textContent = '⏹ Đang dừng…';
+          return;
+        }
+        dnApprove(b, out).catch((err) => (out.textContent = `⚠️ ${err.message}`));
+      });
+      anchor.append(wrap);
+    }, 2000);
+  }
   // Trong lúc 🔄 Load giá: popup "Cảnh báo – Dài tấm phải lớn hơn hoặc bằng khổ tấm" → tự bấm "Bỏ qua" (cảnh báo khác vẫn để nguyên)
   async function reloadPaper(btn) {
     const guard = setInterval(() => {
