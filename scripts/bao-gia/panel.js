@@ -11978,7 +11978,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     if (s0.rule === 'dn') {
       const src = data.dnPending?._src;
-      return src?.complete && src.mode === 'me' && src.at > (t.at || 0) && !data.dnPending[s0.sid] ? 'đề nghị không còn chờ duyệt' : '';
+      return src?.complete && src.mode === 'dang' && src.at > (t.at || 0) && !data.dnPending[s0.sid] ? 'đề nghị không còn chờ duyệt' : '';
     }
     if (s0.rule === 'stale') {
       // chỉ tin danh sách đã đọc đủ mọi trang và mới hơn lúc tạo việc
@@ -12102,11 +12102,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await kvMerge('ordersNew', patch);
     await tkAutoRun();
   }
-  // Trang Đề nghị: bật công tắc "Cần tôi duyệt", đọc đủ mọi trang tab Chưa duyệt + Đang duyệt, 30 phút / lần; đọc xong trả công tắc về như cũ
+  // Trang Đề nghị: bật công tắc "Cần tôi duyệt", đọc đủ mọi trang tab Đang duyệt, 30 phút / lần; đọc xong trả công tắc về như cũ
   async function tkReadDn() {
     if (!MY_ADMIN) return;
     const old = await kvGet('dnPending');
-    if ((old._src?.mode === 'me' && Date.now() - (old._src?.at || 0) < 30 * 60e3) || !tabLock('dgTkDnLock', 5 * 60e3)) return;
+    if ((old._src?.mode === 'dang' && Date.now() - (old._src?.at || 0) < 30 * 60e3) || !tabLock('dgTkDnLock', 5 * 60e3)) return;
     const got = {};
     let complete = false;
     await tkInFrame('/de-nghi/', async (doc) => {
@@ -12144,7 +12144,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!(await settled(prev)) || !sw.classList.contains('ant-switch-checked')) return;
       }
       let allPages = true;
-      for (const name of ['Chưa duyệt', 'Đang duyệt']) {
+      for (const name of ['Đang duyệt']) {
         const tab = tkFindTab(doc(), name);
         if (!tab) {
           allPages = false;
@@ -12182,7 +12182,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
     });
     if (!complete && !Object.keys(got).length) return;
-    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, mode: 'me' } };
+    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, mode: 'dang' } };
     if (complete) for (const [k, o] of Object.entries(old)) if (k !== '_src' && o && !got[k]) patch[k] = null;
     await kvMerge('dnPending', patch);
     await tkAutoRun();
@@ -12307,7 +12307,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${card('debt', '💰', 'Công nợ quá hạn', `Giao cho NVKD của khách, mỗi khách 1 việc / tháng. ${debtAge ? `Dữ liệu cập nhật ${esc(tkTime(debtAge))}.` : 'Chưa có dữ liệu – mở trang Công nợ của CRM.'}`, num('debt', 'amount', 'Nợ quá hạn từ (đ)', ac.debt.amount) + num('debt', 'days', 'Quá hạn từ (ngày)', ac.debt.days))}
         ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
         ${card('stale', '🐢', 'Đơn quá hạn giao, chưa giao', `Đơn còn ở tab Mới và đã quá ngày giao; đơn chưa có ngày giao thì tính từ ngày lên đơn. Đọc từ Danh sách đơn, tab Mới, 30 phút / lần. ${data.ordersNew._src ? `Lần đọc gần nhất ${esc(tkTime(data.ordersNew._src.at))}: ${data.ordersNew._src.n} đơn${data.ordersNew._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Tự đóng khi đơn không còn ở tab Mới.`, num('stale', 'over', 'Quá hạn từ (ngày)', ac.stale.over) + `<label style="font-size:12px;color:#475569">Giao cho<select data-r="stale" data-n="who" style="${TK_IN};width:170px"><option value="boss"${ac.stale.who === 'boss' ? ' selected' : ''}>${esc(cfg.boss)}</option><option value="staff"${ac.stale.who === 'staff' ? ' selected' : ''}>NVKD của đơn</option></select></label>`)}
-        ${card('dn', '📝', 'Đề nghị cần tôi duyệt', `Đọc từ trang Đề nghị với công tắc Cần tôi duyệt, tab Chưa duyệt và Đang duyệt, 30 phút / lần, theo tài khoản của máy đang đọc. Giao cho ${esc(cfg.boss)}, tiền lớn trước. ${data.dnPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.dnPending._src.at))}: ${data.dnPending._src.n} đề nghị${data.dnPending._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đề nghị không còn chờ duyệt thì việc tự xoá.`, '')}
+        ${card('dn', '📝', 'Đề nghị cần tôi duyệt', `Đọc từ trang Đề nghị với công tắc Cần tôi duyệt, chỉ tab Đang duyệt, 30 phút / lần, theo tài khoản của máy đang đọc. Giao cho ${esc(cfg.boss)}, tiền lớn trước. ${data.dnPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.dnPending._src.at))}: ${data.dnPending._src.n} đề nghị${data.dnPending._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đề nghị không còn chờ duyệt thì việc tự xoá.`, '')}
         ${card('order', '📦', 'Đơn sắp đến ngày giao', 'Giao cho NVKD của khách. Tick các trạng thái nghĩa là đơn ĐÃ XONG; trạng thái còn lại được coi là chưa giao. Chưa tick trạng thái nào thì quy tắc này chưa tạo việc.', num('order', 'days', 'Trước ngày giao (ngày)', ac.order.days), `<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">${Object.entries(stat).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<label><input data-st="${esc(k)}" type="checkbox"${ac.order.doneSt.includes(k) ? ' checked' : ''}> ${esc(k || '(trống)')} <span style="color:#94a3b8">${n}</span></label>`).join('') || '<span style="color:#94a3b8">Chưa có đơn nào có ngày giao trong dữ liệu</span>'}</div>`)}
       </div>
       <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none"><span style="flex:1"></span>${tkBtn('x', 'Đóng')}${tkBtn('save', '💾 Lưu và chạy', 'pri')}</div></div>`;
