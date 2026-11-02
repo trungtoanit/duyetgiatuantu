@@ -3257,7 +3257,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const sec = t.slice(a, b > a ? b : a + 400);
     return (sec.match(new RegExp(`${DN_ME}\\s*(Chưa duyệt|Đã duyệt|Từ chối)`)) || [])[1] || '';
   };
-  const dnTable = (doc = document) => [...doc.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Mã đề nghị/i.test(th.innerText.trim())));
+  // Mỗi tab đã mở giữ bảng + phân trang riêng, ẩn trong trang → chỉ lấy của tab đang hiện
+  const dnShown = (el) => !el.closest('.ant-tabs-tabpane-hidden');
+  const dnTable = (doc = document) => [...doc.querySelectorAll('.ant-table')].filter(dnShown).find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Mã đề nghị/i.test(th.innerText.trim())));
   const dnRows = (doc = document, codeRe = /^[A-Z]{1,6}\d+$/) => {
     const t = dnTable(doc);
     if (!t) return [];
@@ -3287,7 +3289,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const t0 = Date.now();
     while (Date.now() - t0 < 16000) {
       await sleep(300);
-      if (on() && !document.querySelector('.ant-spin-spinning') && (first() !== prev || Date.now() - t0 >= 3000)) return true;
+      if (on() && !document.querySelector('.ant-spin-spinning') && ((first() && first() !== prev) || Date.now() - t0 >= 3000)) return true;
     }
     return false;
   };
@@ -12074,7 +12076,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const t0 = Date.now();
         while (Date.now() - t0 < 16000) {
           await sleep(300);
-          if (!spinning() && (first() !== prev || Date.now() - t0 >= 3000)) return dnTable(doc()) && (first() || doc().querySelector('.ant-table-placeholder'));
+          if (!spinning() && ((first() && first() !== prev) || Date.now() - t0 >= 3000)) return first() || dnTable(doc())?.querySelector('.ant-table-placeholder');
         }
         return false;
       };
@@ -12117,7 +12119,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         let done = false;
         for (let page = 1; page <= 40; page++) {
           if (page > 1) {
-            const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
+            const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
             if (!li) {
               done = true;
               break;
