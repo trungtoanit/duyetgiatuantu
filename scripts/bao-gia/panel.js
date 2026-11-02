@@ -3274,11 +3274,33 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .filter(Boolean);
   };
   const DN = { run: false, stop: false };
+  const DN_TAB = 'Đang duyệt'; // chỉ duyệt trong tab này, không sang tab khác
+  // Đưa trang về tab Đang duyệt và chờ bảng tải xong (đã ở tab đó thì thôi); không vào được thì trả false để không duyệt gì
+  const dnGoTab = async () => {
+    const tab = () => tkFindTab(document, DN_TAB);
+    const on = () => !!tab()?.classList.contains('ant-tabs-tab-active');
+    if (!tab()) return false;
+    if (on()) return true;
+    const first = () => dnRows()[0]?.code || '';
+    const prev = first();
+    (tab().querySelector('.ant-tabs-tab-btn') || tab()).click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 16000) {
+      await sleep(300);
+      if (on() && !document.querySelector('.ant-spin-spinning') && (first() !== prev || Date.now() - t0 >= 3000)) return true;
+    }
+    return false;
+  };
   async function dnApprove(btn, out) {
+    out.textContent = `⏳ Sang tab ${DN_TAB}…`;
+    btn.disabled = true;
+    const atTab = await dnGoTab().finally(() => (btn.disabled = false));
+    if (!atTab) return (out.textContent = `⚠️ Không vào được tab ${DN_TAB} – chưa duyệt lệnh nào`);
+    out.textContent = '';
     const list = dnRows();
-    if (!list.length) return (out.textContent = '⚠️ Không thấy lệnh nào trên trang');
+    if (!list.length) return (out.textContent = `⚠️ Không thấy lệnh nào trong tab ${DN_TAB}`);
     const head = list.slice(0, DN_MAX).map((r) => `• ${r.code} – ${r.name.slice(0, 60)} – ${r.sum}đ`).join('\n');
-    if (!confirm(`Tự mở lần lượt và bấm DUYỆT đủ ${DN_MAX} lệnh từ trên xuống rồi dừng.\nChỉ duyệt lệnh có ${DN_ME} "Chưa duyệt"; lệnh khác tự đóng form và lấy lệnh kế tiếp.\n\n${DN_MAX} lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
+    if (!confirm(`Tự mở lần lượt và bấm DUYỆT đủ ${DN_MAX} lệnh từ trên xuống trong tab ${DN_TAB} rồi dừng.\nChỉ duyệt lệnh có ${DN_ME} "Chưa duyệt"; lệnh khác tự đóng form và lấy lệnh kế tiếp.\n\n${DN_MAX} lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
     DN.run = true;
     DN.stop = false;
     btn.textContent = '⏹ Dừng';
@@ -3293,6 +3315,11 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     try {
       while (done.length < DN_MAX && !DN.stop) {
+        // Trang tự nhảy tab sau khi duyệt thì quay về; không về được thì dừng
+        if (!(await dnGoTab())) {
+          err = `Không về được tab ${DN_TAB}`;
+          break;
+        }
         const r = dnRows().find((x) => !seen.has(x.code));
         if (!r) break;
         seen.add(r.code);
@@ -3339,7 +3366,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       DN.run = false;
       btn.textContent = `✅ Duyệt ${DN_MAX} lệnh`;
     }
-    out.textContent = `${err ? `⚠️ ${err} · ` : DN.stop ? '⏹ Đã dừng · ' : done.length < DN_MAX ? '⚠️ Hết lệnh trên trang · ' : '✅ '}Đã duyệt ${done.length}: ${done.map((r) => r.code).join(', ') || '–'}${skip ? ` · bỏ qua ${skip}` : ''}`;
+    out.textContent = `${err ? `⚠️ ${err} · ` : DN.stop ? '⏹ Đã dừng · ' : done.length < DN_MAX ? `⚠️ Hết lệnh trên trang tab ${DN_TAB} · ` : '✅ '}Đã duyệt ${done.length}: ${done.map((r) => r.code).join(', ') || '–'}${skip ? ` · bỏ qua ${skip}` : ''}`;
   }
   if (IS_TOP) {
     setInterval(() => {
@@ -3355,7 +3382,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const wrap = document.createElement('div');
       wrap.setAttribute('data-dg-dn5', '1');
       wrap.setAttribute('style', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:12px');
-      wrap.innerHTML = `<button type="button" title="Mở lần lượt từ trên xuống, bấm Duyệt và đóng form; đủ ${DN_MAX} lệnh thì dừng (hỏi xác nhận trước)" style="cursor:pointer;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:800;color:#fff;background:linear-gradient(90deg,#16a34a,#0d9488)">✅ Duyệt ${DN_MAX} lệnh</button><span data-out style="font-size:12px;font-weight:700;color:#334155"></span>`;
+      wrap.innerHTML = `<button type="button" title="Sang tab ${DN_TAB}, mở lần lượt từ trên xuống, bấm Duyệt và đóng form; đủ ${DN_MAX} lệnh thì dừng (hỏi xác nhận trước)" style="cursor:pointer;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:800;color:#fff;background:linear-gradient(90deg,#16a34a,#0d9488)">✅ Duyệt ${DN_MAX} lệnh</button><span data-out style="font-size:12px;font-weight:700;color:#334155"></span>`;
       const b = wrap.querySelector('button');
       const out = wrap.querySelector('[data-out]');
       b.addEventListener('click', (e) => {
