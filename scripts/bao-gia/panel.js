@@ -4969,12 +4969,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         }
         const fc = done && mDn ? (mSum / done) * total : null;
         const neg = mSum < 0;
-        const tip = `Chênh lệch tháng ${mo + 1}/${y} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${money(Math.round(mSum))} – ${mDn}/${mList.length} đơn đã tính được\nDự báo cả tháng = ${money(Math.round(mSum))} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật)${fc != null ? ` = ${money(Math.round(fc))}` : ''}`;
+        // Dự toán tới ngày đang xem = mục tiêu tháng ÷ số ngày công của tháng × số ngày công đã qua
+        const plan = total ? (DIFF_GOAL_MONTH / total) * done : 0;
+        const short = plan - mSum;
+        const tip = `Chênh lệch tháng ${mo + 1}/${y} (tới ${kd === 0 ? 'hôm nay' : 'ngày đang xem'}): ${money(Math.round(mSum))} – ${mDn}/${mList.length} đơn đã tính được\nDự báo cả tháng = ${money(Math.round(mSum))} ÷ ${done} ngày công đã qua × ${total} ngày công (trừ Chủ nhật)${fc != null ? ` = ${money(Math.round(fc))}` : ''}\nDự toán tới nay = ${money(DIFF_GOAL_MONTH)} ÷ ${total} ngày công × ${done} ngày công đã qua = ${money(Math.round(plan))}\n${short > 0 ? `Thiếu so với dự toán ${money(Math.round(short))}` : `Vượt dự toán ${money(Math.round(-short))}`}`;
         const nBad = Object.values(state.diffBad || {}).filter((x) => x.o.at >= m0 && x.o.at < vn1).length;
         return `<div data-dg-mdet title="${esc(`${tip}${nBad ? `\n⚠️ ${nBad} đơn có số chênh lệch vô lý (> 90% tiền đơn) – không cộng` : ''}\nBấm để xem chi tiết từng đơn`)}" style="cursor:pointer;display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${neg ? '#fef2f2' : '#fdf2f8'};border:1.5px solid ${neg ? '#fecaca' : '#fbcfe8'};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
           <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">🗓️ Chênh lệch T${mo + 1}${mMiss > 0 ? ` <span data-dg-miss="month" style="color:#d97706;cursor:pointer;text-decoration:underline dotted" title="Bấm để xem các đơn chưa tính chênh lệch và tính tiếp">⏳${mMiss}</span>` : ''}</span>
           <b style="font-size:18px;font-weight:900;color:${neg ? '#b91c1c' : '#be185d'};white-space:nowrap;font-variant-numeric:tabular-nums">${mDn ? `${neg ? '−' : ''}${big(Math.abs(mSum))}` : '–'}</b>
-          <span style="font-size:10.5px;font-weight:700;color:#0e7490;white-space:nowrap">→ dự báo ${fc != null ? `${fc < 0 ? '−' : ''}${big(Math.abs(fc))}` : '–'} <span style="color:#94a3b8;font-weight:600">(${done}/${total} ngày công)</span></span></div>`;
+          <span style="font-size:10.5px;font-weight:700;color:#0e7490;white-space:nowrap">→ dự báo ${fc != null ? `${fc < 0 ? '−' : ''}${big(Math.abs(fc))}` : '–'} <span style="color:#94a3b8;font-weight:600">(${done}/${total} ngày công)</span></span>
+          <span style="font-size:10.5px;font-weight:700;white-space:nowrap;color:${short > 0 ? '#b45309' : '#047857'}">${short > 0 ? `→ thiếu dự toán ${big(short)}` : `✓ vượt dự toán ${big(-short)}`} <span style="color:#94a3b8;font-weight:600">(dự toán ${big(plan)})</span></span></div>`;
       })() +
       // Doanh thu tháng (tới ngày đang xem) + dự kiến cả tháng theo ngày công (trừ Chủ nhật)
       (() => {
