@@ -11778,7 +11778,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     document.documentElement.append(box);
   }
   // ---------- ⚡ Tự tạo việc từ dữ liệu CRM: chỉ đọc dữ liệu đã thu thập, không ghi gì lên CRM ----------
-  // Mỗi quy tắc mặc định TẮT (bật là có tin Zalo tới nhân viên; riêng đơn tồn ở tab Mới và đề nghị đang duyệt mặc định giao cho sếp nên không nhắn nhân viên) và có giới hạn số việc mỗi ngày. Mỗi nguồn chỉ tạo 1 việc (công nợ: 1 việc / khách / tháng).
+  // Mỗi quy tắc mặc định TẮT (bật là có tin Zalo tới nhân viên; riêng đơn tồn ở tab Mới và đề nghị cần duyệt mặc định giao cho sếp nên không nhắn nhân viên) và có giới hạn số việc mỗi ngày. Mỗi nguồn chỉ tạo 1 việc (công nợ: 1 việc / khách / tháng).
   // Nguồn đã xong (báo giá có đơn, lỗi đã xử lý, đã thu nợ, đơn đã giao) → việc tự đóng.
   const TK_AUTO = {
     quote: { on: false, hours: 24, cap: 5 },
@@ -11863,7 +11863,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const cust = q?.customer?.name || g?.customer?.name || '';
       out.stale.push({ key: `stale-${dh}`, rule: 'stale', title: `Hoàn thành đơn ${dh}${cust ? ` – ${cust}` : ''}`, desc: `Đơn tạo ${tkTime(o.at)}, đến lúc tạo việc đã ${Math.floor(days)} ngày vẫn ở tab Mới.${o.bg ? ` Báo giá ${o.bg}.` : ''}${o.total ? ` Tổng tiền ${money(o.total)}.` : ''}${staff ? ` NVKD: ${staff}.` : ''}`, to: ac.stale.who === 'staff' && staff ? staff : boss, due: tkDueIn(1, now), pri: days >= 30 ? 'high' : 'normal', weight: days, url: '/misa-order/list?tab=NEW', label: dh, sid: dh });
     }
-    // Đề nghị ở tab Đang duyệt (/de-nghi): giao cho người duyệt, tiền lớn trước
+    // Đề nghị đang chờ mình duyệt (/de-nghi, công tắc Cần tôi duyệt): tiền lớn trước
     for (const [code, o] of Object.entries(data.dnPending || {})) {
       if (code === '_src' || !o) continue;
       const sum = Number(String(o.sum || '').replace(/[^\d]/g, '')) || 0;
@@ -11895,7 +11895,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     if (s0.rule === 'dn') {
       const src = data.dnPending?._src;
-      return src?.complete && src.at > (t.at || 0) && !data.dnPending[s0.sid] ? 'đề nghị không còn ở tab Đang duyệt' : '';
+      return src?.complete && src.mode === 'me' && src.at > (t.at || 0) && !data.dnPending[s0.sid] ? 'đề nghị không còn chờ duyệt' : '';
     }
     if (s0.rule === 'stale') {
       // chỉ tin danh sách đã đọc đủ mọi trang và mới hơn lúc tạo việc
@@ -11922,7 +11922,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!t?.src || t.status === 'done' || t.status === 'cancel') continue;
         const why = tkSrcDone(t, ac, data);
         if (!why) continue;
-        // đề nghị đã rời Đang duyệt → xoá hẳn việc, chỉ giữ lại dòng trong nhật ký
+        // đề nghị không còn chờ duyệt → xoá hẳn việc, chỉ giữ lại dòng trong nhật ký
         if (t.src.rule === 'dn') {
           await kvMerge('tasks', { [t.id]: null });
           await tkLog(t.id, `⚡ Xoá việc: ${why}`);
@@ -12019,17 +12019,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await kvMerge('ordersNew', patch);
     await tkAutoRun();
   }
-  // Tab Đang duyệt của trang Đề nghị: đọc đủ mọi trang, 30 phút / lần
+  // Trang Đề nghị: bật công tắc "Cần tôi duyệt", đọc đủ mọi trang tab Chưa duyệt + Đang duyệt, 30 phút / lần; đọc xong trả công tắc về như cũ
   async function tkReadDn() {
     if (!MY_ADMIN) return;
     const old = await kvGet('dnPending');
-    if (Date.now() - (old._src?.at || 0) < 30 * 60e3 || !tabLock('dgTkDnLock', 5 * 60e3)) return;
+    if ((old._src?.mode === 'me' && Date.now() - (old._src?.at || 0) < 30 * 60e3) || !tabLock('dgTkDnLock', 5 * 60e3)) return;
     const got = {};
     let complete = false;
     await tkInFrame('/de-nghi/', async (doc) => {
       const CODE = /^[A-Z]{1,12}\d+$/; // đủ cả mã dài như SUACHUA0101
       const first = () => (doc() ? dnRows(doc(), CODE)[0]?.code || '' : '');
-      const waitChange = async (prev) => {
+      const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
+      // Chờ bảng tải xong sau khi đổi lọc: đã đổi dòng đầu, hoặc đủ 3 giây mà không còn quay (dòng đầu có thể giữ nguyên hoặc bảng trống)
+      const settled = async (prev) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 16000) {
+          await sleep(300);
+          if (!spinning() && (first() !== prev || Date.now() - t0 >= 3000)) return dnTable(doc()) && (first() || doc().querySelector('.ant-table-placeholder'));
+        }
+        return false;
+      };
+      const pageChange = async (prev) => {
         for (let i = 0; i < 40; i++) {
           await sleep(400);
           const c = first();
@@ -12038,32 +12048,58 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         return false;
       };
       for (let i = 0; i < 60 && !tkFindTab(doc(), 'Đang duyệt'); i++) await sleep(500);
-      const tab = tkFindTab(doc(), 'Đang duyệt');
-      if (!tab) return;
       for (let i = 0; i < 40 && !first(); i++) await sleep(400);
-      if (!tab.classList.contains('ant-tabs-tab-active')) {
-        const prev = first();
-        (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
-        if (!(await waitChange(prev))) return; // không đổi được sang tab Đang duyệt → không dùng kết quả
-        await sleep(600);
+      const label = [...(doc()?.querySelectorAll('*') || [])].find((e) => !e.children.length && e.textContent.trim() === 'Cần tôi duyệt');
+      let box = label;
+      for (let i = 0; i < 4 && box && !box.querySelector?.('.ant-switch'); i++) box = box.parentElement;
+      const sw = box?.querySelector('.ant-switch');
+      if (!sw) return; // không thấy công tắc → không dùng kết quả, không xoá việc nào
+      const wasOn = sw.classList.contains('ant-switch-checked');
+      let prev = first();
+      if (!wasOn) {
+        sw.click();
+        if (!(await settled(prev)) || !sw.classList.contains('ant-switch-checked')) return;
       }
-      for (let page = 1; page <= 40; page++) {
-        if (page > 1) {
-          const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
-          if (!li) {
-            complete = true;
+      let allPages = true;
+      for (const name of ['Chưa duyệt', 'Đang duyệt']) {
+        const tab = tkFindTab(doc(), name);
+        if (!tab) {
+          allPages = false;
+          break;
+        }
+        if (!tab.classList.contains('ant-tabs-tab-active')) {
+          prev = first();
+          (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+          if (!(await settled(prev))) {
+            allPages = false;
             break;
           }
-          const prev = first();
-          li.click();
-          if (!(await waitChange(prev))) break;
-          await sleep(400);
         }
-        for (const r of dnRows(doc(), CODE)) got[r.code] = { code: r.code, name: r.name, sum: r.sum, who: r.who, at: old[r.code]?.at || Date.now() };
+        let done = false;
+        for (let page = 1; page <= 40; page++) {
+          if (page > 1) {
+            const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
+            if (!li) {
+              done = true;
+              break;
+            }
+            prev = first();
+            li.click();
+            if (!(await pageChange(prev))) break;
+            await sleep(400);
+          }
+          for (const r of dnRows(doc(), CODE)) got[r.code] = { code: r.code, name: r.name, sum: r.sum, who: r.who, tab: name, at: old[r.code]?.at || Date.now() };
+        }
+        if (!done) allPages = false;
+      }
+      complete = allPages;
+      if (!wasOn && sw.isConnected) {
+        sw.click();
+        await sleep(500);
       }
     });
-    if (!Object.keys(got).length) return;
-    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length } };
+    if (!complete && !Object.keys(got).length) return;
+    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, mode: 'me' } };
     if (complete) for (const [k, o] of Object.entries(old)) if (k !== '_src' && o && !got[k]) patch[k] = null;
     await kvMerge('dnPending', patch);
     await tkAutoRun();
@@ -12126,7 +12162,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${card('debt', '💰', 'Công nợ quá hạn', `Giao cho NVKD của khách, mỗi khách 1 việc / tháng. ${debtAge ? `Dữ liệu cập nhật ${esc(tkTime(debtAge))}.` : 'Chưa có dữ liệu – mở trang Công nợ của CRM.'}`, num('debt', 'amount', 'Nợ quá hạn từ (đ)', ac.debt.amount) + num('debt', 'days', 'Quá hạn từ (ngày)', ac.debt.days))}
         ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
         ${card('stale', '🐢', 'Đơn tồn lâu ở tab Mới', `Đọc từ Danh sách đơn, tab Mới, 30 phút / lần. ${data.ordersNew._src ? `Lần đọc gần nhất ${esc(tkTime(data.ordersNew._src.at))}: ${data.ordersNew._src.n} đơn${data.ordersNew._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Tự đóng khi đơn không còn ở tab Mới.`, num('stale', 'days', 'Tồn từ (ngày)', ac.stale.days) + `<label style="font-size:12px;color:#475569">Giao cho<select data-r="stale" data-n="who" style="${TK_IN};width:170px"><option value="boss"${ac.stale.who === 'boss' ? ' selected' : ''}>${esc(cfg.boss)}</option><option value="staff"${ac.stale.who === 'staff' ? ' selected' : ''}>NVKD của đơn</option></select></label>`)}
-        ${card('dn', '📝', 'Đề nghị đang duyệt', `Đọc từ trang Đề nghị, tab Đang duyệt, 30 phút / lần. Giao cho ${esc(cfg.boss)}, tiền lớn trước. ${data.dnPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.dnPending._src.at))}: ${data.dnPending._src.n} đề nghị${data.dnPending._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đề nghị rời tab Đang duyệt thì việc tự xoá.`, '')}
+        ${card('dn', '📝', 'Đề nghị cần tôi duyệt', `Đọc từ trang Đề nghị với công tắc Cần tôi duyệt, tab Chưa duyệt và Đang duyệt, 30 phút / lần, theo tài khoản của máy đang đọc. Giao cho ${esc(cfg.boss)}, tiền lớn trước. ${data.dnPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.dnPending._src.at))}: ${data.dnPending._src.n} đề nghị${data.dnPending._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đề nghị không còn chờ duyệt thì việc tự xoá.`, '')}
         ${card('order', '📦', 'Đơn sắp đến ngày giao', 'Giao cho NVKD của khách. Tick các trạng thái nghĩa là đơn ĐÃ XONG; trạng thái còn lại được coi là chưa giao. Chưa tick trạng thái nào thì quy tắc này chưa tạo việc.', num('order', 'days', 'Trước ngày giao (ngày)', ac.order.days), `<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">${Object.entries(stat).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<label><input data-st="${esc(k)}" type="checkbox"${ac.order.doneSt.includes(k) ? ' checked' : ''}> ${esc(k || '(trống)')} <span style="color:#94a3b8">${n}</span></label>`).join('') || '<span style="color:#94a3b8">Chưa có đơn nào có ngày giao trong dữ liệu</span>'}</div>`)}
       </div>
       <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none"><span style="flex:1"></span>${tkBtn('x', 'Đóng')}${tkBtn('save', '💾 Lưu và chạy', 'pri')}</div></div>`;
