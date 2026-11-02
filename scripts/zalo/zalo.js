@@ -322,7 +322,7 @@
     const sentAll = await kvGet('zaloSent');
     if (job.qid && sentAll[job.qid]) return setStatus(id, { ...job, status: 'error', error: 'Deal này đã hỏi rồi – không gửi lại.', doneAt: Date.now() });
     const lastTo = Math.max(0, ...Object.values(sentAll).filter((x) => norm(x?.to) === norm(job.to)).map((x) => x.at || 0));
-    if (Date.now() - lastTo < 30 * 60e3) return setStatus(id, { ...job, status: 'error', error: `Đã nhắn ${job.to} trong 30 phút qua – chưa soạn tin mới.`, doneAt: Date.now() });
+    if (!job.task && Date.now() - lastTo < 30 * 60e3) return setStatus(id, { ...job, status: 'error', error: `Đã nhắn ${job.to} trong 30 phút qua – chưa soạn tin mới.`, doneAt: Date.now() });
     const fail = (why) => {
       tr(`LỖI: ${why}`);
       return setStatus(id, { ...job, status: 'error', error: why, doneAt: Date.now() });

@@ -8852,6 +8852,37 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     @keyframes psFlash { 0% { color: #2563eb; } 100% { } }
     .pdlg-rows:empty { display: none; }
     .bigtab.gap { background: linear-gradient(90deg,#fdf2f8,#eff6ff); }
+    .bigtab.task.has b { background: #dc2626; color: #fff; }
+    .tk-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+    .tk-tile { font: inherit; cursor: pointer; text-align: left; background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid var(--c); border-radius: 10px; padding: 8px 12px; display: grid; gap: 1px; }
+    .tk-tile b { font-size: 22px; color: var(--c); line-height: 1.1; }
+    .tk-tile span { font-size: 12px; color: #475569; }
+    .tk-tile.on { background: #f1f5f9; box-shadow: inset 0 0 0 1px var(--c); }
+    .tk-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .tk-v { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 4px 12px; }
+    .tk-v.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .tk-add { font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; color: #fff; background: linear-gradient(90deg,#4f46e5,#7c3aed); border: 0; border-radius: 8px; padding: 6px 14px; }
+    .tk-f { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .tk-f input, .tk-f select { font: inherit; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 7px; padding: 4px 8px; background: #fff; color: #1e293b; }
+    .tk-f input { flex: 1; min-width: 180px; }
+    .tk-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tk-t th { text-align: left; font-size: 12px; color: #64748b; font-weight: 700; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; }
+    .tk-t td { padding: 7px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .tk-row { cursor: pointer; }
+    .tk-row:hover { background: #f8fafc; }
+    .tk-row.over { background: #fef2f2; }
+    .tk-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+    .tk-title { min-width: 200px; }
+    .tk-ext { font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border-radius: 999px; padding: 1px 7px; }
+    .tk-due { white-space: nowrap; }
+    .tk-due div { font-size: 11px; color: #64748b; }
+    .tk-row.over .tk-due div { color: #dc2626; font-weight: 700; }
+    .tk-st { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+    .tk-st.ov { color: #fff; background: #dc2626; margin-left: 4px; }
+    .tk-pg { position: relative; min-width: 70px; }
+    .tk-pg i { position: absolute; left: 6px; bottom: 4px; height: 3px; max-width: calc(100% - 12px); background: #6366f1; border-radius: 2px; }
+    .tk-pg span { font-size: 12px; color: #475569; }
+    .tk-q { font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; color: #fff; background: #059669; border: 0; border-radius: 7px; padding: 3px 9px; white-space: nowrap; }
     .gp { display: grid; gap: 8px; }
     .gp-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 15px; }
     .gp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -9123,6 +9154,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     pnl.addEventListener('input', (e) => {
       const line = e.target.closest?.('.qe-line');
       if (line) qePreview(line);
+    });
+    pnl.addEventListener('change', (e) => {
+      const k = e.target.dataset?.tkf;
+      if (!k) return;
+      state.tkF = { ...state.tkF, [k]: e.target.value };
+      render();
     });
     pnl.addEventListener('keyup', qeRemember);
     pnl.addEventListener('mouseup', qeRemember);
@@ -11070,6 +11107,477 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
 
+  // ---------- 📋 Tab Công việc (chỉ Tuấn Tú): giao việc, nhắc việc qua Zalo, lịch sử ----------
+  // kv đồng bộ: tasks (mỗi việc 1 dòng), taskLog (lịch sử – chỉ thêm, không sửa), taskRem (lượt nhắc Zalo đã gửi), taskCfg (cấu hình nhắc).
+  // Quy trình: Chờ nhận → Đã nhận → Đang làm → Chờ duyệt → Hoàn thành (Trả lại về Đang làm; Hủy có lý do). Việc tự nhắc mình thì không cần duyệt.
+  // "Quá hạn" là nhãn tính từ hạn, không phải trạng thái. Không sửa việc nào trên CRM.
+  const TASK_ON = SITE.key === 'tuantu';
+  const TK_ST = {
+    assigned: ['Chờ nhận', '#0369a1', '#e0f2fe'],
+    accepted: ['Đã nhận', '#4338ca', '#e0e7ff'],
+    doing: ['Đang làm', '#b45309', '#fef3c7'],
+    submit: ['Chờ duyệt', '#7c3aed', '#f3e8ff'],
+    done: ['Hoàn thành', '#047857', '#d1fae5'],
+    cancel: ['Đã hủy', '#64748b', '#f1f5f9'],
+  };
+  const TK_PRI = { critical: ['Khẩn', '#dc2626'], high: ['Cao', '#ea580c'], normal: ['Thường', '#2563eb'], low: ['Thấp', '#64748b'] };
+  const TK_CFG = { pre: 60, every: 60, max: 3, esc: 24, from: 7, to: 20, sunday: false, boss: 'Nguyễn Trung Toán' };
+  const tkActive = (t) => ['assigned', 'accepted', 'doing'].includes(t?.status);
+  const tkPersonal = (t) => norm(t.by) === norm(t.to);
+  const tkOver = (t, now = Date.now()) => tkActive(t) && t.due && now > t.due;
+  const tkTime = (ms) => new Date(ms).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const tkInput = (ms) => new Date(ms + 7 * 3600e3).toISOString().slice(0, 16); // giá trị ô chọn ngày giờ theo giờ VN
+  const tkParse = (v) => (v ? new Date(`${v}:00+07:00`).getTime() : 0);
+  const tkDayKey = (ms) => new Date(ms + 7 * 3600e3).toISOString().slice(0, 10);
+  const tkLeft = (t) => {
+    const d = (t.due || 0) - Date.now();
+    const a = Math.abs(d);
+    const s = a < 3600e3 ? `${Math.max(1, Math.round(a / 60e3))} phút` : a < 86400e3 ? `${Math.round(a / 3600e3)} giờ` : `${Math.round(a / 86400e3)} ngày`;
+    return d < 0 ? `quá ${s}` : `còn ${s}`;
+  };
+  const tkMine = (t) => norm(t.to) === norm(meName);
+  const tkIsBy = (t) => norm(t.by) === norm(meName);
+  const tkCanWork = (t) => MY_ADMIN || tkMine(t) || tkIsBy(t); // người giao / quản trị được cập nhật giúp người không có extension
+  const tkCanManage = (t) => MY_ADMIN || tkIsBy(t);
+  const tkVisible = (t) => t && (MY_ADMIN || tkMine(t) || tkIsBy(t));
+  // Số việc đang chờ mình xử lý (hiện trên tab)
+  const tkMyCount = (all) =>
+    Object.values(all || {}).filter((t) => {
+      if (!tkVisible(t)) return false;
+      if (tkMine(t) && (t.status === 'assigned' || tkOver(t))) return true;
+      if (tkCanManage(t) && !tkPersonal(t) && (t.status === 'submit' || t.ext)) return true;
+      return false;
+    }).length;
+  // Lượt nhắc kế tiếp của 1 việc (null = chưa cần). rem: các lượt đã gửi / đang gửi – mỗi khoá chỉ gửi 1 lần.
+  function tkPlan(t, cfg, rem, now, me) {
+    if (!t || !t.due) return null;
+    const personal = norm(t.by) === norm(t.to);
+    // việc tự nhắc của người khác: chỉ nhắc trên máy của người đó
+    if (personal && norm(t.to) !== norm(me)) return null;
+    const act = ['assigned', 'accepted', 'doing'].includes(t.status);
+    const hit = (key, kind, to) => (rem[key] ? null : { key, kind, to });
+    let p = null;
+    if (!personal) {
+      if (t.status === 'assigned') p = hit(`${t.id}-new-${norm(t.to)}`, 'new', t.to);
+      if (!p && t.status === 'submit' && t.subAt) p = hit(`${t.id}-sub-${t.subAt}`, 'sub', t.by);
+      if (!p && t.status === 'doing' && t.ret?.at) p = hit(`${t.id}-ret-${t.ret.at}`, 'ret', t.to);
+      if (!p && act && t.ext?.at) p = hit(`${t.id}-ext-${t.ext.at}`, 'ext', t.by);
+      if (!p && act && t.res?.at) p = hit(`${t.id}-res-${t.res.at}`, 'res', t.to);
+      if (p) return p;
+    }
+    if (!act) return null;
+    if (now >= t.due) {
+      if (!personal && now - t.due >= cfg.esc * 3600e3) {
+        p = hit(`${t.id}-${t.due}-esc`, 'esc', cfg.boss);
+        if (p) return p;
+      }
+      const n = Math.min(cfg.max, Math.floor((now - t.due) / (cfg.every * 60e3)) + 1);
+      return n > 0 ? hit(`${t.id}-${t.due}-over${n}`, 'over', t.to) : null;
+    }
+    // việc giao sát hạn thì tin giao việc đã đủ, không nhắc trước hạn thêm
+    if (now >= t.due - cfg.pre * 60e3 && (t.at || 0) <= t.due - cfg.pre * 60e3) return hit(`${t.id}-${t.due}-pre`, 'pre', t.to);
+    return null;
+  }
+  function tkMsg(kind, t) {
+    const head = { new: '📋 Việc mới được giao', pre: '⏰ Việc sắp đến hạn', over: '🔴 Việc đã quá hạn', esc: '🚨 Việc quá hạn lâu – cần can thiệp', sub: '📤 Đã nộp kết quả – chờ duyệt', ret: '↩️ Việc bị trả lại', ext: '⏳ Xin gia hạn – chờ duyệt', res: '📅 Hạn của việc đã thay đổi', manual: '📨 Nhắc việc' }[kind] || '📋 Công việc';
+    const extra = kind === 'sub' ? t.subNote : kind === 'ret' ? t.ret?.note : kind === 'ext' ? `Xin đến ${tkTime(t.ext?.due || 0)}: ${t.ext?.why || ''}` : kind === 'res' ? t.res?.note : '';
+    const tail = ['sub', 'ext', 'esc'].includes(kind) ? 'Mở tab 📋 Công việc trên CRM để xử lý.' : 'Cập nhật tiến độ trên tab 📋 Công việc, hoặc trả lời tin này để người giao cập nhật giúp.';
+    const when = `${tkTime(t.due)} (${tkLeft(t)})`;
+    const rows = [['Việc', t.title], ...(t.desc ? [['Nội dung', t.desc]] : []), ['Người giao', t.by], ['Phụ trách', t.to], ['Hạn', when], ['Mức', TK_PRI[t.pri]?.[0] || ''], ...(t.progress ? [['Tiến độ', `${t.progress}%`]] : [])];
+    const text = [head, ...rows.map(([a, b]) => `${a}: ${b}`), ...(extra ? ['', extra] : []), '', tail].join('\n');
+    const html = `<div><b>${esc(head)}</b></div>${rows.map(([a, b]) => `<div>${esc(a)}: <b>${a === 'Hạn' && kind !== 'new' ? `<span style="color:#dc2626"><font color="#dc2626">${esc(b)}</font></span>` : esc(b)}</b></div>`).join('')}${extra ? `<div><br></div><div><b><span style="color:#15a85f"><font color="#15a85f">${esc(extra)}</font></span></b></div>` : ''}<div><br></div><div><i>${esc(tail)}</i></div>`;
+    return { text, html };
+  }
+  const tkCfgGet = async () => ({ ...TK_CFG, ...((await kvGet('taskCfg')).main || {}) });
+  // Xếp 1 tin vào hàng đợi tab Zalo rồi ghi kết quả vào taskRem (lỗi thì không tự gửi lại – bấm Nhắc ngay)
+  async function tkPush(t, key, kind, toName, mark) {
+    const names = await kvGet('zaloNames');
+    // nhắc chính mình → chat "My Documents" trên Zalo của máy này
+    const to = norm(toName) === norm(meName) ? MT_TEST_TO : names[norm(toName)]?.name || toName;
+    const m = tkMsg(kind, t);
+    const old = await kvGet('zaloJobs');
+    const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+    const jobId = `${Date.now()}-task`;
+    keep[jobId] = { draft: false, to, zaloName: to, text: m.text, html: m.html, status: 'pending', at: Date.now(), task: t.id };
+    await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    const save = (state2, error) => kvMerge('taskRem', { [key]: { ...mark, t: t.id, kind, to: toName, at: Date.now(), by: meName, state: state2, ...(error ? { error } : {}) } }).catch(() => {});
+    await save('queue');
+    (async () => {
+      for (let i = 0; i < 200; i++) {
+        await sleep(1500);
+        const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
+        if (!j) return;
+        if (j.status === 'sent') return save('sent');
+        if (j.status === 'error') return save('error', j.error || 'Lỗi gửi Zalo');
+      }
+      save('error', 'Tab Zalo không nhận việc sau 5 phút');
+    })();
+  }
+  // Tự nhắc: máy admin đang mở tab Zalo, mỗi 30 giây gửi 1 tin, ngoài giờ không nhắc; nhiều máy cùng mở thì giữ chỗ trước
+  if (IS_TOP && TASK_ON) {
+    let tkBusy = false;
+    const tick = async () => {
+      if (!MY_ADMIN || tkBusy || Date.now() - (state.zaloAliveAt || 0) > 6000) return;
+      tkBusy = true;
+      try {
+        const cfg = await tkCfgGet();
+        const vn = new Date(Date.now() + 7 * 3600e3);
+        if ((vn.getUTCDay() === 0 && !cfg.sunday) || vn.getUTCHours() < cfg.from || vn.getUTCHours() >= cfg.to) return;
+        const [all, rem] = await Promise.all([kvGet('tasks'), kvGet('taskRem')]);
+        const now = Date.now();
+        const list = Object.values(all).filter(Boolean).sort((a, b) => (a.due || 0) - (b.due || 0));
+        for (const t of list) {
+          const p = tkPlan(t, cfg, rem, now, meName);
+          if (!p) continue;
+          const claim = `${meName}-${Math.random().toString(36).slice(2, 7)}`;
+          await kvMerge('taskRem', { [p.key]: { t: t.id, kind: p.kind, to: p.to, at: now, by: meName, claim, state: 'claim' } });
+          await sleep(4000);
+          if ((await kvGet('taskRem'))[p.key]?.claim === claim) await tkPush(t, p.key, p.kind, p.to, { claim });
+          return;
+        }
+      } catch (e) {
+        console.warn('[DG] nhắc việc:', e.message);
+      } finally {
+        tkBusy = false;
+      }
+    };
+    setTimeout(() => setInterval(tick, 30000), 15000); // lệch 15 giây với nhịp tự gửi lệnh bảo trì (tránh ghi đè hàng đợi Zalo)
+    // Nhắc ngay trên CRM cho việc của chính mình (mọi người có extension): mỗi lượt 1 lần trên máy này
+    setInterval(async () => {
+      if (document.visibilityState !== 'visible' || !meName || document.getElementById('dg-tk-toast')) return;
+      const all = await kvGet('tasks').catch(() => ({}));
+      const cfg = await tkCfgGet().catch(() => TK_CFG);
+      let seen = {};
+      try {
+        seen = JSON.parse(lsGet('dgTkToast') || '{}');
+      } catch {}
+      const now = Date.now();
+      for (const t of Object.values(all)) {
+        if (!t || !tkMine(t) || !tkActive(t) || !t.due) continue;
+        const over = now > t.due;
+        const slot = over ? `${t.id}-${t.due}-o${Math.min(cfg.max, Math.floor((now - t.due) / (cfg.every * 60e3)))}` : t.status === 'assigned' ? `${t.id}-n` : now >= t.due - cfg.pre * 60e3 ? `${t.id}-${t.due}-p` : '';
+        if (!slot || seen[slot]) continue;
+        seen[slot] = now;
+        lsSet('dgTkToast', JSON.stringify(Object.fromEntries(Object.entries(seen).filter(([, v]) => now - v < 14 * 86400e3))));
+        const box = document.createElement('div');
+        box.id = 'dg-tk-toast';
+        box.setAttribute('style', `position:fixed;right:18px;bottom:18px;z-index:2147483645;width:320px;background:#fff;border-radius:12px;border-left:5px solid ${over ? '#dc2626' : '#6366f1'};box-shadow:0 12px 32px rgba(15,23,42,.3);padding:10px 12px;font:13px/1.45 system-ui,sans-serif;color:#1e293b`);
+        box.innerHTML = `<b>${over ? '🔴 Việc quá hạn' : t.status === 'assigned' ? '📋 Việc mới' : '⏰ Việc sắp đến hạn'}</b><div style="margin:4px 0;font-weight:600">${esc(t.title)}</div><div style="color:#64748b">Hạn ${esc(tkTime(t.due))} · ${esc(tkLeft(t))}</div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button data-k="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:7px;padding:3px 10px;cursor:pointer;font:inherit">Để sau</button><button data-k="go" style="border:0;background:#4f46e5;color:#fff;border-radius:7px;padding:3px 10px;cursor:pointer;font:inherit;font-weight:700">Mở việc</button></div>`;
+        box.addEventListener('click', (e) => {
+          const k = e.target.closest('[data-k]')?.dataset.k;
+          if (!k) return;
+          box.remove();
+          if (k === 'go') {
+            setPanelOpen(true);
+            lsSet('dgTab', 'task');
+            render().then(() => tkDetail(t.id)).catch(() => {});
+          }
+        });
+        document.body.append(box);
+        return;
+      }
+    }, 60000);
+  }
+  // Ghi thay đổi: đọc lại bản mới nhất rồi mới ghi; mọi thay đổi đều vào lịch sử
+  async function tkLog(id, what, note) {
+    const at = Date.now();
+    await kvMerge('taskLog', { [`${id}-${at}-${Math.random().toString(36).slice(2, 6)}`]: { t: id, at, by: meName, what, ...(note ? { note } : {}) } });
+  }
+  async function tkDo(id, patch, what, note) {
+    const cur = (await kvGet('tasks'))[id];
+    if (!cur) throw new Error('Không thấy việc này (có thể chưa đồng bộ).');
+    const p = typeof patch === 'function' ? patch(cur) : patch;
+    await kvMerge('tasks', { [id]: { ...cur, ...p, v: (cur.v || 0) + 1, upd: Date.now(), updBy: meName } });
+    await tkLog(id, what, note);
+    render();
+  }
+  const TK_OVERLAY = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.45);display:grid;place-items:center;font:14px/1.5 system-ui,sans-serif;color:#1e293b';
+  const TK_IN = 'font:inherit;border:1px solid #cbd5e1;border-radius:7px;padding:5px 8px;box-sizing:border-box;width:100%;background:#fff;color:#1e293b';
+  const tkBtn = (k, label, kind = '') => {
+    const st = { pri: 'border:0;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;font-weight:800', ok: 'border:0;background:#059669;color:#fff;font-weight:800', warn: 'border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;font-weight:700', bad: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;font-weight:700' }[kind] || 'border:1px solid #e2e8f0;background:#fff;color:#334155';
+    return `<button data-k="${k}" style="${st};border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit">${label}</button>`;
+  };
+  const tkHead = (title) => `<div style="padding:12px 18px;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px;flex:none"><b style="font-size:16px">${title}</b><button data-k="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px;line-height:1">×</button></div>`;
+  async function tkPeople() {
+    const [seen, zn, all, quotes] = await Promise.all([kvGet('seenUsers'), kvGet('zaloNames'), kvGet('tasks'), kvGet('quotes')]);
+    const m = new Map();
+    const add = (n) => n && !isExcluded(n) && !m.has(norm(n)) && m.set(norm(n), n);
+    Object.values(seen).forEach((x) => add(x?.name));
+    Object.values(PERMS.users || {}).forEach((u) => add(u?.name));
+    Object.values(zn).forEach((x) => add(x?.staff));
+    Object.values(quotes).forEach((q) => add(q?.staff?.name));
+    Object.values(all).forEach((t) => add(t?.to));
+    ADMIN_NAMES.forEach(add);
+    return [...m.values()].sort((a, b) => a.localeCompare(b, 'vi'));
+  }
+  // Khung tạo / sửa việc. Nhân viên chỉ tự tạo việc cho mình; admin giao cho bất kỳ ai (gõ tên ngoài danh sách cũng được, miễn đúng tên Zalo)
+  async function tkEdit(id) {
+    document.getElementById('dg-tk-edit')?.remove();
+    const t = id ? (await kvGet('tasks'))[id] : null;
+    const people = await tkPeople();
+    const names = await kvGet('zaloNames');
+    const nowVn = new Date(Date.now() + 7 * 3600e3);
+    const dflt = nowVn.getUTCHours() < 16 ? Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate(), 17) - 7 * 3600e3 : Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate() + 1, 17) - 7 * 3600e3;
+    const box = document.createElement('div');
+    box.id = 'dg-tk-edit';
+    box.setAttribute('style', TK_OVERLAY);
+    const lock = !MY_ADMIN;
+    const to0 = t?.to || (lock ? meName : '');
+    box.innerHTML = `<div style="width:min(600px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      ${tkHead(t ? '✏️ Sửa việc' : lock ? '➕ Thêm việc của tôi' : '➕ Giao việc')}
+      <div style="padding:14px 18px;display:grid;gap:10px;overflow:auto">
+        <label>Tiêu đề *<input data-f="title" maxlength="200" value="${esc(t?.title || '')}" style="${TK_IN}"></label>
+        <label>Nội dung<textarea data-f="desc" rows="3" style="${TK_IN};resize:vertical">${esc(t?.desc || '')}</textarea></label>
+        <label>Người phụ trách *<input data-f="to" list="dg-tk-ppl" value="${esc(to0)}" ${lock ? 'disabled' : ''} placeholder="Chọn hoặc gõ tên" style="${TK_IN}"><datalist id="dg-tk-ppl">${people.map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist></label>
+        ${lock ? '' : `<label>Tên trên Zalo <span style="color:#64748b;font-size:12px">(chỉ điền nếu khác tên trên – trợ lý tìm đúng tên này để gửi)</span><input data-f="zn" style="${TK_IN}"></label>`}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label>Hạn hoàn thành *<input data-f="due" type="datetime-local" value="${tkInput(t?.due || dflt)}" style="${TK_IN}"></label>
+          <label>Mức ưu tiên<select data-f="pri" style="${TK_IN}">${Object.entries(TK_PRI).map(([k, v]) => `<option value="${k}"${(t?.pri || 'normal') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></label>
+        </div>
+        ${t ? `<label>Lý do thay đổi hạn <span style="color:#64748b;font-size:12px">(gửi kèm tin báo hạn mới)</span><input data-f="why" style="${TK_IN}"></label>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
+        <span data-msg style="margin-right:auto;font-size:12px;font-weight:700;color:#b91c1c"></span>${tkBtn('x', 'Đóng')}${tkBtn('save', t ? '💾 Lưu' : lock ? '➕ Thêm việc' : '📨 Giao việc', 'pri')}</div></div>`;
+    const f = (k) => box.querySelector(`[data-f="${k}"]`);
+    const zn = f('zn');
+    const fillZn = () => {
+      if (zn) zn.value = names[norm(f('to').value)]?.name || '';
+    };
+    fillZn();
+    f('to').addEventListener('change', fillZn);
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const k = e.target.closest('[data-k]')?.dataset.k;
+      if (k === 'x') return box.remove();
+      if (k !== 'save') return;
+      const msg = box.querySelector('[data-msg]');
+      const title = f('title').value.trim();
+      const to = (lock ? to0 : f('to').value).trim();
+      const due = tkParse(f('due').value);
+      if (!title) return (msg.textContent = 'Chưa nhập tiêu đề');
+      if (!to) return (msg.textContent = 'Chưa chọn người phụ trách');
+      if (!due) return (msg.textContent = 'Chưa chọn hạn hoàn thành');
+      if (!t && due <= Date.now()) return (msg.textContent = 'Hạn phải sau thời điểm hiện tại');
+      const data = { title, desc: f('desc').value.trim(), to, due, pri: f('pri').value };
+      try {
+        if (zn && zn.value.trim() && zn.value.trim() !== (names[norm(to)]?.name || '')) await kvMerge('zaloNames', { [norm(to)]: { name: zn.value.trim(), staff: to, at: Date.now(), by: meName } });
+        if (t) {
+          const ch = [];
+          if (data.title !== t.title) ch.push(`tiêu đề: ${t.title} → ${data.title}`);
+          if (data.desc !== (t.desc || '')) ch.push('nội dung');
+          if (norm(data.to) !== norm(t.to)) ch.push(`người phụ trách: ${t.to} → ${data.to}`);
+          if (data.due !== t.due) ch.push(`hạn: ${tkTime(t.due)} → ${tkTime(data.due)}`);
+          if (data.pri !== t.pri) ch.push(`mức: ${TK_PRI[t.pri]?.[0]} → ${TK_PRI[data.pri]?.[0]}`);
+          if (!ch.length) return box.remove();
+          const why = f('why').value.trim();
+          const toChanged = norm(data.to) !== norm(t.to);
+          await tkDo(t.id, { ...data, ...(toChanged && tkActive(t) ? { status: norm(t.by) === norm(data.to) ? 'doing' : 'assigned', progress: 0 } : {}), ...(data.due !== t.due ? { res: { at: Date.now(), note: why || `Hạn mới: ${tkTime(data.due)}` }, ext: null } : {}) }, `Sửa ${ch.join('; ')}`, why);
+        } else {
+          const nid = `T${Date.now().toString(36)}`;
+          const personal = norm(to) === norm(meName);
+          await kvMerge('tasks', { [nid]: { id: nid, ...data, by: meName, status: personal ? 'doing' : 'assigned', progress: 0, at: Date.now(), upd: Date.now(), updBy: meName, v: 1 } });
+          await tkLog(nid, personal ? 'Tạo việc của tôi' : `Giao việc cho ${to}, hạn ${tkTime(due)}`);
+          render();
+        }
+        box.remove();
+        document.getElementById('dg-tk-detail') && tkDetail(id);
+      } catch (err) {
+        msg.textContent = `⚠️ ${err.message}`;
+      }
+    });
+    document.body.append(box);
+    f('title').focus();
+  }
+  // Khung chi tiết việc: nút theo trạng thái & vai trò, lịch sử, các lượt nhắc Zalo
+  async function tkDetail(id) {
+    document.getElementById('dg-tk-detail')?.remove();
+    const [all, logs, rem] = await Promise.all([kvGet('tasks'), kvGet('taskLog'), kvGet('taskRem')]);
+    const t = all[id];
+    if (!tkVisible(t)) return;
+    const work = tkCanWork(t);
+    const manage = tkCanManage(t);
+    const personal = tkPersonal(t);
+    const act = tkActive(t);
+    const box = document.createElement('div');
+    box.id = 'dg-tk-detail';
+    box.setAttribute('style', TK_OVERLAY);
+    const st = TK_ST[t.status] || TK_ST.assigned;
+    const hist = [
+      ...Object.values(logs).filter((x) => x?.t === id).map((x) => ({ at: x.at, html: `<b>${esc(x.by || '')}</b>: ${esc(x.what || '')}${x.note ? `<div style="color:#475569">“${esc(x.note)}”</div>` : ''}` })),
+      ...Object.values(rem).filter((x) => x?.t === id).map((x) => ({ at: x.at, html: `📨 Nhắc Zalo <b>${esc(x.to || '')}</b> – ${x.state === 'sent' ? '✅ đã gửi' : x.state === 'error' ? `<span style="color:#b91c1c">⚠️ ${esc(x.error || 'lỗi')}</span>` : '⏳ đang gửi'}` })),
+    ].sort((a, b) => b.at - a.at);
+    const btns = [];
+    if (work && t.status === 'assigned') btns.push(tkBtn('accept', '✅ Nhận việc', 'ok'));
+    if (work && t.status === 'accepted') btns.push(tkBtn('start', '▶️ Bắt đầu làm', 'ok'));
+    if (work && (t.status === 'accepted' || t.status === 'doing')) btns.push(tkBtn('update', '💾 Lưu tiến độ'));
+    if (work && t.status === 'doing') btns.push(personal ? tkBtn('finish', '✅ Hoàn thành', 'ok') : tkBtn('submit', '📤 Nộp kết quả', 'pri'));
+    if (manage && t.status === 'submit') btns.push(tkBtn('approve', '✅ Duyệt hoàn thành', 'ok'), tkBtn('reject', '↩️ Trả lại (cần lý do)', 'warn'));
+    if (!manage && work && act && !t.ext) btns.push(tkBtn('askext', '⏳ Xin gia hạn (cần lý do)', 'warn'));
+    if (manage && act && t.ext) btns.push(tkBtn('extok', '✅ Duyệt gia hạn', 'ok'), tkBtn('extno', '✖️ Từ chối gia hạn', 'warn'));
+    if (manage && !personal && (act || t.status === 'submit')) btns.push(tkBtn('remind', '📨 Nhắc ngay'));
+    if (manage && t.status !== 'done' && t.status !== 'cancel') btns.push(tkBtn('edit', '✏️ Sửa'), tkBtn('cancel', '🗑 Hủy (cần lý do)', 'bad'));
+    box.innerHTML = `<div style="width:min(720px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      ${tkHead(`📋 ${esc(t.title)}`)}
+      <div style="padding:14px 18px;display:grid;gap:10px;overflow:auto">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="padding:2px 10px;border-radius:999px;font-weight:800;font-size:12px;color:${st[1]};background:${st[2]}">${st[0]}</span>
+          ${tkOver(t) ? `<span style="padding:2px 10px;border-radius:999px;font-weight:800;font-size:12px;color:#fff;background:#dc2626">Quá hạn · ${esc(tkLeft(t))}</span>` : ''}
+          <span style="font-weight:700;color:${TK_PRI[t.pri]?.[1]}">● ${TK_PRI[t.pri]?.[0] || ''}</span>
+          <span style="color:#475569">Hạn <b>${esc(tkTime(t.due))}</b>${act && !tkOver(t) ? ` · ${esc(tkLeft(t))}` : ''}</span></div>
+        <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
+        ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
+        ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
+        ${t.subNote && t.status === 'submit' ? `<div style="background:#f3e8ff;border-radius:8px;padding:8px 10px">📤 Kết quả đã nộp: ${esc(t.subNote)}</div>` : ''}
+        ${work && (t.status === 'accepted' || t.status === 'doing') ? `<label style="display:flex;gap:8px;align-items:center">Tiến độ <input data-f="pg" type="range" min="0" max="100" step="5" value="${Number(t.progress) || 0}" style="flex:1"> <b data-pgv>${Number(t.progress) || 0}%</b></label>` : `<div>Tiến độ: <b>${Number(t.progress) || 0}%</b></div>`}
+        ${btns.length ? `<label>Ghi chú / lý do<textarea data-f="note" rows="2" placeholder="Kết quả, vướng mắc, lý do trả lại / gia hạn / hủy…" style="${TK_IN};resize:vertical"></textarea></label>` : ''}
+        ${!manage && work && act && !t.ext ? `<label>Xin gia hạn đến<input data-f="extdue" type="datetime-local" value="${tkInput(t.due + 86400e3)}" style="${TK_IN}"></label>` : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${btns.join('')}</div>
+        <div data-msg style="font-size:12px;font-weight:700;color:#b91c1c"></div>
+        <div style="border-top:1px solid #e2e8f0;padding-top:8px"><b>🕘 Lịch sử</b>
+          ${hist.map((h) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:13px;border-bottom:1px dashed #f1f5f9"><span style="color:#64748b;flex:none">${esc(tkTime(h.at))}</span><span>${h.html}</span></div>`).join('') || '<div style="color:#94a3b8">Chưa có</div>'}
+        </div>
+      </div></div>`;
+    const pg = box.querySelector('[data-f="pg"]');
+    pg?.addEventListener('input', () => (box.querySelector('[data-pgv]').textContent = `${pg.value}%`));
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const k = e.target.closest('[data-k]')?.dataset.k;
+      if (!k) return;
+      if (k === 'x') return box.remove();
+      if (k === 'edit') return tkEdit(id);
+      const msg = box.querySelector('[data-msg]');
+      const note = box.querySelector('[data-f="note"]')?.value.trim() || '';
+      const pv = pg ? Number(pg.value) : Number(t.progress) || 0;
+      const need = (s) => {
+        if (!note) msg.textContent = `Cần nhập ${s} vào ô Ghi chú / lý do`;
+        return !!note;
+      };
+      try {
+        if (k === 'accept') await tkDo(id, { status: 'accepted' }, 'Nhận việc', note);
+        else if (k === 'start') await tkDo(id, { status: 'doing', progress: pv }, 'Bắt đầu làm', note);
+        else if (k === 'update') await tkDo(id, { status: 'doing', progress: pv }, `Cập nhật tiến độ ${pv}%`, note);
+        else if (k === 'finish') await tkDo(id, { status: 'done', progress: 100, doneAt: Date.now() }, 'Hoàn thành', note);
+        else if (k === 'submit') await tkDo(id, { status: 'submit', progress: 100, subAt: Date.now(), subNote: note }, 'Nộp kết quả', note);
+        else if (k === 'approve') await tkDo(id, { status: 'done', doneAt: Date.now(), ext: null }, 'Duyệt hoàn thành', note);
+        else if (k === 'reject') {
+          if (!need('lý do trả lại')) return;
+          await tkDo(id, { status: 'doing', ret: { at: Date.now(), note } }, 'Trả lại', note);
+        } else if (k === 'askext') {
+          if (!need('lý do xin gia hạn')) return;
+          const due = tkParse(box.querySelector('[data-f="extdue"]').value);
+          if (due <= t.due) return (msg.textContent = 'Hạn xin gia phải sau hạn hiện tại');
+          await tkDo(id, { ext: { due, why: note, by: meName, at: Date.now() } }, `Xin gia hạn đến ${tkTime(due)}`, note);
+        } else if (k === 'extok') await tkDo(id, (c) => ({ due: c.ext.due, ext: null, res: { at: Date.now(), note: note || `Đồng ý gia hạn đến ${tkTime(c.ext.due)}` } }), `Duyệt gia hạn đến ${tkTime(t.ext.due)}`, note);
+        else if (k === 'extno') {
+          if (!need('lý do từ chối')) return;
+          await tkDo(id, { ext: null }, 'Từ chối gia hạn', note);
+        } else if (k === 'cancel') {
+          if (!need('lý do hủy')) return;
+          await tkDo(id, { status: 'cancel', ext: null }, 'Hủy việc', note);
+        } else if (k === 'remind') {
+          // mở tab Zalo ngay lúc bấm (trình duyệt chặn nếu mở sau khi chờ)
+          const alive = Date.now() - (state.zaloAliveAt || 0) < 6000;
+          try {
+            window.open(alive ? '' : 'https://chat.zalo.me/', 'dg-zalo')?.focus();
+          } catch {}
+          const fresh = (await kvGet('tasks'))[id] || t;
+          const to = fresh.status === 'submit' ? fresh.by : fresh.to;
+          await tkPush(fresh, `${id}-manual-${Date.now()}`, 'manual', to, {});
+          await tkLog(id, `Nhắc ngay qua Zalo: ${to}`);
+        }
+        tkDetail(id);
+      } catch (err) {
+        msg.textContent = `⚠️ ${err.message}`;
+      }
+    });
+    document.body.append(box);
+  }
+  async function tkCfgOpen() {
+    document.getElementById('dg-tk-cfg')?.remove();
+    const c = await tkCfgGet();
+    const people = await tkPeople();
+    const box = document.createElement('div');
+    box.id = 'dg-tk-cfg';
+    box.setAttribute('style', TK_OVERLAY);
+    const num = (k, label, min, max) => `<label>${label}<input data-f="${k}" type="number" min="${min}" max="${max}" value="${c[k]}" style="${TK_IN}"></label>`;
+    box.innerHTML = `<div style="width:min(520px,96vw);background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      ${tkHead('⚙️ Cấu hình nhắc việc')}
+      <div style="padding:14px 18px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${num('pre', 'Nhắc trước hạn (phút)', 5, 1440)}${num('every', 'Nhắc lại khi quá hạn (phút)', 15, 1440)}
+        ${num('max', 'Số lần nhắc quá hạn tối đa', 1, 10)}${num('esc', 'Báo cấp trên sau khi quá (giờ)', 1, 240)}
+        ${num('from', 'Chỉ nhắc từ (giờ)', 0, 23)}${num('to', 'Đến trước (giờ)', 1, 24)}
+        <label style="grid-column:1/-1">Người nhận báo quá hạn lâu<input data-f="boss" list="dg-tk-ppl2" value="${esc(c.boss)}" style="${TK_IN}"><datalist id="dg-tk-ppl2">${people.map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist></label>
+        <label style="grid-column:1/-1"><input data-f="sunday" type="checkbox"${c.sunday ? ' checked' : ''}> Nhắc cả Chủ nhật</label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0"><span style="margin-right:auto;font-size:12px;color:#64748b">Chỉ gửi khi máy admin mở CRM và tab Zalo.</span>${tkBtn('x', 'Đóng')}${tkBtn('save', '💾 Lưu', 'pri')}</div></div>`;
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const k = e.target.closest('[data-k]')?.dataset.k;
+      if (k === 'x') return box.remove();
+      if (k !== 'save') return;
+      const v = (n, d) => {
+        const x = Number(box.querySelector(`[data-f="${n}"]`).value);
+        return Number.isFinite(x) && x > 0 ? x : d;
+      };
+      const from = Number(box.querySelector('[data-f="from"]').value);
+      await kvMerge('taskCfg', { main: { pre: v('pre', TK_CFG.pre), every: v('every', TK_CFG.every), max: v('max', TK_CFG.max), esc: v('esc', TK_CFG.esc), from: Number.isFinite(from) ? from : TK_CFG.from, to: v('to', TK_CFG.to), sunday: box.querySelector('[data-f="sunday"]').checked, boss: box.querySelector('[data-f="boss"]').value.trim() || TK_CFG.boss, at: Date.now(), by: meName } });
+      box.remove();
+    });
+    document.body.append(box);
+  }
+  function taskTab(all, perm) {
+    const now = Date.now();
+    const list = Object.values(all || {}).filter(tkVisible);
+    const today = tkDayKey(now);
+    const open = (t) => t.status !== 'done' && t.status !== 'cancel';
+    const sets = {
+      today: list.filter((t) => open(t) && tkDayKey(t.due) === today),
+      over: list.filter((t) => tkOver(t, now)),
+      submit: list.filter((t) => t.status === 'submit'),
+      wait: list.filter((t) => t.status === 'assigned'),
+    };
+    const views = [['att', '📌 Cần chú ý'], ['mine', '🙋 Việc của tôi'], ...(perm.admin ? [['all', '📚 Tất cả việc']] : [])];
+    const view = views.some((v) => v[0] === lsGet('dgTkView')) ? lsGet('dgTkView') : 'att';
+    const F = state.tkF || (state.tkF = {});
+    const tile = state.tkTile;
+    let rows;
+    if (tile && sets[tile]) rows = sets[tile];
+    else if (view === 'mine') rows = list.filter((t) => tkMine(t) && (F.st ? t.status === F.st : open(t)));
+    else if (view === 'all')
+      rows = list.filter((t) => (!F.who || norm(t.to) === norm(F.who)) && (F.st ? t.status === F.st : true) && (!F.pri || t.pri === F.pri) && (!F.q || norm(`${t.title} ${t.desc || ''}`).includes(norm(F.q))));
+    else rows = list.filter((t) => tkOver(t, now) || t.status === 'submit' || t.status === 'assigned' || t.ext || (open(t) && tkDayKey(t.due) === today));
+    const PRI_W = { critical: 0, high: 1, normal: 2, low: 3 };
+    rows = [...rows].sort((a, b) => Number(open(b)) - Number(open(a)) || (open(a) ? (a.due || 0) - (b.due || 0) || (PRI_W[a.pri] ?? 2) - (PRI_W[b.pri] ?? 2) : (b.upd || 0) - (a.upd || 0))).slice(0, 200);
+    const tileHtml = (k, label, color) => `<button class="tk-tile${tile === k ? ' on' : ''}" data-act="task-tile" data-v="${k}" style="--c:${color}"><b>${sets[k].length}</b><span>${label}</span></button>`;
+    const whos = [...new Set(list.map((t) => t.to))].sort((a, b) => a.localeCompare(b, 'vi'));
+    const sel = (k, opts) => `<select data-tkf="${k}"><option value="">${k === 'who' ? 'Mọi người' : k === 'st' ? 'Mọi trạng thái' : 'Mọi mức'}</option>${opts.map(([v, l]) => `<option value="${esc(v)}"${F[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const row = (t) => {
+      const st = TK_ST[t.status] || TK_ST.assigned;
+      const quick = tkMine(t) && t.status === 'assigned' ? `<button class="tk-q" data-act="task-accept" data-tk="${esc(t.id)}">✅ Nhận</button>` : '';
+      return `<tr class="tk-row${tkOver(t, now) ? ' over' : ''}" data-act="task-open" data-tk="${esc(t.id)}">
+        <td><span class="tk-dot" style="background:${TK_PRI[t.pri]?.[1] || '#2563eb'}" title="${esc(TK_PRI[t.pri]?.[0] || '')}"></span></td>
+        <td class="tk-title"><b>${esc(t.title)}</b>${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
+        <td>${avatarHtml(t.to, 18)} ${esc(t.to)}</td>
+        <td class="tk-due">${esc(tkTime(t.due))}${open(t) && t.status !== 'submit' ? `<div>${esc(tkLeft(t))}</div>` : ''}</td>
+        <td><span class="tk-st" style="color:${st[1]};background:${st[2]}">${st[0]}</span>${tkOver(t, now) ? '<span class="tk-st ov">Quá hạn</span>' : ''}</td>
+        <td class="tk-pg"><i style="width:${Number(t.progress) || 0}%"></i><span>${Number(t.progress) || 0}%</span></td>
+        <td>${quick}</td></tr>`;
+    };
+    return `<div class="tk">
+      <div class="tk-tiles">${tileHtml('today', 'Việc hôm nay', '#2563eb')}${tileHtml('over', 'Quá hạn', '#dc2626')}${tileHtml('submit', 'Chờ duyệt', '#7c3aed')}${tileHtml('wait', 'Chờ nhân viên nhận', '#0369a1')}</div>
+      <div class="tk-bar">
+        ${views.map(([v, l]) => `<button class="tk-v${!tile && v === view ? ' on' : ''}" data-act="task-view" data-v="${v}">${l}</button>`).join('')}
+        <span style="flex:1"></span>
+        ${perm.admin ? '<button class="tk-v" data-act="task-cfg">⚙️ Cấu hình nhắc</button>' : ''}
+        <button class="tk-add" data-act="task-new">${perm.admin ? '➕ Giao việc' : '➕ Thêm việc của tôi'}</button>
+      </div>
+      ${!tile && view === 'all' ? `<div class="tk-f"><input data-tkf="q" placeholder="Tìm tiêu đề / nội dung" value="${esc(F.q || '')}">${sel('who', whos.map((n) => [n, n]))}${sel('st', Object.entries(TK_ST).map(([k, v]) => [k, v[0]]))}${sel('pri', Object.entries(TK_PRI).map(([k, v]) => [k, v[0]]))}</div>` : ''}
+      ${!tile && view === 'mine' ? `<div class="tk-f">${sel('st', Object.entries(TK_ST).map(([k, v]) => [k, v[0]]))}</div>` : ''}
+      ${rows.length ? `<table class="tk-t"><thead><tr><th></th><th>Việc</th><th>Phụ trách</th><th>Hạn</th><th>Trạng thái</th><th>Tiến độ</th><th></th></tr></thead><tbody>${rows.map(row).join('')}</tbody></table>` : `<div class="muted" style="padding:24px;text-align:center">${list.length ? 'Không có việc nào trong mục này.' : 'Chưa có việc nào. Bấm nút ➕ để bắt đầu.'}</div>`}
+    </div>`;
+  }
+
   // ---------- Tab "Khách hàng 6 tháng": doanh số theo tháng từ lịch sử mua hàng đã thu thập (kv 'orders') ----------
   // Doanh thu sau VAT: dùng tổng sau VAT của đơn nếu ERP có; không thì tiền hàng × (1 + VAT 8%)
   // (đối chiếu DH0012095: 33.752.800 × 1,08 = 36.453.024 – đúng cột "Thành tiền" trên ERP)
@@ -12401,7 +12909,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
         const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t));
         if (IS_OWNER()) allowed.push('gap'); // tab riêng của Nguyễn Trung Toán
-        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt', 'qa', 'gap'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        if (TASK_ON) allowed.push('task'); // 📋 Công việc: ai có extension cũng cần để nhận và cập nhật việc
+        const tkAll = TASK_ON ? await kvGet('tasks') : {};
+        const tkN = TASK_ON ? tkMyCount(tkAll) : 0;
+        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt', 'qa', 'gap', 'task'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
@@ -12415,6 +12926,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button>
           <button class="bigtab${tab === 'debt' ? ' on' : ''}" data-act="tab" data-tab="debt">💰 Công nợ</button>
+          <button class="bigtab task${tab === 'task' ? ' on' : ''}${tkN ? ' has' : ''}" data-act="tab" data-tab="task">📋 Công việc${tkN ? ` <b>${tkN}</b>` : ''}</button>
           <button class="bigtab qa${tab === 'qa' ? ' on' : ''}" data-act="tab" data-tab="qa">💬 Bộ câu hỏi</button>
           <button class="bigtab gap${tab === 'gap' ? ' on' : ''}" data-act="tab" data-tab="gap">📈 Chênh lệch 2 hệ thống</button>
           <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
@@ -12426,6 +12938,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           return bar + hotBox(hotData, quotes, hotDone, true);
         }
         if (tab === 'debt') return bar + debtTab(await kvGet('debt2'), perm);
+        if (tab === 'task') return bar + taskTab(tkAll, perm);
         if (tab === 'qa') {
           await qaHydrate();
           return bar + qaTab(perm.admin);
@@ -13805,6 +14318,19 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       lsSet('dgTab', b.dataset.tab);
       state.dealAnimKey = null;
       state.weekAnimKey = null;
+      render();
+    }
+    else if (act === 'task-open') tkDetail(b.dataset.tk).catch((err) => alert(err.message));
+    else if (act === 'task-new') tkEdit().catch((err) => alert(err.message));
+    else if (act === 'task-cfg') tkCfgOpen().catch((err) => alert(err.message));
+    else if (act === 'task-accept') tkDo(b.dataset.tk, { status: 'accepted' }, 'Nhận việc').catch((err) => alert(err.message));
+    else if (act === 'task-view') {
+      lsSet('dgTkView', b.dataset.v);
+      state.tkTile = null;
+      render();
+    }
+    else if (act === 'task-tile') {
+      state.tkTile = state.tkTile === b.dataset.v ? null : b.dataset.v;
       render();
     }
     else if (act === 'report-start') {
