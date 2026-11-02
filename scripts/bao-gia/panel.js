@@ -11381,7 +11381,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         lsSet('dgTkToast', JSON.stringify(Object.fromEntries(Object.entries(seen).filter(([, v]) => now - v < 14 * 86400e3))));
         const box = document.createElement('div');
         box.id = 'dg-tk-toast';
-        box.setAttribute('style', `position:fixed;right:18px;bottom:18px;z-index:2147483645;width:320px;background:#fff;border-radius:12px;border-left:5px solid ${over ? '#dc2626' : '#6366f1'};box-shadow:0 12px 32px rgba(15,23,42,.3);padding:10px 12px;font:13px/1.45 system-ui,sans-serif;color:#1e293b`);
+        box.setAttribute('style', `position:fixed;right:18px;bottom:18px;z-index:2147483647;width:320px;background:#fff;border-radius:12px;border-left:5px solid ${over ? '#dc2626' : '#6366f1'};box-shadow:0 12px 32px rgba(15,23,42,.3);padding:10px 12px;font:13px/1.45 system-ui,sans-serif;color:#1e293b`);
         box.innerHTML = `<b>${over ? '🔴 Việc quá hạn' : t.status === 'assigned' ? '📋 Việc mới' : '⏰ Việc sắp đến hạn'}</b><div style="margin:4px 0;font-weight:600">${esc(t.title)}</div><div style="color:#64748b">Hạn ${esc(tkTime(t.due))} · ${esc(tkLeft(t))}</div>
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button data-k="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:7px;padding:3px 10px;cursor:pointer;font:inherit">Để sau</button><button data-k="go" style="border:0;background:#4f46e5;color:#fff;border-radius:7px;padding:3px 10px;cursor:pointer;font:inherit;font-weight:700">Mở việc</button></div>`;
         box.addEventListener('click', (e) => {
@@ -11394,7 +11394,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             render().then(() => tkDetail(t.id)).catch(() => {});
           }
         });
-        document.body.append(box);
+        document.documentElement.append(box);
         return;
       }
     }, 60000);
@@ -11412,7 +11412,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await tkLog(id, what, note);
     render();
   }
-  const TK_OVERLAY = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.45);display:grid;place-items:center;font:14px/1.5 system-ui,sans-serif;color:#1e293b;text-align:left';
+  // bảng Trợ lý ở z-index tối đa → khung việc cũng tối đa và gắn sau bảng trong <html> thì mới nổi lên trên
+  const TK_OVERLAY = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.45);display:grid;place-items:center;font:14px/1.5 system-ui,sans-serif;color:#1e293b;text-align:left';
   const TK_IN = 'font:inherit;border:1px solid #cbd5e1;border-radius:7px;padding:5px 8px;box-sizing:border-box;width:100%;background:#fff;color:#1e293b';
   const tkBtn = (k, label, kind = '') => {
     const st = { pri: 'border:0;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;font-weight:800', ok: 'border:0;background:#059669;color:#fff;font-weight:800', warn: 'border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;font-weight:700', bad: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;font-weight:700' }[kind] || 'border:1px solid #e2e8f0;background:#fff;color:#334155';
@@ -11590,7 +11591,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         msg.textContent = `⚠️ ${err.message}`;
       }
     });
-    document.body.append(box);
+    document.documentElement.append(box);
     f('title').focus();
   }
   // Khung chi tiết việc: nút theo trạng thái & vai trò, lịch sử, các lượt nhắc Zalo
@@ -11696,7 +11697,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         msg.textContent = `⚠️ ${err.message}`;
       }
     });
-    document.body.append(box);
+    document.documentElement.append(box);
   }
   async function tkReportOpen() {
     document.getElementById('dg-tk-rp')?.remove();
@@ -11728,7 +11729,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       await tkPush({ id: 'report' }, `report-manual-${Date.now()}`, kind, cfg.boss, {}, tkReport(kind, all, cfg.boss));
       box.querySelector('[data-st]').textContent = '✅ Đã xếp vào hàng đợi Zalo';
     });
-    document.body.append(box);
+    document.documentElement.append(box);
   }
   async function tkCfgOpen() {
     document.getElementById('dg-tk-cfg')?.remove();
@@ -11764,7 +11765,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       await kvMerge('taskCfg', { main: { pre: v('pre', TK_CFG.pre), every: v('every', TK_CFG.every), max: v('max', TK_CFG.max), esc: v('esc', TK_CFG.esc), from: Number.isFinite(from) ? from : TK_CFG.from, to: v('to', TK_CFG.to), sunday: box.querySelector('[data-f="sunday"]').checked, boss: box.querySelector('[data-f="boss"]').value.trim() || TK_CFG.boss, rpOn: box.querySelector('[data-f="rpOn"]').checked, rpM: box.querySelector('[data-f="rpM"]').value || TK_CFG.rpM, rpE: box.querySelector('[data-f="rpE"]').value || TK_CFG.rpE, at: Date.now(), by: meName } });
       box.remove();
     });
-    document.body.append(box);
+    document.documentElement.append(box);
   }
   function taskTab(all, perm) {
     const now = Date.now();
