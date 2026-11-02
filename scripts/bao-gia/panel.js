@@ -11208,6 +11208,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1);
     return d.getTime() - 7 * 3600e3;
   }
+  // Sau khi Zalo báo kết quả: ghi lịch sử và đặt lại giờ nhắc kế tiếp (gửi lỗi cũng hẹn lại để hôm sau thử tiếp)
+  async function tkAfterSend(id, to, base, ok, error) {
+    const cur = (await kvGet('tasks'))[id];
+    if (!cur) return;
+    const res = ok ? `Đã gửi Zalo cho ${to}` : `Gửi Zalo cho ${to} lỗi: ${error || ''}`;
+    if (!tkActive(cur)) await tkLog(id, res);
+    else {
+      const cfg = await tkCfgGet();
+      let at = tkNextRemind(cfg, base);
+      while (at <= Date.now()) at = tkNextRemind(cfg, at);
+      await tkDo(id, { remindAt: at }, `${res}; lần nhắc tới ${tkTime(at)}`);
+    }
+    // đang mở đúng việc này và chưa gõ ghi chú → vẽ lại để thấy ngay
+    const box = document.getElementById('dg-tk-detail');
+    if (box?.dataset.tk === id && !box.querySelector('[data-f="note"]')?.value) tkDetail(id);
+  }
   // Tin hỏi công nợ khi nhắc (số nợ lấy mới nhất nếu có)
   function tkDebtMsg(t, r) {
     const cust = t.title.replace(/^Thu công nợ\s*/, '');
@@ -11231,7 +11247,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   const tkCfgGet = async () => ({ ...TK_CFG, ...((await kvGet('taskCfg')).main || {}) });
   // Xếp 1 tin vào hàng đợi tab Zalo rồi ghi kết quả vào taskRem (lỗi thì không tự gửi lại – bấm Nhắc ngay)
-  async function tkPush(t, key, kind, toName, mark, msg) {
+  async function tkPush(t, key, kind, toName, mark, msg, after) {
     const names = await kvGet('zaloNames');
     // nhắc chính mình → chat "My Documents" trên Zalo của máy này
     const to = norm(toName) === norm(meName) ? MT_TEST_TO : names[norm(toName)]?.name || toName;
@@ -11249,10 +11265,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         await sleep(1500);
         const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
         if (!j) return;
-        if (j.status === 'sent') return save('sent');
-        if (j.status === 'error') return save('error', j.error || 'Lỗi gửi Zalo');
+        if (j.status === 'sent') {
+          await save('sent');
+          return after?.(true);
+        }
+        if (j.status === 'error') {
+          await save('error', j.error || 'Lỗi gửi Zalo');
+          return after?.(false, j.error || 'Lỗi gửi Zalo');
+        }
       }
-      save('error', 'Tab Zalo không nhận việc sau 5 phút');
+      await save('error', 'Tab Zalo không nhận việc sau 5 phút');
+      after?.(false, 'Tab Zalo không nhận việc sau 5 phút');
     })();
   }
   // Báo cáo sáng / cuối ngày: chỉ tổng hợp từ dữ liệu việc thật (không qua AI nên không có số liệu suy đoán)
@@ -11349,22 +11372,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           if ((await kvGet('taskRem'))[rpKey]?.claim === claim) await tkPush({ id: 'report' }, rpKey, rpK, cfg.boss, { claim }, tkReport(rpK, all, cfg.boss, now));
           return;
         }
+        // lượt nhắc đã gửi nhưng tab theo dõi bị đóng giữa chừng → vẫn hẹn lần kế, không để kẹt
+        for (const t of list) {
+          const r = t.remindAt && rem[`${t.id}-again-${t.remindAt}`];
+          if (r && tkActive(t) && now - (r.at || 0) > 10 * 60e3) await tkAfterSend(t.id, r.to || t.to, t.remindAt, r.state === 'sent', r.error || 'Không rõ kết quả gửi');
+        }
         for (const t of list) {
           const p = tkPlan(t, cfg, rem, now, meName);
           if (!p) continue;
           const claim = `${meName}-${Math.random().toString(36).slice(2, 7)}`;
           await kvMerge('taskRem', { [p.key]: { t: t.id, kind: p.kind, to: p.to, at: now, by: meName, claim, state: 'claim' } });
           await sleep(4000);
-          if ((await kvGet('taskRem'))[p.key]?.claim === claim) {
-            await tkPush(t, p.key, p.kind, p.to, { claim });
-            // nhắc mỗi ngày đến khi xong: hẹn lần kế, giữ đúng giờ đã hẹn (máy mở trễ cũng không gửi dồn)
-            if (p.kind === 'again') {
-              let at = tkNextRemind(cfg, t.remindAt);
-              while (at <= now) at = tkNextRemind(cfg, at);
-              const cur = (await kvGet('tasks'))[t.id];
-              if (cur?.remindAt === t.remindAt) await kvMerge('tasks', { [t.id]: { ...cur, remindAt: at } });
-            }
-          }
+          // nhắc mỗi ngày đến khi xong: gửi xong mới ghi lịch sử và hẹn lần kế, giữ đúng giờ đã hẹn (máy mở trễ cũng không gửi dồn)
+          if ((await kvGet('taskRem'))[p.key]?.claim === claim) await tkPush(t, p.key, p.kind, p.to, { claim }, null, p.kind === 'again' ? (ok, err) => tkAfterSend(t.id, p.to, t.remindAt, ok, err) : null);
           return;
         }
       } catch (e) {
@@ -11639,6 +11659,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const act = tkActive(t);
     const box = document.createElement('div');
     box.id = 'dg-tk-detail';
+    box.dataset.tk = id;
     box.setAttribute('style', TK_OVERLAY);
     const st = TK_ST[t.status] || TK_ST.assigned;
     const hist = [
@@ -11727,11 +11748,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           } catch {}
           const fresh = (await kvGet('tasks'))[id] || t;
           const to = fresh.status === 'submit' ? fresh.by : fresh.to;
-          await tkPush(fresh, `${id}-manual-${Date.now()}`, 'manual', to, {});
-          if (tkActive(fresh)) {
-            const at = tkNextRemind(await tkCfgGet());
-            await tkDo(id, { remindAt: at }, `Nhắc ngay qua Zalo: ${to}; nhắc lại mỗi ngày từ ${tkTime(at)} đến khi xong`);
-          } else await tkLog(id, `Nhắc ngay qua Zalo: ${to}`);
+          await tkPush(fresh, `${id}-manual-${Date.now()}`, 'manual', to, {}, null, (ok, err) => tkAfterSend(id, to, Date.now(), ok, err));
         }
         tkDetail(id);
       } catch (err) {
