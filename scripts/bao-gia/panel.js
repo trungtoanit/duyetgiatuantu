@@ -11821,6 +11821,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const g of Object.values(data.orders || {})) for (const o of g?.orders || []) if (o?.quote) orderedQuotes.add(o.quote);
     for (const q of Object.values(data.quotes || {})) {
       if (q?.quoteStatus !== 'APPROVE' || q.hasOrder || orderedQuotes.has(q.code)) continue;
+      // kho báo giá có thể chưa kịp cập nhật: đã đọc đủ tab Duyệt lên đơn mà không có báo giá này → không tạo lại
+      if (data.approvePending?._src?.complete && !data.approvePending[q.code]) continue;
       const h = (now / 1000 - tkSec(q.updatedAt || q.createdAt)) / 3600;
       if (h < ac.quote.hours) continue;
       out.quote.push({ key: `quote-${q.id}`, rule: 'quote', title: `Duyệt lên đơn ${q.code} – ${q.customer?.name || ''}`.trim(), desc: `Báo giá ${money(q.amount)} chờ Duyệt lên đơn đã ${Math.floor(h / 24)} ngày. NVKD: ${q.staff?.name || ''}`, to: boss, due: tkDueIn(0, now) > now ? tkDueIn(0, now) : tkDueIn(1, now), pri: 'high', weight: Number(q.amount) || 0, url: `/bao-gia/update/${q.id}`, label: q.code, sid: q.id });
@@ -11885,6 +11887,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const s0 = t.src;
     if (s0.rule === 'quote') {
       const q = data.quotes?.[s0.sid];
+      const snap = data.approvePending;
+      if (snap?._src?.complete && snap._src.at > (t.at || 0) && !snap[s0.label]) return 'báo giá không còn ở tab Duyệt lên đơn';
       if (!q) return '';
       if (q.hasOrder || q.quoteStatus !== 'APPROVE') return 'báo giá đã rời trạng thái chờ Duyệt lên đơn';
       return Object.values(data.orders || {}).some((g) => g?.orders?.some((o) => o.quote === q.code)) ? 'báo giá đã có đơn' : '';
@@ -11913,8 +11917,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return '';
   }
   const tkAutoData = async () => {
-    const [quotes, orders, debt, maint, maintCfg, tasks, cfg, ac0, ordersNew, dnPending] = await Promise.all([kvGet('quotes'), kvGet('orders'), kvGet('debt2'), kvGet('maintReports'), kvGet('maintCfg'), kvGet('tasks'), tkCfgGet(), kvGet('taskCfg'), kvGet('ordersNew'), kvGet('dnPending')]);
-    return { quotes, orders, debt, maint, maintCfg, tasks, cfg, ordersNew, dnPending, ac: tkAutoCfg(ac0.auto) };
+    const [quotes, orders, debt, maint, maintCfg, tasks, cfg, ac0, ordersNew, dnPending, approvePending] = await Promise.all([kvGet('quotes'), kvGet('orders'), kvGet('debt2'), kvGet('maintReports'), kvGet('maintCfg'), kvGet('tasks'), tkCfgGet(), kvGet('taskCfg'), kvGet('ordersNew'), kvGet('dnPending'), kvGet('approvePending')]);
+    return { quotes, orders, debt, maint, maintCfg, tasks, cfg, ordersNew, dnPending, approvePending, ac: tkAutoCfg(ac0.auto) };
   };
   let tkAutoBusy = false;
   async function tkAutoRun() {
@@ -11930,8 +11934,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!t?.src || t.status === 'done' || t.status === 'cancel') continue;
         const why = tkSrcDone(t, ac, data);
         if (!why) continue;
-        // đề nghị không còn chờ duyệt → xoá hẳn việc, chỉ giữ lại dòng trong nhật ký
-        if (t.src.rule === 'dn') {
+        // đề nghị không còn chờ duyệt, báo giá đã thành công / thất bại / có đơn → xoá hẳn việc, chỉ giữ lại dòng trong nhật ký
+        if (t.src.rule === 'dn' || t.src.rule === 'quote') {
           await kvMerge('tasks', { [t.id]: null });
           await tkLog(t.id, `⚡ Xoá việc: ${why}`);
           changed = true;
@@ -12112,6 +12116,67 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await kvMerge('dnPending', patch);
     await tkAutoRun();
   }
+  // Tab Duyệt lên đơn của Danh sách báo giá: còn việc báo giá đang mở thì 15 phút / lần đọc đủ mọi trang để biết báo giá nào đã rời tab
+  async function tkReadApprove() {
+    if (!MY_ADMIN) return;
+    const old = await kvGet('approvePending');
+    if (Date.now() - (old._src?.at || 0) < 15 * 60e3) return;
+    const tasks = await kvGet('tasks');
+    const cfg = tkAutoCfg((await kvGet('taskCfg')).auto);
+    if (!cfg.quote.on && !Object.values(tasks).some((t) => t?.src?.rule === 'quote' && t.status !== 'done' && t.status !== 'cancel')) return;
+    if (!tabLock('dgTkApLock', 5 * 60e3)) return;
+    const got = {};
+    let complete = false;
+    await tkInFrame('/bao-gia?t=APPROVE', async (doc) => {
+      const rows = () => [...(doc()?.querySelectorAll('.ant-table-tbody tr') || [])].map((tr) => tr.innerText.match(/BG\d{3,}/)?.[0]).filter(Boolean);
+      const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
+      const settled = async (prev) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 16000) {
+          await sleep(300);
+          if (!spinning() && (rows()[0] !== prev || Date.now() - t0 >= 3000)) return true;
+        }
+        return false;
+      };
+      for (let i = 0; i < 60 && !tkFindTab(doc(), 'Duyệt lên đơn'); i++) await sleep(500);
+      const tab = tkFindTab(doc(), 'Duyệt lên đơn');
+      if (!tab) return;
+      for (let i = 0; i < 40 && !rows().length && !doc()?.querySelector('.ant-table-placeholder'); i++) await sleep(400);
+      if (!tab.classList.contains('ant-tabs-tab-active')) {
+        const prev = rows()[0];
+        (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+        if (!(await settled(prev))) return;
+      }
+      // CRM có thể giữ số trang của tab trước → về trang 1
+      const p1 = doc()?.querySelector('.ant-pagination-item-1');
+      if (p1 && !p1.classList.contains('ant-pagination-item-active')) {
+        const prev = rows()[0];
+        p1.click();
+        if (!(await settled(prev))) return;
+      }
+      const count = Number(tab.innerText.match(/\d+(?!\+)/)?.[0]);
+      const plus = /\d\+/.test(tab.innerText);
+      for (let page = 1; page <= 40; page++) {
+        if (page > 1) {
+          const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
+          if (!li) {
+            // chỉ coi là đủ khi khớp số trên tab (bảng trống do CRM giữ trang cũ thì không xoá nhầm)
+            complete = plus ? Object.keys(got).length > 0 : !count || Object.keys(got).length >= count;
+            break;
+          }
+          const prev = rows()[0];
+          li.click();
+          if (!(await settled(prev))) break;
+        }
+        for (const c of rows()) got[c] = 1;
+      }
+    });
+    if (!complete && !Object.keys(got).length) return;
+    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length } };
+    if (complete) for (const [k, o] of Object.entries(old)) if (k !== '_src' && o && !got[k]) patch[k] = null;
+    await kvMerge('approvePending', patch);
+    await tkAutoRun();
+  }
   // Còn việc bảo trì đang mở → 15 phút / lần xem tab Đã xử lý, Từ chối để cập nhật trạng thái báo cáo; việc tương ứng tự hoàn thành
   let tkMaintAt = 0;
   async function tkReadMaint() {
@@ -12144,6 +12209,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tkReadNewOrders().catch((e) => console.warn('[DG] đọc tab Mới:', e.message));
       tkReadMaint().catch((e) => console.warn('[DG] đọc bảo trì:', e.message));
       tkReadDn().catch((e) => console.warn('[DG] đọc đề nghị:', e.message));
+      tkReadApprove().catch((e) => console.warn('[DG] đọc Duyệt lên đơn:', e.message));
     }, 60000);
   }
   async function tkAutoOpen() {
@@ -12166,7 +12232,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ${tkHead('⚡ Tự tạo việc từ CRM')}
       <div style="padding:12px 18px;display:grid;gap:10px;overflow:auto">
         <div style="font-size:12px;color:#475569">Bật quy tắc nào thì việc của quy tắc đó tự được tạo và tin Zalo tự gửi tới người phụ trách. Xem danh sách dưới mỗi quy tắc trước khi bật. Dữ liệu lấy từ các trang CRM đã được mở gần đây.</div>
-        ${card('quote', '🎯', 'Báo giá chờ Duyệt lên đơn quá lâu', `Giao cho ${esc(cfg.boss)}. Tự đóng khi báo giá có đơn hoặc đổi trạng thái.`, num('quote', 'hours', 'Chờ từ (giờ)', ac.quote.hours))}
+        ${card('quote', '🎯', 'Báo giá chờ Duyệt lên đơn quá lâu', `Giao cho ${esc(cfg.boss)}. Thành công, thất bại hoặc có đơn thì việc tự xoá (đọc tab Duyệt lên đơn 15 phút / lần).`, num('quote', 'hours', 'Chờ từ (giờ)', ac.quote.hours))}
         ${card('debt', '💰', 'Công nợ quá hạn', `Giao cho NVKD của khách, mỗi khách 1 việc / tháng. ${debtAge ? `Dữ liệu cập nhật ${esc(tkTime(debtAge))}.` : 'Chưa có dữ liệu – mở trang Công nợ của CRM.'}`, num('debt', 'amount', 'Nợ quá hạn từ (đ)', ac.debt.amount) + num('debt', 'days', 'Quá hạn từ (ngày)', ac.debt.days))}
         ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
         ${card('stale', '🐢', 'Đơn quá hạn giao, chưa giao', `Đơn còn ở tab Mới và đã quá ngày giao; đơn chưa có ngày giao thì tính từ ngày lên đơn. Đọc từ Danh sách đơn, tab Mới, 30 phút / lần. ${data.ordersNew._src ? `Lần đọc gần nhất ${esc(tkTime(data.ordersNew._src.at))}: ${data.ordersNew._src.n} đơn${data.ordersNew._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Tự đóng khi đơn không còn ở tab Mới.`, num('stale', 'over', 'Quá hạn từ (ngày)', ac.stale.over) + `<label style="font-size:12px;color:#475569">Giao cho<select data-r="stale" data-n="who" style="${TK_IN};width:170px"><option value="boss"${ac.stale.who === 'boss' ? ' selected' : ''}>${esc(cfg.boss)}</option><option value="staff"${ac.stale.who === 'staff' ? ' selected' : ''}>NVKD của đơn</option></select></label>`)}
