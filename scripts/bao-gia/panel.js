@@ -8965,6 +8965,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .tk-row.over { background: #fef2f2; }
     .tk-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
     .tk-title { min-width: 200px; }
+    .panel-load { height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #64748b; font-size: 14px; }
+    .panel-load i { width: 42px; height: 42px; border: 4px solid #dbeafe; border-top-color: #2563eb; border-radius: 50%; animation: dgPanelSpin .8s linear infinite; }
+    .panel-load b { font-weight: 600; animation: dgPanelFade 1.4s ease-in-out infinite; }
+    @keyframes dgPanelSpin { to { transform: rotate(360deg); } }
+    @keyframes dgPanelFade { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
     .tk-kind { display: inline-block; width: 22px; font-size: 14px; }
     .tk-more td { text-align: center; color: #64748b; font-size: 12px; padding: 10px; }
     .tk-ext { font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border-radius: 999px; padding: 1px 7px; }
@@ -9225,7 +9230,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     host.id = 'dg-root';
     document.documentElement.append(host);
     root = host.attachShadow({ mode: 'open' });
-    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Trợ lý ERP</button><div class="panel" hidden></div><div class="grip" hidden title="Kéo để dãn / thu hẹp · bấm đúp để về mặc định"></div><div class="side" hidden></div>`;
+    root.innerHTML = `<style>${CSS}</style><button class="fab">📊 Trợ lý ERP</button><div class="panel" hidden><div class="panel-load"><i></i><b>Đang tải dữ liệu…</b></div></div><div class="grip" hidden title="Kéo để dãn / thu hẹp · bấm đúp để về mặc định"></div><div class="side" hidden></div>`;
     wireGrip(root.querySelector('.grip'));
     root.querySelector('.fab').onclick = () => {
       const open = root.querySelector('.panel').hidden;
