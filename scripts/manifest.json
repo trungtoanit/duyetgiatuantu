@@ -1,5 +1,5 @@
 {
-  "version": "1.2.460",
+  "version": "1.2.461",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -118,6 +118,7 @@
     "teamRemind",
     "teamTpl",
     "zaloNames",
-    "zaloSent"
+    "zaloSent",
+    "donGuiPending"
   ]
 }
