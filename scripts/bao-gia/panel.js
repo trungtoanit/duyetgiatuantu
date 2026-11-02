@@ -8868,6 +8868,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .tk-f { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
     .tk-f input, .tk-f select { font: inherit; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 7px; padding: 4px 8px; background: #fff; color: #1e293b; }
     .tk-f input { flex: 1; min-width: 180px; }
+    .tk-sts { align-items: center; }
+    .tk-c { font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .tk-c b { font-weight: 800; opacity: .7; }
+    .tk-c:hover { border-color: var(--fg, #94a3b8); }
+    .tk-c.on { color: var(--fg); background: var(--bg); border-color: var(--fg); }
+    .tk-c.clr { color: #b91c1c; border-color: #fecaca; }
     .tk-t { width: 100%; border-collapse: collapse; font-size: 13px; }
     .tk-t th { text-align: left; font-size: 12px; color: #64748b; font-weight: 700; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; }
     .tk-t td { padding: 7px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
@@ -12163,18 +12169,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       state.tkTile = lsGet('dgTkTile') || null;
     }
     const F = state.tkF;
+    // chọn nhiều trạng thái (bản cũ lưu 1 trạng thái dạng chuỗi)
+    const stSel = Array.isArray(F.st) ? F.st : F.st ? [F.st] : [];
     const tile = state.tkTile;
     let rows;
     if (tile && sets[tile]) rows = sets[tile];
-    else if (view === 'mine') rows = list.filter((t) => tkMine(t) && (F.st ? t.status === F.st : open(t)));
+    else if (view === 'mine') rows = list.filter((t) => tkMine(t) && (stSel.length ? stSel.includes(t.status) : open(t)));
     else if (view === 'all')
-      rows = list.filter((t) => (!F.who || norm(t.to) === norm(F.who)) && (F.st ? t.status === F.st : true) && (!F.pri || t.pri === F.pri) && (!F.q || norm(`${t.title} ${t.desc || ''}`).includes(norm(F.q))));
+      rows = list.filter((t) => (!F.who || norm(t.to) === norm(F.who)) && (!stSel.length || stSel.includes(t.status)) && (!F.pri || t.pri === F.pri) && (!F.q || norm(`${t.title} ${t.desc || ''}`).includes(norm(F.q))));
     else rows = list.filter((t) => tkOver(t, now) || t.status === 'submit' || t.status === 'assigned' || t.ext || (open(t) && tkDayKey(t.due) === today));
     const PRI_W = { critical: 0, high: 1, normal: 2, low: 3 };
     rows = [...rows].sort((a, b) => Number(open(b)) - Number(open(a)) || (open(a) ? (a.due || 0) - (b.due || 0) || (PRI_W[a.pri] ?? 2) - (PRI_W[b.pri] ?? 2) : (b.upd || 0) - (a.upd || 0))).slice(0, 200);
     const tileHtml = (k, label, color) => `<button class="tk-tile${tile === k ? ' on' : ''}" data-act="task-tile" data-v="${k}" style="--c:${color}"><b>${sets[k].length}</b><span>${label}</span></button>`;
     const whos = [...new Set(list.map((t) => t.to))].sort((a, b) => a.localeCompare(b, 'vi'));
-    const sel = (k, opts) => `<select data-tkf="${k}"><option value="">${k === 'who' ? 'Mọi người' : k === 'st' ? 'Mọi trạng thái' : 'Mọi mức'}</option>${opts.map(([v, l]) => `<option value="${esc(v)}"${F[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const pool = view === 'mine' ? list.filter(tkMine) : list;
+    const stChips = `<div class="tk-f tk-sts">${Object.entries(TK_ST).map(([k, v]) => `<button class="tk-c${stSel.includes(k) ? ' on' : ''}" style="--fg:${v[1]};--bg:${v[2]}" data-act="task-st" data-v="${k}">${stSel.includes(k) ? '✓ ' : ''}${v[0]} <b>${pool.filter((t) => t.status === k).length}</b></button>`).join('')}${stSel.length ? '<button class="tk-c clr" data-act="task-st" data-v="">✕ Bỏ chọn</button>' : `<span class="muted" style="font-size:12px">${view === 'mine' ? 'Đang hiện việc chưa xong' : 'Đang hiện mọi trạng thái'} – bấm để chọn một hoặc nhiều</span>`}</div>`;
+    const sel = (k, opts) => `<select data-tkf="${k}"><option value="">${k === 'who' ? 'Mọi người' : 'Mọi mức'}</option>${opts.map(([v, l]) => `<option value="${esc(v)}"${F[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
     const row = (t) => {
       const st = TK_ST[t.status] || TK_ST.assigned;
       const quick = tkMine(t) && t.status === 'assigned' ? `<button class="tk-q" data-act="task-accept" data-tk="${esc(t.id)}">✅ Nhận</button>` : '';
@@ -12195,8 +12205,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${perm.admin ? '<button class="tk-v" data-act="task-auto">⚡ Từ CRM</button><button class="tk-v" data-act="task-report">📊 Báo cáo</button><button class="tk-v" data-act="task-cfg">⚙️ Cấu hình nhắc</button>' : ''}
         <button class="tk-add" data-act="task-new">${perm.admin ? '➕ Giao việc' : '➕ Thêm việc của tôi'}</button>
       </div>
-      ${!tile && view === 'all' ? `<div class="tk-f"><input data-tkf="q" placeholder="Tìm tiêu đề / nội dung" value="${esc(F.q || '')}">${sel('who', whos.map((n) => [n, n]))}${sel('st', Object.entries(TK_ST).map(([k, v]) => [k, v[0]]))}${sel('pri', Object.entries(TK_PRI).map(([k, v]) => [k, v[0]]))}</div>` : ''}
-      ${!tile && view === 'mine' ? `<div class="tk-f">${sel('st', Object.entries(TK_ST).map(([k, v]) => [k, v[0]]))}</div>` : ''}
+      ${!tile && view === 'all' ? `<div class="tk-f"><input data-tkf="q" placeholder="Tìm tiêu đề / nội dung" value="${esc(F.q || '')}">${sel('who', whos.map((n) => [n, n]))}${sel('pri', Object.entries(TK_PRI).map(([k, v]) => [k, v[0]]))}</div>${stChips}` : ''}
+      ${!tile && view === 'mine' ? stChips : ''}
       ${rows.length ? `<table class="tk-t"><thead><tr><th></th><th>Việc</th><th>Phụ trách</th><th>Hạn</th><th>Trạng thái</th><th>Tiến độ</th><th></th></tr></thead><tbody>${rows.map(row).join('')}</tbody></table>` : `<div class="muted" style="padding:24px;text-align:center">${list.length ? 'Không có việc nào trong mục này.' : 'Chưa có việc nào. Bấm nút ➕ để bắt đầu.'}</div>`}
     </div>`;
   }
@@ -14949,6 +14959,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'task-report') tkReportOpen().catch((err) => alert(err.message));
     else if (act === 'task-auto') tkAutoOpen().catch((err) => alert(err.message));
     else if (act === 'task-accept') tkDo(b.dataset.tk, { status: 'accepted' }, 'Nhận việc').catch((err) => alert(err.message));
+    else if (act === 'task-st') {
+      const cur = state.tkF?.st;
+      const arr = Array.isArray(cur) ? cur : cur ? [cur] : [];
+      const v = b.dataset.v;
+      state.tkF = { ...state.tkF, st: !v ? [] : arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v] };
+      lsSet('dgTkF', JSON.stringify(state.tkF));
+      render();
+    }
     else if (act === 'task-view') {
       lsSet('dgTkView', b.dataset.v);
       state.tkTile = null;
