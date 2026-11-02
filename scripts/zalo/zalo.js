@@ -530,8 +530,8 @@
     await markSent(job, false);
     await markTeam(job, false);
     await setStatus(id, { ...job, images: job.images ? job.images.length : undefined, more: job.more ? job.more.length : undefined, status: 'sent', doneAt: Date.now(), via: used });
-    // Tin nhắc cả đội: gửi xong tự đóng tab Zalo do trợ lý mở (không còn việc nào chờ)
-    if (job.team) {
+    // Tin nhắc cả đội / bấm Nhắc ngay: gửi xong tự đóng tab Zalo do trợ lý mở (không còn việc nào chờ)
+    if (job.team || job.closeTab) {
       await sleep(2000);
       const more = Object.values(await kvGet('zaloJobs')).some((j) => j?.status === 'pending' && Date.now() - j.at < 10 * 60e3);
       if (!more && (window.opener || window.name === 'dg-zalo')) {

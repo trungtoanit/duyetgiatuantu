@@ -11215,6 +11215,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1);
     return d.getTime() - 7 * 3600e3;
   }
+  // Bấm gửi tay: mở tab Zalo ngay lúc bấm (trình duyệt chặn nếu mở sau khi chờ). Tab do người dùng tự mở không trùng tên → window.open ra tab trống thì đóng, để tab đó tự gửi.
+  function tkOpenZalo() {
+    const alive = Date.now() - (state.zaloAliveAt || 0) < 6000;
+    try {
+      const w = window.open(alive ? '' : 'https://chat.zalo.me/', 'dg-zalo');
+      let blank = false;
+      try {
+        blank = alive && w?.location.href === 'about:blank';
+      } catch {}
+      blank ? w.close() : w?.focus();
+    } catch {}
+  }
   // Sau khi Zalo báo kết quả: ghi lịch sử và đặt lại giờ nhắc kế tiếp (gửi lỗi cũng hẹn lại để hôm sau thử tiếp)
   async function tkAfterSend(id, to, base, ok, error) {
     const cur = (await kvGet('tasks'))[id];
@@ -11263,7 +11275,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-task`;
-    keep[jobId] = { draft: false, to, zaloName: to, text: m.text, html: m.html, status: 'pending', at: Date.now(), task: t.id };
+    keep[jobId] = { draft: false, to, zaloName: to, text: m.text, html: m.html, status: 'pending', at: Date.now(), task: t.id, closeTab: key.includes('-manual-') };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     const save = (state2, error) => kvMerge('taskRem', { [key]: { ...mark, t: t.id, kind, to: toName, at: Date.now(), by: meName, state: state2, ...(error ? { error } : {}) } }).catch(() => {});
     await save('queue');
@@ -11748,11 +11760,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         } else if (k === 'noremind') {
           await tkDo(id, { remindAt: null }, 'Dừng nhắc mỗi ngày', note);
         } else if (k === 'remind') {
-          // mở tab Zalo ngay lúc bấm (trình duyệt chặn nếu mở sau khi chờ)
-          const alive = Date.now() - (state.zaloAliveAt || 0) < 6000;
-          try {
-            window.open(alive ? '' : 'https://chat.zalo.me/', 'dg-zalo')?.focus();
-          } catch {}
+          tkOpenZalo();
           const fresh = (await kvGet('tasks'))[id] || t;
           const to = fresh.status === 'submit' ? fresh.by : fresh.to;
           await tkPush(fresh, `${id}-manual-${Date.now()}`, 'manual', to, {}, null, (ok, err) => tkAfterSend(id, to, Date.now(), ok, err));
@@ -12101,10 +12109,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         return draw();
       }
       if (k !== 'send') return;
-      const alive = Date.now() - (state.zaloAliveAt || 0) < 6000;
-      try {
-        window.open(alive ? '' : 'https://chat.zalo.me/', 'dg-zalo')?.focus();
-      } catch {}
+      tkOpenZalo();
       await tkPush({ id: 'report' }, `report-manual-${Date.now()}`, kind, cfg.boss, {}, tkReport(kind, all, cfg.boss));
       box.querySelector('[data-st]').textContent = '✅ Đã xếp vào hàng đợi Zalo';
     });
