@@ -3244,9 +3244,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Giấy cũ: ô có dấu ⚠ (chữ) hoặc bất kỳ biểu tượng nào (hình / SVG / icon) – ô giấy mới chỉ có chữ + thanh
   const isOldPaper = (cell) =>
     !!cell && (/⚠/.test(cell.innerText || '') || !!cell.querySelector('svg, img, .anticon, [role="img"], i[class*="icon"], [class*="warning"], [class*="Warning"]'));
-  // ---------- ✅ Duyệt 5 lệnh (trang Đề nghị, quản trị): do người dùng bấm, xác nhận trước; mở lần lượt từ trên xuống → Duyệt → đóng form, đủ 5 lệnh thì dừng ----------
+  // ---------- ✅ Duyệt hết (trang Đề nghị, quản trị): do người dùng bấm, xác nhận trước; mở lần lượt từ lệnh đầu tiên → Duyệt → đóng form, qua các trang đến khi hết lệnh ----------
   // Lệnh không có nút Duyệt (đã duyệt / chưa tới lượt) thì bỏ qua, không tính. Có gì bất thường thì dừng ngay và để nguyên form để người dùng xem.
-  const DN_MAX = 5;
   const DN_ME = 'Nguyễn Trung Toán'; // chỉ duyệt lệnh mà người này đang "Chưa duyệt" trong mục Trạng thái
   // Trạng thái của DN_ME trong form: phần giữa "Trạng thái:" và "Người theo dõi" (tránh trùng tên ở Người tạo / Người theo dõi)
   const dnMyStatus = (m) => {
@@ -3260,7 +3259,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Mỗi tab đã mở giữ bảng + phân trang riêng, ẩn trong trang → chỉ lấy của tab đang hiện
   const dnShown = (el) => !el.closest('.ant-tabs-tabpane-hidden');
   const dnTable = (doc = document) => [...doc.querySelectorAll('.ant-table')].filter(dnShown).find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Mã đề nghị/i.test(th.innerText.trim())));
-  const dnRows = (doc = document, codeRe = /^[A-Z]{1,6}\d+$/) => {
+  const dnRows = (doc = document, codeRe = /^[A-Z]{1,12}\d+$/) => {
     const t = dnTable(doc);
     if (!t) return [];
     const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
@@ -3293,6 +3292,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return false;
   };
+  const dnPager = () => [...document.querySelectorAll('.ant-pagination')].find(dnShown);
+  // Bấm chuyển trang rồi chờ bảng đổi dòng đầu
+  const dnTurn = async (li) => {
+    const prev = dnRows()[0]?.code || '';
+    li.click();
+    const ok = await waitFor(() => !document.querySelector('.ant-spin-spinning') && dnRows()[0] && dnRows()[0].code !== prev, 10000, 300);
+    await sleep(400);
+    return !!ok;
+  };
+  // Vừa duyệt xong 1 lệnh → xoá việc tương ứng bên tab Công việc, bỏ khỏi danh sách chờ để không bị tạo lại; lỗi thì lần đọc Đề nghị sau vẫn tự xoá
+  const dnTaskDrop = async (code) => {
+    if (!TASK_ON) return;
+    const id = `A-dn-${code}`;
+    await kvMerge('dnPending', { [code]: null });
+    if (!(await kvGet('tasks'))[id]) return;
+    await kvMerge('tasks', { [id]: null });
+    await tkLog(id, `⚡ Xoá việc: đã duyệt ${code} bằng nút Duyệt hết`);
+  };
   async function dnApprove(btn, out) {
     out.textContent = `⏳ Sang tab ${DN_TAB}…`;
     btn.disabled = true;
@@ -3301,14 +3318,17 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     out.textContent = '';
     const list = dnRows();
     if (!list.length) return (out.textContent = `⚠️ Không thấy lệnh nào trong tab ${DN_TAB}`);
-    const head = list.slice(0, DN_MAX).map((r) => `• ${r.code} – ${r.name.slice(0, 60)} – ${r.sum}đ`).join('\n');
-    if (!confirm(`Tự mở lần lượt và bấm DUYỆT đủ ${DN_MAX} lệnh từ trên xuống trong tab ${DN_TAB} rồi dừng.\nChỉ duyệt lệnh có ${DN_ME} "Chưa duyệt"; lệnh khác tự đóng form và lấy lệnh kế tiếp.\n\n${DN_MAX} lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
+    const total = dnPager()?.querySelector('.ant-pagination-total-text')?.innerText.trim() || `${list.length} dòng`;
+    const head = list.slice(0, 5).map((r) => `• ${r.code} – ${r.name.slice(0, 60)} – ${r.sum}đ`).join('\n');
+    if (!confirm(`Tự mở lần lượt và bấm DUYỆT từ lệnh đầu tiên đến hết tab ${DN_TAB} (${total}), qua cả các trang sau.\nChỉ duyệt lệnh có ${DN_ME} "Chưa duyệt"; lệnh khác tự đóng form và lấy lệnh kế tiếp.\n\n5 lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
     DN.run = true;
     DN.stop = false;
     btn.textContent = '⏹ Dừng';
     const seen = new Set();
+    const retried = new Set();
     const done = [];
     let skip = 0;
+    let fresh = 0; // số lệnh mới mở từ lần về trang 1 gần nhất
     let err = '';
     const shut = async (m) => {
       m.querySelector('.ant-modal-close')?.click();
@@ -3316,19 +3336,40 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       await sleep(500);
     };
     try {
-      while (done.length < DN_MAX && !DN.stop) {
+      while (!DN.stop) {
         // Trang tự nhảy tab sau khi duyệt thì quay về; không về được thì dừng
         if (!(await dnGoTab())) {
           err = `Không về được tab ${DN_TAB}`;
           break;
         }
         const r = dnRows().find((x) => !seen.has(x.code));
-        if (!r) break;
+        if (!r) {
+          // Hết trang này → sang trang sau; tới trang cuối mà có lệnh mới thì về trang 1 rà lại (lệnh đã duyệt rời bảng làm các dòng sau dồn lên). Rà không còn gì mới là hết.
+          const pg = dnPager();
+          const next = pg?.querySelector('.ant-pagination-next:not(.ant-pagination-disabled)');
+          const one = fresh ? pg?.querySelector('.ant-pagination-item-1:not(.ant-pagination-item-active)') : null;
+          if (!next && !one) break;
+          if (!next) fresh = 0;
+          out.textContent = `⏳ Đã duyệt ${done.length} · sang trang khác…`;
+          if (!(await dnTurn(next || one))) {
+            err = 'Không chuyển được trang';
+            break;
+          }
+          continue;
+        }
         seen.add(r.code);
-        out.textContent = `⏳ ${done.length}/${DN_MAX} · mở ${r.code}…`;
+        fresh++;
+        out.textContent = `⏳ Đã duyệt ${done.length} · mở ${r.code}…`;
         r.link.click();
         const m = await waitFor(() => visModalsTop().find((x) => x.innerText.includes(`#${r.code}`)), 8000, 200);
         if (!m) {
+          // Bảng vừa tải lại nên bấm trượt → thử lại 1 lần
+          if (!retried.has(r.code)) {
+            retried.add(r.code);
+            seen.delete(r.code);
+            await sleep(1500);
+            continue;
+          }
           err = `Không mở được ${r.code}`;
           break;
         }
@@ -3341,7 +3382,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           await shut(m);
           continue;
         }
-        out.textContent = `⏳ ${done.length}/${DN_MAX} · duyệt ${r.code}…`;
+        out.textContent = `⏳ Đã duyệt ${done.length} · duyệt ${r.code}…`;
         ap.click();
         let asked = false;
         const ok = await waitFor(() => {
@@ -3359,6 +3400,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           break;
         }
         done.push(r);
+        await dnTaskDrop(r.code).catch(() => {});
         await sleep(400);
         await shut(m);
       }
@@ -3366,9 +3408,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       err = e.message;
     } finally {
       DN.run = false;
-      btn.textContent = `✅ Duyệt ${DN_MAX} lệnh`;
+      btn.textContent = '✅ Duyệt hết';
     }
-    out.textContent = `${err ? `⚠️ ${err} · ` : DN.stop ? '⏹ Đã dừng · ' : done.length < DN_MAX ? `⚠️ Hết lệnh trên trang tab ${DN_TAB} · ` : '✅ '}Đã duyệt ${done.length}: ${done.map((r) => r.code).join(', ') || '–'}${skip ? ` · bỏ qua ${skip}` : ''}`;
+    out.textContent = `${err ? `⚠️ ${err} · ` : DN.stop ? '⏹ Đã dừng · ' : '✅ Hết lệnh · '}Đã duyệt ${done.length}: ${done.length > 10 ? '… ' : ''}${done.slice(-10).map((r) => r.code).join(', ') || '–'}${skip ? ` · bỏ qua ${skip}` : ''}`;
   }
   if (IS_TOP) {
     setInterval(() => {
@@ -3384,7 +3426,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const wrap = document.createElement('div');
       wrap.setAttribute('data-dg-dn5', '1');
       wrap.setAttribute('style', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:12px');
-      wrap.innerHTML = `<button type="button" title="Sang tab ${DN_TAB}, mở lần lượt từ trên xuống, bấm Duyệt và đóng form; đủ ${DN_MAX} lệnh thì dừng (hỏi xác nhận trước)" style="cursor:pointer;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:800;color:#fff;background:linear-gradient(90deg,#16a34a,#0d9488)">✅ Duyệt ${DN_MAX} lệnh</button><span data-out style="font-size:12px;font-weight:700;color:#334155"></span>`;
+      wrap.innerHTML = `<button type="button" title="Sang tab ${DN_TAB}, mở lần lượt từ trên xuống, bấm Duyệt và đóng form, qua các trang đến khi hết lệnh (hỏi xác nhận trước)" style="cursor:pointer;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:800;color:#fff;background:linear-gradient(90deg,#16a34a,#0d9488)">✅ Duyệt hết</button><span data-out style="font-size:12px;font-weight:700;color:#334155"></span>`;
       const b = wrap.querySelector('button');
       const out = wrap.querySelector('[data-out]');
       b.addEventListener('click', (e) => {
