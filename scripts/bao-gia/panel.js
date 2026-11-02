@@ -11775,6 +11775,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const [all, logs, rem] = await Promise.all([kvGet('tasks'), kvGet('taskLog'), kvGet('taskRem')]);
     const t = all[id];
     if (!tkVisible(t)) return;
+    const imgs = t.src?.rule === 'maint' ? mtImgs((await kvGet('maintReports'))[t.src.sid]) : [];
     const work = tkCanWork(t);
     const manage = tkCanManage(t);
     const personal = tkPersonal(t);
@@ -11811,6 +11812,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
         ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.rule === 'maint' ? `${t.src.url}?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.rule === 'stale' ? `/misa-order/list?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
+        ${imgs.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${imgs.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Mở ảnh trong báo cáo"><img src="${esc(u)}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;display:block"></a>`).join('')}</div>` : ''}
         ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Nhắc mỗi ngày đến khi xong, lần tới ${esc(tkTime(t.remindAt))}</div>` : ''}
         ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
         ${t.subNote && t.status === 'submit' ? `<div style="background:#f3e8ff;border-radius:8px;padding:8px 10px">📤 Kết quả đã nộp: ${esc(t.subNote)}</div>` : ''}
