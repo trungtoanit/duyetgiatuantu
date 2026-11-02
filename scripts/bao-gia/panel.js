@@ -11197,14 +11197,23 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
 
-  // Mở Báo cáo bảo trì từ việc bên tab Công việc (?dgFind=152): chờ bảng tải xong rồi nhập ID vào ô Tìm ID
-  if (IS_TOP && /^\/bao-tri\/bao-cao/.test(location.pathname)) {
+  // Mở nguồn từ việc bên tab Công việc (?dgFind=…): chờ bảng tải xong rồi nhập vào ô tìm – Báo cáo bảo trì theo ID, Danh sách đơn theo mã DH ở tab Tất cả
+  const DG_FIND = IS_TOP && [
+    { path: /^\/bao-tri\/bao-cao/, box: /^Tìm ID/i, id: /^\d+$/ },
+    { path: /^\/misa-order\/list/, box: /^Tìm kiếm/i, id: /^DH\d+$/, tab: 'Tất cả' },
+  ].find((x) => x.path.test(location.pathname));
+  if (DG_FIND) {
     const id = new URLSearchParams(location.search).get('dgFind');
-    if (/^\d+$/.test(id || '')) {
-      const box = () => [...document.querySelectorAll('input')].find((i) => /^Tìm ID/i.test(i.placeholder || ''));
+    if (DG_FIND.id.test(id || '')) {
+      const box = () => [...document.querySelectorAll('input')].find((i) => DG_FIND.box.test(i.placeholder || ''));
       waitFor(() => box() && document.querySelector('.ant-table-tbody tr:not(.ant-table-measure-row)'), 30000, 300).then(async (ready) => {
         if (!ready) return;
         await sleep(800);
+        const tab = DG_FIND.tab && tkFindTab(document, DG_FIND.tab);
+        if (tab && !tab.classList.contains('ant-tabs-tab-active')) {
+          (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+          await sleep(1500);
+        }
         const inp = box();
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, id);
         inp.dispatchEvent(new Event('input', { bubbles: true }));
@@ -11800,7 +11809,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           ${t.rep ? `<span style="font-weight:700;color:#0f766e">🔁 ${esc(TK_REP[t.rep] || '')}</span>` : ''}
           <span style="color:#475569">Hạn <b>${esc(tkTime(t.due))}</b>${act && !tkOver(t) ? ` · ${esc(tkLeft(t))}` : ''}</span></div>
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
-        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.rule === 'maint' ? `${t.src.url}?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
+        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.rule === 'maint' ? `${t.src.url}?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.rule === 'stale' ? `/misa-order/list?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
         ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Nhắc mỗi ngày đến khi xong, lần tới ${esc(tkTime(t.remindAt))}</div>` : ''}
         ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
@@ -11923,7 +11932,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const mtTo = data.maintCfg?.main?.to;
     if (mtTo) {
       for (const r of Object.values(data.maint || {})) {
-        if (!mtOpen(r) || !/CRITICAL|HIGH/i.test(r.level || '')) continue;
+        if (!tkMtPending(r, data) || !/CRITICAL|HIGH/i.test(r.level || '')) continue;
         const days = (now / 1000 - tkSec(r.createdAt)) / 86400;
         if (days < ac.maint.days) continue;
         const crit = /CRITICAL/i.test(r.level);
@@ -11980,6 +11989,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     if (s0.rule === 'maint') {
       const r = data.maint?.[s0.sid];
+      const snap = data.maintOpen;
+      if (snap?._src?.complete && snap._src.at > (t.at || 0) && !snap[s0.sid]) return 'báo cáo bảo trì không còn chưa xử lý';
       return r && !mtOpen(r) ? (/REJECT|CANCEL/i.test(r.status || '') ? 'báo cáo bảo trì bị từ chối' : 'báo cáo bảo trì đã xử lý') : '';
     }
     if (s0.rule === 'debt') {
@@ -12002,8 +12013,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return '';
   }
   const tkAutoData = async () => {
-    const [quotes, orders, debt, maint, maintCfg, tasks, cfg, ac0, ordersNew, dnPending, approvePending] = await Promise.all([kvGet('quotes'), kvGet('orders'), kvGet('debt2'), kvGet('maintReports'), kvGet('maintCfg'), kvGet('tasks'), tkCfgGet(), kvGet('taskCfg'), kvGet('ordersNew'), kvGet('dnPending'), kvGet('approvePending')]);
-    return { quotes, orders, debt, maint, maintCfg, tasks, cfg, ordersNew, dnPending, approvePending, ac: tkAutoCfg(ac0.auto) };
+    const [quotes, orders, debt, maint, maintCfg, tasks, cfg, ac0, ordersNew, dnPending, approvePending, maintOpen] = await Promise.all([kvGet('quotes'), kvGet('orders'), kvGet('debt2'), kvGet('maintReports'), kvGet('maintCfg'), kvGet('tasks'), tkCfgGet(), kvGet('taskCfg'), kvGet('ordersNew'), kvGet('dnPending'), kvGet('approvePending'), kvGet('maintOpen')]);
+    return { quotes, orders, debt, maint, maintCfg, tasks, cfg, ordersNew, dnPending, approvePending, maintOpen, ac: tkAutoCfg(ac0.auto) };
   };
   let tkAutoBusy = false;
   async function tkAutoRun() {
@@ -12262,16 +12273,53 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await kvMerge('approvePending', patch);
     await tkAutoRun();
   }
-  // Còn việc bảo trì đang mở → 15 phút / lần xem tab Đã xử lý, Từ chối để cập nhật trạng thái báo cáo; việc tương ứng tự hoàn thành
+  // Quy tắc bật hoặc còn việc bảo trì đang mở → 15 phút / lần đọc đủ các tab chưa xử lý (Mới, Đang xử lý, Đã có đề nghị) làm danh sách gốc,
+  // rồi xem tab Đã xử lý, Từ chối để cập nhật trạng thái báo cáo; việc tương ứng tự hoàn thành
   let tkMaintAt = 0;
+  // Có danh sách đọc đủ từ các tab chưa xử lý thì theo danh sách đó; chưa có thì theo trạng thái đã lưu
+  function tkMtPending(r, data) {
+    const snap = data.maintOpen;
+    return snap?._src?.complete ? !!snap[r.id] : mtOpen(r);
+  }
   async function tkReadMaint() {
     if (!MY_ADMIN || Date.now() - tkMaintAt < 15 * 60e3) return;
     const tasks = await kvGet('tasks');
-    if (!Object.values(tasks).some((t) => t?.src?.rule === 'maint' && t.status !== 'done' && t.status !== 'cancel')) return;
+    const maintOn = tkAutoCfg((await kvGet('taskCfg')).auto).maint.on;
+    if (!maintOn && !Object.values(tasks).some((t) => t?.src?.rule === 'maint' && t.status !== 'done' && t.status !== 'cancel')) return;
     if (!tabLock('dgTkMaintLock', 5 * 60e3)) return;
     tkMaintAt = Date.now();
+    const old = await kvGet('maintOpen');
+    const got = {};
+    let complete = false;
     await tkInFrame('/bao-tri/bao-cao', async (doc) => {
       for (let i = 0; i < 60 && !tkFindTab(doc(), 'Đã xử lý'); i++) await sleep(500);
+      const table = () => [...(doc()?.querySelectorAll('.ant-table') || [])].find(dnShown);
+      const ids = () => [...(table()?.querySelectorAll('.ant-table-tbody tr') || [])].map((tr) => (tr.cells[0]?.innerText.match(/\d+/) || [])[0]).filter(Boolean);
+      let allRead = true;
+      for (const name of ['Mới', 'Đang xử lý', 'Đã có đề nghị']) {
+        const tab = tkFindTab(doc(), name);
+        if (!tab) {
+          allRead = false;
+          break;
+        }
+        // số trên tab: không có số là 0 dòng; "99+" thì không so được
+        const badge = tab.innerText.match(/\d+\+?/)?.[0] || '0';
+        (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+        await sleep(2000);
+        for (let i = 0; i < 25 && (doc()?.querySelector('.ant-spin-spinning') || (badge !== '0' && !ids().length)); i++) await sleep(400);
+        const seen = new Set(ids());
+        for (let page = 2; page <= 12; page++) {
+          const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
+          if (!li) break;
+          const prev = ids()[0];
+          li.click();
+          for (let i = 0; i < 25 && (!ids().length || ids()[0] === prev); i++) await sleep(400);
+          ids().forEach((x) => seen.add(x));
+        }
+        if (!badge.endsWith('+') && seen.size !== Number(badge)) allRead = false;
+        for (const id of seen) got[id] = { tab: name };
+      }
+      complete = allRead;
       for (const name of ['Đã xử lý', 'Từ chối']) {
         const tab = tkFindTab(doc(), name);
         if (!tab) continue;
@@ -12286,6 +12334,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
       await sleep(1500);
     });
+    if (complete) {
+      const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length } };
+      for (const k of Object.keys(old)) if (k !== '_src' && !got[k]) patch[k] = null;
+      await kvMerge('maintOpen', patch);
+    }
     await tkAutoRun();
   }
   if (IS_TOP && TASK_ON) {
@@ -12319,7 +12372,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <div style="font-size:12px;color:#475569">Bật quy tắc nào thì việc của quy tắc đó tự được tạo và tin Zalo tự gửi tới người phụ trách. Xem danh sách dưới mỗi quy tắc trước khi bật. Dữ liệu lấy từ các trang CRM đã được mở gần đây.</div>
         ${card('quote', '🎯', 'Báo giá chờ Duyệt lên đơn quá lâu', `Giao cho ${esc(cfg.boss)}. Thành công, thất bại hoặc có đơn thì việc tự xoá (đọc tab Duyệt lên đơn 15 phút / lần).`, num('quote', 'hours', 'Chờ từ (giờ)', ac.quote.hours))}
         ${card('debt', '💰', 'Công nợ quá hạn', `Giao cho NVKD của khách, mỗi khách 1 việc / tháng. ${debtAge ? `Dữ liệu cập nhật ${esc(tkTime(debtAge))}.` : 'Chưa có dữ liệu – mở trang Công nợ của CRM.'}`, num('debt', 'amount', 'Nợ quá hạn từ (đ)', ac.debt.amount) + num('debt', 'days', 'Quá hạn từ (ngày)', ac.debt.days))}
-        ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
+        ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Chỉ lấy báo cáo chưa xử lý (tab Mới, Đang xử lý, Đã có đề nghị), đọc 15 phút / lần${data.maintOpen._src ? `, lần gần nhất ${esc(tkTime(data.maintOpen._src.at))}: ${data.maintOpen._src.n} báo cáo` : ''}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
         ${card('stale', '🐢', 'Đơn quá hạn giao, chưa giao', `Đơn còn ở tab Mới và đã quá ngày giao; đơn chưa có ngày giao thì tính từ ngày lên đơn. Đọc từ Danh sách đơn, tab Mới, 30 phút / lần. ${data.ordersNew._src ? `Lần đọc gần nhất ${esc(tkTime(data.ordersNew._src.at))}: ${data.ordersNew._src.n} đơn${data.ordersNew._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Tự đóng khi đơn không còn ở tab Mới.`, num('stale', 'over', 'Quá hạn từ (ngày)', ac.stale.over) + `<label style="font-size:12px;color:#475569">Giao cho<select data-r="stale" data-n="who" style="${TK_IN};width:170px"><option value="boss"${ac.stale.who === 'boss' ? ' selected' : ''}>${esc(cfg.boss)}</option><option value="staff"${ac.stale.who === 'staff' ? ' selected' : ''}>NVKD của đơn</option></select></label>`)}
         ${card('dn', '📝', 'Đề nghị cần tôi duyệt', `Đọc từ trang Đề nghị với công tắc Cần tôi duyệt, chỉ tab Đang duyệt, 30 phút / lần, theo tài khoản của máy đang đọc. Giao cho ${esc(cfg.boss)}, tiền lớn trước. ${data.dnPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.dnPending._src.at))}: ${data.dnPending._src.n} đề nghị${data.dnPending._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đề nghị không còn chờ duyệt thì việc tự xoá.`, '')}
         ${card('order', '📦', 'Đơn sắp đến ngày giao', 'Giao cho NVKD của khách. Tick các trạng thái nghĩa là đơn ĐÃ XONG; trạng thái còn lại được coi là chưa giao. Chưa tick trạng thái nào thì quy tắc này chưa tạo việc.', num('order', 'days', 'Trước ngày giao (ngày)', ac.order.days), `<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">${Object.entries(stat).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<label><input data-st="${esc(k)}" type="checkbox"${ac.order.doneSt.includes(k) ? ' checked' : ''}> ${esc(k || '(trống)')} <span style="color:#94a3b8">${n}</span></label>`).join('') || '<span style="color:#94a3b8">Chưa có đơn nào có ngày giao trong dữ liệu</span>'}</div>`)}

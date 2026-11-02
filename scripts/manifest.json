@@ -101,6 +101,7 @@
     "ordersNew",
     "dnPending",
     "approvePending",
+    "maintOpen",
     "notifRead",
     "notifs",
     "nudgeCfg",
