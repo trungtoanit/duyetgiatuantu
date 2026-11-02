@@ -11184,6 +11184,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (!p && t.status === 'doing' && t.ret?.at) p = hit(`${t.id}-ret-${t.ret.at}`, 'ret', t.to);
       if (!p && act && t.ext?.at) p = hit(`${t.id}-ext-${t.ext.at}`, 'ext', t.by);
       if (!p && act && t.res?.at) p = hit(`${t.id}-res-${t.res.at}`, 'res', t.to);
+      if (!p && act && t.remindAt && now >= t.remindAt) p = hit(`${t.id}-again-${t.remindAt}`, 'again', t.to);
       if (p) return p;
     }
     if (!act) return null;
@@ -11199,8 +11200,27 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (now >= t.due - cfg.pre * 60e3 && (t.at || 0) <= t.due - cfg.pre * 60e3) return hit(`${t.id}-${t.due}-pre`, 'pre', t.to);
     return null;
   }
+  // Hẹn nhắc lại sau khi bấm Nhắc ngay: ngày mai cùng giờ (ngoài giờ được nhắc thì lấy đầu giờ); mai là Chủ nhật thì sang thứ 2
+  function tkNextRemind(cfg, now = Date.now()) {
+    const v = new Date(now + 7 * 3600e3);
+    const inHours = v.getUTCHours() >= cfg.from && v.getUTCHours() < cfg.to;
+    const d = new Date(Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate() + 1, inHours ? v.getUTCHours() : cfg.from, inHours ? v.getUTCMinutes() : 0));
+    if (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1);
+    return d.getTime() - 7 * 3600e3;
+  }
+  // Tin hỏi công nợ khi nhắc (số nợ lấy mới nhất nếu có)
+  function tkDebtMsg(t, r) {
+    const cust = t.title.replace(/^Thu công nợ\s*/, '');
+    const head = '💰 Công nợ này sao chưa nhận được em?';
+    const rows = [['Khách', cust], ...(r?.overdueAmount ? [['Nợ quá hạn', money(r.overdueAmount)], ['Lâu nhất', `${r.maxDaysOverdue || 0} ngày`]] : [['Chi tiết', t.desc || '']])];
+    const tail = 'Em báo lại ngày khách hẹn thanh toán nhé.';
+    return {
+      text: [head, ...rows.map(([a, b]) => `${a}: ${b}`), '', tail].join('\n'),
+      html: `<div><b>${esc(head)}</b></div>${rows.map(([a, b]) => `<div>${esc(a)}: <b>${esc(b)}</b></div>`).join('')}<div><br></div><div><i>${esc(tail)}</i></div>`,
+    };
+  }
   function tkMsg(kind, t) {
-    const head = { new: '📋 Việc mới được giao', pre: '⏰ Việc sắp đến hạn', over: '🔴 Việc đã quá hạn', esc: '🚨 Việc quá hạn lâu – cần can thiệp', sub: '📤 Đã nộp kết quả – chờ duyệt', ret: '↩️ Việc bị trả lại', ext: '⏳ Xin gia hạn – chờ duyệt', res: '📅 Hạn của việc đã thay đổi', manual: '📨 Nhắc việc' }[kind] || '📋 Công việc';
+    const head = { new: '📋 Việc mới được giao', pre: '⏰ Việc sắp đến hạn', over: '🔴 Việc đã quá hạn', esc: '🚨 Việc quá hạn lâu – cần can thiệp', sub: '📤 Đã nộp kết quả – chờ duyệt', ret: '↩️ Việc bị trả lại', ext: '⏳ Xin gia hạn – chờ duyệt', res: '📅 Hạn của việc đã thay đổi', manual: '📨 Nhắc việc', again: '📨 Nhắc lại việc' }[kind] || '📋 Công việc';
     const extra = kind === 'sub' ? t.subNote : kind === 'ret' ? t.ret?.note : kind === 'ext' ? `Xin đến ${tkTime(t.ext?.due || 0)}: ${t.ext?.why || ''}` : kind === 'res' ? t.res?.note : '';
     const tail = ['sub', 'ext', 'esc'].includes(kind) ? 'Mở tab 📋 Công việc trên CRM để xử lý.' : 'Cập nhật tiến độ trên tab 📋 Công việc, hoặc trả lời tin này để người giao cập nhật giúp.';
     const when = `${tkTime(t.due)} (${tkLeft(t)})`;
@@ -11215,7 +11235,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const names = await kvGet('zaloNames');
     // nhắc chính mình → chat "My Documents" trên Zalo của máy này
     const to = norm(toName) === norm(meName) ? MT_TEST_TO : names[norm(toName)]?.name || toName;
-    const m = msg || tkMsg(kind, t);
+    const debtAsk = !msg && t.src?.rule === 'debt' && (kind === 'manual' || kind === 'again');
+    const m = msg || (debtAsk ? tkDebtMsg(t, (await kvGet('debt2'))[`cust:${t.src.sid}`]) : tkMsg(kind, t));
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-task`;
@@ -11637,6 +11658,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
         ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
+        ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Sẽ nhắc lại lúc ${esc(tkTime(t.remindAt))}</div>` : ''}
         ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
         ${t.subNote && t.status === 'submit' ? `<div style="background:#f3e8ff;border-radius:8px;padding:8px 10px">📤 Kết quả đã nộp: ${esc(t.subNote)}</div>` : ''}
         ${work && (t.status === 'accepted' || t.status === 'doing') ? `<label style="display:flex;gap:8px;align-items:center">Tiến độ <input data-f="pg" type="range" min="0" max="100" step="5" value="${Number(t.progress) || 0}" style="flex:1"> <b data-pgv>${Number(t.progress) || 0}%</b></label>` : `<div>Tiến độ: <b>${Number(t.progress) || 0}%</b></div>`}
@@ -11694,7 +11716,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const fresh = (await kvGet('tasks'))[id] || t;
           const to = fresh.status === 'submit' ? fresh.by : fresh.to;
           await tkPush(fresh, `${id}-manual-${Date.now()}`, 'manual', to, {});
-          await tkLog(id, `Nhắc ngay qua Zalo: ${to}`);
+          if (tkActive(fresh)) {
+            const at = tkNextRemind(await tkCfgGet());
+            await tkDo(id, { remindAt: at }, `Nhắc ngay qua Zalo: ${to}; hẹn nhắc lại ${tkTime(at)}`);
+          } else await tkLog(id, `Nhắc ngay qua Zalo: ${to}`);
         }
         tkDetail(id);
       } catch (err) {
