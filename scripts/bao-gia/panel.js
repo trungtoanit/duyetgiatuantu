@@ -8928,7 +8928,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .pdlg-rows:empty { display: none; }
     .bigtab.gap { background: linear-gradient(90deg,#fdf2f8,#eff6ff); }
     .bigtab.task.has b { background: #dc2626; color: #fff; }
-    .tk-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+    .tk-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
     .tk-tile { font: inherit; cursor: pointer; text-align: left; background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid var(--c); border-radius: 10px; padding: 8px 12px; display: grid; gap: 1px; }
     .tk-tile b { font-size: 22px; color: var(--c); line-height: 1.1; }
     .tk-tile span { font-size: 12px; color: #475569; }
@@ -12585,6 +12585,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       over: list.filter((t) => tkOver(t, now)),
       submit: list.filter((t) => t.status === 'submit'),
       wait: list.filter((t) => t.status === 'assigned'),
+      dg: list.filter((t) => t.src?.rule === 'dg' && open(t)), // 📮 đơn gửi chờ lên đơn
     };
     const views = [['att', '📌 Cần chú ý'], ['mine', '🙋 Việc của tôi'], ...(perm.admin ? [['all', '📚 Tất cả việc']] : [])];
     const view = views.some((v) => v[0] === lsGet('dgTkView')) ? lsGet('dgTkView') : 'att';
@@ -12606,7 +12607,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     else if (view === 'mine') rows = list.filter((t) => tkMine(t) && (stSel.length ? stSel.includes(t.status) : open(t)));
     else if (view === 'all')
       rows = list.filter((t) => (!F.who || norm(t.to) === norm(F.who)) && (!stSel.length || stSel.includes(t.status)) && (!F.pri || t.pri === F.pri) && (!F.q || norm(`${t.title} ${t.desc || ''}`).includes(norm(F.q))));
-    else rows = list.filter((t) => tkOver(t, now) || t.status === 'submit' || t.status === 'assigned' || t.ext || (open(t) && tkDayKey(t.due) === today));
+    else rows = list.filter((t) => tkOver(t, now) || t.status === 'submit' || t.status === 'assigned' || t.ext || (open(t) && tkDayKey(t.due) === today) || (open(t) && t.src?.rule === 'dg'));
     const PRI_W = { critical: 0, high: 1, normal: 2, low: 3 };
     rows = [...rows].sort((a, b) => Number(open(b)) - Number(open(a)) || (open(a) ? (a.due || 0) - (b.due || 0) || (PRI_W[a.pri] ?? 2) - (PRI_W[b.pri] ?? 2) : (b.upd || 0) - (a.upd || 0))).slice(0, 200);
     const tileHtml = (k, label, color) => `<button class="tk-tile${tile === k ? ' on' : ''}" data-act="task-tile" data-v="${k}" style="--c:${color}"><b>${sets[k].length}</b><span>${label}</span></button>`;
@@ -12658,7 +12659,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     rows.forEach((t) => (groupN[groupKey(t)] = (groupN[groupKey(t)] || 0) + 1));
     const rowsHtml = rows.map((t, i) => (i === 0 || groupKey(rows[i - 1]) !== groupKey(t) ? groupHead(groupKey(t), groupN[groupKey(t)]) : '') + row(t)).join('');
     return `<div class="tk">
-      <div class="tk-tiles">${tileHtml('today', 'Việc hôm nay', '#2563eb')}${tileHtml('over', 'Quá hạn', '#dc2626')}${tileHtml('submit', 'Chờ duyệt', '#7c3aed')}${tileHtml('wait', 'Chờ nhân viên nhận', '#0369a1')}</div>
+      <div class="tk-tiles">${tileHtml('today', 'Việc hôm nay', '#2563eb')}${tileHtml('over', 'Quá hạn', '#dc2626')}${tileHtml('submit', 'Chờ duyệt', '#7c3aed')}${tileHtml('wait', 'Chờ nhân viên nhận', '#0369a1')}${tileHtml('dg', '📮 Đơn gửi chờ lên đơn', '#ea580c')}</div>
       <div class="tk-bar">
         ${views.map(([v, l]) => `<button class="tk-v${!tile && v === view ? ' on' : ''}" data-act="task-view" data-v="${v}">${l}</button>`).join('')}
         <span style="flex:1"></span>
