@@ -12143,6 +12143,163 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
   const tkFindTab = (doc, name) => [...(doc?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+\+?/g, '').trim() === name);
+  // ---------- 🏭 Nhắc nhóm Zalo "Thành phẩm" theo bảng "10 ngày doanh số + báo cáo TP" (/dashboard/ke-hoach) ----------
+  // Tổng Báo cáo TP < tổng Báo giá → sản xuất yếu hơn kinh doanh; ngày làm việc gần nhất (trừ Chủ nhật) dưới trung bình → hỏi tình hình.
+  // kv 'tpCheck': main = cấu hình { to, auto }, YYYY-MM-DD = đã nhắc ngày đó. Tự gửi thứ 2–7 từ 8 giờ, 1 lần / ngày, khi tab Zalo đang mở.
+  const TP_GROUP = 'Thành phẩm';
+  const tpNum = (s) => Number(String(s || '').replace(/\./g, '').replace(',', '.')) || 0;
+  function tpRead(doc) {
+    const t = [...(doc?.querySelectorAll('.ant-table') || [])].find((x) => [...x.querySelectorAll('thead th')].some((h) => h.innerText.trim() === 'Báo cáo TP'));
+    if (!t || [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim()).slice(-3).join() !== 'Báo giá,Báo cáo TP,Xuất kho') return null;
+    const out = { days: [] };
+    for (const tr of t.querySelectorAll('tbody tr, tfoot tr')) {
+      const c = [...tr.cells].map((x) => x.innerText.trim());
+      if (c.length < 4) continue;
+      const v = { bg: tpNum(c[c.length - 3]), tp: tpNum(c[c.length - 2]) };
+      const d = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(c[1]);
+      if (d) out.days.push({ ...v, key: `${d[3]}-${d[2]}-${d[1]}`, label: `${d[1]}/${d[2]}` });
+      else if (c[0] === 'Tổng') out.total = v;
+      else if (c[0] === 'Trung bình') out.avg = v;
+    }
+    return out.days.length && out.total && out.avg ? out : null;
+  }
+  function tpBuild(d, now = Date.now()) {
+    const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
+    const red = (s) => `<b><span style="color:#db342e"><font color="#db342e">${esc(s)}</font></span></b>`;
+    const today = tkDayKey(now);
+    const texts = [];
+    const htmls = [];
+    const keys = d.days.map((x) => x.key).sort();
+    const range = `${d.days.find((x) => x.key === keys[0]).label} – ${d.days.find((x) => x.key === keys[keys.length - 1]).label}`;
+    const lack = d.total.bg - d.total.tp;
+    if (lack > 0) {
+      texts.push(`📉 Báo cáo thành phẩm ${range}: ${big(d.total.tp)}, thấp hơn kinh doanh (${big(d.total.bg)}), thiếu ${big(lack)}.`);
+      htmls.push(`<div>📉 Báo cáo thành phẩm ${esc(range)}: <b>${esc(big(d.total.tp))}</b>, thấp hơn kinh doanh (<b>${esc(big(d.total.bg))}</b>), thiếu ${red(big(lack))}.</div>`);
+    }
+    const prev = d.days.filter((x) => x.key < today && new Date(`${x.key}T00:00:00Z`).getUTCDay() !== 0).sort((a, b) => (a.key < b.key ? 1 : -1))[0];
+    if (prev && prev.tp < d.avg.tp) {
+      const name = prev.key === tkDayKey(now - 86400e3) ? `Hôm qua (${prev.label})` : `Ngày ${prev.label}`;
+      const ask = 'Tình hình sao mà sản xuất dưới trung bình vậy? Báo lại anh nguyên nhân và hướng xử lý nhé.';
+      texts.push(`🔴 ${name} thành phẩm đạt ${big(prev.tp)}, dưới trung bình ${big(d.avg.tp)}, thiếu ${big(d.avg.tp - prev.tp)}.\n${ask}`);
+      htmls.push(`<div>🔴 ${esc(name)} thành phẩm đạt ${red(big(prev.tp))}, dưới trung bình <b>${esc(big(d.avg.tp))}</b>, thiếu ${red(big(d.avg.tp - prev.tp))}.</div><div><b>${esc(ask)}</b></div>`);
+    }
+    return texts.length ? { text: texts.join('\n\n'), html: htmls.join('<div><br></div>') } : null;
+  }
+  async function tpSend(text, html, to) {
+    const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
+    const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+    const jobId = `${Date.now()}-tp`;
+    keep[jobId] = { draft: false, to, zaloName: names[norm(to)]?.name || to, text, html, status: 'pending', at: Date.now() };
+    await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    return jobId;
+  }
+  async function openTpSend() {
+    const d = tpRead(document);
+    if (!d) return alert('Bảng 10 ngày doanh số chưa tải xong – đợi một chút rồi thử lại.');
+    const cfg = (await kvGet('tpCheck')).main || {};
+    const m = tpBuild(d);
+    document.getElementById('dg-tp-send')?.remove();
+    const box = document.createElement('div');
+    box.id = 'dg-tp-send';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.4);display:grid;place-items:center;font-family:inherit');
+    box.innerHTML = `<div style="width:min(680px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      <div style="padding:12px 18px;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;display:flex;align-items:center;flex:none"><b style="font-size:16px">🏭 Nhắc nhóm Thành phẩm</b><button data-s="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px">×</button></div>
+      <div style="padding:10px 18px;display:grid;gap:8px;border-bottom:1px solid #e2e8f0;font-size:13px">
+        <label style="display:flex;gap:8px;align-items:center">👥 Nhóm Zalo: <input data-to value="${esc(cfg.to || TP_GROUP)}" style="flex:1;font:inherit;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px"></label>
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input data-auto type="checkbox" ${cfg.auto ? 'checked' : ''}> 🤖 Tự gửi khi có vấn đề: thứ 2–7 từ 8 giờ, 1 lần / ngày, khi tab Zalo đang mở</label>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:12px 18px;background:#e5efff">
+        <div style="font-size:12px;color:#475569;margin-bottom:6px">📱 Tin sẽ gửi – bấm vào để sửa trực tiếp:</div>
+        <div data-pv contenteditable="${m ? 'true' : 'false'}" style="background:#fff;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.55;color:#111;outline:none;border:1px dashed #a5b4fc">${m ? m.html : '✅ Không có gì cần nhắc: báo cáo thành phẩm không thấp hơn kinh doanh, ngày làm việc gần nhất không dưới trung bình.'}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0">
+        <span data-st style="font-size:12px;font-weight:700;color:#047857;margin-right:auto"></span>
+        <button data-s="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit">Đóng</button>
+        ${m ? `<button data-s="test" style="border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit;font-weight:700">🧪 Gửi test</button>
+        <button data-s="send" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">📨 Gửi nhóm</button>` : ''}</div></div>`;
+    const q = (s) => box.querySelector(s);
+    const saveCfg = () => kvMerge('tpCheck', { main: { to: q('[data-to]').value.trim() || TP_GROUP, auto: q('[data-auto]').checked, at: Date.now(), by: meName } });
+    q('[data-auto]').addEventListener('change', saveCfg);
+    q('[data-to]').addEventListener('change', saveCfg);
+    box.addEventListener('click', async (e) => {
+      const a = e.target.dataset?.s;
+      if (e.target === box || a === 'x') return box.remove();
+      if (a !== 'test' && a !== 'send') return;
+      const test = a === 'test';
+      const to = test ? MT_TEST_TO : q('[data-to]').value.trim() || TP_GROUP;
+      // mở tab Zalo ngay lúc bấm; đang mở thì chỉ chuyển tới, không tải lại
+      try {
+        window.open(Date.now() - (state.zaloAliveAt || 0) < 6000 ? '' : 'https://chat.zalo.me/', 'dg-zalo')?.focus();
+      } catch {}
+      const st = q('[data-st]');
+      const jobId = await tpSend(q('[data-pv]').innerText, q('[data-pv]').innerHTML, to);
+      if (!test) {
+        await saveCfg();
+        await kvMerge('tpCheck', { [tkDayKey(Date.now())]: { at: Date.now(), by: meName, to, jobId } });
+      }
+      for (let i = 0; i < 200 && box.isConnected; i++) {
+        await sleep(1500);
+        const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
+        if (!j) return;
+        if (j.status === 'sent') return (st.textContent = `✅ Đã gửi cho ${j.via || to}`);
+        if (j.status === 'error') return (st.textContent = `⚠️ ${j.error || 'Lỗi gửi Zalo'}`);
+        st.textContent = j.status === 'sending' ? `⏳ Zalo đang tìm “${to}” và gửi…` : '⏳ Chờ tab Zalo nhận việc…';
+      }
+    });
+    document.documentElement.append(box);
+  }
+  if (IS_TOP && TASK_ON) {
+    // Nút trên khung "10 ngày doanh số + báo cáo TP"
+    setInterval(() => {
+      if (!MY_ADMIN || !/^\/dashboard\/ke-hoach/.test(location.pathname)) return;
+      const head = [...document.querySelectorAll('.ant-card-head')].find((h) => /^10 ngày doanh số/.test(h.innerText.trim()));
+      if (!head || head.querySelector('[data-dg-tp]')) return;
+      const b = document.createElement('button');
+      b.dataset.dgTp = '1';
+      b.textContent = '🏭 Nhắc Thành phẩm';
+      b.setAttribute('style', 'position:absolute;right:24px;top:14px;border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:5px 14px;cursor:pointer;font:inherit;font-weight:700');
+      b.onclick = () => openTpSend().catch((e) => alert(e.message));
+      head.style.position = 'relative';
+      head.append(b);
+    }, 2000);
+    // Tự gửi: đọc bảng trong khung ẩn, giữ chỗ trước (nhiều máy admin cùng mở) rồi xếp việc gửi; không có vấn đề thì ghi lại để khỏi đọc nữa trong ngày
+    let tpBusy = false;
+    let tpTried = 0;
+    setInterval(async () => {
+      const now = Date.now();
+      const vn = new Date(now + 7 * 3600e3);
+      if (!MY_ADMIN || tpBusy || now - tpTried < 10 * 60e3 || document.visibilityState !== 'visible' || vn.getUTCDay() === 0 || vn.getUTCHours() < 8 || now - (state.zaloAliveAt || 0) > 6000) return;
+      const day = tkDayKey(now);
+      const all = await kvGet('tpCheck');
+      if (!all.main?.auto || all[day] || !tabLock('dgTpLock', 5 * 60e3)) return;
+      tpBusy = true;
+      tpTried = now;
+      try {
+        const d = await tkInFrame('/dashboard/ke-hoach', async (doc) => {
+          for (let i = 0; i < 60; i++) {
+            const r = doc() && tpRead(doc());
+            if (r) return r;
+            await sleep(500);
+          }
+          return null;
+        });
+        if (!d) return;
+        const m = tpBuild(d, now);
+        if (!m) return void (await kvMerge('tpCheck', { [day]: { at: now, by: meName, none: true } }));
+        const key = `${meName}-${Math.random().toString(36).slice(2, 7)}`;
+        await kvMerge('tpCheck', { [day]: { at: now, by: meName, key } });
+        await sleep(4000);
+        if ((await kvGet('tpCheck'))[day]?.key !== key) return;
+        const to = all.main.to || TP_GROUP;
+        const jobId = await tpSend(m.text, m.html, to);
+        await kvMerge('tpCheck', { [day]: { at: now, by: meName, key, to, jobId, auto: true } });
+      } catch (e) {
+        console.warn('[DG] nhắc Thành phẩm:', e.message);
+      } finally {
+        tpBusy = false;
+      }
+    }, 60000);
+  }
   // Tab Mới của Danh sách đơn: đọc đủ mọi trang, 30 phút / lần. Đọc thiếu trang thì chỉ thêm đơn, không xoá đơn cũ khỏi danh sách.
   async function tkReadNewOrders() {
     if (!MY_ADMIN || dayOrdersBusy) return;
