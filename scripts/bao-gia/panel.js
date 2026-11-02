@@ -12162,10 +12162,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // Trang Đơn gửi (/don-gui): đọc đủ mọi tab đối tác (Đại Dương, Hải Âu, Tường Long…) và mọi trang, 15 phút / lần:
   // đơn có "Số BG TT" mà chưa có "ĐH Misa" là đơn gửi chờ lên đơn (số đỏ trên tab). Chỉ bấm tab / phân trang để xem, không sửa gì.
-  async function tkReadDonGui() {
-    if (!MY_ADMIN) return;
+  // force: quay lại tab khi còn đơn chờ → đọc ngay (cách lần trước tối thiểu 30 giây), đơn đã duyệt mất việc liền
+  let tkDonGuiBusy = false;
+  async function tkReadDonGui(force = false) {
+    if (!MY_ADMIN || tkDonGuiBusy) return;
     const old = await kvGet('donGuiPending');
-    if (Date.now() - (old._src?.at || 0) < 15 * 60e3 || !tabLock('dgTkDonGuiLock', 5 * 60e3)) return;
+    if (force && !Object.keys(old).some((k) => k !== '_src' && old[k])) return;
+    if (Date.now() - (old._src?.at || 0) < (force ? 30e3 : 15 * 60e3) || !tabLock('dgTkDonGuiLock', force ? 30e3 : 5 * 60e3)) return;
+    tkDonGuiBusy = true;
+    try {
+      await tkReadDonGuiRun(old);
+    } finally {
+      tkDonGuiBusy = false;
+    }
+  }
+  async function tkReadDonGuiRun(old) {
     const got = {};
     const count = {};
     let complete = false;
@@ -12461,6 +12472,36 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tkReadDonGui().catch((e) => console.warn('[DG] đọc đơn gửi:', e.message));
       tkReadApprove().catch((e) => console.warn('[DG] đọc Duyệt lên đơn:', e.message));
     }, 60000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') tkReadDonGui(true).catch((e) => console.warn('[DG] đọc đơn gửi:', e.message));
+    });
+    // Đang mở trang Đơn gửi: dòng vừa có ĐH Misa (đã duyệt) → xoá việc ngay, không chờ lần đọc sau
+    if (/^\/don-gui/.test(location.pathname)) {
+      let seen = '';
+      setInterval(async () => {
+        if (!MY_ADMIN || document.visibilityState !== 'visible') return;
+        const table = [...document.querySelectorAll('.ant-table')].filter(dnShown).find((x) => [...x.querySelectorAll('thead th')].some((th) => th.innerText.trim() === 'Số BG TT'));
+        if (!table) return;
+        const heads = [...table.querySelectorAll('thead th')].map((h) => h.innerText.trim());
+        const iBg = heads.indexOf('Số BG TT');
+        const iDh = heads.indexOf('ĐH Misa');
+        if (iBg < 0 || iDh < 0) return;
+        const done = [...table.querySelectorAll('.ant-table-tbody tr')].filter((tr) => /DH\d+/.test(tr.cells[iDh]?.innerText || '')).map((tr) => (tr.cells[iBg]?.innerText.match(/BG\d+/) || [])[0]).filter(Boolean);
+        const sig = done.join();
+        if (sig === seen) return;
+        seen = sig;
+        const pend = await kvGet('donGuiPending');
+        const hit = done.filter((bg) => pend[bg]);
+        if (!hit.length) return;
+        await kvMerge('donGuiPending', Object.fromEntries(hit.map((bg) => [bg, null])));
+        const tasks = await kvGet('tasks');
+        for (const t of Object.values(tasks)) {
+          if (t?.src?.rule !== 'dg' || !hit.includes(t.src.sid)) continue;
+          await kvMerge('tasks', { [t.id]: null });
+          await tkLog(t.id, '⚡ Xoá việc: đơn gửi đã có mã đơn hàng');
+        }
+      }, 3000);
+    }
   }
   async function tkAutoOpen() {
     document.getElementById('dg-tk-auto')?.remove();
