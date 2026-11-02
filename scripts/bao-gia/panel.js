@@ -12302,11 +12302,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           allRead = false;
           break;
         }
-        // số trên tab: không có số là 0 dòng; "99+" thì không so được
-        const badge = tab.innerText.match(/\d+\+?/)?.[0] || '0';
+        // số trên tab (tải sau bảng nên đọc lại mỗi lần): không có số là 0 dòng; "99+" thì không so được
+        const badge = () => tab.innerText.match(/\d+\+?/)?.[0] || '0';
         (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
         await sleep(2000);
-        for (let i = 0; i < 25 && (doc()?.querySelector('.ant-spin-spinning') || (badge !== '0' && !ids().length)); i++) await sleep(400);
+        for (let i = 0; i < 25 && (doc()?.querySelector('.ant-spin-spinning') || (badge() !== '0' && !ids().length)); i++) await sleep(400);
         const seen = new Set(ids());
         for (let page = 2; page <= 12; page++) {
           const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
@@ -12316,7 +12316,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           for (let i = 0; i < 25 && (!ids().length || ids()[0] === prev); i++) await sleep(400);
           ids().forEach((x) => seen.add(x));
         }
-        if (!badge.endsWith('+') && seen.size !== Number(badge)) allRead = false;
+        if (!badge().endsWith('+') && seen.size !== Number(badge())) allRead = false;
         for (const id of seen) got[id] = { tab: name };
       }
       complete = allRead;
