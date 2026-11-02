@@ -11125,7 +11125,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const tkActive = (t) => ['assigned', 'accepted', 'doing'].includes(t?.status);
   const tkPersonal = (t) => norm(t.by) === norm(t.to);
   const tkOver = (t, now = Date.now()) => tkActive(t) && t.due && now > t.due;
-  const tkTime = (ms) => new Date(ms).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const tkTime = (ms) => new Date(ms).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/-/g, '/');
   const tkInput = (ms) => new Date(ms + 7 * 3600e3).toISOString().slice(0, 16); // giá trị ô chọn ngày giờ theo giờ VN
   const tkParse = (v) => (v ? new Date(`${v}:00+07:00`).getTime() : 0);
   const tkDayKey = (ms) => new Date(ms + 7 * 3600e3).toISOString().slice(0, 10);
@@ -11292,13 +11292,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await tkLog(id, what, note);
     render();
   }
-  const TK_OVERLAY = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.45);display:grid;place-items:center;font:14px/1.5 system-ui,sans-serif;color:#1e293b';
+  const TK_OVERLAY = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.45);display:grid;place-items:center;font:14px/1.5 system-ui,sans-serif;color:#1e293b;text-align:left';
   const TK_IN = 'font:inherit;border:1px solid #cbd5e1;border-radius:7px;padding:5px 8px;box-sizing:border-box;width:100%;background:#fff;color:#1e293b';
   const tkBtn = (k, label, kind = '') => {
     const st = { pri: 'border:0;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;font-weight:800', ok: 'border:0;background:#059669;color:#fff;font-weight:800', warn: 'border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;font-weight:700', bad: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;font-weight:700' }[kind] || 'border:1px solid #e2e8f0;background:#fff;color:#334155';
     return `<button data-k="${k}" style="${st};border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit">${label}</button>`;
   };
-  const tkHead = (title) => `<div style="padding:12px 18px;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px;flex:none"><b style="font-size:16px">${title}</b><button data-k="x" style="margin-left:auto;all:unset;cursor:pointer;font-size:22px;line-height:1">×</button></div>`;
+  const tkHead = (title) => `<div style="padding:12px 18px;background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;display:flex;align-items:center;gap:10px;flex:none"><b style="font-size:16px">${title}</b><button data-k="x" style="all:unset;margin-left:auto;cursor:pointer;font-size:22px;line-height:1">×</button></div>`;
   async function tkPeople() {
     const [seen, zn, all, quotes] = await Promise.all([kvGet('seenUsers'), kvGet('zaloNames'), kvGet('tasks'), kvGet('quotes')]);
     const m = new Map();
