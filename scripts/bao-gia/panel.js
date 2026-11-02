@@ -9162,6 +9162,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const k = e.target.dataset?.tkf;
       if (!k) return;
       state.tkF = { ...state.tkF, [k]: e.target.value };
+      lsSet('dgTkF', JSON.stringify(state.tkF));
       render();
     });
     pnl.addEventListener('keyup', qeRemember);
@@ -12152,7 +12153,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     const views = [['att', '📌 Cần chú ý'], ['mine', '🙋 Việc của tôi'], ...(perm.admin ? [['all', '📚 Tất cả việc']] : [])];
     const view = views.some((v) => v[0] === lsGet('dgTkView')) ? lsGet('dgTkView') : 'att';
-    const F = state.tkF || (state.tkF = {});
+    // bộ lọc và ô đang chọn được lưu lại qua F5
+    if (!state.tkF) {
+      try {
+        state.tkF = JSON.parse(lsGet('dgTkF') || '{}');
+      } catch {
+        state.tkF = {};
+      }
+      state.tkTile = lsGet('dgTkTile') || null;
+    }
+    const F = state.tkF;
     const tile = state.tkTile;
     let rows;
     if (tile && sets[tile]) rows = sets[tile];
@@ -14942,10 +14952,12 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'task-view') {
       lsSet('dgTkView', b.dataset.v);
       state.tkTile = null;
+      lsSet('dgTkTile', null);
       render();
     }
     else if (act === 'task-tile') {
       state.tkTile = state.tkTile === b.dataset.v ? null : b.dataset.v;
+      lsSet('dgTkTile', state.tkTile);
       render();
     }
     else if (act === 'report-start') {
