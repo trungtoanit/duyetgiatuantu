@@ -3244,6 +3244,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- ✅ Duyệt 5 lệnh (trang Đề nghị, quản trị): do người dùng bấm, xác nhận trước; mở lần lượt từ trên xuống → Duyệt → đóng form, đủ 5 lệnh thì dừng ----------
   // Lệnh không có nút Duyệt (đã duyệt / chưa tới lượt) thì bỏ qua, không tính. Có gì bất thường thì dừng ngay và để nguyên form để người dùng xem.
   const DN_MAX = 5;
+  const DN_ME = 'Nguyễn Trung Toán'; // chỉ duyệt lệnh mà người này đang "Chưa duyệt" trong mục Trạng thái
+  // Trạng thái của DN_ME trong form: phần giữa "Trạng thái:" và "Người theo dõi" (tránh trùng tên ở Người tạo / Người theo dõi)
+  const dnMyStatus = (m) => {
+    const t = (m.innerText || '').normalize('NFC').replace(/\s+/g, ' ');
+    const a = t.indexOf('Trạng thái:');
+    if (a < 0) return '';
+    const b = t.indexOf('Người theo dõi', a);
+    const sec = t.slice(a, b > a ? b : a + 400);
+    return (sec.match(new RegExp(`${DN_ME}\\s*(Chưa duyệt|Đã duyệt|Từ chối)`)) || [])[1] || '';
+  };
   const dnTable = () => [...document.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Mã đề nghị/i.test(th.innerText.trim())));
   const dnRows = () => {
     const t = dnTable();
@@ -3264,7 +3274,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const list = dnRows();
     if (!list.length) return (out.textContent = '⚠️ Không thấy lệnh nào trên trang');
     const head = list.slice(0, DN_MAX).map((r) => `• ${r.code} – ${r.name.slice(0, 60)} – ${r.sum}đ`).join('\n');
-    if (!confirm(`Tự mở lần lượt và bấm DUYỆT đủ ${DN_MAX} lệnh từ trên xuống rồi dừng.\nLệnh chưa tới lượt / đã duyệt sẽ bỏ qua và lấy lệnh kế tiếp.\n\n${DN_MAX} lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
+    if (!confirm(`Tự mở lần lượt và bấm DUYỆT đủ ${DN_MAX} lệnh từ trên xuống rồi dừng.\nChỉ duyệt lệnh có ${DN_ME} "Chưa duyệt"; lệnh khác tự đóng form và lấy lệnh kế tiếp.\n\n${DN_MAX} lệnh đầu đang hiện:\n${head}\n\nTiếp tục?`)) return;
     DN.run = true;
     DN.stop = false;
     btn.textContent = '⏹ Dừng';
@@ -3290,7 +3300,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
           break;
         }
         const findBtn = () => [...m.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Duyệt' && !b.disabled);
-        const ap = await waitFor(findBtn, 3000, 150);
+        // Phải có Nguyễn Trung Toán "Chưa duyệt" và có nút Duyệt; không thì đóng form, lấy lệnh kế tiếp
+        await waitFor(() => findBtn() && dnMyStatus(m), 3000, 150);
+        const ap = dnMyStatus(m) === 'Chưa duyệt' ? findBtn() : null;
         if (!ap) {
           skip++;
           await shut(m);
@@ -3327,7 +3339,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) {
     setInterval(() => {
-      if (!MY_ADMIN || !/^\/de-nghi/.test(location.pathname) || document.querySelector('[data-dg-dn5]')) return;
+      if (!/^\/de-nghi/.test(location.pathname) || document.querySelector('[data-dg-dn5]')) return;
+      // Nút Duyệt trong form duyệt theo tài khoản đang đăng nhập → chỉ hiện với đúng tài khoản Nguyễn Trung Toán
+      if (!state.meReal) {
+        kvGet('me').then((me) => (state.meReal = me?.name || '')).catch(() => {});
+        return;
+      }
+      if (!IS_OWNER()) return;
       const anchor = [...document.querySelectorAll('.ant-picker-range')].pop()?.closest('.flex.items-end') || [...document.querySelectorAll('.ant-picker-range')].pop()?.parentElement;
       if (!anchor || !dnTable()) return;
       const wrap = document.createElement('div');
