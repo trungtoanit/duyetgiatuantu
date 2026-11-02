@@ -11247,7 +11247,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const TK_REP = { daily: 'Hàng ngày', workday: 'Hàng ngày, trừ Chủ nhật', weekly: 'Hàng tuần', monthly: 'Hàng tháng' };
   const tkActive = (t) => ['assigned', 'accepted', 'doing'].includes(t?.status);
   const tkPersonal = (t) => norm(t.by) === norm(t.to);
-  const tkOver = (t, now = Date.now()) => tkActive(t) && t.due && now > t.due;
+  const tkOver = (t, now = Date.now()) => tkActive(t) && t.due && now > t.due && t.src?.rule !== 'dg'; // đơn gửi luôn là việc hôm nay, không quá hạn
   const tkTime = (ms) => new Date(ms).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/-/g, '/');
   const tkInput = (ms) => new Date(ms + 7 * 3600e3).toISOString().slice(0, 16); // giá trị ô chọn ngày giờ theo giờ VN
   const tkParse = (v) => (v ? new Date(`${v}:00+07:00`).getTime() : 0);
@@ -11900,6 +11900,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   };
   const tkAutoCfg = (c) => Object.fromEntries(Object.keys(TK_AUTO).map((k) => [k, { ...TK_AUTO[k], ...(c?.[k] || {}) }]));
   const tkSec = (x) => (x > 1e11 ? x / 1000 : x || 0);
+  // Hết ngày hôm nay (23:59 giờ VN) – việc Đơn gửi chờ lên đơn luôn là việc của hôm nay, sang ngày mới tự dời hạn, không thành quá hạn
+  const tkTodayEnd = (now = Date.now()) => {
+    const v = new Date(now + 7 * 3600e3);
+    return Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), 23, 59) - 7 * 3600e3;
+  };
   // Hạn sau n ngày, 17:00 giờ VN; rơi vào Chủ nhật thì lùi sang thứ 2
   function tkDueIn(n, now = Date.now()) {
     const v = new Date(now + 7 * 3600e3);
@@ -11989,7 +11994,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const [bg, o] of Object.entries(data.donGuiPending || {})) {
       if (bg === '_src' || !o) continue;
       const days = Math.max(0, (now - (o.at || now)) / 86400e3);
-      out.dg.push({ key: `dg-${bg}`, rule: 'dg', title: `Duyệt lên đơn gửi ${bg}${o.kh ? ` – ${o.kh}` : ''} (${o.tab})`, desc: `Đơn gửi ${o.tab} có báo giá ${bg} nhưng chưa có mã đơn hàng.${o.code ? ` Số BG đối tác: ${o.code}.` : ''}${o.sale ? ` Sale: ${o.sale}.` : ''}${o.day ? ` Ngày tạo: ${o.day}.` : ''}`, to: boss, due: tkDueIn(1, now), pri: 'high', weight: days, url: `/don-gui?dgTab=${encodeURIComponent(o.tab)}`, label: bg, sid: bg });
+      out.dg.push({ key: `dg-${bg}`, rule: 'dg', title: `Duyệt lên đơn gửi ${bg}${o.kh ? ` – ${o.kh}` : ''} (${o.tab})`, desc: `Đơn gửi ${o.tab} có báo giá ${bg} nhưng chưa có mã đơn hàng.${o.code ? ` Số BG đối tác: ${o.code}.` : ''}${o.sale ? ` Sale: ${o.sale}.` : ''}${o.day ? ` Ngày tạo: ${o.day}.` : ''}`, to: boss, due: tkTodayEnd(now), pri: 'high', weight: days, url: `/don-gui?dgTab=${encodeURIComponent(o.tab)}`, label: bg, sid: bg });
     }
     for (const k of Object.keys(out)) out[k].sort((a, b) => b.weight - a.weight);
     return out;
@@ -12061,6 +12066,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         }
         await kvMerge('tasks', { [t.id]: { ...t, status: 'done', doneAt: now, upd: now, updBy: meName, ext: null, v: (t.v || 0) + 1 } });
         await tkLog(t.id, `⚡ Tự đóng: ${why}`);
+        changed = true;
+      }
+      // Việc đơn gửi còn mở: luôn là việc hôm nay → dời hạn về cuối ngày hiện tại
+      for (const t of Object.values(tasks)) {
+        if (t?.src?.rule !== 'dg' || t.status === 'done' || t.status === 'cancel' || t.due === tkTodayEnd(now) || tkSrcDone(t, ac, data)) continue;
+        await kvMerge('tasks', { [t.id]: { ...t, due: tkTodayEnd(now), upd: now, v: (t.v || 0) + 1 } });
         changed = true;
       }
       const has = new Set(Object.values(tasks).map((t) => t?.src?.key).filter(Boolean));
@@ -12581,7 +12592,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const today = tkDayKey(now);
     const open = (t) => t.status !== 'done' && t.status !== 'cancel';
     const sets = {
-      today: list.filter((t) => open(t) && tkDayKey(t.due) === today),
+      today: list.filter((t) => open(t) && (tkDayKey(t.due) === today || t.src?.rule === 'dg')),
       over: list.filter((t) => tkOver(t, now)),
       submit: list.filter((t) => t.status === 'submit'),
       wait: list.filter((t) => t.status === 'assigned'),
