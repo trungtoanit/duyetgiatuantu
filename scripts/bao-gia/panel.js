@@ -8958,6 +8958,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .tk-row.over { background: #fef2f2; }
     .tk-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
     .tk-title { min-width: 200px; }
+    .tk-kind { display: inline-block; width: 22px; font-size: 14px; }
+    .tk-more td { text-align: center; color: #64748b; font-size: 12px; padding: 10px; }
     .tk-ext { font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border-radius: 999px; padding: 1px 7px; }
     .tk-age { margin-left: 6px; font-size: 11px; font-weight: 700; color: #b45309; background: #fef3c7; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
     .tk-amt { text-align: right; white-space: nowrap; font-weight: 800; color: #0f766e; }
@@ -9128,6 +9130,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) p.addEventListener(ev, stop, { passive: true });
     let t;
     p.addEventListener('scroll', () => {
+      tkLazyFill();
       if (scrollWanted != null) return; // đang khôi phục – không ghi đè bằng vị trí tạm
       clearTimeout(t);
       t = setTimeout(() => lsSet('dgPanelScroll', String(Math.round(p.scrollTop))), 200);
@@ -11244,6 +11247,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   };
   const TK_PRI = { critical: ['Khẩn', '#dc2626'], high: ['Cao', '#ea580c'], normal: ['Thường', '#2563eb'], low: ['Thấp', '#64748b'] };
   const TK_CFG = { pre: 60, every: 60, max: 3, esc: 24, from: 7, to: 20, sunday: false, boss: 'Nguyễn Trung Toán', rpOn: true, rpM: '07:30', rpE: '17:30' };
+  // Icon phân loại từng dòng việc (cùng icon với các nguồn trong ⚡ Từ CRM)
+  const TK_KIND = { quote: ['🎯', 'Báo giá chờ duyệt'], debt: ['💰', 'Công nợ'], maint: ['🔧', 'Bảo trì'], stale: ['🐢', 'Đơn chưa hoàn thành'], dn: ['📝', 'Đề nghị'], dg: ['📮', 'Đơn gửi'], order: ['📦', 'Đơn sắp giao'] };
+  const tkKind = (t) => TK_KIND[t.src?.rule] || (t.rep ? ['🔁', `Việc lặp lại: ${TK_REP[t.rep] || ''}`] : ['🗒️', 'Việc giao tay']);
   const TK_REP = { daily: 'Hàng ngày', workday: 'Hàng ngày, trừ Chủ nhật', weekly: 'Hàng tuần', monthly: 'Hàng tháng' };
   const tkActive = (t) => ['assigned', 'accepted', 'doing'].includes(t?.status);
   const tkPersonal = (t) => norm(t.by) === norm(t.to);
@@ -12627,6 +12633,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     });
     document.documentElement.append(box);
   }
+  const TK_PAGE = 50;
+  // Dòng "Đang tải thêm" đã gần tới mép dưới bảng → vẽ thêm việc, tới khi đủ che màn hình
+  function tkLazyFill() {
+    const p = root?.querySelector('.panel');
+    for (let el; (el = p?.querySelector('.tk-more')) && el.getBoundingClientRect().top - p.getBoundingClientRect().bottom < 600;) state.tkNext(el);
+  }
   function taskTab(all, perm, debt = {}) {
     const now = Date.now();
     const list = Object.values(all || {}).filter(tkVisible);
@@ -12661,7 +12673,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       rows = list.filter((t) => (!F.who || norm(t.to) === norm(F.who)) && (!stSel.length || stSel.includes(t.status)) && (!F.pri || t.pri === F.pri) && (!F.q || norm(`${t.title} ${t.desc || ''}`).includes(norm(F.q))));
     else rows = list.filter((t) => tkOver(t, now) || t.status === 'submit' || t.status === 'assigned' || t.ext || (open(t) && tkDayKey(t.due) === today) || (open(t) && t.src?.rule === 'dg'));
     const PRI_W = { critical: 0, high: 1, normal: 2, low: 3 };
-    rows = [...rows].sort((a, b) => Number(open(b)) - Number(open(a)) || (open(a) ? (a.due || 0) - (b.due || 0) || (PRI_W[a.pri] ?? 2) - (PRI_W[b.pri] ?? 2) : (b.upd || 0) - (a.upd || 0))).slice(0, 200);
+    rows = [...rows].sort((a, b) => Number(open(b)) - Number(open(a)) || (open(a) ? (a.due || 0) - (b.due || 0) || (PRI_W[a.pri] ?? 2) - (PRI_W[b.pri] ?? 2) : (b.upd || 0) - (a.upd || 0)));
+    // Lazy load: vẽ trước TK_PAGE dòng, cuộn gần cuối thì vẽ thêm; đổi bộ lọc / ô / chế độ xem thì về lại từ đầu, vẽ lại giữ số dòng đã mở
+    const lazyKey = JSON.stringify([tile, view, F]);
+    if (state.tkLazyKey !== lazyKey) {
+      state.tkLazyKey = lazyKey;
+      state.tkShow = TK_PAGE;
+    }
     const tileHtml = (k, label, color) => `<button class="tk-tile${tile === k ? ' on' : ''}" data-act="task-tile" data-v="${k}" style="--c:${color}"><b>${sets[k].length}</b><span>${label}</span></button>`;
     const whos = [...new Set(list.map((t) => t.to))].sort((a, b) => a.localeCompare(b, 'vi'));
     const pool = view === 'mine' ? list.filter(tkMine) : list;
@@ -12689,7 +12707,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const quick = tkMine(t) && t.status === 'assigned' ? `<button class="tk-q" data-act="task-accept" data-tk="${esc(t.id)}">✅ Nhận</button>` : '';
       return `<tr class="tk-row${tkOver(t, now) ? ' over' : ''}" data-act="task-open" data-tk="${esc(t.id)}">
         <td><span class="tk-dot" style="background:${TK_PRI[t.pri]?.[1] || '#2563eb'}" title="${esc(TK_PRI[t.pri]?.[0] || '')}"></span></td>
-        <td class="tk-title"><b>${esc(t.title)}</b>${t.rep ? ` <span title="${esc(TK_REP[t.rep] || '')}">🔁</span>` : ''}${t.src ? ' <span title="Tự tạo từ CRM">⚡</span>' : ''}${tkOrderAge(t)}${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
+        <td class="tk-title"><span class="tk-kind" title="${esc(tkKind(t)[1])}">${tkKind(t)[0]}</span><b>${esc(t.title)}</b>${t.src ? ' <span title="Tự tạo từ CRM">⚡</span>' : ''}${tkOrderAge(t)}${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
         <td class="tk-amt">${tkAmtCell(t)}</td>
         <td>${avatarHtml(t.to, 18)} ${esc(t.to)}</td>
         <td class="tk-due">${esc(tkTime(t.due))}${open(t) && t.status !== 'submit' ? `<div>${esc(tkLeft(t))}</div>` : ''}</td>
@@ -12709,7 +12727,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const groupKey = (t) => (open(t) ? tkDayKey(t.due) : 'closed');
     const groupN = {};
     rows.forEach((t) => (groupN[groupKey(t)] = (groupN[groupKey(t)] || 0) + 1));
-    const rowsHtml = rows.map((t, i) => (i === 0 || groupKey(rows[i - 1]) !== groupKey(t) ? groupHead(groupKey(t), groupN[groupKey(t)]) : '') + row(t)).join('');
+    const rowsPart = (from, to) => rows.slice(from, to).map((t, k) => (from + k === 0 || groupKey(rows[from + k - 1]) !== groupKey(t) ? groupHead(groupKey(t), groupN[groupKey(t)]) : '') + row(t)).join('');
+    const moreRow = (n) => (n < rows.length ? `<tr class="tk-more"><td colspan="8">Đang tải thêm… ${n}/${rows.length} việc</td></tr>` : '');
+    state.tkNext = (el) => {
+      const n = Math.min(state.tkShow + TK_PAGE, rows.length);
+      el.insertAdjacentHTML('beforebegin', rowsPart(state.tkShow, n) + moreRow(n));
+      el.remove();
+      state.tkShow = n;
+    };
+    const rowsHtml = rowsPart(0, state.tkShow) + moreRow(state.tkShow);
     return `<div class="tk">
       <div class="tk-tiles">${tileHtml('today', 'Việc hôm nay', '#2563eb')}${tileHtml('over', 'Quá hạn', '#dc2626')}${tileHtml('submit', 'Chờ duyệt', '#7c3aed')}${tileHtml('wait', 'Chờ nhân viên nhận', '#0369a1')}${tileHtml('dg', '📮 Đơn gửi chờ lên đơn', '#ea580c')}</div>
       <div class="tk-bar">
@@ -14106,6 +14132,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (panelHtml !== lastPanelHtml || !panelEl.innerHTML) {
       lastPanelHtml = panelHtml;
       panelEl.innerHTML = panelHtml;
+      tkLazyFill();
     }
     if (searchFocused) {
       const el = root.querySelector('input.dg-search');
