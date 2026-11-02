@@ -11197,6 +11197,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
 
+  // Mở Báo cáo bảo trì từ việc bên tab Công việc (?dgFind=152): chờ bảng tải xong rồi nhập ID vào ô Tìm ID
+  if (IS_TOP && /^\/bao-tri\/bao-cao/.test(location.pathname)) {
+    const id = new URLSearchParams(location.search).get('dgFind');
+    if (/^\d+$/.test(id || '')) {
+      const box = () => [...document.querySelectorAll('input')].find((i) => /^Tìm ID/i.test(i.placeholder || ''));
+      waitFor(() => box() && document.querySelector('.ant-table-tbody tr:not(.ant-table-measure-row)'), 30000, 300).then(async (ready) => {
+        if (!ready) return;
+        await sleep(800);
+        const inp = box();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, id);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+  }
   // ---------- 📋 Tab Công việc (chỉ Tuấn Tú): giao việc, nhắc việc qua Zalo, lịch sử ----------
   // kv đồng bộ: tasks (mỗi việc 1 dòng), taskLog (lịch sử – chỉ thêm, không sửa), taskRem (lượt nhắc Zalo đã gửi), taskCfg (cấu hình nhắc).
   // Quy trình: Chờ nhận → Đã nhận → Đang làm → Chờ duyệt → Hoàn thành (Trả lại về Đang làm; Hủy có lý do). Việc tự nhắc mình thì không cần duyệt.
@@ -11786,7 +11800,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           ${t.rep ? `<span style="font-weight:700;color:#0f766e">🔁 ${esc(TK_REP[t.rep] || '')}</span>` : ''}
           <span style="color:#475569">Hạn <b>${esc(tkTime(t.due))}</b>${act && !tkOver(t) ? ` · ${esc(tkLeft(t))}` : ''}</span></div>
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
-        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
+        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.rule === 'maint' ? `${t.src.url}?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
         ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Nhắc mỗi ngày đến khi xong, lần tới ${esc(tkTime(t.remindAt))}</div>` : ''}
         ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
