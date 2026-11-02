@@ -11200,7 +11200,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (now >= t.due - cfg.pre * 60e3 && (t.at || 0) <= t.due - cfg.pre * 60e3) return hit(`${t.id}-${t.due}-pre`, 'pre', t.to);
     return null;
   }
-  // Hẹn nhắc lại sau khi bấm Nhắc ngay: ngày mai cùng giờ (ngoài giờ được nhắc thì lấy đầu giờ); mai là Chủ nhật thì sang thứ 2
+  // Hẹn nhắc lại sau khi bấm Nhắc ngay (lặp mỗi ngày đến khi việc xong / hủy / bấm dừng): ngày mai cùng giờ (ngoài giờ được nhắc thì lấy đầu giờ); mai là Chủ nhật thì sang thứ 2
   function tkNextRemind(cfg, now = Date.now()) {
     const v = new Date(now + 7 * 3600e3);
     const inHours = v.getUTCHours() >= cfg.from && v.getUTCHours() < cfg.to;
@@ -11355,7 +11355,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const claim = `${meName}-${Math.random().toString(36).slice(2, 7)}`;
           await kvMerge('taskRem', { [p.key]: { t: t.id, kind: p.kind, to: p.to, at: now, by: meName, claim, state: 'claim' } });
           await sleep(4000);
-          if ((await kvGet('taskRem'))[p.key]?.claim === claim) await tkPush(t, p.key, p.kind, p.to, { claim });
+          if ((await kvGet('taskRem'))[p.key]?.claim === claim) {
+            await tkPush(t, p.key, p.kind, p.to, { claim });
+            // nhắc mỗi ngày đến khi xong: hẹn lần kế, giữ đúng giờ đã hẹn (máy mở trễ cũng không gửi dồn)
+            if (p.kind === 'again') {
+              let at = tkNextRemind(cfg, t.remindAt);
+              while (at <= now) at = tkNextRemind(cfg, at);
+              const cur = (await kvGet('tasks'))[t.id];
+              if (cur?.remindAt === t.remindAt) await kvMerge('tasks', { [t.id]: { ...cur, remindAt: at } });
+            }
+          }
           return;
         }
       } catch (e) {
@@ -11645,6 +11654,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!manage && work && act && !t.ext) btns.push(tkBtn('askext', '⏳ Xin gia hạn (cần lý do)', 'warn'));
     if (manage && act && t.ext) btns.push(tkBtn('extok', '✅ Duyệt gia hạn', 'ok'), tkBtn('extno', '✖️ Từ chối gia hạn', 'warn'));
     if (manage && !personal && (act || t.status === 'submit')) btns.push(tkBtn('remind', '📨 Nhắc ngay'));
+    if (manage && act && t.remindAt) btns.push(tkBtn('noremind', '🔕 Dừng nhắc mỗi ngày'));
     if (manage && t.status !== 'done' && t.status !== 'cancel') btns.push(tkBtn('edit', '✏️ Sửa'), tkBtn('cancel', '🗑 Hủy (cần lý do)', 'bad'));
     box.innerHTML = `<div style="width:min(720px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
       ${tkHead(`📋 ${esc(t.title)}`)}
@@ -11658,7 +11668,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
         ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
-        ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Sẽ nhắc lại lúc ${esc(tkTime(t.remindAt))}</div>` : ''}
+        ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Nhắc mỗi ngày đến khi xong, lần tới ${esc(tkTime(t.remindAt))}</div>` : ''}
         ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
         ${t.subNote && t.status === 'submit' ? `<div style="background:#f3e8ff;border-radius:8px;padding:8px 10px">📤 Kết quả đã nộp: ${esc(t.subNote)}</div>` : ''}
         ${work && (t.status === 'accepted' || t.status === 'doing') ? `<label style="display:flex;gap:8px;align-items:center">Tiến độ <input data-f="pg" type="range" min="0" max="100" step="5" value="${Number(t.progress) || 0}" style="flex:1"> <b data-pgv>${Number(t.progress) || 0}%</b></label>` : `<div>Tiến độ: <b>${Number(t.progress) || 0}%</b></div>`}
@@ -11707,6 +11717,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         } else if (k === 'cancel') {
           if (!need('lý do hủy')) return;
           await tkDo(id, { status: 'cancel', ext: null }, 'Hủy việc', note);
+        } else if (k === 'noremind') {
+          await tkDo(id, { remindAt: null }, 'Dừng nhắc mỗi ngày', note);
         } else if (k === 'remind') {
           // mở tab Zalo ngay lúc bấm (trình duyệt chặn nếu mở sau khi chờ)
           const alive = Date.now() - (state.zaloAliveAt || 0) < 6000;
@@ -11718,7 +11730,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           await tkPush(fresh, `${id}-manual-${Date.now()}`, 'manual', to, {});
           if (tkActive(fresh)) {
             const at = tkNextRemind(await tkCfgGet());
-            await tkDo(id, { remindAt: at }, `Nhắc ngay qua Zalo: ${to}; hẹn nhắc lại ${tkTime(at)}`);
+            await tkDo(id, { remindAt: at }, `Nhắc ngay qua Zalo: ${to}; nhắc lại mỗi ngày từ ${tkTime(at)} đến khi xong`);
           } else await tkLog(id, `Nhắc ngay qua Zalo: ${to}`);
         }
         tkDetail(id);
