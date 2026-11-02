@@ -3241,7 +3241,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // Giấy cũ: ô có dấu ⚠ (chữ) hoặc bất kỳ biểu tượng nào (hình / SVG / icon) – ô giấy mới chỉ có chữ + thanh
   const isOldPaper = (cell) =>
     !!cell && (/⚠/.test(cell.innerText || '') || !!cell.querySelector('svg, img, .anticon, [role="img"], i[class*="icon"], [class*="warning"], [class*="Warning"]'));
+  // Trong lúc 🔄 Load giá: popup "Cảnh báo – Dài tấm phải lớn hơn hoặc bằng khổ tấm" → tự bấm "Bỏ qua" (cảnh báo khác vẫn để nguyên)
   async function reloadPaper(btn) {
+    const guard = setInterval(() => {
+      for (const m of document.querySelectorAll('.ant-modal-confirm, .ant-modal')) {
+        if (!m.getClientRects().length || !/Dài tấm phải lớn hơn hoặc bằng khổ tấm/i.test(m.innerText || '')) continue;
+        [...m.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Bỏ qua')?.click();
+      }
+    }, 250);
+    try {
+      return await reloadPaperRun(btn);
+    } finally {
+      clearInterval(guard);
+    }
+  }
+  async function reloadPaperRun(btn) {
     const pt = productTable();
     if (!pt) return (btn.textContent = '⚠️ Không thấy bảng hàng hóa');
     const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && isOldPaper(paperCell(tr, pt.iKc)));
