@@ -8877,6 +8877,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .tk-t { width: 100%; border-collapse: collapse; font-size: 13px; }
     .tk-t th { text-align: left; font-size: 12px; color: #64748b; font-weight: 700; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; }
     .tk-t td { padding: 7px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .tk-gh td { background: #f1f5f9; color: #334155; font-weight: 800; font-size: 13px; padding: 5px 8px; border-bottom: 1px solid #e2e8f0; }
+    .tk-gh b { font-size: 11px; background: #fff; border-radius: 999px; padding: 0 7px; margin-left: 4px; }
+    .tk-gh.now td { background: #e0e7ff; color: #3730a3; }
+    .tk-gh.past td { background: #fee2e2; color: #b91c1c; }
     .tk-row { cursor: pointer; }
     .tk-row:hover { background: #f8fafc; }
     .tk-row.over { background: #fef2f2; }
@@ -12202,6 +12206,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <td class="tk-pg"><i style="width:${Number(t.progress) || 0}%"></i><span>${Number(t.progress) || 0}%</span></td>
         <td>${quick}</td></tr>`;
     };
+    // Gom theo ngày đến hạn; việc đã xong / đã hủy gom riêng ở cuối
+    const groupHead = (k, n) => {
+      if (k === 'closed') return `<tr class="tk-gh"><td colspan="7">✔️ Đã xong / đã hủy <b>${n}</b></td></tr>`;
+      const d = new Date(`${k}T00:00:00Z`);
+      const wd = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][d.getUTCDay()];
+      const diff = Math.round((d.getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400e3);
+      const name = diff === 0 ? 'Hôm nay' : diff === 1 ? 'Ngày mai' : diff === -1 ? 'Hôm qua' : '';
+      return `<tr class="tk-gh${diff < 0 ? ' past' : diff === 0 ? ' now' : ''}"><td colspan="7">${diff < 0 ? '🔴 ' : '📅 '}${name ? `${name} · ` : ''}${wd}, ${k.slice(8, 10)}/${k.slice(5, 7)} <b>${n}</b></td></tr>`;
+    };
+    const groupKey = (t) => (open(t) ? tkDayKey(t.due) : 'closed');
+    const groupN = {};
+    rows.forEach((t) => (groupN[groupKey(t)] = (groupN[groupKey(t)] || 0) + 1));
+    const rowsHtml = rows.map((t, i) => (i === 0 || groupKey(rows[i - 1]) !== groupKey(t) ? groupHead(groupKey(t), groupN[groupKey(t)]) : '') + row(t)).join('');
     return `<div class="tk">
       <div class="tk-tiles">${tileHtml('today', 'Việc hôm nay', '#2563eb')}${tileHtml('over', 'Quá hạn', '#dc2626')}${tileHtml('submit', 'Chờ duyệt', '#7c3aed')}${tileHtml('wait', 'Chờ nhân viên nhận', '#0369a1')}</div>
       <div class="tk-bar">
@@ -12212,7 +12229,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       </div>
       ${!tile && view === 'all' ? `<div class="tk-f"><input data-tkf="q" placeholder="Tìm tiêu đề / nội dung" value="${esc(F.q || '')}">${sel('who', whos.map((n) => [n, n]))}${sel('pri', Object.entries(TK_PRI).map(([k, v]) => [k, v[0]]))}</div>${stChips}` : ''}
       ${!tile && view === 'mine' ? stChips : ''}
-      ${rows.length ? `<table class="tk-t"><thead><tr><th></th><th>Việc</th><th>Phụ trách</th><th>Hạn</th><th>Trạng thái</th><th>Tiến độ</th><th></th></tr></thead><tbody>${rows.map(row).join('')}</tbody></table>` : `<div class="muted" style="padding:24px;text-align:center">${list.length ? 'Không có việc nào trong mục này.' : 'Chưa có việc nào. Bấm nút ➕ để bắt đầu.'}</div>`}
+      ${rows.length ? `<table class="tk-t"><thead><tr><th></th><th>Việc</th><th>Phụ trách</th><th>Hạn</th><th>Trạng thái</th><th>Tiến độ</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table>` : `<div class="muted" style="padding:24px;text-align:center">${list.length ? 'Không có việc nào trong mục này.' : 'Chưa có việc nào. Bấm nút ➕ để bắt đầu.'}</div>`}
     </div>`;
   }
 
