@@ -3258,7 +3258,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return (sec.match(new RegExp(`${DN_ME}\\s*(Chưa duyệt|Đã duyệt|Từ chối)`)) || [])[1] || '';
   };
   const dnTable = (doc = document) => [...doc.querySelectorAll('.ant-table')].find((x) => [...x.querySelectorAll('thead th')].some((th) => /^Mã đề nghị/i.test(th.innerText.trim())));
-  const dnRows = (doc = document) => {
+  const dnRows = (doc = document, codeRe = /^[A-Z]{1,6}\d+$/) => {
     const t = dnTable(doc);
     if (!t) return [];
     const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
@@ -3268,7 +3268,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return [...t.querySelectorAll('.ant-table-tbody tr')]
       .filter((tr) => !tr.classList.contains('ant-table-measure-row') && !tr.classList.contains('ant-table-placeholder'))
       .map((tr) => {
-        const link = [...(tr.cells[1]?.querySelectorAll('*') || [])].find((e) => !e.children.length && /^[A-Z]{1,6}\d+$/.test(e.textContent.trim()));
+        const link = [...(tr.cells[1]?.querySelectorAll('*') || [])].find((e) => !e.children.length && codeRe.test(e.textContent.trim()));
         return link && { tr, link, code: link.textContent.trim(), name: tr.cells[iName]?.innerText.trim() || '', sum: tr.cells[iSum]?.innerText.trim() || '', who: tr.cells[iWho]?.innerText.trim() || '' };
       })
       .filter(Boolean);
@@ -12027,7 +12027,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const got = {};
     let complete = false;
     await tkInFrame('/de-nghi/', async (doc) => {
-      const first = () => (doc() ? dnRows(doc())[0]?.code || '' : '');
+      const CODE = /^[A-Z]{1,12}\d+$/; // đủ cả mã dài như SUACHUA0101
+      const first = () => (doc() ? dnRows(doc(), CODE)[0]?.code || '' : '');
       const waitChange = async (prev) => {
         for (let i = 0; i < 40; i++) {
           await sleep(400);
@@ -12058,7 +12059,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           if (!(await waitChange(prev))) break;
           await sleep(400);
         }
-        for (const r of dnRows(doc())) got[r.code] = { code: r.code, name: r.name, sum: r.sum, who: r.who, at: old[r.code]?.at || Date.now() };
+        for (const r of dnRows(doc(), CODE)) got[r.code] = { code: r.code, name: r.name, sum: r.sum, who: r.who, at: old[r.code]?.at || Date.now() };
       }
     });
     if (!Object.keys(got).length) return;
