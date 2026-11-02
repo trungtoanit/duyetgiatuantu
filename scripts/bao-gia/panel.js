@@ -11632,6 +11632,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           ${t.rep ? `<span style="font-weight:700;color:#0f766e">🔁 ${esc(TK_REP[t.rep] || '')}</span>` : ''}
           <span style="color:#475569">Hạn <b>${esc(tkTime(t.due))}</b>${act && !tkOver(t) ? ` · ${esc(tkLeft(t))}` : ''}</span></div>
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
+        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
         ${t.ext ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">⏳ <b>${esc(t.ext.by || '')}</b> xin gia hạn đến <b>${esc(tkTime(t.ext.due))}</b>: ${esc(t.ext.why || '')}</div>` : ''}
         ${t.subNote && t.status === 'submit' ? `<div style="background:#f3e8ff;border-radius:8px;padding:8px 10px">📤 Kết quả đã nộp: ${esc(t.subNote)}</div>` : ''}
@@ -11696,6 +11697,203 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       } catch (err) {
         msg.textContent = `⚠️ ${err.message}`;
       }
+    });
+    document.documentElement.append(box);
+  }
+  // ---------- ⚡ Tự tạo việc từ dữ liệu CRM: chỉ đọc dữ liệu đã thu thập, không ghi gì lên CRM ----------
+  // Mỗi quy tắc mặc định TẮT (bật là có tin Zalo tới nhân viên) và có giới hạn số việc mỗi ngày. Mỗi nguồn chỉ tạo 1 việc (công nợ: 1 việc / khách / tháng).
+  // Nguồn đã xong (báo giá có đơn, lỗi đã xử lý, đã thu nợ, đơn đã giao) → việc tự đóng.
+  const TK_AUTO = {
+    quote: { on: false, hours: 24, cap: 5 },
+    debt: { on: false, amount: 20e6, days: 7, cap: 5 },
+    maint: { on: false, days: 3, cap: 3 },
+    order: { on: false, days: 2, cap: 5, doneSt: [] },
+  };
+  const tkAutoCfg = (c) => Object.fromEntries(Object.keys(TK_AUTO).map((k) => [k, { ...TK_AUTO[k], ...(c?.[k] || {}) }]));
+  const tkSec = (x) => (x > 1e11 ? x / 1000 : x || 0);
+  // Hạn sau n ngày, 17:00 giờ VN; rơi vào Chủ nhật thì lùi sang thứ 2
+  function tkDueIn(n, now = Date.now()) {
+    const v = new Date(now + 7 * 3600e3);
+    let d = Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate() + n, 17);
+    if (new Date(d).getUTCDay() === 0) d += 86400e3;
+    return d - 7 * 3600e3;
+  }
+  // Đơn gần đây trong kho đơn: chỉ xét đơn có ngày giao, phạm vi 14 ngày trước đến 30 ngày tới
+  function tkRecentOrders(orders, now = Date.now()) {
+    const out = [];
+    for (const [cid, g] of Object.entries(orders || {})) {
+      for (const o of g?.orders || []) {
+        if (!o?.deliveryDate) continue;
+        const at = Date.parse(`${o.deliveryDate}T17:00:00+07:00`);
+        if (!at || at < now - 14 * 86400e3 || at > now + 30 * 86400e3) continue;
+        out.push({ o, at, cid, g });
+      }
+    }
+    return out;
+  }
+  // Danh sách việc đủ điều kiện của từng quy tắc (chưa lọc việc đã tạo), giá trị lớn / gấp đứng trước
+  function tkRules(ac, data, boss, now = Date.now()) {
+    const out = { quote: [], debt: [], maint: [], order: [] };
+    const orderedQuotes = new Set();
+    for (const g of Object.values(data.orders || {})) for (const o of g?.orders || []) if (o?.quote) orderedQuotes.add(o.quote);
+    for (const q of Object.values(data.quotes || {})) {
+      if (q?.quoteStatus !== 'APPROVE' || q.hasOrder || orderedQuotes.has(q.code)) continue;
+      const h = (now / 1000 - tkSec(q.updatedAt || q.createdAt)) / 3600;
+      if (h < ac.quote.hours) continue;
+      out.quote.push({ key: `quote-${q.id}`, rule: 'quote', title: `Duyệt lên đơn ${q.code} – ${q.customer?.name || ''}`.trim(), desc: `Báo giá ${money(q.amount)} chờ Duyệt lên đơn đã ${Math.floor(h / 24)} ngày. NVKD: ${q.staff?.name || ''}`, to: boss, due: tkDueIn(0, now) > now ? tkDueIn(0, now) : tkDueIn(1, now), pri: 'high', weight: Number(q.amount) || 0, url: `/bao-gia/update/${q.id}`, label: q.code, sid: q.id });
+    }
+    const month = tkDayKey(now).slice(0, 7);
+    for (const id of data.debt?.['list:overdue']?.ids || []) {
+      const r = data.debt[`cust:${id}`];
+      if (!r || !r.staffName || isExcluded(r.staffName)) continue;
+      if ((r.overdueAmount || 0) < ac.debt.amount || (r.maxDaysOverdue || 0) < ac.debt.days) continue;
+      const name = r.customerName || r.name || r.customerCode || `khách ${id}`;
+      out.debt.push({ key: `debt-${id}-${month}`, rule: 'debt', title: `Thu công nợ ${name}`, desc: `Quá hạn ${money(r.overdueAmount)}, lâu nhất ${r.maxDaysOverdue} ngày. Báo lại ngày khách hẹn thanh toán.`, to: r.staffName, due: tkDueIn(3, now), pri: (r.maxDaysOverdue || 0) > 30 ? 'high' : 'normal', weight: r.overdueAmount, url: '/cong-no', label: 'Công nợ', sid: id });
+    }
+    const mtTo = data.maintCfg?.main?.to;
+    if (mtTo) {
+      for (const r of Object.values(data.maint || {})) {
+        if (!mtOpen(r) || !/CRITICAL|HIGH/i.test(r.level || '')) continue;
+        const days = (now / 1000 - tkSec(r.createdAt)) / 86400;
+        if (days < ac.maint.days) continue;
+        const crit = /CRITICAL/i.test(r.level);
+        out.maint.push({ key: `maint-${r.id}`, rule: 'maint', title: `Xử lý lỗi bảo trì #${r.id} – ${r.machine?.name || r.machine?.code || 'máy'}`, desc: `${r.desc || ''}\nNgười báo: ${r.reporter || ''} · đã ${Math.floor(days)} ngày`.trim(), to: mtTo, due: tkDueIn(crit ? 0 : 1, now) > now ? tkDueIn(crit ? 0 : 1, now) : tkDueIn(1, now), pri: crit ? 'critical' : 'high', weight: (crit ? 1e6 : 0) + days, url: '/bao-tri/bao-cao', label: `Báo cáo #${r.id}`, sid: r.id });
+      }
+    }
+    // chưa chọn trạng thái "đã xong" thì chưa phân biệt được đơn nào còn phải giao → không tạo
+    if (ac.order.doneSt?.length) {
+      for (const { o, at, cid, g } of tkRecentOrders(data.orders, now)) {
+        if (ac.order.doneSt.includes(o.status) || at > now + ac.order.days * 86400e3) continue;
+        const staff = g.customer?.staff;
+        if (!staff || isExcluded(staff)) continue;
+        out.order.push({ key: `order-${o.id}`, rule: 'order', title: `Kiểm tra tiến độ đơn ${o.code || o.id} – giao ${o.deliveryDate.split('-').reverse().slice(0, 2).join('/')}`, desc: `Khách: ${g.customer?.name || ''}. Trạng thái: ${o.status || ''}. Báo lại nếu có nguy cơ trễ.`, to: staff, due: at > now ? at : tkDueIn(1, now), pri: at < now ? 'critical' : 'high', weight: -at, url: /^\d+$/.test(cid) ? `/khach-hang/view/${cid}?t=order` : '/misa-order/list', label: o.code || 'Đơn hàng', sid: o.id, cid });
+      }
+    }
+    for (const k of Object.keys(out)) out[k].sort((a, b) => b.weight - a.weight);
+    return out;
+  }
+  // Nguồn của việc tự tạo đã xong chưa
+  function tkSrcDone(t, ac, data) {
+    const s0 = t.src;
+    if (s0.rule === 'quote') {
+      const q = data.quotes?.[s0.sid];
+      if (!q) return '';
+      if (q.hasOrder || q.quoteStatus !== 'APPROVE') return 'báo giá đã rời trạng thái chờ Duyệt lên đơn';
+      return Object.values(data.orders || {}).some((g) => g?.orders?.some((o) => o.quote === q.code)) ? 'báo giá đã có đơn' : '';
+    }
+    if (s0.rule === 'maint') {
+      const r = data.maint?.[s0.sid];
+      return r && !mtOpen(r) ? 'báo cáo bảo trì đã xử lý' : '';
+    }
+    if (s0.rule === 'debt') {
+      const r = data.debt?.[`cust:${s0.sid}`];
+      return r && !(r.overdueAmount > 0) ? 'khách đã hết nợ quá hạn' : '';
+    }
+    if (s0.rule === 'order') {
+      const o = (data.orders?.[s0.cid]?.orders || []).find((x) => String(x.id) === String(s0.sid));
+      return o && ac.order.doneSt?.includes(o.status) ? `đơn đã ở trạng thái ${o.status}` : '';
+    }
+    return '';
+  }
+  const tkAutoData = async () => {
+    const [quotes, orders, debt, maint, maintCfg, tasks, cfg, ac0] = await Promise.all([kvGet('quotes'), kvGet('orders'), kvGet('debt2'), kvGet('maintReports'), kvGet('maintCfg'), kvGet('tasks'), tkCfgGet(), kvGet('taskCfg')]);
+    return { quotes, orders, debt, maint, maintCfg, tasks, cfg, ac: tkAutoCfg(ac0.auto) };
+  };
+  let tkAutoBusy = false;
+  async function tkAutoRun() {
+    if (!TASK_ON || !MY_ADMIN || tkAutoBusy) return;
+    tkAutoBusy = true;
+    try {
+      const data = await tkAutoData();
+      const { tasks, cfg, ac } = data;
+      const now = Date.now();
+      const today = tkDayKey(now);
+      let changed = false;
+      for (const t of Object.values(tasks)) {
+        if (!t?.src || t.status === 'done' || t.status === 'cancel') continue;
+        const why = tkSrcDone(t, ac, data);
+        if (!why) continue;
+        await kvMerge('tasks', { [t.id]: { ...t, status: 'done', doneAt: now, upd: now, updBy: meName, ext: null, v: (t.v || 0) + 1 } });
+        await tkLog(t.id, `⚡ Tự đóng: ${why}`);
+        changed = true;
+      }
+      const has = new Set(Object.values(tasks).map((t) => t?.src?.key).filter(Boolean));
+      const rules = tkRules(ac, data, cfg.boss, now);
+      for (const [rule, list] of Object.entries(rules)) {
+        if (!ac[rule].on) continue;
+        let left = ac[rule].cap - Object.values(tasks).filter((t) => t?.src?.rule === rule && tkDayKey(t.at || 0) === today).length;
+        for (const c of list) {
+          if (left <= 0) break;
+          if (has.has(c.key)) continue;
+          const id = `A-${c.key}`;
+          const personal = norm(c.to) === norm(cfg.boss);
+          await kvMerge('tasks', { [id]: { id, title: c.title, desc: c.desc, to: c.to, by: cfg.boss, due: c.due, pri: c.pri, status: personal ? 'doing' : 'assigned', progress: 0, at: now, upd: now, updBy: meName, v: 1, src: { key: c.key, rule, url: c.url, label: c.label, sid: c.sid, ...(c.cid ? { cid: c.cid } : {}) } } });
+          await tkLog(id, `⚡ Tự tạo từ CRM: giao ${c.to}, hạn ${tkTime(c.due)}`);
+          left--;
+          changed = true;
+        }
+      }
+      if (changed) render();
+    } catch (e) {
+      console.warn('[DG] tự tạo việc:', e.message);
+    } finally {
+      tkAutoBusy = false;
+    }
+  }
+  if (IS_TOP && TASK_ON) setInterval(() => tkAutoRun(), 5 * 60e3);
+  async function tkAutoOpen() {
+    document.getElementById('dg-tk-auto')?.remove();
+    const data = await tkAutoData();
+    const { ac, cfg } = data;
+    const box = document.createElement('div');
+    box.id = 'dg-tk-auto';
+    box.setAttribute('style', TK_OVERLAY);
+    const stat = {};
+    for (const { o } of tkRecentOrders(data.orders)) stat[o.status || ''] = (stat[o.status || ''] || 0) + 1;
+    const num = (r, k, label, v) => `<label style="font-size:12px;color:#475569">${label}<input data-r="${r}" data-n="${k}" type="number" min="0" value="${v}" style="${TK_IN};width:110px"></label>`;
+    const debtAge = data.debt['list:overdue']?.at;
+    const card = (r, icon, title, note, fields, extra = '') => `<div style="border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;display:grid;gap:8px">
+        <label style="font-weight:800"><input data-r="${r}" data-n="on" type="checkbox"${ac[r].on ? ' checked' : ''}> ${icon} ${title}</label>
+        <div style="font-size:12px;color:#64748b">${note}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">${fields}${num(r, 'cap', 'Tối đa / ngày', ac[r].cap)}</div>${extra}
+        <div data-pv="${r}" style="font-size:12px;background:#f8fafc;border-radius:8px;padding:6px 8px"></div></div>`;
+    box.innerHTML = `<div style="width:min(760px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
+      ${tkHead('⚡ Tự tạo việc từ CRM')}
+      <div style="padding:12px 18px;display:grid;gap:10px;overflow:auto">
+        <div style="font-size:12px;color:#475569">Bật quy tắc nào thì việc của quy tắc đó tự được tạo và tin Zalo tự gửi tới người phụ trách. Xem danh sách dưới mỗi quy tắc trước khi bật. Dữ liệu lấy từ các trang CRM đã được mở gần đây.</div>
+        ${card('quote', '🎯', 'Báo giá chờ Duyệt lên đơn quá lâu', `Giao cho ${esc(cfg.boss)}. Tự đóng khi báo giá có đơn hoặc đổi trạng thái.`, num('quote', 'hours', 'Chờ từ (giờ)', ac.quote.hours))}
+        ${card('debt', '💰', 'Công nợ quá hạn', `Giao cho NVKD của khách, mỗi khách 1 việc / tháng. ${debtAge ? `Dữ liệu cập nhật ${esc(tkTime(debtAge))}.` : 'Chưa có dữ liệu – mở trang Công nợ của CRM.'}`, num('debt', 'amount', 'Nợ quá hạn từ (đ)', ac.debt.amount) + num('debt', 'days', 'Quá hạn từ (ngày)', ac.debt.days))}
+        ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
+        ${card('order', '📦', 'Đơn sắp đến ngày giao', 'Giao cho NVKD của khách. Tick các trạng thái nghĩa là đơn ĐÃ XONG; trạng thái còn lại được coi là chưa giao. Chưa tick trạng thái nào thì quy tắc này chưa tạo việc.', num('order', 'days', 'Trước ngày giao (ngày)', ac.order.days), `<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">${Object.entries(stat).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<label><input data-st="${esc(k)}" type="checkbox"${ac.order.doneSt.includes(k) ? ' checked' : ''}> ${esc(k || '(trống)')} <span style="color:#94a3b8">${n}</span></label>`).join('') || '<span style="color:#94a3b8">Chưa có đơn nào có ngày giao trong dữ liệu</span>'}</div>`)}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none"><span style="flex:1"></span>${tkBtn('x', 'Đóng')}${tkBtn('save', '💾 Lưu và chạy', 'pri')}</div></div>`;
+    const read = () => {
+      const n = tkAutoCfg(ac);
+      box.querySelectorAll('[data-r]').forEach((el) => {
+        n[el.dataset.r][el.dataset.n] = el.type === 'checkbox' ? el.checked : Math.max(0, Number(el.value) || 0);
+      });
+      n.order.doneSt = [...box.querySelectorAll('[data-st]')].filter((x) => x.checked).map((x) => x.dataset.st);
+      return n;
+    };
+    const has = new Set(Object.values(data.tasks).map((t) => t?.src?.key).filter(Boolean));
+    const preview = () => {
+      const n = read();
+      const rules = tkRules(n, data, cfg.boss);
+      for (const [r, list] of Object.entries(rules)) {
+        const fresh = list.filter((c) => !has.has(c.key));
+        box.querySelector(`[data-pv="${r}"]`).innerHTML = `<b>${fresh.length} việc đủ điều kiện</b>${list.length > fresh.length ? ` · ${list.length - fresh.length} đã có việc` : ''}${fresh.length > n[r].cap ? ` · mỗi ngày tạo tối đa ${n[r].cap}` : ''}${fresh.slice(0, 5).map((c) => `<div>• ${esc(c.title)} <span style="color:#64748b">→ ${esc(c.to)}, hạn ${esc(tkTime(c.due))}</span></div>`).join('')}${fresh.length > 5 ? `<div style="color:#64748b">… và ${fresh.length - 5} việc khác</div>` : ''}`;
+      }
+    };
+    preview();
+    box.addEventListener('input', preview);
+    box.addEventListener('click', async (e) => {
+      if (e.target === box) return box.remove();
+      const k = e.target.closest('[data-k]')?.dataset.k;
+      if (k === 'x') return box.remove();
+      if (k !== 'save') return;
+      await kvMerge('taskCfg', { auto: { ...read(), at: Date.now(), by: meName } });
+      await tkAutoRun();
+      box.remove();
     });
     document.documentElement.append(box);
   }
@@ -11798,7 +11996,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const quick = tkMine(t) && t.status === 'assigned' ? `<button class="tk-q" data-act="task-accept" data-tk="${esc(t.id)}">✅ Nhận</button>` : '';
       return `<tr class="tk-row${tkOver(t, now) ? ' over' : ''}" data-act="task-open" data-tk="${esc(t.id)}">
         <td><span class="tk-dot" style="background:${TK_PRI[t.pri]?.[1] || '#2563eb'}" title="${esc(TK_PRI[t.pri]?.[0] || '')}"></span></td>
-        <td class="tk-title"><b>${esc(t.title)}</b>${t.rep ? ` <span title="${esc(TK_REP[t.rep] || '')}">🔁</span>` : ''}${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
+        <td class="tk-title"><b>${esc(t.title)}</b>${t.rep ? ` <span title="${esc(TK_REP[t.rep] || '')}">🔁</span>` : ''}${t.src ? ' <span title="Tự tạo từ CRM">⚡</span>' : ''}${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
         <td>${avatarHtml(t.to, 18)} ${esc(t.to)}</td>
         <td class="tk-due">${esc(tkTime(t.due))}${open(t) && t.status !== 'submit' ? `<div>${esc(tkLeft(t))}</div>` : ''}</td>
         <td><span class="tk-st" style="color:${st[1]};background:${st[2]}">${st[0]}</span>${tkOver(t, now) ? '<span class="tk-st ov">Quá hạn</span>' : ''}</td>
@@ -11810,7 +12008,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <div class="tk-bar">
         ${views.map(([v, l]) => `<button class="tk-v${!tile && v === view ? ' on' : ''}" data-act="task-view" data-v="${v}">${l}</button>`).join('')}
         <span style="flex:1"></span>
-        ${perm.admin ? '<button class="tk-v" data-act="task-report">📊 Báo cáo</button><button class="tk-v" data-act="task-cfg">⚙️ Cấu hình nhắc</button>' : ''}
+        ${perm.admin ? '<button class="tk-v" data-act="task-auto">⚡ Từ CRM</button><button class="tk-v" data-act="task-report">📊 Báo cáo</button><button class="tk-v" data-act="task-cfg">⚙️ Cấu hình nhắc</button>' : ''}
         <button class="tk-add" data-act="task-new">${perm.admin ? '➕ Giao việc' : '➕ Thêm việc của tôi'}</button>
       </div>
       ${!tile && view === 'all' ? `<div class="tk-f"><input data-tkf="q" placeholder="Tìm tiêu đề / nội dung" value="${esc(F.q || '')}">${sel('who', whos.map((n) => [n, n]))}${sel('st', Object.entries(TK_ST).map(([k, v]) => [k, v[0]]))}${sel('pri', Object.entries(TK_PRI).map(([k, v]) => [k, v[0]]))}</div>` : ''}
@@ -14565,6 +14763,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     else if (act === 'task-new') tkEdit().catch((err) => alert(err.message));
     else if (act === 'task-cfg') tkCfgOpen().catch((err) => alert(err.message));
     else if (act === 'task-report') tkReportOpen().catch((err) => alert(err.message));
+    else if (act === 'task-auto') tkAutoOpen().catch((err) => alert(err.message));
     else if (act === 'task-accept') tkDo(b.dataset.tk, { status: 'accepted' }, 'Nhận việc').catch((err) => alert(err.message));
     else if (act === 'task-view') {
       lsSet('dgTkView', b.dataset.v);
