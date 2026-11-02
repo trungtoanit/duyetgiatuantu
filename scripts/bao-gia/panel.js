@@ -8890,6 +8890,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .tk-ext { font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border-radius: 999px; padding: 1px 7px; }
     .tk-age { margin-left: 6px; font-size: 11px; font-weight: 700; color: #b45309; background: #fef3c7; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
     .tk-amt { text-align: right; white-space: nowrap; font-weight: 800; color: #0f766e; }
+    .tk-amt .od { color: #dc2626; }
+    .tk-amt small { display: block; font-size: 11px; font-weight: 600; color: #64748b; }
     .tk-due { white-space: nowrap; }
     .tk-due div { font-size: 11px; color: #64748b; }
     .tk-row.over .tk-due div { color: #dc2626; font-weight: 700; }
@@ -12267,7 +12269,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     });
     document.documentElement.append(box);
   }
-  function taskTab(all, perm) {
+  function taskTab(all, perm, debt = {}) {
     const now = Date.now();
     const list = Object.values(all || {}).filter(tkVisible);
     const today = tkDayKey(now);
@@ -12315,13 +12317,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return d == null ? '' : `<span class="tk-age">🕒 Lên đơn ${Math.floor(d)} ngày trước</span>`;
     };
     const tkAmount = (t) => String(t.desc || '').match(/\d[\d.,]*đ/)?.[0] || '';
+    // Việc công nợ: số quá hạn cần thu lấy mới nhất từ dữ liệu Công nợ, kèm số ngày quá hạn
+    const tkAmtCell = (t) => {
+      if (t.src?.rule !== 'debt') return esc(tkAmount(t));
+      const r = debt[`cust:${t.src.sid}`];
+      const v = r?.overdueAmount ? money(r.overdueAmount) : tkAmount(t);
+      const d = r?.maxDaysOverdue ?? /lâu nhất (\d+) ngày/.exec(t.desc || '')?.[1];
+      return v ? `<span class="od">${esc(v)}</span><small>cần thu${d ? ` · quá ${esc(String(d))} ngày` : ''}</small>` : '';
+    };
     const row = (t) => {
       const st = TK_ST[t.status] || TK_ST.assigned;
       const quick = tkMine(t) && t.status === 'assigned' ? `<button class="tk-q" data-act="task-accept" data-tk="${esc(t.id)}">✅ Nhận</button>` : '';
       return `<tr class="tk-row${tkOver(t, now) ? ' over' : ''}" data-act="task-open" data-tk="${esc(t.id)}">
         <td><span class="tk-dot" style="background:${TK_PRI[t.pri]?.[1] || '#2563eb'}" title="${esc(TK_PRI[t.pri]?.[0] || '')}"></span></td>
         <td class="tk-title"><b>${esc(t.title)}</b>${t.rep ? ` <span title="${esc(TK_REP[t.rep] || '')}">🔁</span>` : ''}${t.src ? ' <span title="Tự tạo từ CRM">⚡</span>' : ''}${tkOrderAge(t)}${t.ext ? ' <span class="tk-ext">⏳ xin gia hạn</span>' : ''}</td>
-        <td class="tk-amt">${esc(tkAmount(t))}</td>
+        <td class="tk-amt">${tkAmtCell(t)}</td>
         <td>${avatarHtml(t.to, 18)} ${esc(t.to)}</td>
         <td class="tk-due">${esc(tkTime(t.due))}${open(t) && t.status !== 'submit' ? `<div>${esc(tkLeft(t))}</div>` : ''}</td>
         <td><span class="tk-st" style="color:${st[1]};background:${st[2]}">${st[0]}</span>${tkOver(t, now) ? '<span class="tk-st ov">Quá hạn</span>' : ''}</td>
@@ -13715,7 +13725,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           return bar + hotBox(hotData, quotes, hotDone, true);
         }
         if (tab === 'debt') return bar + debtTab(await kvGet('debt2'), perm);
-        if (tab === 'task') return bar + taskTab(tkAll, perm);
+        if (tab === 'task') return bar + taskTab(tkAll, perm, await kvGet('debt2'));
         if (tab === 'qa') {
           await qaHydrate();
           return bar + qaTab(perm.admin);
