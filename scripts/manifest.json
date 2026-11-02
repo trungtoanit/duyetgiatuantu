@@ -99,6 +99,7 @@
     "taskLog",
     "taskRem",
     "ordersNew",
+    "dnPending",
     "notifRead",
     "notifs",
     "nudgeCfg",
