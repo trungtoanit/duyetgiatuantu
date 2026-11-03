@@ -1849,6 +1849,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="pdlg-v"><b>${pct0}%</b></div>
       <input type="range" min="5" max="50" step="1" value="${pct0}">
       <div class="pdlg-chips">${[20, 22, 23, 25, 27, 28, 30, 32, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-warn" data-v="20" title="Bấm để chọn 20%" style="display:none;cursor:pointer;margin:8px 0;padding:8px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-weight:800">⚠️ Đang bán chậm, hãy set 20%</div>
       <div class="pdlg-sum"></div>
       <div class="pdlg-rows"></div>
       <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
@@ -1968,7 +1969,14 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       syncGo();
       renderTot();
     });
+    // % chung hoặc % riêng dòng nào trên 20%: báo đỏ, chỉ nhắc chứ không chặn Set giá
+    const slowWarn = () => {
+      const high = Number(range.value) > 20;
+      box.querySelector('.pdlg-warn').style.display = high || Object.values(rowPct).some((v) => v > 20) ? '' : 'none';
+      box.querySelector('.pdlg-v b').style.color = high ? '#dc2626' : '';
+    };
     const syncGo = () => {
+      slowWarn();
       const own = Object.values(rowPct).filter((v) => v !== Number(range.value)).length;
       box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%${own ? ` (+${own} dòng riêng)` : ''}`;
     };
@@ -1978,6 +1986,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       renderSum();
       renderRows();
     };
+    slowWarn();
     renderSum();
     renderRows();
     // Tính lại khi kéo: nghe nhiều sự kiện + dò giá trị định kỳ (bộ gõ / trang có thể chặn sự kiện "input")
@@ -2030,6 +2039,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         renderRows();
         return syncGo();
       }
+      // Bấm dòng báo đỏ: đưa cả các dòng riêng trên 20% về 20%
+      if (e.target.closest('.pdlg-warn')) for (const i in rowPct) if (rowPct[i] > 20) delete rowPct[i];
       const v = e.target.closest('[data-v]')?.dataset.v;
       if (v) {
         range.value = v;
