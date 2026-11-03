@@ -10894,11 +10894,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const pctCls = (v) => (v == null ? '' : v < 30 ? 'bad' : 'good');
   // Cột "Chênh lệch": Flexo = tổng BG − tổng PO giấy tấm; chỉ Offset = ước tính BG × đang bán %
   // Số chênh lệch dạng số (để cộng tổng): Flexo = BG − giấy tấm; Offset = Σ giá × SL × đang bán %
+  // Báo giá F+O: tổng chênh lệch = chênh lệch Flexo + chênh lệch Offset. Chưa tách được tiền từng phần thì cả 2 cùng tính trên tổng BG → trừ phần tính trùng.
+  const foDiff = (q, flexo, offset) => {
+    const od = offset == null ? null : offsetDiff(q);
+    if (!flexo || !od) return { sum: flexo ? flexo.diff : od ? od.diff : null, flexo, od };
+    return { sum: flexo.diff + od.diff - Math.max(0, flexo.base + od.base - (Number(q.amount) || flexo.base + od.base)), flexo, od, both: true };
+  };
   const diffVal = (q) => {
     const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
     if (!kinds.length) return null;
     const { flexo, offset } = marginParts(q);
     if (q?.noSheet) return null;
+    if (kinds.includes('flexo') && kinds.includes('offset')) return foDiff(q, flexo, offset).sum;
     if (kinds.includes('flexo')) return flexo ? flexo.diff : null;
     return offset == null ? null : offsetDiff(q)?.diff ?? null;
   };
@@ -10915,6 +10922,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const { flexo, offset } = marginParts(q);
     // Có dòng giấy tấm 0đ/m2 → chưa tính được chênh lệch: báo động ngay trên hàng
     if (q?.noSheet) return `<span class="pc dl angry" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – chưa có giá giấy tấm">😡 Chưa có giá GT</span>`;
+    if (kinds.includes('flexo') && kinds.includes('offset')) {
+      const fo = foDiff(q, flexo, offset);
+      if (fo.sum == null) return '<span class="pc dl wait" title="Flexo + Offset: đang chờ tính">…</span>';
+      const signed = (v) => `${v < 0 ? '−' : '+'}${trM(Math.abs(v))}`;
+      const tip = `Tổng chênh lệch F+O\nFlexo: ${fo.flexo ? signed(fo.flexo.diff) : 'chưa tính được'}\nOffset: ${fo.od ? signed(fo.od.diff) : 'chưa tính được'}${fo.both ? '' : '\nChưa đủ 2 phần – số này chưa phải tổng'}`;
+      return `<span class="pc dl f ${fo.sum < 0 ? 'bad' : 'good'}" title="${esc(tip)}">${fo.both ? '' : '≈'}${fo.sum < 0 ? '−' : ''}${trM(Math.abs(fo.sum))}</span>`;
+    }
     if (kinds.includes('flexo')) {
       if (!flexo) return '<span class="pc dl wait" title="Flexo: đang chờ tính">…</span>';
       return `<span class="pc dl f ${flexo.diff < 0 ? 'bad' : 'good'}" title="Flexo: BG ${money(flexo.base)} − giấy tấm ${money(flexo.best.total)}${flexo.rest != null ? ` · còn ${flexo.rest}%` : ' · PO > BG'}">${flexo.diff < 0 ? '−' : ''}${trM(Math.abs(flexo.diff))}</span>`;
