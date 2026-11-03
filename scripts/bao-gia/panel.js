@@ -11840,6 +11840,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (manage && act && t.ext) btns.push(tkBtn('extok', '✅ Duyệt gia hạn', 'ok'), tkBtn('extno', '✖️ Từ chối gia hạn', 'warn'));
     if (manage && !personal && (act || t.status === 'submit')) btns.push(tkBtn('remind', '📨 Nhắc ngay'));
     if (manage && act && t.src?.rule === 'tp') btns.push(tkBtn('tptest', '🧪 Gửi test'));
+    if (manage && act && t.due < tkDueIn(1)) btns.push(tkBtn('tomorrow', `📅 Gia hạn ngày mai (${tkTime(tkDueIn(1))})`));
     if (manage && act && t.remindAt) btns.push(tkBtn('noremind', '🔕 Dừng nhắc mỗi ngày'));
     if (manage && t.status !== 'done' && t.status !== 'cancel') btns.push(tkBtn('edit', '✏️ Sửa'), tkBtn('cancel', '🗑 Hủy (cần lý do)', 'bad'));
     box.innerHTML = `<div style="width:min(720px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
@@ -11909,6 +11910,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         } else if (k === 'cancel') {
           if (!need('lý do hủy')) return;
           await tkDo(id, { status: 'cancel', ext: null }, 'Hủy việc', note);
+        } else if (k === 'tomorrow') {
+          // Hạn mới 17:00 ngày mai, mai là Chủ nhật thì sang thứ 2; bỏ luôn đề nghị gia hạn đang chờ nếu có
+          const due = tkDueIn(1);
+          await tkDo(id, { due, ext: null }, `Gia hạn đến ${tkTime(due)}`, note);
         } else if (k === 'noremind') {
           await tkDo(id, { remindAt: null }, 'Dừng nhắc mỗi ngày', note);
         } else if (k === 'tptest') {
