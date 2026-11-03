@@ -1104,10 +1104,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   };
 
   async function collectListPages(maxPages = COLLECT.listPages) {
-    let saved = null;
-    try {
-      saved = localStorage.getItem('quote.query');
-    } catch {}
     const f = document.createElement('iframe');
     f.name = 'dg-collector';
     f.setAttribute('aria-hidden', 'true');
@@ -1147,9 +1143,6 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }
     } finally {
       f.remove();
-      try {
-        if (saved != null) localStorage.setItem('quote.query', saved);
-      } catch {}
     }
   }
 

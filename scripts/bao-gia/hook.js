@@ -6,6 +6,32 @@
   window.__dgHooked = true;
   const COLLECTOR_FRAME = window.name === 'dg-collector';
 
+  // Khung đọc ngầm dùng chung localStorage với tab đang xem: CRM lưu số trang / bộ lọc vào quote.query… nên đọc ngầm tới trang cuối
+  // thì F5 tab thật nhảy về trang cuối. → trong khung, các khoá query chỉ giữ trong bộ nhớ của khung, luôn bắt đầu từ trang 1.
+  if (COLLECTOR_FRAME) {
+    const isQuery = (s, k) => s === window.localStorage && /query/i.test(String(k));
+    const mem = new Map();
+    const { getItem, setItem, removeItem } = Storage.prototype;
+    Storage.prototype.getItem = function (k) {
+      if (!isQuery(this, k)) return getItem.call(this, k);
+      if (mem.has(k)) return mem.get(k);
+      const v = getItem.call(this, k);
+      try {
+        const o = JSON.parse(v);
+        if (o?.page > 1) return JSON.stringify({ ...o, page: 1 });
+      } catch {}
+      return v;
+    };
+    Storage.prototype.setItem = function (k, v) {
+      if (!isQuery(this, k)) return setItem.call(this, k, v);
+      mem.set(k, String(v));
+    };
+    Storage.prototype.removeItem = function (k) {
+      if (!isQuery(this, k)) return removeItem.call(this, k);
+      mem.set(k, null);
+    };
+  }
+
   // CRM vừa cập nhật bản mới mà trình duyệt còn giữ trang HTML cũ trong cache → file main.*.js cũ
   // bị 404 → trang trắng. Khi gặp, làm mới cache rồi tải lại trang (tối đa 1 lần / phút).
   window.addEventListener(
