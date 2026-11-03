@@ -1735,7 +1735,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="pdlg-q">Bán bao nhiêu %?</div>
       <div class="pdlg-v"><b>${pct0}%</b></div>
       <input type="range" min="5" max="60" step="1" value="${pct0}">
-      <div class="pdlg-chips">${[25, 30, 32, 35, 38, 40, 42, 45, 50].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-chips">${[20, 25, 30, 32, 35, 38, 40, 42, 45, 50].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-warn" data-v="20" title="Bấm để chọn 20%" style="display:none;cursor:pointer;margin:8px 0;padding:8px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-weight:800">⚠️ Đang bán chậm, hãy set 20%</div>
       <div class="pdlg-sum"></div>
       <div class="muted pdlg-note">Giá mới = NVL 1 thùng (dòng Tổng bảng "Nguyên liệu" của chiết giá) ÷ (1 − %) – giống hàng "Mốc NVL". Bấm Set giá: điền "Giá thực bán" từng dòng Offset, lưu báo giá rồi tải lại trang.</div>
       <div class="pdlg-step"></div>
@@ -1745,6 +1746,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const range = box.querySelector('input');
     const sumEl = box.querySelector('.pdlg-sum');
     let reading = false;
+    // Đặt trên 20%: báo đỏ, chỉ nhắc chứ không chặn Set giá
+    const slowWarn = () => {
+      const high = Number(range.value) > 20;
+      box.querySelector('.pdlg-warn').style.display = high ? '' : 'none';
+      box.querySelector('.pdlg-v b').style.color = high ? '#dc2626' : '';
+    };
     const render2 = () => {
       const pct = Number(range.value);
       const rows = offsetRowsForDialog(q);
@@ -1760,6 +1767,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const sync = () => {
       box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
       box.querySelector('[data-p="go"]').textContent = `✅ Set giá ${range.value}%`;
+      slowWarn();
       render2();
     };
     let lastV = range.value;
@@ -1781,6 +1789,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         render2();
       }
     };
+    slowWarn();
     render2();
     // Chưa có giá vốn dòng nào → tự đọc chiết giá (khung ẩn, không bật hộp thoại in)
     if (offsetRowsForDialog(q).some((r) => !r.x?.nvlUnit)) readNow().catch(() => {});
