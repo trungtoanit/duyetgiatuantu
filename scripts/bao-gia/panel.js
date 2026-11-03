@@ -4223,7 +4223,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Trang danh sách Báo giá của CRM: thêm cột "Nhãn" (Flexo/Offset, 🔥 Ưu tiên, Khách cho giá…) trước "Tên cơ hội" ----------
   function crmTagCss() {
     if (document.getElementById('dg-tagcol-css') || !root) return;
-    const ok = /^\s*(\.it-main\s+)?\.(knd|pkd|nosheet|ctr|bok|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|conn|tmai|dl-hotbadge)([.:][\w-]+)*\s*$/;
+    const ok = /^\s*(\.it-main\s+)?\.(knd|pkd|nosheet|ctr|bok|bokst|tgt|hip|crd|prm|smp|nodep|byr|nobyr|norep|conn|tmai|dl-hotbadge)([.:][\w-]+)*\s*$/;
     let css = '';
     for (const st of root.querySelectorAll('style')) {
       for (const r of st.sheet?.cssRules || []) {
@@ -8489,6 +8489,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .nobyr { margin-left: 6px; display: inline-block; background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
     .it-main .nobyr { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .bok.reo { background: #e0f2fe; color: #075985; border-color: #7dd3fc; }
+    @keyframes dgLuckyShine { 0% { background-position: 0% 50%; } 100% { background-position: 250% 50%; } }
+    @keyframes dgLuckyGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.25); } 50% { box-shadow: 0 0 10px 3px rgba(250,204,21,.85); } }
+    @keyframes dgLuckySpin { 0%, 100% { transform: rotate(-14deg) scale(1); } 50% { transform: rotate(196deg) scale(1.35); } }
+    @keyframes dgLuckyTwinkle { 0%, 100% { opacity: 0; transform: scale(.3) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(90deg); } }
+    .bok.star { position: relative; color: #854d0e; border-color: #f59e0b; background: linear-gradient(100deg, #fef3c7, #fde047, #fffbeb, #fbbf24, #fef3c7); background-size: 250% 100%; animation: dgLuckyShine 2.4s linear infinite, dgLuckyGlow 1.6s ease-in-out infinite; }
+    .bokst { display: inline-block; animation: dgLuckySpin 2.4s ease-in-out infinite; }
+    .bokst.sp { position: absolute; font-size: 10px; line-height: 1; color: #f59e0b; pointer-events: none; animation: dgLuckyTwinkle 1.6s ease-in-out infinite; }
+    .bokst.s1 { top: -5px; left: 5px; }
+    .bokst.s2 { top: -6px; right: 3px; animation-delay: .5s; }
+    .bokst.s3 { bottom: -5px; right: 16px; animation-delay: 1s; }
     .it-main .bok { margin-left: 0; margin-right: 4px; font-size: 11px; padding: 0 7px; }
     .nosheet { margin-left: 6px; display: inline-block; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 999px; padding: 0 9px;
       font-size: 12px; font-weight: 800; vertical-align: 1px; white-space: nowrap; }
@@ -9715,7 +9725,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const t = bossOkInfo(q, c);
     if (!t) return '';
     const keep = KEEP_PRICE_RE.test(t.text || '');
-    return ` <span class="bok${keep ? ' reo' : ''}" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">${keep ? '🔁 Tái đơn' : '✅ Lấy đơn'}</span>`;
+    return ` <span class="bok${keep ? ' reo' : ' star'}" title="${esc(`${t.staff?.name || ''}: ${t.text}`.slice(0, 300))} · ${ago(t.createdAt)}">${keep ? '🔁 Tái đơn' : '<span class="bokst">⭐</span> Lấy đơn<span class="bokst sp s1">✦</span><span class="bokst sp s2">✦</span><span class="bokst sp s3">✦</span>'}</span>`;
   };
   // Có sản phẩm giá giấy tấm 0đ/m2 → chưa có giá giấy tấm (Flexo chưa chính xác)
   const noSheetTag = (q) => (q?.noSheet ? ` <span class="nosheet" title="Có ${q.noSheetN || ''} dòng sản phẩm giá giấy tấm 0đ/m2 – cần cập nhật giá giấy tấm">😡 Chưa có giá giấy tấm</span>` : '');
