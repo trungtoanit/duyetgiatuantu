@@ -12039,7 +12039,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     // Đơn gửi có Số BG TT mà chưa có ĐH Misa (/don-gui): cần duyệt lên đơn gửi, chờ lâu trước
     for (const [bg, o] of Object.entries(data.donGuiPending || {})) {
-      if (bg === '_src' || !o) continue;
+      if (bg === '_src' || !o || tkDgClosed(data).has(bg)) continue;
       const days = Math.max(0, (now - (o.at || now)) / 86400e3);
       out.dg.push({ key: `dg-${bg}`, rule: 'dg', title: `Duyệt lên đơn gửi ${bg}${o.kh ? ` – ${o.kh}` : ''} (${o.tab})`, desc: `Đơn gửi ${o.tab} có báo giá ${bg} nhưng chưa có mã đơn hàng.${o.code ? ` Số BG đối tác: ${o.code}.` : ''}${o.sale ? ` Sale: ${o.sale}.` : ''}${o.day ? ` Ngày tạo: ${o.day}.` : ''}`, to: boss, due: tkTodayEnd(now), pri: 'high', weight: days, url: `/don-gui?dgTab=${encodeURIComponent(o.tab)}`, label: bg, sid: bg });
     }
@@ -12051,6 +12051,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return out;
   }
   // Nguồn của việc tự tạo đã xong chưa
+  // Báo giá đã có đơn / đã chốt theo kho báo giá, kho đơn và tab Mới: cột ĐH Misa của trang Đơn gửi có thể chưa kịp cập nhật
+  function tkDgClosed(data) {
+    if (data.dgClosed) return data.dgClosed;
+    const out = new Set();
+    for (const q of Object.values(data.quotes || {})) if (q?.code && (q.hasOrder || q.quoteStatus === 'SUCCESS' || q.quoteStatus === 'REJECT')) out.add(q.code);
+    for (const g of Object.values(data.orders || {})) for (const o of g?.orders || []) if (o?.quote) out.add(o.quote);
+    for (const [k, o] of Object.entries(data.ordersNew || {})) if (k !== '_src' && o?.bg && !o.cancel) out.add(o.bg);
+    return (data.dgClosed = out);
+  }
   function tkSrcDone(t, ac, data) {
     const s0 = t.src;
     if (s0.rule === 'quote') {
@@ -12080,8 +12089,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return src?.complete && src.mode === 'dang' && src.at > (t.at || 0) && !data.dnPending[s0.sid] ? 'đề nghị không còn chờ duyệt' : '';
     }
     if (s0.rule === 'dg') {
+      if (tkDgClosed(data).has(s0.sid)) return 'báo giá đã có đơn hoặc đã chốt';
+      // đơn chỉ bị bỏ khỏi danh sách khi tab của nó đã đọc đủ, nên không còn trong danh sách là đã có mã đơn hàng
       const src = data.donGuiPending?._src;
-      return src?.complete && src.at > (t.at || 0) && !data.donGuiPending[s0.sid] ? 'đơn gửi đã có mã đơn hàng' : '';
+      return src && src.at > (t.at || 0) && !data.donGuiPending[s0.sid] ? 'đơn gửi đã có mã đơn hàng' : '';
     }
     if (s0.rule === 'tp') return s0.sid !== tkDayKey(Date.now()) ? 'đã sang ngày mới, xét lại theo số liệu mới' : '';
     if (s0.rule === 'stale') {
@@ -12305,6 +12316,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function tkReadDonGuiRun(old) {
     const got = {};
     const count = {};
+    const okTabs = new Set();
     let complete = false;
     await tkInFrame('/don-gui', async (doc) => {
       const table = () => [...(doc()?.querySelectorAll('.ant-table') || [])].filter(dnShown).find((x) => [...x.querySelectorAll('thead th')].some((th) => th.innerText.trim() === 'Số BG TT'));
@@ -12365,13 +12377,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             count[name]++;
           }
         }
-        if (!done) allOk = false;
+        if (done) okTabs.add(name);
+        else allOk = false;
       }
       complete = allOk;
     });
-    if (!complete && !Object.keys(got).length) return;
+    if (!okTabs.size) return;
     const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, count } };
-    if (complete) for (const [k, o] of Object.entries(old)) if (k !== '_src' && o && !got[k]) patch[k] = null;
+    // 1 tab đọc lỗi thì giữ đơn của tab đó, các tab đọc đủ vẫn bỏ được đơn đã có mã
+    for (const [k, o] of Object.entries(old)) if (k !== '_src' && o && !got[k] && okTabs.has(o.tab)) patch[k] = null;
     await kvMerge('donGuiPending', patch);
     await tkAutoRun();
   }
