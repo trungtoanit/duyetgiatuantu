@@ -11849,7 +11849,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           ${t.rep ? `<span style="font-weight:700;color:#0f766e">🔁 ${esc(TK_REP[t.rep] || '')}</span>` : ''}
           <span style="color:#475569">Hạn <b>${esc(tkTime(t.due))}</b>${act && !tkOver(t) ? ` · ${esc(tkLeft(t))}` : ''}</span></div>
         <div style="color:#475569">👤 Phụ trách: <b>${esc(t.to)}</b> · Người giao: <b>${esc(t.by)}</b></div>
-        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.rule === 'maint' ? `${t.src.url}?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.rule === 'stale' ? `/misa-order/list?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.url)}" target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
+        ${t.src ? `<div>⚡ Tự tạo từ CRM · <a href="${esc(t.src.rule === 'maint' ? `${t.src.url}?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.rule === 'stale' ? `/misa-order/list?dgFind=${encodeURIComponent(t.src.sid)}` : t.src.url)}" data-src-link target="_blank" rel="noopener" style="font-weight:800;color:#1d4ed8">🔗 Mở ${esc(t.src.label || 'nguồn')}</a></div>` : ''}
         ${t.desc ? `<div style="white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:8px 10px">${esc(t.desc)}</div>` : ''}
         ${imgs.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${imgs.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Mở ảnh trong báo cáo"><img src="${esc(u)}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;display:block"></a>`).join('')}</div>` : ''}
         ${act && t.remindAt > Date.now() ? `<div style="color:#0f766e;font-weight:600">🔔 Nhắc mỗi ngày đến khi xong, lần tới ${esc(tkTime(t.remindAt))}</div>` : ''}
@@ -11868,6 +11868,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     pg?.addEventListener('input', () => (box.querySelector('[data-pgv]').textContent = `${pg.value}%`));
     box.addEventListener('click', async (e) => {
       if (e.target === box) return box.remove();
+      // Mở nguồn ở tab mới: đóng form việc và ẩn bảng (tab mới cũng không bung bảng che trang); bấm nút nổi để mở lại
+      if (e.target.closest('[data-src-link]')) {
+        setPanelOpen(false);
+        return box.remove();
+      }
       const k = e.target.closest('[data-k]')?.dataset.k;
       if (!k) return;
       if (k === 'x') return box.remove();
