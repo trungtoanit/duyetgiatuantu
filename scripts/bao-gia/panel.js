@@ -12117,8 +12117,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       out.stale.push({ key: `stale-${dh}`, rule: 'stale', title: `Hoàn thành đơn ${dh}${cust ? ` – ${cust}` : ''}`, desc: `Lên đơn ${tkTime(o.at)}. ${dd ? `Hạn giao ${dd.split('-').reverse().slice(0, 2).join('/')}, lúc tạo việc đã quá ${Math.floor(days)} ngày` : `Chưa có ngày giao, lúc tạo việc đã ${Math.floor(days)} ngày`}, vẫn ở tab Mới.${o.bg ? ` Báo giá ${o.bg}.` : ''}${o.total ? ` Tổng tiền ${money(o.total)}.` : ''}${staff ? ` NVKD: ${staff}.` : ''}`, to: ac.stale.who === 'staff' && staff ? staff : boss, due: tkDueIn(1, now), pri: days >= 30 ? 'high' : 'normal', weight: days, url: '/misa-order/list?tab=NEW', label: dh, sid: dh, orderAt: o.at });
     }
     // Đề nghị đang chờ mình duyệt (/de-nghi, công tắc Cần tôi duyệt): tiền lớn trước
+    const dnIds = tkDnIds(data);
     for (const [code, o] of Object.entries(data.dnPending || {})) {
-      if (code === '_src' || !o) continue;
+      if (code === '_src' || !o || dnIds?.has(code) === false) continue;
       const sum = Number(String(o.sum || '').replace(/[^\d]/g, '')) || 0;
       out.dn.push({ key: `dn-${code}`, rule: 'dn', title: `Duyệt đề nghị ${code} – ${o.name || ''}`.trim(), desc: `${sum ? `Tổng tiền ${money(sum)}. ` : ''}${o.who ? `Người đề nghị: ${o.who}.` : ''}`.trim(), to: boss, due: tkDueIn(1, now), pri: sum >= 50e6 ? 'high' : 'normal', weight: sum, url: '/de-nghi/', label: code, sid: code });
     }
@@ -12145,6 +12146,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const [k, o] of Object.entries(data.ordersNew || {})) if (k !== '_src' && o?.bg && !o.cancel) out.add(o.bg);
     return (data.dgClosed = out);
   }
+  // Mã đề nghị của lần đọc đủ gần nhất. Xoá (null) không đồng bộ lên máy chủ, nên máy khác vẫn giữ dòng đã xoá trong dnPending: phải so với danh sách này
+  const tkDnIds = (data) => {
+    const src = data.dnPending?._src;
+    return src?.complete && src.mode === 'dang' && Array.isArray(src.ids) ? new Set(src.ids) : null;
+  };
   function tkSrcDone(t, ac, data) {
     const s0 = t.src;
     if (s0.rule === 'quote') {
@@ -12171,7 +12177,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     if (s0.rule === 'dn') {
       const src = data.dnPending?._src;
-      return src?.complete && src.mode === 'dang' && src.at > (t.at || 0) && !data.dnPending[s0.sid] ? 'đề nghị không còn chờ duyệt' : '';
+      const ids = tkDnIds(data);
+      return src?.complete && src.mode === 'dang' && src.at > (t.at || 0) && !(ids ? ids.has(s0.sid) : data.dnPending[s0.sid]) ? 'đề nghị không còn ở tab Đang duyệt' : '';
     }
     if (s0.rule === 'dg') {
       if (tkDgClosed(data).has(s0.sid)) return 'báo giá đã có đơn hoặc đã chốt';
@@ -12478,7 +12485,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function tkReadDn() {
     if (!MY_ADMIN) return;
     const old = await kvGet('dnPending');
-    if ((old._src?.mode === 'dang' && Date.now() - (old._src?.at || 0) < 30 * 60e3) || !tabLock('dgTkDnLock', 5 * 60e3)) return;
+    if ((old._src?.mode === 'dang' && Array.isArray(old._src.ids) && Date.now() - (old._src?.at || 0) < 30 * 60e3) || !tabLock('dgTkDnLock', 5 * 60e3)) return;
     const got = {};
     let complete = false;
     await tkInFrame('/de-nghi/', async (doc) => {
@@ -12554,7 +12561,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
     });
     if (!complete && !Object.keys(got).length) return;
-    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, mode: 'dang' } };
+    const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, mode: 'dang', ids: Object.keys(got) } };
     if (complete) for (const [k, o] of Object.entries(old)) if (k !== '_src' && o && !got[k]) patch[k] = null;
     await kvMerge('dnPending', patch);
     await tkAutoRun();
