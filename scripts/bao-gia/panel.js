@@ -12530,6 +12530,54 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     await tkAutoRun();
   }
   // Tab Duyệt lên đơn của Danh sách báo giá: còn việc báo giá đang mở thì 15 phút / lần đọc đủ mọi trang để biết báo giá nào đã rời tab
+  // Danh sách Tất cả của CRM không có báo giá Thành công / Thất bại, nên báo giá đã lên đơn mà chưa mở lại vẫn nằm ở trạng thái cũ trong kho.
+  // → 15 phút / lần đọc 2 trang đầu của 2 tab này (hoạt động mới nhất lên đầu), lần đầu đọc hết để dọn báo giá cũ; hook.js tự lưu trạng thái mới.
+  let tkClosedBusy = false;
+  async function tkReadClosed() {
+    if (!MY_ADMIN || tkClosedBusy) return;
+    const key = `dgClosedRead${SITE.key}`;
+    const last = Number(lsGet(key)) || 0;
+    if (Date.now() - last < 15 * 60e3 || !tabLock('dgClosedLock', 10 * 60e3)) return;
+    tkClosedBusy = true;
+    try {
+      const maxPage = last ? 2 : 60;
+      let ok = 0;
+      await tkInFrame('/bao-gia', async (doc) => {
+        const first = () => doc()?.querySelector('.ant-table-tbody tr.ant-table-row')?.innerText.match(/BG\d{3,}/)?.[0] || '';
+        const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
+        const moved = async (prev) => {
+          for (let i = 0; i < 50; i++) {
+            await sleep(300);
+            if (!spinning() && first() && first() !== prev) return true;
+          }
+          return false;
+        };
+        for (let i = 0; i < 60 && !(tkFindTab(doc(), 'Thành công') && first()); i++) await sleep(500);
+        for (const name of ['Thành công', 'Thất bại']) {
+          const tab = tkFindTab(doc(), name);
+          if (!tab) continue;
+          let prev = first();
+          (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+          if (!(await moved(prev))) continue;
+          await sleep(1500); // chờ panel.js trong khung lưu xong
+          for (let page = 2; page <= maxPage; page++) {
+            const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
+            if (!li) break;
+            prev = first();
+            li.click();
+            if (!(await moved(prev))) break;
+            await sleep(1500);
+          }
+          ok++;
+        }
+      });
+      if (ok) lsSet(key, String(Date.now()));
+      else lsSet(key, String(last ? Date.now() - 10 * 60e3 : 0)); // không đọc được: lần đầu thì thử lại ở nhịp sau
+      gapPopupNow();
+    } finally {
+      tkClosedBusy = false;
+    }
+  }
   async function tkReadApprove() {
     if (!MY_ADMIN) return;
     const old = await kvGet('approvePending');
@@ -12666,6 +12714,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tkReadDn().catch((e) => console.warn('[DG] đọc đề nghị:', e.message));
       tkReadDonGui().catch((e) => console.warn('[DG] đọc đơn gửi:', e.message));
       tkReadTp().catch((e) => console.warn('[DG] đọc Dashboard KH:', e.message));
+      tkReadClosed().catch((e) => console.warn('[DG] đọc tab Thành công / Thất bại:', e.message));
       tkReadApprove().catch((e) => console.warn('[DG] đọc Duyệt lên đơn:', e.message));
     }, 60000);
     document.addEventListener('visibilitychange', () => {
