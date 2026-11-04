@@ -390,6 +390,7 @@
       }
       if (old.hasOrder && old.orderCode) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
       await kvMerge('quotes', { [data.id]: { ...old, ...next } });
+      if (next.quoteStatus !== old.quoteStatus && CLOSED.has(next.quoteStatus)) gapPopupNow(); // vừa thất bại / thành công → bỏ khỏi popup ngay
     } else if (kind === 'margin') {
       const all = await kvGet('margins');
       const cur = all[data.code] || { products: {} };
@@ -11057,7 +11058,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const STATUS_BY_LABEL = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [v, k]));
   let odAt = 0;
   function watchOrderDom(q) {
-    if (!IS_TOP || !q?.id || Date.now() - odAt < 15000) return;
+    if (!IS_TOP || !q?.id || Date.now() - odAt < 5000) return;
     odAt = Date.now();
     const misa = [...document.querySelectorAll('span, div, b, strong')].some((e) => e.children.length === 0 && /^Mã đơn hàng Misa:?$/i.test(e.textContent.trim()));
     const checked = [...document.querySelectorAll('.ant-tag-checkable-checked, .ant-tag-checkable.ant-tag-checkable-checked')]
@@ -11066,7 +11067,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const patch = {};
     if (misa && !q.hasOrder) patch.hasOrder = true;
     if (checked && checked !== q.quoteStatus && CLOSED.has(checked)) patch.quoteStatus = checked;
-    if (Object.keys(patch).length) kvMerge('quotes', { [q.id]: { ...q, ...patch, updatedAt: Math.max(q.updatedAt || 0, Math.floor(Date.now() / 1000)) } }).catch(() => {});
+    if (Object.keys(patch).length) kvMerge('quotes', { [q.id]: { ...q, ...patch, updatedAt: Math.max(q.updatedAt || 0, Math.floor(Date.now() / 1000)) } }).then(gapPopupNow).catch(() => {});
+  }
+  // Bấm đổi tình trạng trên trang báo giá → kiểm tra ngay (không chờ lượt vẽ lại), CRM cập nhật nhãn sau khi lưu nên thử vài lần
+  if (IS_TOP) {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest?.('.ant-tag-checkable')) return;
+      const id = Number(location.pathname.match(/\/bao-gia\/update\/(\d+)/)?.[1]);
+      if (!id) return;
+      for (const ms of [800, 2500, 6000]) {
+        setTimeout(async () => {
+          const q = (await kvGet('quotes'))[id];
+          odAt = 0;
+          if (q) watchOrderDom(q);
+        }, ms);
+      }
+    }, true);
   }
 
   function renderSide(q, qid = q?.id, body = '', ho = '', hoN = 0) {
@@ -13036,6 +13052,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const r of rows) n[gapCustKey(r)] = (n[gapCustKey(r)] || 0) + 1;
     return (r) => (r.q.customer?.code || r.q.customer?.name ? n[gapCustKey(r)] : 0);
   };
+  // Báo giá vừa đóng (thất bại, thành công, có đơn): tính lại và ghi popup ngay, không chờ nhịp 60 giây
+  function gapPopupNow() {
+    state.gapCache = null;
+    return gapToPopup().catch(() => {});
+  }
   async function gapToPopup() {
     if (!IS_TOP) return;
     if (!state.meReal) state.meReal = (await kvGet('me'))?.name || ''; // bảng chưa mở vẫn biết tài khoản
