@@ -12543,7 +12543,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const maxPage = last ? 2 : 60;
       let ok = 0;
       await tkInFrame('/bao-gia', async (doc) => {
-        const first = () => doc()?.querySelector('.ant-table-tbody tr.ant-table-row')?.innerText.match(/BG\d{3,}/)?.[0] || '';
+        // mỗi tab CRM giữ 1 bảng riêng, bảng của tab đang ẩn vẫn nằm trong trang → chỉ xét bảng đang hiện
+        const first = () => [...(doc()?.querySelectorAll('.ant-table-tbody tr.ant-table-row') || [])].find(dnShown)?.innerText.match(/BG\d{3,}/)?.[0] || '';
         const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
         const moved = async (prev) => {
           for (let i = 0; i < 50; i++) {
@@ -12561,7 +12562,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           if (!(await moved(prev))) continue;
           await sleep(1500); // chờ panel.js trong khung lưu xong
           for (let page = 2; page <= maxPage; page++) {
-            const li = doc()?.querySelector(`.ant-pagination-item-${page}`);
+            const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
             if (!li) break;
             prev = first();
             li.click();
@@ -12576,6 +12577,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       gapPopupNow();
     } finally {
       tkClosedBusy = false;
+      lsSet('dgClosedLock', 'null');
     }
   }
   async function tkReadApprove() {
