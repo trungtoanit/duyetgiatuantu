@@ -7107,7 +7107,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const w = host.getBoundingClientRect().width;
       // thu nhỏ bớt 132px để chừa chỗ ô 🔧 Bảo trì bên phải
       const MT_W = 124;
-      box.setAttribute('style', `flex:${cs.flex === '0 1 auto' ? '1 1 auto' : cs.flex};width:${w ? `${Math.round(w - MT_W - 8)}px` : 'auto'};max-width:calc(100% - ${MT_W + 8}px);margin:${cs.margin};align-self:stretch;min-width:0;box-sizing:border-box`);
+      const MT_ON = SITE.key === 'tuantu'; // Đại Dương không dùng Bảo trì: không hiện ô, băng Gợi ý chốt đơn chiếm cả chỗ
+      const MT_ROOM = MT_ON ? MT_W + 8 : 0;
+      box.setAttribute('style', `flex:${cs.flex === '0 1 auto' ? '1 1 auto' : cs.flex};width:${w ? `${Math.round(w - MT_ROOM)}px` : 'auto'};max-width:calc(100% - ${MT_ROOM}px);margin:${cs.margin};align-self:stretch;min-width:0;box-sizing:border-box`);
       host.after(box);
       // 🔧 Bảo trì: số báo cáo chưa xử lý (khẩn cấp / cao nổi bật) – bấm mở trang Bảo trì → Báo cáo
       const mt = document.createElement('a');
@@ -7135,7 +7137,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         z.textContent = '⏳ Đang soạn…';
         maintZaloQuick(z).catch((err) => (z.textContent = `⚠️ ${err.message}`));
       });
-      box.after(mt);
+      if (MT_ON) box.after(mt);
       // Lịch nhắc bảo trì qua Zalo: 7:30 và 12:30 hằng ngày (giờ VN), Chủ nhật nghỉ
       const MT_SLOTS = [[7, 30], [12, 30]];
       const mtSlots = (from, dir) => {
