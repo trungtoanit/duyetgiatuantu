@@ -4296,7 +4296,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     ['prio', '🔥', 'Ưu tiên', '#ea580c', (q, c) => renderCtx.hotSet?.has(q.id) && !CLOSED.has(q.quoteStatus) && !hasOrderFull(q, c) && !cancelInfo(c)],
     ['flexo', '', 'F', '#2563eb', (q) => (q.kinds || []).includes('flexo')],
     ['offset', '', 'O', '#9333ea', (q) => (q.kinds || (q.offset ? ['offset'] : [])).includes('offset')],
-    ['bossok', '✅', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
+    ['bossok', '<span style="display:inline-block;animation:dgLuckySpin 2.4s ease-in-out infinite">⭐</span>', 'Lấy đơn', '#16a34a', (q, c) => bossOkInfo(q, c)],
     ['tgt', '💲', 'Khách cho giá', '#059669', (q, c) => targetPriceInfo(c)],
     ['buyer', '🤝', 'Thu mua %', '#a21caf', (q, c) => buyerInfo(q, c)],
     ['nobuyer', '🚫', 'Chưa cho thu mua', '#64748b', (q, c) => noBuyer(q, c)],
