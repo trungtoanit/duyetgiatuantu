@@ -1516,12 +1516,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!t) return null;
     const hs = [...t.querySelectorAll('thead th')];
     const iD = hs.findIndex((th) => /^Giá deal/i.test(th.innerText.trim()));
+    const iStt = hs.findIndex((th) => th.innerText.trim() === 'STT');
     let zero = 0;
     let n = 0;
     for (const tr of t.querySelectorAll('.ant-table-tbody tr')) {
       if (tr.classList.contains('ant-table-measure-row') || !tr.innerText.trim()) continue;
       const c = tr.cells[iD];
-      if (!c) continue;
+      if (!c || /offset/i.test(tr.cells[iStt]?.innerText || '')) continue; // Set giá Flexo không đụng dòng Offset
       const v = Number((c.innerText.replace(/\d+(?:[.,]\d+)?\s*%/g, '').match(/[\d.,]+/) || ['0'])[0].replace(/[.,]/g, '')) || 0;
       n++;
       if (!v) zero++;
@@ -1541,7 +1542,41 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       return Math.abs(now - at) < 5 * 60e3;
     });
   }
+  // Dòng Offset của bảng Hàng hóa (theo nhãn cột STT) và giá hiện tại: Set giá Flexo phải giữ nguyên các dòng này
+  function offsetPriceRows() {
+    const t = pageProductTable();
+    if (!t) return [];
+    const heads = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+    const iStt = heads.indexOf('STT');
+    const pIdx = heads.findIndex((h) => /^Giá thực bán/i.test(h));
+    return [...t.querySelectorAll('.ant-table-tbody tr')]
+      .filter((tr) => !tr.classList.contains('ant-table-measure-row') && tr.innerText.trim())
+      .map((tr, i) => ({ i, cell: tr.cells[pIdx], cur: sellPriceOf(tr.cells[pIdx]), offset: /offset/i.test(tr.cells[iStt]?.innerText || '') }))
+      .filter((r) => r.offset && r.cell);
+  }
+  // NCC chung cho cả Flexo và Offset: "Set deal cho BG" đổi luôn giá dòng Offset → điền lại giá cũ; không trả lại được thì báo lỗi để không lưu sai
+  async function restoreOffsetPrices(snap, step) {
+    const old = new Map(snap.map((r) => [r.i, r.cur]));
+    for (let pass = 0; pass <= 3; pass++) {
+      const wrong = offsetPriceRows().filter((r) => old.has(r.i) && r.cur !== old.get(r.i));
+      if (!wrong.length) return;
+      if (pass === 3) throw new Error(`Không giữ được giá cũ ở ${wrong.length} dòng Offset (dòng ${wrong.map((r) => r.i + 1).join(', ')}) nên chưa lưu báo giá – hãy tải lại trang rồi thử lại.`);
+      for (const r of wrong) {
+        step(`Dòng ${r.i + 1} (Offset): giữ giá cũ ${money(old.get(r.i))}…`);
+        await setCellPrice(r.cell, old.get(r.i));
+        await sleep(300);
+      }
+      await sleep(500);
+    }
+  }
+  // Nút NCC trong hộp PO: bỏ NCC chỉ có dòng Offset (báo giá có cả Flexo lẫn Offset)
+  function flexoDealChips(chips, doc = document) {
+    const kt = readKindTotals(doc);
+    const onlyOffset = (kt?.offsetSup || []).filter((x) => !kt.flexoSup.includes(x));
+    return chips.filter((c) => !onlyOffset.includes(c.code));
+  }
   async function runSetPrice(q, pct, step, rowPct = {}) {
+    const offSnap = offsetPriceRows();
     // Set deal xong mà cột "Giá deal" vẫn 0 → set lại (tối đa 3 lượt) rồi mới lưu
     let done = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -1564,7 +1599,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       step(`Giá deal vẫn 0 ở ${z.zero}/${z.n} dòng – set lại…`);
       await sleep(800);
     }
-    await afterSetDeal(q, pct, step, rowPct, done);
+    await afterSetDeal(q, pct, step, rowPct, done, offSnap);
   }
   async function setDealOnce(q, pct, step) {
     step('Mở Lên PO → Giấy tấm…');
@@ -1575,16 +1610,18 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const t = b.innerText.trim();
       if (/^[A-Z][A-Z0-9_.&-]{1,12}$/.test(t) && t !== 'OUT' && !chips.some((c) => c.code === t)) chips.push({ code: t, btn: b });
     }
+    const fxChips = flexoDealChips(chips);
+    if (chips.length && !fxChips.length) throw new Error('Không thấy nhà cung cấp giấy của dòng Flexo trong PO, chưa set gì để tránh đổi giá dòng Offset.');
     const readTotal = () => Number(((poModalNow() || modal).innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
     const done = [];
-    for (const [i, ch] of (chips.length ? chips : [null]).entries()) {
+    for (const [i, ch] of (fxChips.length ? fxChips : [null]).entries()) {
       if (ch) {
         // "Set deal cho BG" của nhà trước có thể đã đóng hộp PO → mở lại để set tiếp nhà sau
         if (i > 0 && !poModalNow()) {
-          step(`Nhà cung cấp ${ch.code} (${i + 1}/${chips.length}): mở lại Lên PO → Giấy tấm…`);
+          step(`Nhà cung cấp ${ch.code} (${i + 1}/${fxChips.length}): mở lại Lên PO → Giấy tấm…`);
           await openPoGiayTam(document);
         }
-        step(`Nhà cung cấp ${ch.code} (${i + 1}/${chips.length}): chọn…`);
+        step(`Nhà cung cấp ${ch.code} (${i + 1}/${fxChips.length}): chọn…`);
         const chBtn = await waitFor(() => [...(poModalNow() || modal).querySelectorAll('button.ant-btn')].find((b) => b.isConnected && b.innerText.trim() === ch.code), 8000, 200);
         if (!chBtn) throw new Error(`Không thấy nút nhà cung cấp ${ch.code} trong PO (đã set: ${done.join(', ') || 'chưa'}).`);
         chBtn.click();
@@ -1610,7 +1647,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     return done;
   }
-  async function afterSetDeal(q, pct, step, rowPct, done) {
+  async function afterSetDeal(q, pct, step, rowPct, done, offSnap = []) {
     step('Lưu báo giá…');
     // % riêng từng dòng: giá sau khi set deal (đang = giấy tấm ÷ (1 − pct)) → giấy tấm ÷ (1 − % dòng)
     const custom = Object.entries(rowPct).filter(([, v]) => v != null && v !== pct);
@@ -1624,6 +1661,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         await setCellPrice(r.cell, Math.ceil((r.cur * (1 - pct / 100)) / (1 - v / 100)));
         await sleep(300);
       }
+    }
+    if (offSnap.length) {
+      await sleep(700);
+      await restoreOffsetPrices(offSnap, step);
     }
     const saveBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Cập nhật');
     if (!saveBtn) throw new Error('Đã set deal nhưng không thấy nút "Cập nhật" để lưu báo giá – hãy tự bấm Cập nhật.');
@@ -1846,7 +1887,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="pdlg-warn" data-v="20" title="Bấm để chọn 20%" style="display:none;cursor:pointer;margin:8px 0;padding:8px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-weight:800">⚠️ Đang bán chậm, hãy set 20%</div>
       <div class="pdlg-sum"></div>
       <div class="pdlg-rows"></div>
-      <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho từng nhà cung cấp, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang.</div>
+      <div class="muted pdlg-note">Sẽ mở Lên PO → Giấy tấm, kéo % Deal cho nhà cung cấp của dòng Flexo, bấm "Set deal cho BG", lưu báo giá rồi tải lại trang. Dòng Offset giữ nguyên giá.</div>
       <div class="pdlg-step"></div>
       <div class="pdlg-btns"><button class="act" data-p="close">Huỷ</button><button class="act primary" data-p="go">✅ Set giá ${pct0}%</button></div>
     </div></div>`;
