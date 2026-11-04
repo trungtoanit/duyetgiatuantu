@@ -9035,6 +9035,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .gp-site.tuantu { background: #dc2626; } .gp-site.daiduong { background: #2563eb; }
     .gp-main { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .gp-main b { color: #1d4ed8; } .gp-cust { font-weight: 700; color: #b45309; margin: 0 6px; } .gp-name { color: #64748b; }
+    .gp-n { display: inline-block; min-width: 16px; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: #ea580c; color: #fff; font-size: 11px; font-style: normal; font-weight: 800; line-height: 16px; text-align: center; }
     .gp-staff { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .gp-amt { text-align: right; font-weight: 800; color: #047857; font-variant-numeric: tabular-nums; }
     .gp-diff { text-align: right; }
@@ -13026,6 +13027,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     { k: 'r100', t: '≥ 100tr', c: '#b45309', bg: '#fffbeb', min: 100e6, max: Infinity },
   ];
   const gapRange = (v) => GAP_RANGES.find((b) => v >= b.min && v < b.max)?.k || 'r0';
+  // Bộ đếm sau mã khách: số báo giá của cùng khách (trong từng hệ thống) trên danh sách chênh lệch; 1 lần thì không hiện
+  const gapCustKey = (r) => `${r.site.key}|${norm(r.q.customer?.code || r.q.customer?.name || '')}`;
+  const gapCustCount = (rows) => {
+    const n = {};
+    for (const r of rows) n[gapCustKey(r)] = (n[gapCustKey(r)] || 0) + 1;
+    return (r) => (r.q.customer?.code || r.q.customer?.name ? n[gapCustKey(r)] : 0);
+  };
   async function gapToPopup() {
     if (!IS_TOP) return;
     if (!state.meReal) state.meReal = (await kvGet('me'))?.name || ''; // bảng chưa mở vẫn biết tài khoản
@@ -13034,6 +13042,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const byDiff = lsGet('dgGapSort') === 'diff';
     const rows = all.slice().sort((a, b) => (byDiff ? b.v - a.v : gapOrder(a, b)));
     const unread = rows.filter((r) => r.q.isRead === false).length;
+    const custN = gapCustCount(rows);
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
     const sumOf = (k) => rows.filter((r) => r.site.key === k).reduce((t, r) => t + r.v, 0);
     const card = {
@@ -13056,7 +13065,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       rows: rows.map((r) => ({ // hiện đủ mọi báo giá đủ điều kiện, không giới hạn
         tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
         tagColor: r.site.key === 'tuantu' ? '#dc2626' : '#2563eb',
-        title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}`,
+        title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}${custN(r) > 1 ? ` ×${custN(r)}` : ''}`,
         sub: `${shortName(r.q.staff?.name || '')} · ${r.q.name || ''}`,
         right: `${r.v < 0 ? '−' : ''}${trM(Math.abs(r.v))}`,
         ...(([rightColor, rightBg]) => ({ rightColor, rightBg }))(diffColors(r.v)),
@@ -13102,6 +13111,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const tt = all.filter((r) => r.site.key === 'tuantu');
     const dd = all.filter((r) => r.site.key === 'daiduong');
     const unread = all.filter((r) => r.q.isRead === false).length;
+    const custN = gapCustCount(all);
     return `<div class="gp">
       <div class="gp-h"><b>📈 Báo giá có chênh lệch – Tuấn Tú + Đại Dương</b><span class="muted">Tuấn Tú ≥ 10 tr · Đại Dương ≥ 10 tr · chỉ báo giá chưa chốt / chưa lên đơn</span>
         <button class="gp-chip" data-act="gap-copy" data-site="daiduong" style="--c:#2563eb;margin-left:auto">📋 Copy khách Đại Dương</button>
@@ -13115,7 +13125,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           const rd = q.isRead === false ? ' unread' : q.isRead === true ? ' read' : '';
           return `<a class="gp-row${rd}" title="${q.isRead === false ? 'Chưa đọc' : q.isRead === true ? 'Đã đọc' : ''}" href="${r.host}/bao-gia/update/${q.id}" target="_blank" rel="noopener">
             <span class="gp-no">${i + 1}</span><span class="gp-site ${r.site.key}">${r.site.key === 'tuantu' ? 'TT' : 'ĐD'}</span>
-            <span class="gp-main"><b>${esc(q.code)}</b> <span class="gp-cust">${esc(shortCompany(q.customer?.code || q.customer?.name || ''))}</span><span class="gp-name">${esc(q.name || '')}</span></span>
+            <span class="gp-main"><b>${esc(q.code)}</b> <span class="gp-cust">${esc(shortCompany(q.customer?.code || q.customer?.name || ''))}${custN(r) > 1 ? `<i class="gp-n" title="Khách này có ${custN(r)} báo giá trong danh sách">${custN(r)}</i>` : ''}</span><span class="gp-name">${esc(q.name || '')}</span></span>
             <span class="gp-staff">${esc(shortName(staff))}</span>
             <span class="gp-amt">${moneyShortG(Number(q.amount))}</span>
             <span class="gp-diff">${diffPillV(r.v)}</span></a>`;
