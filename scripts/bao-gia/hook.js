@@ -271,6 +271,19 @@
     if (!all || (!(sum.flexo && sum.offset) && !sum.other)) return undefined; // chỉ 1 loại, không có dòng khác → khỏi chia
     return { flexo: sum.flexo / all, offset: sum.offset / all, other: sum.other / all };
   }
+  // % VAT phần Flexo / Offset (tiền thuế ÷ thành tiền các dòng loại đó) – để quy giá trị báo giá về trước VAT
+  function kindVatOf(products) {
+    if (!Array.isArray(products) || !products.length) return undefined;
+    const out = {};
+    for (const kind of ['flexo', 'offset']) {
+      const rows = products.filter((p) => !p.isDeleted && kindOfProduct(p) === kind);
+      if (!rows.length) continue;
+      const base = rows.reduce((a, p) => a + (Number(p.totalPrice) || 0), 0);
+      const vat = rows.reduce((a, p) => a + (Number(p.moneyVat) || 0), 0);
+      out[kind] = base > 0 ? Math.round((vat / base) * 1000) / 10 : Number(rows[0].vatPercent) || 0;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
   // NCC giấy của từng loại: mã trước "_" trong kết cấu giấy (PNTP_T140/X120… → PNTP, VS_*/X90… → VS), tìm trong mọi chuỗi của dòng
   function kindSupOf(products) {
     if (!Array.isArray(products) || !products.length) return undefined;
@@ -308,6 +321,7 @@
       : undefined,
     // Tỉ trọng thành tiền theo loại hàng (báo giá vừa Flexo vừa Offset): % Flexo / Offset tính trên phần tiền của loại đó
     kindShare: kindShareOf(o.opportunityProducts),
+    kindVat: kindVatOf(o.opportunityProducts),
     pkinds: prodKindsOf(o.opportunityProducts),
     kindSup: kindSupOf(o.opportunityProducts),
     // NVKD = người phụ trách khách (cột Sale của ERP); creator = người tạo báo giá

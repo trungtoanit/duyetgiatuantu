@@ -62,6 +62,12 @@ Extension không tự gọi API của CRM. Nó chỉ đọc lại những phản
 nên không cần quyền gì thêm và không làm đổi trạng thái của báo giá.
 Nội dung bình luận được gửi tới Claude API (Anthropic) để đánh giá.
 
+### Lợi nhuận từ mốc 15% (chỉ Đại Dương)
+
+Trên thẻ báo giá ở `quanly.baobidaiduong.com`, ô **Flexo** / **Offset** và bảng **Giải thích** có thêm **Lợi nhuận từ mốc 15%**:
+`giá bán trước VAT − NVL trước VAT ÷ (1 − 15%)`. Giá trị báo giá và "Tổng thanh toán" của PO đều đã gồm VAT nên được quy về trước VAT
+(VAT phần bán đọc từ dòng sản phẩm, giấy tấm 8%). Mốc đặt ở `SITES.daiduong.floorPct`; Tuấn Tú không có khóa này nên không hiện.
+
 ### 💲 Set giá nhanh (báo giá Flexo)
 
 Trên trang báo giá Flexo, bình luận NVKD xin giá ("Sếp cho em xin báo giá đơn này") có nút **💲 Set giá** cạnh "Trả lời".

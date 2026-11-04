@@ -12,7 +12,7 @@
   // Tuấn Tú giữ tên dữ liệu cũ; domain khác thêm tiền tố (vd. "dd.quotes") để không lẫn báo giá / khách giữa 2 CRM.
   const SITES = {
     tuantu: { key: 'tuantu', prefix: '', name: 'Tuấn Tú', org: 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ', watermark: 'TUAN TU PACKAGING', teamGroup: 'Sale Nội Bộ - Tuấn Tú', bossSign: true, excluded: ['Trần Đình Hùng', 'Nguyễn Trí Thức', 'Nguyễn Thăng Khôi', 'Đại Dương'] },
-    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'] },
+    daiduong: { key: 'daiduong', prefix: 'dd.', name: 'Đại Dương', org: 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG', watermark: 'BAO BI DAI DUONG', teamGroup: '', bossSign: false, excluded: ['Tuấn Tú', 'Nguyễn Trí Thức'], floorPct: 15 },
   };
   const SITE = /(^|\.)baobidaiduong\.com$/i.test(location.hostname) ? SITES.daiduong : SITES.tuantu;
   const API_BASE = `${location.protocol}//${location.hostname}:8080`; // máy chủ API của CRM (cùng tên miền, cổng 8080)
@@ -9628,6 +9628,26 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (cost > 100) return { best, cost, rest: null, invalid: true, base, diff, suppliers: sups, skipped, missing, at: fx.at };
     return { best, cost, rest: Math.round((100 - cost) * 10) / 10, base, diff, suppliers: sups, skipped, missing, at: fx.at };
   };
+  // Lợi nhuận từ mốc % sàn (SITE.floorPct – chỉ Đại Dương; Tuấn Tú không có nên không hiện):
+  // LN = giá bán − NVL ÷ (1 − mốc), đều TRƯỚC VAT. Giá trị BG và "Tổng thanh toán" PO đều đã gồm VAT nên phải quy về trước VAT.
+  const PAPER_VAT = 8; // PO giấy tấm: VAT 8% (cấu hình TAX_PERCENT của CRM)
+  const floorProfit = (salePost, nvlPost, saleVat, nvlVat) => {
+    const pct = SITE.floorPct;
+    if (!pct || !(salePost > 0) || !(nvlPost > 0)) return null;
+    const sale = salePost / (1 + (saleVat || 0) / 100);
+    const nvl = nvlPost / (1 + (nvlVat || 0) / 100);
+    const floor = nvl / (1 - pct / 100);
+    return { pct, sale, nvl, floor, profit: sale - floor };
+  };
+  const flexoFloor = (q, fx) => (fx ? floorProfit(fx.base, fx.best.total, q?.kindVat?.flexo ?? PAPER_VAT, PAPER_VAT) : null);
+  const offsetFloor = (q, od) => {
+    if (!od) return null;
+    // Bảng chiết giá không gắn được giá trị BG (không có số tiền BG) → số đang là trước VAT sẵn
+    const vat = q?.amount ? od.vat ?? q?.kindVat?.offset ?? 0 : 0;
+    return floorProfit(od.base, od.nvlPost, vat, vat);
+  };
+  const floorSign = (v) => `${v < 0 ? '−' : '+'}${trM(Math.abs(v))}`;
+  const floorTitle = (f) => `Giá bán trước VAT ${money(Math.round(f.sale))} − giá mốc ${money(Math.round(f.floor))} (NVL trước VAT ${money(Math.round(f.nvl))} ÷ ${(1 - f.pct / 100).toLocaleString('vi-VN')})`;
   const marginOf = (q) => {
     // % thấp nhất giữa Flexo (còn lại sau giấy tấm) và Offset (1 − NVL sau VAT ÷ BG) – cùng cách tính với thẻ
     const { flexo, offset } = marginParts(q);
@@ -10675,6 +10695,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       top.textContent = `${dp}%`;
       top.className = `osim-top osim-dpct ${lv}`;
     }
+    // Lợi nhuận từ mốc % sàn theo giá đang thử (số trên bảng chiết giá là trước VAT; s quy về phần tiền của BG)
+    const topFloor = side?.querySelector('.osim-topfloor');
+    if (topFloor && sumTT) {
+      const fp = (sumTT - nvlSum / (1 - Number(topFloor.dataset.p) / 100)) * (Number(topFloor.dataset.s) || 1);
+      topFloor.textContent = floorSign(fp);
+      topFloor.closest('.osim-floorbox')?.classList.toggle('neg', fp < 0);
+    }
     const topDiff = side?.querySelector('.osim-topdiff');
     if (topDiff) topDiff.textContent = `${diff < 0 ? '−' : '+'}${trM(Math.abs(diff))}`;
     // Tỷ lệ NVL / đơn giá hiện tại (trước VAT)
@@ -10785,6 +10812,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const diffHtml = `<b class="pos osim-diff">${od.exact ? '' : '≈'}${trM(od.diff)}</b>`;
     // Có cột Nguyên liệu → số chênh lệch nằm ở cột Nguyên liệu (lệch trái 1 ô so với Thành tiền)
     out.push(nvlCol ? r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', '', `<span class="osim-dpct">${pctTxt}</span>`, '', diffHtml) : r('<b>Chênh lệch Offset = BG − NVL sau VAT</b>', diffHtml, pctTxt));
+    const fl = offsetFloor(q, od);
+    if (fl) out.push(`<tr><td colspan="${nvlCol ? 6 : 4}"><b>Lợi nhuận từ mốc ${fl.pct}% (trước VAT): ${od.exact ? '' : '≈'}${floorSign(fl.profit)}</b> <span class="muted">– ${esc(floorTitle(fl))}</span></td></tr>`);
     if (!od.exact) out.push(`<tr><td colspan="${nvlCol ? 6 : 4}" class="muted">Tổng trên bảng chiết giá (giá × SL) không khớp giá trị BG theo mức VAT 0/5/8/10% → ước tính theo đang bán %.</td></tr>`);
     return out.join('');
   }
@@ -11134,8 +11163,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ${ho}
       ${info}
       ${kinds.length ? '<div class="side-sec">📊 Lợi nhuận đơn hàng</div><div class="mtiles">' : ''}
-      ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>` : '') : ''}
-      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="osim-top ${pctCls(offset)}">${offset}%</b>` : marginParts(q).offNoPrice ? '<span class="warnx">⚠️ Chưa cho giá (bảng chiết giá 0đ)</span>' : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b class="osim-topdiff">${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>` : ''; })()}` : '') : ''}
+      ${kinds.includes('flexo') ? tile('flexo', '🟦 Flexo', flexo ? (flexo.invalid ? `<span class="warnx">⚠️ PO giấy tấm > giá trị BG</span>` : `<b class="${pctCls(flexo.rest)}">${flexo.rest}%</b>`) : waitHtml(busy), flexo ? `${flexo.invalid ? `giấy tấm ${trM(flexo.best.total)} · BG ${trM(flexo.base)}` : `giấy tấm ${flexo.cost}%`}<div class="mt-diff ${flexo.diff < 0 ? 'neg' : ''}"><span>Chênh lệch BG − giấy tấm</span><b>${flexo.diff < 0 ? '−' : '+'}${trM(Math.abs(flexo.diff))}</b></div>${(() => { const f = flexoFloor(q, flexo); return f ? `<div class="mt-diff ${f.profit < 0 ? 'neg' : ''}" title="${esc(floorTitle(f))}"><span>Lợi nhuận từ mốc ${f.pct}% (trước VAT)</span><b>${floorSign(f.profit)}</b></div>` : ''; })()}` : '') : ''}
+      ${kinds.includes('offset') ? tile('offset', '🟪 Offset', offset != null ? `<b class="osim-top ${pctCls(offset)}">${offset}%</b>` : marginParts(q).offNoPrice ? '<span class="warnx">⚠️ Chưa cho giá (bảng chiết giá 0đ)</span>' : waitHtml(busy), offset != null ? `đang bán${(() => { const od = offsetDiff(q); return od ? `<div class="mt-nvl">NVL sau VAT${od.vat ? ` ${od.vat}%` : ''}: <b>${od.exact ? '' : '≈'}${trM(od.nvlPost)}</b> · ${od.part ? 'phần Offset' : 'BG'} ${trM(od.base)}</div><div class="mt-diff off"><span>Chênh lệch (BG − NVL sau VAT)${od.exact ? '' : ' · ước tính'}</span><b class="osim-topdiff">${od.exact ? '+' : '≈'}${trM(od.diff)}</b></div>${(() => { const f = offsetFloor(q, od); const sv = od.rows.reduce((a, x) => a + (x.val || 0), 0); return f ? `<div class="mt-diff off osim-floorbox ${f.profit < 0 ? 'neg' : ''}" title="${esc(floorTitle(f))}"><span>Lợi nhuận từ mốc ${f.pct}% (trước VAT)${od.exact ? '' : ' · ước tính'}</span><b class="osim-topfloor" data-s="${sv ? f.sale / sv : 1}" data-p="${f.pct}">${od.exact ? '' : '≈'}${floorSign(f.profit)}</b></div>` : ''; })()}` : ''; })()}` : '') : ''}
       ${kinds.length ? '</div>' : ''}
       ${flexo?.missing?.length ? `<div class="warnx">⚠️ Chưa đọc được PO giấy tấm của ${esc(flexo.missing.join(', '))} – % Flexo đang thiếu, sẽ tự tính lại.</div>` : ''}
       ${busy && marginStep ? `<div class="calc-step"><span class="spinner"></span>${esc(marginStep)}</div>` : ''}
@@ -11186,7 +11215,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ? fx.suppliers.map((s) => `<tr><td>Flexo · giấy tấm ${esc(s.code)}</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td>${money(s.total)}</td><td class="num">${Math.round((s.total / fx.base) * 1000) / 10}%</td></tr>`).join('') +
         (fx.skipped || []).map((s) => `<tr class="muted"><td>PO ${esc(s.code)} – giấy cho sản phẩm Offset, không tính vào Flexo</td><td>${esc(s.name.split('|').pop().trim().slice(0, 40))}</td><td><s>${money(s.total)}</s></td><td></td></tr>`).join('') +
         `<tr><td><b>Tổng giấy tấm</b></td><td></td><td><b>${money(fx.best.total)}</b></td><td class="num"><b>${fx.cost}%</b></td></tr>` +
-        `<tr><td><b>Chênh lệch (BG − giấy tấm)</b></td><td></td><td><b class="${fx.diff < 0 ? 'warnx' : 'pos'}">${fx.diff < 0 ? '−' : ''}${trM(Math.abs(fx.diff))}</b></td><td class="num">${fx.rest != null ? `${fx.rest}%` : ''}</td></tr>`
+        `<tr><td><b>Chênh lệch (BG − giấy tấm)</b></td><td></td><td><b class="${fx.diff < 0 ? 'warnx' : 'pos'}">${fx.diff < 0 ? '−' : ''}${trM(Math.abs(fx.diff))}</b></td><td class="num">${fx.rest != null ? `${fx.rest}%` : ''}</td></tr>` +
+        (() => { const f = flexoFloor(q, fx); return f ? `<tr><td><b>Lợi nhuận từ mốc ${f.pct}% (trước VAT)</b></td><td>${esc(floorTitle(f))}</td><td><b class="${f.profit < 0 ? 'warnx' : 'pos'}">${floorSign(f.profit)}</b></td><td></td></tr>` : ''; })()
       : '';
     return `<details class="mgnbox"><summary>${head}${busy ? ' <span class="spinner"></span>' : ''} <span class="link">Giải thích</span></summary>
       ${offRows ? `<div class="expl"><b>Offset</b> – lấy từ bảng chiết giá (Ctrl+Shift+G): <i>Đang bán % = 1 − NVL 1 thùng ÷ giá 1 thùng</i>.</div>` : ''}
