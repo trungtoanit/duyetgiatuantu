@@ -13028,6 +13028,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   ];
   const gapRange = (v) => GAP_RANGES.find((b) => v >= b.min && v < b.max)?.k || 'r0';
   // Bộ đếm sau mã khách: số báo giá của cùng khách (trong từng hệ thống) trên danh sách chênh lệch; 1 lần thì không hiện
+  // Popup của extension chỉ nhận chữ thường → dùng số trong vòng tròn đặc làm badge (❷…⓴), trên 20 thì ghi ×N
+  const gapBadge = (n) => (n <= 10 ? String.fromCodePoint(0x2775 + n) : n <= 20 ? String.fromCodePoint(0x24ea + n - 10) : `×${n}`);
   const gapCustKey = (r) => `${r.site.key}|${norm(r.q.customer?.code || r.q.customer?.name || '')}`;
   const gapCustCount = (rows) => {
     const n = {};
@@ -13065,7 +13067,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       rows: rows.map((r) => ({ // hiện đủ mọi báo giá đủ điều kiện, không giới hạn
         tag: r.site.key === 'tuantu' ? 'TT' : 'ĐD',
         tagColor: r.site.key === 'tuantu' ? '#dc2626' : '#2563eb',
-        title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}${custN(r) > 1 ? ` ×${custN(r)}` : ''}`,
+        title: `${r.q.code} ${shortCompany(r.q.customer?.code || r.q.customer?.name || '')}${custN(r) > 1 ? ` ${gapBadge(custN(r))}` : ''}`,
         sub: `${shortName(r.q.staff?.name || '')} · ${r.q.name || ''}`,
         right: `${r.v < 0 ? '−' : ''}${trM(Math.abs(r.v))}`,
         ...(([rightColor, rightBg]) => ({ rightColor, rightBg }))(diffColors(r.v)),
