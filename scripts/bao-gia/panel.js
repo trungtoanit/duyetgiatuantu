@@ -12571,7 +12571,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   const tkFindTab = (doc, name) => [...(doc?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+\+?/g, '').trim() === name);
   // ---------- 🖨 In size khách mua (/khach-hang/view/{id}): đọc đủ tab Lịch sử mua hàng trong khung ẩn, gộp theo mã TP ----------
-  // Mỗi mã TP: tên và định lượng giấy của đơn gần nhất, các đơn giá trong 365 ngày gần nhất (mới nhất trước, kèm ngày đơn gần nhất có giá đó). Bỏ đơn đã huỷ.
+  // Mỗi mã TP: tên và định lượng giấy của đơn gần nhất, các đơn giá trong 365 ngày gần nhất (mới nhất trước, kèm số lượng và ngày đơn gần nhất có giá đó). Bỏ đơn đã huỷ và mã không bán trong 365 ngày.
   // Mỗi loại (Hộp giấy, Thùng giấy, Thùng carton…) và số lớp là 1 bảng riêng, trong bảng sắp theo dài → rộng → cao từ nhỏ tới lớn.
   const CS_KINDS = ['Hộp giấy', 'Thùng giấy', 'Thùng carton'];
   const CS_DAY = (s) => {
@@ -12645,8 +12645,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const kind = kw ? `${kw[1][0].toUpperCase()}${kw[1].slice(1).toLowerCase()} ${kw[2].toLowerCase()}` : 'Khác';
     return { kind, ply, short, ...(m ? { d: num(m[1]), r: num(m[2]), c: num(m[3]) } : {}) };
   }
+  const csFrom = (now = Date.now()) => Number(new Date(now + 7 * 3600e3 - 365 * 86400e3).toISOString().slice(0, 10).replace(/-/g, '')); // giờ VN
   function csGroup(rows, now = Date.now()) {
-    const from = new Date(now + 7 * 3600e3 - 365 * 86400e3).toISOString().slice(0, 10).replace(/-/g, ''); // giờ VN
+    const from = csFrom(now);
     const map = new Map();
     for (const r of rows) {
       if (r.order.dead) continue;
@@ -12656,10 +12657,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       map.set(key, g);
       if (r.name && r.order.day > g.nameDay) [g.name, g.nameDay] = [r.name, r.order.day];
       if (r.paper && r.order.day > g.paperDay) [g.paper, g.paperDay] = [r.paper, r.order.day];
-      if (r.price && r.order.day >= Number(from) && r.order.day >= (g.prices.get(r.price)?.day || 0)) g.prices.set(r.price, { price: r.price, qty: r.qty, day: r.order.day, date: r.order.date });
+      if (r.price && r.order.day >= from && r.order.day >= (g.prices.get(r.price)?.day || 0)) g.prices.set(r.price, { price: r.price, qty: r.qty, day: r.order.day, date: r.order.date });
     }
     const dim = (v) => v ?? Infinity; // chưa đọc được size thì xếp cuối
     return [...map.values()]
+      .filter((g) => g.prices.size)
       .map((g) => ({ ...g, ...csSize(g.name), prices: [...g.prices.values()].sort((a, b) => b.day - a.day || b.price - a.price) }))
       .sort((a, b) => dim(a.d) - dim(b.d) || dim(a.r) - dim(b.r) || dim(a.c) - dim(b.c) || a.tp.localeCompare(b.tp));
   }
@@ -12668,7 +12670,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const seen = new Map();
     const out = [];
     for (const g of groups) {
-      const key = g.d != null ? [g.kind, g.ply, g.d, g.r, g.c, g.prices.map((p) => p.price).sort((a, b) => a - b)].join('|') : '';
+      const key = g.d != null && g.prices.length ? [g.kind, g.ply, g.d, g.r, g.c, g.prices.map((p) => p.price).sort((a, b) => a - b)].join('|') : '';
       const head = key && seen.get(key);
       if (!head) {
         const item = { ...g, more: 0, prices: g.prices.map((p) => ({ ...p })) };
@@ -12691,7 +12693,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
   function csSheet(name, cid, groups, nOrders) {
     const dimCell = (v) => `<td class="n">${v ?? '–'}</td>`;
-    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}${g.more ? `<small>+${g.more} mã cùng size, cùng giá</small>` : ''}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><em>${p.qty ? `SL ${p.qty.toLocaleString('vi-VN')}` : ''}</em><span>${esc(p.date)}</span></div>`).join('') || '<i>Không bán trong 365 ngày</i>'}</td></tr>`;
+    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}${g.more ? `<small>+${g.more} mã cùng size, cùng giá</small>` : ''}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><em>${p.qty ? `SL ${p.qty.toLocaleString('vi-VN')}` : ''}</em><span>${esc(p.date)}</span></div>`).join('')}</td></tr>`;
     const codes = (list) => list.reduce((n, g) => n + 1 + (g.more || 0), 0);
     // Hộp giấy, Thùng giấy, Thùng carton trước, loại khác theo tên, "Khác" cuối cùng; trong mỗi loại theo số lớp tăng dần, không rõ số lớp để cuối
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
@@ -12722,12 +12724,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .pr{white-space:nowrap}
       .pr div{display:grid;grid-template-columns:1fr 1.2fr auto;gap:8px}
       .pr em{font-style:normal;text-align:right}
-      .pr span,.pr i{color:#555}
+      .pr span{color:#555}
       .pr b{font-weight:400}
       .pr .new b{font-weight:700}
       .pr.many{background:#fff8e1}
     </style></head><body><h1>Size khách mua: ${esc(name)}</h1>
-      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá trong 365 ngày gần nhất: mới nhất ở trên, số lượng và ngày là của đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
+      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm bán trong 365 ngày gần nhất, từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá trong 365 ngày gần nhất: mới nhất ở trên, số lượng và ngày là của đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
       ${sections}</body></html>`;
   }
   function csPrint(html) {
@@ -12768,8 +12770,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         }
         const rows = await csReadOrders(cid, (p) => (btn.textContent = `⏳ Đang đọc đơn, trang ${p}…`));
         const groups = csMerge(csGroup(rows));
-        if (!groups.length) throw new Error('Khách này chưa có đơn nào để in size.');
-        csPrint(csSheet(name || `Khách ${cid}`, cid, groups, new Set(rows.filter((r) => !r.order.dead).map((r) => r.order.code)).size));
+        if (!groups.length) throw new Error('Khách này không có đơn nào trong 365 ngày gần nhất.');
+        csPrint(csSheet(name || `Khách ${cid}`, cid, groups, new Set(rows.filter((r) => !r.order.dead && r.price && r.order.day >= csFrom()).map((r) => r.order.code)).size));
         btn.textContent = LABEL;
       } catch (err) {
         btn.textContent = `⚠️ ${err.message}`;
