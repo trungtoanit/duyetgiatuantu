@@ -12691,9 +12691,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // "1264 | PNTP_140/125/125-C" → "140/125/125-C": chỉ giữ định lượng, không in mã nhà cung cấp
   const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
+  // Số ngày từ đơn có giá gần nhất của dòng tới hôm nay (giờ VN); từ CS_IDLE ngày trở lên là lâu chưa đặt, tô đỏ
+  const CS_IDLE = 90;
+  const csIdleDays = (g, now = Date.now()) => {
+    const d = String(Math.max(...g.prices.map((p) => p.day)));
+    return Math.floor((now + 7 * 3600e3) / 86400e3) - Math.floor(Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8)) / 86400e3);
+  };
   function csSheet(name, cid, groups, nOrders) {
     const dimCell = (v) => `<td class="n">${v ?? '–'}</td>`;
-    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><em>${p.qty ? `SL ${p.qty.toLocaleString('vi-VN')}` : ''}</em><span>${esc(p.date)}</span></div>`).join('')}</td></tr>`;
+    const idleCell = (g) => {
+      const n = csIdleDays(g);
+      return `<td class="n${n >= CS_IDLE ? ' idle' : ''}">${n} ngày</td>`;
+    };
+    const idleCount = groups.filter((g) => csIdleDays(g) >= CS_IDLE).length;
+    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><em>${p.qty ? `SL ${p.qty.toLocaleString('vi-VN')}` : ''}</em><span>${esc(p.date)}</span></div>`).join('')}</td>${idleCell(g)}</tr>`;
     const codes = (list) => list.reduce((n, g) => n + 1 + (g.more || 0), 0);
     // Hộp giấy, Thùng giấy, Thùng carton trước, loại khác theo tên, "Khác" cuối cùng; trong mỗi loại theo số lớp tăng dần, không rõ số lớp để cuối
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
@@ -12701,7 +12712,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sections = parts
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
-        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${codes(list)} mã</small></h2><table><colgroup>${[4, 9, 27, 5, 5, 5, 19, 26].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Đơn giá 365 ngày gần nhất</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${codes(list)} mã</small></h2><table><colgroup>${[4, 9, 24, 5, 5, 5, 16, 25, 7].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Đơn giá 365 ngày gần nhất</th><th class="n">Chưa đặt</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
       })
       .join('');
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Size khách mua - ${esc(name)}</title><style>
@@ -12727,8 +12738,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .pr b{font-weight:400}
       .pr .new b{font-weight:700}
       .pr.many{background:#fff8e1}
+      .idle{background:#fee2e2;color:#b91c1c;font-weight:700}
     </style></head><body><h1>Size khách mua: ${esc(name)}</h1>
-      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm bán trong 365 ngày gần nhất, từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá trong 365 ngày gần nhất: mới nhất ở trên, số lượng và ngày là của đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
+      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm bán trong 365 ngày gần nhất, từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá trong 365 ngày gần nhất: mới nhất ở trên, số lượng và ngày là của đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cột Chưa đặt: số ngày từ đơn có giá gần nhất; ô đỏ là từ ${CS_IDLE} ngày trở lên (${idleCount} dòng). Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
       ${sections}</body></html>`;
   }
   function csPrint(html) {
