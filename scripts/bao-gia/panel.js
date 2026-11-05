@@ -12693,7 +12693,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
   function csSheet(name, cid, groups, nOrders) {
     const dimCell = (v) => `<td class="n">${v ?? '–'}</td>`;
-    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}${g.more ? `<small>+${g.more} mã cùng size, cùng giá</small>` : ''}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><em>${p.qty ? `SL ${p.qty.toLocaleString('vi-VN')}` : ''}</em><span>${esc(p.date)}</span></div>`).join('')}</td></tr>`;
+    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><em>${p.qty ? `SL ${p.qty.toLocaleString('vi-VN')}` : ''}</em><span>${esc(p.date)}</span></div>`).join('')}</td></tr>`;
     const codes = (list) => list.reduce((n, g) => n + 1 + (g.more || 0), 0);
     // Hộp giấy, Thùng giấy, Thùng carton trước, loại khác theo tên, "Khác" cuối cùng; trong mỗi loại theo số lớp tăng dần, không rõ số lớp để cuối
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
@@ -12720,7 +12720,6 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       th{background:#eef2f7;font-weight:700}
       .c{text-align:center}
       .tp{font-weight:700}
-      .tp small{display:block;font-size:10px;font-weight:400;color:#555}
       .pr{white-space:nowrap}
       .pr div{display:grid;grid-template-columns:1fr 1.2fr auto;gap:8px}
       .pr em{font-style:normal;text-align:right}
