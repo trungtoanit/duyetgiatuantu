@@ -209,13 +209,35 @@ function savePref(id) {
   prefsAt[id] = at;
   chrome.runtime.sendMessage({ type: 'kv.merge', key: 'popupPrefs', patch: { [`filter:${id}`]: { v: cardFilter[id] || '', at } } }, () => void chrome.runtime.lastError);
 }
+// Tìm trong khung: không dấu, không phân biệt hoa thường, nhiều từ thì phải có đủ. Chỉ ẩn / hiện dòng, không vẽ lại để ô tìm không mất chữ khi gõ tiếng Việt
+const cardQuery = {};
+let composing = false;
+const searchText = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+function applyCardSearch(id) {
+  const box = [...$('cards').querySelectorAll('.pc-search')].find((x) => x.dataset.card === id);
+  const list = box?.closest('.card').querySelector('.pc-list');
+  if (!list) return;
+  const words = searchText(cardQuery[id]).split(/\s+/).filter(Boolean);
+  let n = 0;
+  for (const row of list.querySelectorAll('.pc-row')) {
+    const hit = words.every((w) => row.dataset.q.includes(w));
+    row.classList.toggle('hide', !hit);
+    if (hit) row.querySelector('.pc-no').textContent = ++n;
+  }
+  box.closest('.pc-find').querySelector('.pc-count').textContent = words.length ? `${n} kết quả` : '';
+  list.querySelector('.pc-none')?.classList.toggle('hide', !words.length || n > 0);
+}
 async function loadCards() {
+  if (composing) return;
   await loadPrefs().catch(() => {});
   const cards = (await chrome.storage.local.get(KV('popupCards')))[KV('popupCards')] || {};
   cardsData = cards;
   const list = Object.entries(cards).filter(([, c]) => c && Array.isArray(c.rows)).map(([id, c]) => ({ ...c, id }));
   const sig = JSON.stringify([list, cardFilter]);
   if (sig === cardsSig) return;
+  const firstDraw = !cardsSig;
+  const focused = document.activeElement?.classList?.contains('pc-search') ? document.activeElement : null;
+  const focus = focused && { id: focused.dataset.card, at: focused.selectionStart };
   cardsSig = sig;
   document.body.classList.toggle('wide', list.length > 0);
   // bề rộng popup do script quyết định (card.width, tối đa 800 – giới hạn của Chrome)
@@ -231,15 +253,20 @@ async function loadCards() {
         return `<span class="pc-chip${x.filter != null ? ' fl' : ''}${on ? ' on' : ''}" ${x.filter != null ? `data-card="${esc(fk)}" data-f="${esc(x.filter)}"` : ''} style="color:${esc(x.color || '#334155')};${x.bg && !on ? `background:${esc(x.bg)};` : ''}${on ? `background:${esc(x.color || '#334155')};color:#fff` : ''}">${esc(x.text)}</span>`;
       }).join('')}</div>`).join('')}
       ${c.actions?.length ? `<div class="pc-chips">${c.actions.map((a, i) => `<button class="pc-act" data-card="${esc(c.id || '')}" data-ai="${i}" style="color:${esc(a.color || '#1d4ed8')}">${esc(a.label)}</button>`).join('')}</div>` : ''}
+      <div class="pc-find"><input class="pc-search" type="search" data-card="${esc(c.id)}" value="${esc(cardQuery[c.id] || '')}" placeholder="🔍 Tìm mã báo giá, khách, sale, nội dung…"><span class="pc-count"></span></div>
       <div class="pc-list">${c.rows
         .filter((r) => [...new Set((c.chips || []).map((x) => x.g || ''))].every((g) => !cardFilter[fKey(c.id, g)] || (r.f || []).includes(cardFilter[fKey(c.id, g)])))
-        .map((r, i) => `<div class="pc-row${r.unread === true ? ' unread' : r.unread === false ? ' read' : ''}" data-url="${esc(r.url || '')}" title="${r.unread === true ? 'Chưa đọc' : r.unread === false ? 'Đã đọc' : ''}"><span class="pc-no">${i + 1}</span>
+        .map((r, i) => `<div class="pc-row${r.unread === true ? ' unread' : r.unread === false ? ' read' : ''}" data-url="${esc(r.url || '')}" data-q="${esc(searchText([r.tag, r.title, r.sub, r.right].join(' ')))}" title="${r.unread === true ? 'Chưa đọc' : r.unread === false ? 'Đã đọc' : ''}"><span class="pc-no">${i + 1}</span>
           <span class="pc-tag" style="background:${esc(r.tagColor || '#64748b')}">${esc(r.tag || '')}</span>
           <span class="pc-main"><b>${esc(r.title)}</b><span class="s">${esc(r.sub || '')}</span></span>
           <span class="pc-right" style="color:${esc(r.rightColor || '#047857')};background:${esc(r.rightBg || '#ecfdf5')}">${esc(r.right || '')}</span></div>`)
-        .join('') || '<div class="hint">Không có dữ liệu.</div>'}</div></section>`)
+        .join('') || '<div class="hint">Không có dữ liệu.</div>'}<div class="hint pc-none hide">Không thấy dòng nào trong bộ lọc đang chọn.</div></div></section>`)
     .join('');
   restoreCardScroll();
+  list.forEach((c) => cardQuery[c.id] && applyCardSearch(c.id));
+  const input = [...$('cards').querySelectorAll('.pc-search')].find((x) => x.dataset.card === focus?.id) || (firstDraw ? $('cards').querySelector('.pc-search') : null);
+  input?.focus({ preventScroll: true });
+  if (focus && input) input.setSelectionRange(focus.at, focus.at);
 }
 // Giữ vị trí cuộn của từng danh sách (giữa các lần vẽ lại và các lần mở popup), theo khung + chip lọc
 const scrollKey = (id) => `pcScroll:${id}:${Object.keys(cardFilter).filter((k) => k === id || k.startsWith(`${id}|`)).sort().map((k) => cardFilter[k] || '').join(':')}`;
@@ -254,10 +281,11 @@ function restoreCardScroll() {
     try {
       y = Number(localStorage.getItem(scrollKey(id))) || 0;
     } catch {}
-    el.scrollTop = y;
+    if (!cardQuery[id]) el.scrollTop = y;
     if (!el.dataset.sc) {
       el.dataset.sc = '1';
       el.addEventListener('scroll', () => {
+        if (cardQuery[id]) return; // đang tìm: không ghi đè vị trí cuộn của danh sách đầy đủ
         try {
           localStorage.setItem(scrollKey(id), String(el.scrollTop));
         } catch {}
@@ -265,6 +293,18 @@ function restoreCardScroll() {
     }
   });
 }
+$('cards').addEventListener('compositionstart', () => (composing = true));
+$('cards').addEventListener('compositionend', () => (composing = false));
+$('cards').addEventListener('input', (e) => {
+  if (!e.target.classList.contains('pc-search')) return;
+  const id = e.target.dataset.card;
+  const had = !!cardQuery[id];
+  cardQuery[id] = e.target.value;
+  applyCardSearch(id);
+  const list = e.target.closest('.card').querySelector('.pc-list');
+  if (cardQuery[id]) list.scrollTop = 0;
+  else if (had) restoreCardScroll();
+});
 // Nút hành động của khung: { label, copy } → chép chữ vào bộ nhớ tạm
 let cardsData = {};
 $('cards').addEventListener('click', async (e) => {
