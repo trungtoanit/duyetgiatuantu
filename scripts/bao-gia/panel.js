@@ -12502,20 +12502,28 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const now = Date.now();
       const today = tkDayKey(now);
       let changed = false;
+      const gone = {};
+      const goneLog = {};
       for (const t of Object.values(tasks)) {
         if (!t?.src || t.status === 'done' || t.status === 'cancel') continue;
         const why = tkSrcDone(t, ac, data);
         if (!why) continue;
         // đề nghị không còn chờ duyệt, báo giá đã thành công / thất bại / có đơn → xoá hẳn việc, chỉ giữ lại dòng trong nhật ký
         if (t.src.rule === 'dn' || t.src.rule === 'quote' || t.src.rule === 'dg' || t.src.rule === 'tp') {
-          await kvMerge('tasks', { [t.id]: null });
-          await tkLog(t.id, `⚡ Xoá việc: ${why}`);
+          gone[t.id] = null;
+          goneLog[`${t.id}-${now}-${Math.random().toString(36).slice(2, 6)}`] = { t: t.id, at: now, by: meName, what: `⚡ Xoá việc: ${why}` };
           changed = true;
           continue;
         }
         await kvMerge('tasks', { [t.id]: { ...t, status: 'done', doneAt: now, upd: now, updBy: meName, ext: null, v: (t.v || 0) + 1 } });
         await tkLog(t.id, `⚡ Tự đóng: ${why}`);
         changed = true;
+      }
+      // Xoá gộp 1 lần: xoá từng việc mất khoảng 1,5 giây / việc, hàng trăm việc thì danh sách còn hiện mấy phút
+      if (Object.keys(gone).length) {
+        await kvMerge('tasks', gone);
+        await kvMerge('taskLog', goneLog);
+        render();
       }
       // Việc đơn gửi còn mở: luôn là việc hôm nay → dời hạn về cuối ngày hiện tại
       for (const t of Object.values(tasks)) {
