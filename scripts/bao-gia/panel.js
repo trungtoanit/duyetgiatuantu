@@ -12571,7 +12571,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   const tkFindTab = (doc, name) => [...(doc?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+\+?/g, '').trim() === name);
   // ---------- 🖨 In size khách mua (/khach-hang/view/{id}): đọc đủ tab Lịch sử mua hàng trong khung ẩn, gộp theo mã TP ----------
-  // Mỗi mã TP: tên và định lượng giấy của đơn gần nhất, các đơn giá từng bán (mới nhất trước, kèm ngày đơn gần nhất có giá đó). Bỏ đơn đã huỷ.
+  // Mỗi mã TP: tên và định lượng giấy của đơn gần nhất, các đơn giá trong 365 ngày gần nhất (mới nhất trước, kèm ngày đơn gần nhất có giá đó). Bỏ đơn đã huỷ.
   // Mỗi loại (Hộp giấy, Thùng giấy, Thùng carton…) và số lớp là 1 bảng riêng, trong bảng sắp theo dài → rộng → cao từ nhỏ tới lớn.
   const CS_KINDS = ['Hộp giấy', 'Thùng giấy', 'Thùng carton'];
   const CS_DAY = (s) => {
@@ -12645,7 +12645,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const kind = kw ? `${kw[1][0].toUpperCase()}${kw[1].slice(1).toLowerCase()} ${kw[2].toLowerCase()}` : 'Khác';
     return { kind, ply, short, ...(m ? { d: num(m[1]), r: num(m[2]), c: num(m[3]) } : {}) };
   }
-  function csGroup(rows) {
+  function csGroup(rows, now = Date.now()) {
+    const from = new Date(now + 7 * 3600e3 - 365 * 86400e3).toISOString().slice(0, 10).replace(/-/g, ''); // giờ VN
     const map = new Map();
     for (const r of rows) {
       if (r.order.dead) continue;
@@ -12655,7 +12656,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       map.set(key, g);
       if (r.name && r.order.day > g.nameDay) [g.name, g.nameDay] = [r.name, r.order.day];
       if (r.paper && r.order.day > g.paperDay) [g.paper, g.paperDay] = [r.paper, r.order.day];
-      if (r.price && r.order.day >= (g.prices.get(r.price)?.day || 0)) g.prices.set(r.price, { price: r.price, day: r.order.day, date: r.order.date });
+      if (r.price && r.order.day >= Number(from) && r.order.day >= (g.prices.get(r.price)?.day || 0)) g.prices.set(r.price, { price: r.price, day: r.order.day, date: r.order.date });
     }
     const dim = (v) => v ?? Infinity; // chưa đọc được size thì xếp cuối
     return [...map.values()]
@@ -12667,7 +12668,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const seen = new Map();
     const out = [];
     for (const g of groups) {
-      const key = g.d != null && g.prices.length ? [g.kind, g.ply, g.d, g.r, g.c, g.prices.map((p) => p.price).sort((a, b) => a - b)].join('|') : '';
+      const key = g.d != null ? [g.kind, g.ply, g.d, g.r, g.c, g.prices.map((p) => p.price).sort((a, b) => a - b)].join('|') : '';
       const head = key && seen.get(key);
       if (!head) {
         const item = { ...g, more: 0, prices: g.prices.map((p) => ({ ...p })) };
@@ -12690,7 +12691,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
   function csSheet(name, cid, groups, nOrders) {
     const dimCell = (v) => `<td class="n">${v ?? '–'}</td>`;
-    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}${g.more ? `<small>+${g.more} mã cùng size, cùng giá</small>` : ''}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '–'}</td></tr>`;
+    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}${g.more ? `<small>+${g.more} mã cùng size, cùng giá</small>` : ''}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '<i>Không bán trong 365 ngày</i>'}</td></tr>`;
     const codes = (list) => list.reduce((n, g) => n + 1 + (g.more || 0), 0);
     // Hộp giấy, Thùng giấy, Thùng carton trước, loại khác theo tên, "Khác" cuối cùng; trong mỗi loại theo số lớp tăng dần, không rõ số lớp để cuối
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
@@ -12698,7 +12699,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sections = parts
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
-        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${codes(list)} mã</small></h2><table><colgroup>${[4, 9, 30, 5, 5, 5, 23, 19].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${codes(list)} mã</small></h2><table><colgroup>${[4, 9, 30, 5, 5, 5, 23, 19].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Đơn giá 365 ngày gần nhất</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
       })
       .join('');
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Size khách mua - ${esc(name)}</title><style>
@@ -12720,12 +12721,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .tp small{display:block;font-size:10px;font-weight:400;color:#555}
       .pr{white-space:nowrap}
       .pr div{display:flex;justify-content:space-between;gap:12px}
-      .pr span{color:#555}
+      .pr span,.pr i{color:#555}
       .pr b{font-weight:400}
       .pr .new b{font-weight:700}
       .pr.many{background:#fff8e1}
     </style></head><body><h1>Size khách mua: ${esc(name)}</h1>
-      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá: mới nhất ở trên, ngày là đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
+      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá trong 365 ngày gần nhất: mới nhất ở trên, ngày là đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
       ${sections}</body></html>`;
   }
   function csPrint(html) {
@@ -12753,7 +12754,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     btn.className = 'ant-btn ant-btn-default';
     const LABEL = '🖨 In size khách mua';
     btn.textContent = LABEL;
-    btn.title = 'In các size khách đã mua: mã TP, tên sản phẩm, định lượng giấy gần nhất, các đơn giá từng bán';
+    btn.title = 'In các size khách đã mua: mã TP, tên sản phẩm, định lượng giấy gần nhất, các đơn giá trong 365 ngày gần nhất';
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       try {
