@@ -12669,7 +12669,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sections = plies
       .map((ply) => {
         const list = groups.filter((g) => g.ply === ply);
-        return `<h2>${ply ? `${ply} lớp` : 'Khác'} <small>${list.length} mã</small></h2><table><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+        return `<h2>${ply ? `${ply} lớp` : 'Khác'} <small>${list.length} mã</small></h2><table><colgroup>${[4, 9, 30, 5, 5, 5, 23, 19].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
       })
       .join('');
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Size khách mua - ${esc(name)}</title><style>
@@ -12679,16 +12679,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       h1{font-size:17px;margin:0 0 2px}
       h2{font-size:14px;margin:12px 0 4px;break-after:avoid}
       h2 small{font-size:11px;font-weight:400;color:#555}
-      .n{text-align:right;width:48px;font-variant-numeric:tabular-nums}
+      .n{text-align:right;font-variant-numeric:tabular-nums}
       .sub{color:#555;margin-bottom:8px}
-      table{width:100%;border-collapse:collapse}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
       thead{display:table-header-group}
       tr{break-inside:avoid}
-      th,td{border:1px solid #999;padding:4px 6px;vertical-align:top;text-align:left}
+      th,td{border:1px solid #999;padding:4px 6px;vertical-align:top;text-align:left;overflow-wrap:anywhere}
       th{background:#eef2f7;font-weight:700}
-      .c{text-align:center;width:32px}
+      .c{text-align:center}
       .tp{font-weight:700;white-space:nowrap}
-      .pr{white-space:nowrap;width:170px}
+      .pr{white-space:nowrap}
       .pr div{display:flex;justify-content:space-between;gap:12px}
       .pr span{color:#555}
       .pr b{font-weight:400}
