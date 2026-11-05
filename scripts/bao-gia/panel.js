@@ -3500,6 +3500,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- 🛒 Gửi yêu cầu mua hàng (form Thông tin đề nghị của phiếu bảo trì): phiếu in + hình đính kèm ghép thành 1 ảnh, gửi nhóm Zalo ----------
   // Nội dung lấy đúng khối .print-example mà nút In phiếu của CRM in ra (đã có sẵn, ẩn trong form) nên không bật hộp thoại in.
   const BUY_GROUP = 'Nhóm bảo trì mua vật tư cho MMTB';
+  const BUY_TAG = 'Uyên Kế Toán Tuấn Tú'; // tag @ trong tin (đúng tên hiển thị trong nhóm Zalo)
   const buyLoad = async (url) => {
     const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(20000).then(() => null)]);
     if (!du) throw new Error('hết thời gian tải');
@@ -3665,12 +3666,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       ['Báo cáo sửa chữa', o.report],
       ['File khác', others.join(', ')],
     ].filter((r) => r[1]);
-    const text = [`🛒 YÊU CẦU MUA HÀNG #${o.code}`, o.title, ...rows.map((r) => `${r[0]}: ${r[1]}`), `Kèm phiếu đề nghị${shots.length ? ` và ${shots.length} hình đính kèm` : ''}.`, link].filter(Boolean).join('\n');
-    const html = `<div><b>🛒 YÊU CẦU MUA HÀNG #${esc(o.code)}</b></div><div><b>${esc(o.title)}</b></div>${rows.map((r) => `<div>${esc(r[0])}: ${esc(r[1])}</div>`).join('')}<div>Kèm phiếu đề nghị${shots.length ? ` và ${shots.length} hình đính kèm` : ''}.</div>${link ? `<div>${esc(link)}</div>` : ''}`;
+    const text = [`🛒 YÊU CẦU MUA HÀNG #${o.code}`, o.title, ...rows.map((r) => `${r[0]}: ${r[1]}`), `Kèm phiếu đề nghị${shots.length ? ` và ${shots.length} hình đính kèm` : ''}.`, link, 'Gửi: '].filter(Boolean).join('\n');
+    const html = `<div><b>🛒 YÊU CẦU MUA HÀNG #${esc(o.code)}</b></div><div><b>${esc(o.title)}</b></div>${rows.map((r) => `<div>${esc(r[0])}: ${esc(r[1])}</div>`).join('')}<div>Kèm phiếu đề nghị${shots.length ? ` và ${shots.length} hình đính kèm` : ''}.</div>${link ? `<div>${esc(link)}</div>` : ''}<div>Gửi: </div>`;
     const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-buy`;
-    keep[jobId] = { draft: false, to, zaloName: test ? to : names[norm(to)]?.name || to, text, html, images: [image], status: 'pending', at: Date.now(), task: `buy-${o.code}` };
+    keep[jobId] = { draft: false, to, zaloName: test ? to : names[norm(to)]?.name || to, text, html, images: [image], mention: BUY_TAG, status: 'pending', at: Date.now(), task: `buy-${o.code}` };
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     for (let i = 0; i < 200; i++) {
       await sleep(1500);
@@ -3681,7 +3682,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       else if (j.status === 'error') throw new Error(j.error || 'Lỗi gửi Zalo');
       else if (j.status === 'sent') {
         if (!test) await kvMerge('buyReq', { [o.code]: { at: j.doneAt || Date.now(), by: meName } }).catch(() => {});
-        btn.textContent = `✅ Đã gửi ${j.via || to}`;
+        btn.textContent = `✅ Đã gửi ${j.via || to}${j.mentionOk === false ? ' · chưa tag được' : ''}`;
         return;
       }
     }

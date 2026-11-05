@@ -284,6 +284,50 @@
     const el = pick?.[0];
     return el ? el.closest('button, [role="button"], [class*="btn"]') || el : null;
   }
+  // Tag @tên trong nhóm: gõ "@" + từng từ của tên ở cuối ô soạn, Zalo hiện danh sách thành viên thì bấm đúng người.
+  // Chỉ bấm dòng mới xuất hiện sau khi gõ (tránh bấm trùng tên ở cột trái / trong lịch sử chat). Không có danh sách
+  // (chat không phải nhóm, sai tên) thì để nguyên chữ @tên và báo false, tin vẫn gửi.
+  async function addMention(name, log = () => {}) {
+    const ed = chatInput();
+    if (!ed) return false;
+    const want = norm(name);
+    const cands = () =>
+      [...document.querySelectorAll('div, span, p')].filter((e) => {
+        if (e.children.length > 2 || ed.contains(e) || e.contains(ed) || !visible(e) || norm(e.textContent || '') !== want) return false;
+        return e.getBoundingClientRect().bottom <= ed.getBoundingClientRect().bottom + 10;
+      });
+    const shortTexts = () => new Set([...document.querySelectorAll('div, span')].filter((e) => e.children.length <= 2 && visible(e) && (e.textContent || '').length < 60).map((e) => (e.textContent || '').trim()));
+    const before = new Set(cands());
+    const textsBefore = shortTexts();
+    ed.focus();
+    const rg = document.createRange();
+    rg.selectNodeContents(ed);
+    rg.collapse(false);
+    const s0 = getSelection();
+    s0.removeAllRanges();
+    s0.addRange(rg);
+    document.execCommand('insertText', false, `${/\s$/.test(ed.innerText || '') ? '' : ' '}@`);
+    await sleep(500);
+    const words = name.trim().split(/\s+/);
+    for (const [i, w] of words.entries()) {
+      document.execCommand('insertText', false, i ? ` ${w}` : w);
+      await sleep(800);
+      const hit = cands().filter((e) => !before.has(e)).sort((x, y) => x.querySelectorAll('*').length - y.querySelectorAll('*').length)[0];
+      if (!hit) continue;
+      const r = hit.getBoundingClientRect();
+      const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + 5, clientY: r.top + r.height / 2, button: 0 };
+      for (const t of ['mousedown', 'mouseup', 'click']) hit.dispatchEvent(new MouseEvent(t, o));
+      await sleep(500);
+      log(`tag: đã chọn ${name} ở từ ${i + 1}/${words.length} · ô soạn: ${(ed.innerHTML || '').slice(-300)}`);
+      return true;
+    }
+    // Ghi lại phần mới hiện ra để chỉnh bộ dò nếu Zalo hiển thị khác
+    const fresh = [...shortTexts()].filter((t) => t && !textsBefore.has(t)).slice(0, 30);
+    log(`tag: KHÔNG thấy "${name}" trong danh sách · chữ mới: ${fresh.join(' | ').slice(0, 300)} · lớp mention: ${[...document.querySelectorAll('[class*="mention" i]')].map((e) => String(e.className).slice(0, 40)).slice(0, 5).join(', ')}`);
+    ed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+    await sleep(200);
+    return false;
+  }
   function pressSend(el, log = () => {}) {
     const btn = findSend();
     if (btn) {
@@ -479,6 +523,7 @@
     debugDump(`paste:${how || 'fail'}`, chatInput() || input);
     if (!how) return fail('Không dán được nội dung vào ô chat.');
     await sleep(500);
+    if (job.mention) job.mentionOk = await addMention(job.mention, tr);
     // Chế độ thử: chỉ soạn sẵn, không bấm gửi
     if (job.draft) {
       await markSent(job, true);
