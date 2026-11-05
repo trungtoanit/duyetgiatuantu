@@ -12570,6 +12570,165 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
   const tkFindTab = (doc, name) => [...(doc?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+\+?/g, '').trim() === name);
+  // ---------- 🖨 In size khách mua (/khach-hang/view/{id}): đọc đủ tab Lịch sử mua hàng trong khung ẩn, gộp theo mã TP ----------
+  // Mỗi mã TP: tên và định lượng giấy của đơn gần nhất, các đơn giá từng bán (mới nhất trước, kèm ngày đơn gần nhất có giá đó). Bỏ đơn đã huỷ.
+  const CS_DAY = (s) => {
+    const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(s || '');
+    return m ? Number(`${m[3]}${m[2]}${m[1]}`) : 0;
+  };
+  // Bảng đơn: dòng đầu mỗi đơn đủ cột, các dòng sau chỉ có các cột sản phẩm (cột của đơn gộp ô bằng rowSpan)
+  function csReadRows(t) {
+    const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
+    const col = (re) => heads.findIndex((h) => re.test(h));
+    const iOrder = col(/^Mã đơn/);
+    const iName = col(/^Tên sản phẩm/);
+    const iStatus = col(/^Trạng thái/);
+    const at = (re) => col(re) - iName;
+    const [dPaper, dTp, dPrice] = [at(/^Loại giấy/), at(/^Mã sản phẩm/), at(/^Đơn giá/)];
+    const out = [];
+    let order = null;
+    for (const tr of t.querySelectorAll('.ant-table-tbody tr.ant-table-row')) {
+      const full = tr.cells.length === heads.length;
+      if (full) {
+        const txt = tr.cells[iOrder].innerText;
+        order = { code: txt.match(/[A-Z]{2}\d+/)?.[0] || txt.trim(), day: CS_DAY(txt), date: txt.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || '', dead: /hủy|huỷ/i.test(tr.cells[iStatus]?.innerText || '') };
+      }
+      if (!order) continue;
+      const base = full ? iName : 0;
+      const cell = (d) => tr.cells[base + d]?.innerText.replace(/\s+/g, ' ').trim() || '';
+      out.push({ order, name: cell(0), paper: cell(dPaper), tp: cell(dTp), price: Number(cell(dPrice).replace(/[^\d]/g, '')) || 0 });
+    }
+    return out;
+  }
+  async function csReadOrders(cid, onPage) {
+    return tkInFrame(`/khach-hang/view/${cid}?t=order`, async (doc) => {
+      const table = () => [...(doc()?.querySelectorAll('.ant-table') || [])].find((x) => [...x.querySelectorAll('thead th')].some((h) => /^Tên sản phẩm/.test(h.innerText.trim())));
+      // Trang có nhiều bộ phân trang: lấy bộ đầu tiên nằm sau bảng đơn
+      const pager = () => [...(doc()?.querySelectorAll('.ant-pagination') || [])].find((p) => table()?.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const first = () => table()?.querySelector('.ant-table-tbody tr.ant-table-row')?.cells[0]?.innerText || '';
+      for (let i = 0; i < 100 && !first() && !table()?.querySelector('.ant-table-placeholder'); i++) await sleep(300);
+      if (!table()) throw new Error('Không đọc được bảng Lịch sử mua hàng.');
+      for (let i = 0; i < 20 && !first() && !table().querySelector('.ant-table-tbody tr.ant-table-row'); i++) await sleep(300);
+      await sleep(500);
+      const rows = [];
+      for (let page = 1; page <= 100; page++) {
+        onPage?.(page);
+        rows.push(...csReadRows(table()));
+        const li = pager()?.querySelector(`.ant-pagination-item-${page + 1}`);
+        if (!li) break;
+        const prev = first();
+        li.click();
+        let moved = false;
+        for (let i = 0; i < 70 && !moved; i++) {
+          await sleep(300);
+          moved = !!first() && first() !== prev && !doc()?.querySelector('.ant-spin-spinning');
+        }
+        if (!moved) throw new Error(`Không chuyển được sang trang ${page + 1} của lịch sử đơn.`);
+        await sleep(300);
+      }
+      // Đọc thiếu đơn thì không in, tránh bảng in bị sót size
+      const total = Number((pager()?.innerText.match(/Tổng\s*([\d.,]+)/) || [])[1]?.replace(/[.,]/g, '')) || 0;
+      const seen = new Set(rows.map((r) => r.order.code)).size;
+      if (total && seen < total) throw new Error(`Mới đọc được ${seen}/${total} đơn, chưa in. Hãy thử lại.`);
+      return rows;
+    });
+  }
+  function csGroup(rows) {
+    const map = new Map();
+    for (const r of rows) {
+      if (r.order.dead) continue;
+      const key = r.tp || r.name;
+      if (!key) continue;
+      const g = map.get(key) || { tp: r.tp, name: '', paper: '', nameDay: -1, paperDay: -1, prices: new Map() };
+      map.set(key, g);
+      if (r.name && r.order.day > g.nameDay) [g.name, g.nameDay] = [r.name, r.order.day];
+      if (r.paper && r.order.day > g.paperDay) [g.paper, g.paperDay] = [r.paper, r.order.day];
+      if (r.price && r.order.day >= (g.prices.get(r.price)?.day || 0)) g.prices.set(r.price, { price: r.price, day: r.order.day, date: r.order.date });
+    }
+    const num = (g) => Number(g.tp.match(/\d+/)?.[0]) || Infinity;
+    return [...map.values()].sort((a, b) => num(a) - num(b) || a.name.localeCompare(b.name, 'vi')).map((g) => ({ ...g, prices: [...g.prices.values()].sort((a, b) => b.day - a.day || b.price - a.price) }));
+  }
+  // "1264 | PNTP_140/125/125-C" → "140/125/125-C": chỉ giữ định lượng, không in mã nhà cung cấp
+  const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
+  function csSheet(name, cid, groups, nOrders) {
+    const rows = groups
+      .map((g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.name)}</td><td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '–'}</td></tr>`)
+      .join('');
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Size khách mua - ${esc(name)}</title><style>
+      @page{size:A4 landscape;margin:10mm}
+      *{box-sizing:border-box}
+      body{margin:0;font:12px/1.35 Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      h1{font-size:17px;margin:0 0 2px}
+      .sub{color:#555;margin-bottom:8px}
+      table{width:100%;border-collapse:collapse}
+      thead{display:table-header-group}
+      tr{break-inside:avoid}
+      th,td{border:1px solid #999;padding:4px 6px;vertical-align:top;text-align:left}
+      th{background:#eef2f7;font-weight:700}
+      .c{text-align:center;width:32px}
+      .tp{font-weight:700;white-space:nowrap}
+      .pr{white-space:nowrap;width:170px}
+      .pr div{display:flex;justify-content:space-between;gap:12px}
+      .pr span{color:#555}
+      .pr b{font-weight:400}
+      .pr .new b{font-weight:700}
+      .pr.many{background:#fff8e1}
+    </style></head><body><h1>Size khách mua: ${esc(name)}</h1>
+      <div class="sub">Mã khách ${esc(cid)} · ${groups.length} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá: mới nhất ở trên, ngày là đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá.</div>
+      <table><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  }
+  function csPrint(html) {
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0';
+    f.onload = () => {
+      f.contentWindow.addEventListener('afterprint', () => f.remove());
+      f.contentWindow.focus();
+      f.contentWindow.print();
+    };
+    f.srcdoc = html;
+    document.documentElement.append(f);
+  }
+  function csMount() {
+    const cid = location.pathname.match(/^\/khach-hang\/view\/(\d+)/)?.[1];
+    if (!cid || document.querySelector('[data-dg-sizes]')) return;
+    const edit = [...document.querySelectorAll('.ant-space-item > button')].find((b) => b.innerText.trim() === 'Chỉnh sửa');
+    if (!edit) return;
+    const item = document.createElement('div');
+    item.className = 'ant-space-item';
+    item.setAttribute('data-dg-sizes', '1');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ant-btn ant-btn-default';
+    const LABEL = '🖨 In size khách mua';
+    btn.textContent = LABEL;
+    btn.title = 'In các size khách đã mua: mã TP, tên sản phẩm, định lượng giấy gần nhất, các đơn giá từng bán';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        // Tên khách là dòng đầu của khối tiêu đề chứa các nút
+        let box = edit.closest('.ant-space')?.parentElement;
+        let name = '';
+        for (let i = 0; i < 4 && box && !name; i++, box = box.parentElement) {
+          const line = box.innerText.trim().split('\n')[0].trim();
+          if (!box.querySelector('button')?.innerText.includes(line)) name = line;
+        }
+        const rows = await csReadOrders(cid, (p) => (btn.textContent = `⏳ Đang đọc đơn, trang ${p}…`));
+        const groups = csGroup(rows);
+        if (!groups.length) throw new Error('Khách này chưa có đơn nào để in size.');
+        csPrint(csSheet(name || `Khách ${cid}`, cid, groups, new Set(rows.filter((r) => !r.order.dead).map((r) => r.order.code)).size));
+        btn.textContent = LABEL;
+      } catch (err) {
+        btn.textContent = `⚠️ ${err.message}`;
+        setTimeout(() => (btn.textContent = LABEL), 6000);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    item.append(btn);
+    edit.parentElement.before(item);
+  }
+  if (IS_TOP) setInterval(csMount, 1500);
   // ---------- 🏭 Việc Thành phẩm theo bảng "10 ngày doanh số + báo cáo TP" (/dashboard/ke-hoach) ----------
   // Tổng Báo cáo TP < tổng Báo giá → sản xuất yếu hơn kinh doanh; ngày làm việc gần nhất (trừ Chủ nhật) dưới trung bình → hỏi tình hình.
   // Thứ 2–7 từ 8 giờ đọc 1 lần / ngày, ghi kv 'tpCheck' (YYYY-MM-DD) → quy tắc 'tp' tạo việc giao cho nhóm Zalo, luồng nhắc việc gửi tin vào nhóm.
