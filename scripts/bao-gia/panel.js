@@ -2459,12 +2459,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return r < 0 ? null : { l, t, r: r + 1, b: b + 1 };
   }
   // Watermark chéo "TUAN TU PACKAGING" lặp khắp ảnh báo giá (mờ, không che chữ)
-  function drawWatermark(ctx, w, h) {
+  function drawWatermark(ctx, w, h, alpha = 0.03) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const fs = Math.round(w / 16);
     ctx.font = `900 ${fs}px Arial, Helvetica, sans-serif`;
-    ctx.fillStyle = 'rgba(220, 38, 38, 0.03)';
+    ctx.fillStyle = `rgba(220, 38, 38, ${alpha})`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.translate(w / 2, h / 2);
@@ -3609,6 +3609,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         y += LABEL + Math.max(...r.map((s) => s.h)) + 16;
       }
     }
+    // Watermark phủ cả phiếu lẫn hình; đậm hơn ảnh báo giá vì ảnh này là JPEG và Zalo còn nén lại
+    drawWatermark(x, c.width, c.height, 0.06);
     let out = c.toDataURL('image/jpeg', 0.88);
     if (out.length > 5e6) out = c.toDataURL('image/jpeg', 0.7);
     return out;
