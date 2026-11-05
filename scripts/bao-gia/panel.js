@@ -16787,6 +16787,21 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
 
   // Cập nhật số báo giá quá 12 giờ trên nút nổi theo thời gian
   setInterval(render, 60 * 1000); // cũng để hiện dữ liệu vừa đồng bộ từ máy khác
+  // Bàn giao xử lý ở máy khác: kéo dữ liệu mỗi 20 giây và ngay khi quay lại tab, có thay đổi mới vẽ lại thẻ
+  let hoSig = null;
+  const hoRefresh = async () => {
+    if (document.hidden) return;
+    try {
+      await call({ type: 'remote.pull' });
+      const rows = Object.values(await kvGet('handovers'));
+      const sig = `${rows.length}:${rows.filter((h) => h.sentAt || h.skippedAt).length}`;
+      if (hoSig !== null && sig !== hoSig) render();
+      hoSig = sig;
+    } catch {}
+  };
+  setInterval(hoRefresh, 20 * 1000);
+  document.addEventListener('visibilitychange', hoRefresh);
+  window.addEventListener('focus', hoRefresh);
 
   // ERP là SPA: theo dõi đổi trang để cập nhật mục "Báo giá đang mở"
   // Vào trang báo giá + bật "Tự mở bảng" → mở bảng
