@@ -3589,6 +3589,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     x.fillRect(0, 0, c.width, c.height);
     x.drawImage(sheet, 0, 0);
     x.scale(S, S);
+    // Góc phải trên, chỗ trống cạnh tên công ty: chữ đỏ, tự thu nhỏ để không chạm dòng địa chỉ
+    x.save();
+    x.fillStyle = '#dc2626';
+    x.textAlign = 'right';
+    x.textBaseline = 'top';
+    let fs = 28;
+    do x.font = `900 ${fs}px Arial, sans-serif`;
+    while (x.measureText('YÊU CẦU HỎI GIÁ').width > 240 && --fs > 14);
+    x.fillText('YÊU CẦU HỎI GIÁ', W - M, 28);
+    x.restore();
     if (rows.length) {
       let y = H + 6;
       x.fillStyle = '#cbd5e1';
