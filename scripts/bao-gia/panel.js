@@ -3497,6 +3497,229 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       anchor.append(wrap);
     }, 2000);
   }
+  // ---------- 🛒 Gửi yêu cầu mua hàng (form Thông tin đề nghị của phiếu bảo trì): phiếu in + hình đính kèm ghép thành 1 ảnh, gửi nhóm Zalo ----------
+  // Nội dung lấy đúng khối .print-example mà nút In phiếu của CRM in ra (đã có sẵn, ẩn trong form) nên không bật hộp thoại in.
+  const BUY_GROUP = 'Nhóm bảo trì mua vật tư cho MMTB';
+  const buyLoad = async (url) => {
+    const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(20000).then(() => null)]);
+    if (!du) throw new Error('hết thời gian tải');
+    const im = new Image();
+    im.src = du;
+    await im.decode();
+    return { du, im };
+  };
+  // Khối phiếu in → ảnh SVG foreignObject: chỉ giữ các rule CSS có dùng, hình đổi sang data URL, đo chiều cao trong shadow DOM để không ảnh hưởng trang
+  async function buySheet(el, W, S) {
+    const clone = el.cloneNode(true);
+    for (const img of [...clone.querySelectorAll('img')]) {
+      try {
+        img.setAttribute('src', (await buyLoad(new URL(img.getAttribute('src'), location.href).href)).du);
+      } catch {
+        img.remove();
+      }
+    }
+    const rules = [];
+    const walk = (list) => {
+      for (const r of list) {
+        if (r.media && r.cssRules) {
+          if (/print/i.test(r.media.mediaText) || matchMedia(r.media.mediaText).matches) walk(r.cssRules);
+        } else if (r.selectorText) {
+          try {
+            if (clone.querySelector(r.selectorText)) rules.push(r.cssText);
+          } catch {}
+        }
+      }
+    };
+    for (const ss of document.styleSheets) {
+      try {
+        walk(ss.cssRules);
+      } catch {}
+    }
+    const bcs = getComputedStyle(document.body);
+    const inner = document.createElement('div');
+    inner.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    inner.setAttribute('style', `position:relative;box-sizing:border-box;width:${W}px;padding:24px;background:#fff;color:#000;font-family:${bcs.fontFamily.replace(/"/g, "'")};font-size:14px;line-height:1.4;`);
+    const st = document.createElement('style');
+    // Giống pageStyle của nút In phiếu: bảng có đường kẻ
+    st.textContent = `${rules.join('\n')}\ntable, th, td { border: 1px solid; }\ntable { width: 100%; border-collapse: collapse; }\ntd, th { padding: 2px 4px; }`;
+    inner.append(st, clone);
+    const host = document.createElement('div');
+    host.setAttribute('style', 'position:fixed;left:-99999px;top:0;visibility:hidden;');
+    host.attachShadow({ mode: 'open' }).append(inner);
+    document.documentElement.append(host);
+    await Promise.all([...clone.querySelectorAll('img')].map((i) => i.decode().catch(() => {})));
+    const H = Math.ceil(inner.getBoundingClientRect().height) + 2;
+    host.remove();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(inner)}</foreignObject></svg>`;
+    const im = new Image();
+    im.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await im.decode();
+    const c = document.createElement('canvas');
+    c.width = W * S;
+    c.height = H * S;
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, c.width, c.height);
+    x.scale(S, S);
+    x.drawImage(im, 0, 0);
+    return { c, H };
+  }
+  // Ghép: phiếu ở trên, hình đính kèm ở dưới (1 hình rộng hết khổ, từ 2 hình xếp 2 cột)
+  async function buyCompose(el, shots) {
+    const W = 1100;
+    const S = 1.5;
+    const M = 24;
+    const { c: sheet, H } = await buySheet(el, W, S);
+    const cols = shots.length > 1 ? 2 : 1;
+    const cellW = (W - M * 2 - (cols - 1) * 16) / cols;
+    const maxH = cols === 1 ? 1100 : 700;
+    const LABEL = 26;
+    const cells = shots.map((s, i) => {
+      const k = Math.min(1, cellW / s.im.naturalWidth, maxH / s.im.naturalHeight);
+      return { ...s, i, w: s.im.naturalWidth * k, h: s.im.naturalHeight * k };
+    });
+    const rows = [];
+    for (let i = 0; i < cells.length; i += cols) rows.push(cells.slice(i, i + cols));
+    const extra = rows.length ? 54 + rows.reduce((a, r) => a + LABEL + Math.max(...r.map((x) => x.h)) + 16, 0) : 0;
+    const c = document.createElement('canvas');
+    c.width = W * S;
+    c.height = Math.ceil((H + extra) * S);
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(sheet, 0, 0);
+    x.scale(S, S);
+    if (rows.length) {
+      let y = H + 6;
+      x.fillStyle = '#cbd5e1';
+      x.fillRect(M, y, W - M * 2, 1);
+      x.fillStyle = '#000';
+      x.font = 'bold 18px Arial, sans-serif';
+      x.textBaseline = 'top';
+      x.fillText(`Hình đính kèm (${cells.length})`, M, y + 14);
+      y += 48;
+      for (const r of rows) {
+        r.forEach((s, j) => {
+          const left = M + j * (cellW + 16);
+          x.fillStyle = '#334155';
+          x.font = '14px Arial, sans-serif';
+          x.fillText(`${s.i + 1}. ${s.name}`.slice(0, 70), left, y + 3);
+          x.drawImage(s.im, left, y + LABEL, s.w, s.h);
+        });
+        y += LABEL + Math.max(...r.map((s) => s.h)) + 16;
+      }
+    }
+    let out = c.toDataURL('image/jpeg', 0.88);
+    if (out.length > 5e6) out = c.toDataURL('image/jpeg', 0.7);
+    return out;
+  }
+  const buyModal = () => [...document.querySelectorAll('.ant-modal')].find((m) => m.getClientRects().length && /^Thông tin đề nghị/.test((m.querySelector('.ant-modal-title')?.innerText || '').trim()));
+  function buyInfo(m) {
+    const t = (m.innerText || '').normalize('NFC');
+    const lines = t.split('\n').map((x) => x.trim()).filter(Boolean);
+    const val = (re) => (t.match(re)?.[1] || '').trim();
+    const label = [...m.querySelectorAll('h1, h2, h3, h4, label, div, span, p')].find((e) => !e.children.length && (e.textContent || '').trim() === 'File đính kèm');
+    const files = [...(label?.nextElementSibling?.children || [])].map((r) => ({ img: r.querySelector('img')?.src || '', name: (r.innerText || '').replace(/^\s*\d+\.\s*/, '').trim() }));
+    return { code: val(/#([A-Z]{1,12}\d+)/), title: lines[1] || '', group: val(/Nhóm đề nghị:\s*([^\n]+)/), who: val(/Người tạo:\s*([^\n]+)/), report: val(/Báo cáo sửa chữa:\s*([^\n]+)/), files };
+  }
+  async function buySend(btn, test) {
+    const m = buyModal();
+    const sheetEl = m?.querySelector('.print-example');
+    if (!sheetEl) throw new Error('Không thấy phiếu in trong form');
+    const o = buyInfo(m);
+    if (!o.code) throw new Error('Không đọc được mã phiếu');
+    if (!test) {
+      const done = (await kvGet('buyReq'))[o.code];
+      if (done && !confirm(`${o.code} đã gửi lúc ${new Date(done.at).toLocaleString('vi-VN')} (${done.by || ''}). Gửi lại?`)) return;
+    }
+    tkOpenZalo();
+    const to = test ? MT_TEST_TO : BUY_GROUP;
+    btn.textContent = '⏳ Đang lấy hình…';
+    const shots = [];
+    for (const f of o.files.filter((x) => x.img)) {
+      try {
+        shots.push({ im: (await buyLoad(f.img)).im, name: f.name });
+      } catch (e) {
+        throw new Error(`Không tải được hình ${f.name}: ${e.message}`); // thiếu hình thì không gửi, tránh mua sai
+      }
+    }
+    btn.textContent = '📸 Đang ghép phiếu…';
+    const image = await Promise.race([buyCompose(sheetEl, shots), sleep(60000).then(() => Promise.reject(new Error('Ghép phiếu quá lâu (60s)')))]);
+    const others = o.files.filter((x) => !x.img).map((x) => x.name);
+    const link = /[?&]id=\d+/.test(location.search) ? location.href : '';
+    const rows = [
+      ['Người tạo', o.who],
+      ['Báo cáo sửa chữa', o.report],
+      ['File khác', others.join(', ')],
+    ].filter((r) => r[1]);
+    const text = [`🛒 YÊU CẦU MUA HÀNG #${o.code}`, o.title, ...rows.map((r) => `${r[0]}: ${r[1]}`), `Kèm phiếu đề nghị${shots.length ? ` và ${shots.length} hình đính kèm` : ''}.`, link].filter(Boolean).join('\n');
+    const html = `<div><b>🛒 YÊU CẦU MUA HÀNG #${esc(o.code)}</b></div><div><b>${esc(o.title)}</b></div>${rows.map((r) => `<div>${esc(r[0])}: ${esc(r[1])}</div>`).join('')}<div>Kèm phiếu đề nghị${shots.length ? ` và ${shots.length} hình đính kèm` : ''}.</div>${link ? `<div>${esc(link)}</div>` : ''}`;
+    const [names, old] = await Promise.all([kvGet('zaloNames'), kvGet('zaloJobs')]);
+    const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+    const jobId = `${Date.now()}-buy`;
+    keep[jobId] = { draft: false, to, zaloName: test ? to : names[norm(to)]?.name || to, text, html, images: [image], status: 'pending', at: Date.now(), task: `buy-${o.code}` };
+    await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    for (let i = 0; i < 200; i++) {
+      await sleep(1500);
+      const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
+      if (!j) throw new Error('Việc gửi Zalo đã bị xoá');
+      if (j.status === 'pending') btn.textContent = `⏳ Chờ tab Zalo… (${Math.round((i + 1) * 1.5)}s)`;
+      else if (j.status === 'sending') btn.textContent = '⏳ Zalo đang gửi…';
+      else if (j.status === 'error') throw new Error(j.error || 'Lỗi gửi Zalo');
+      else if (j.status === 'sent') {
+        if (!test) await kvMerge('buyReq', { [o.code]: { at: j.doneAt || Date.now(), by: meName } }).catch(() => {});
+        btn.textContent = `✅ Đã gửi ${j.via || to}`;
+        return;
+      }
+    }
+    throw new Error('Tab Zalo không nhận việc sau 5 phút');
+  }
+  if (IS_TOP && SITE.key !== 'daiduong') {
+    const BUY_BTN = 'cursor:pointer;border:0;border-radius:6px;font:inherit;font-weight:700;color:#fff;';
+    setInterval(() => {
+      const m = buyModal();
+      if (!m) return;
+      const inBtn = [...m.querySelectorAll('button')].find((b) => (b.innerText || '').trim() === 'In phiếu');
+      if (!inBtn) return;
+      let box = m.querySelector('[data-dg-buy]');
+      const o = buyInfo(m);
+      // Chỉ phiếu sửa chữa / vật tư bảo trì; form dùng lại cho phiếu khác thì ẩn
+      const fit = /^SUACHUA/.test(o.code) || /bảo trì/i.test(o.group);
+      if (!box) {
+        if (!fit) return;
+        box = document.createElement('span');
+        box.setAttribute('data-dg-buy', '1');
+        box.setAttribute('style', 'display:inline-flex;gap:6px;align-items:stretch;');
+        box.innerHTML = `<button type="button" data-buy="real" title="Ghép phiếu in với hình đính kèm thành 1 ảnh và gửi vào nhóm Zalo “${esc(BUY_GROUP)}”" style="${BUY_BTN}padding:4px 14px;background:linear-gradient(90deg,#16a34a,#0d9488)"></button><button type="button" data-buy="test" title="Gửi test đúng tin này vào My Documents" style="${BUY_BTN}padding:4px 10px;background:#64748b;display:none">🧪 Gửi test</button>`;
+        for (const b of box.querySelectorAll('button')) {
+          b.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (box.dataset.busy) return;
+            box.dataset.busy = '1';
+            const label = b.dataset.buy === 'test' ? b.textContent : '';
+            buySend(b, b.dataset.buy === 'test')
+              .catch((err) => (b.textContent = `⚠️ ${err.message}`.slice(0, 90)))
+              .finally(() => setTimeout(() => {
+                delete box.dataset.busy;
+                box.dataset.code = '';
+                if (label) b.textContent = label;
+              }, 6000));
+          });
+        }
+        inBtn.after(box);
+      }
+      box.style.display = fit ? 'inline-flex' : 'none';
+      box.querySelector('[data-buy=test]').style.display = MY_ADMIN || IS_OWNER() ? '' : 'none';
+      if (box.dataset.busy || box.dataset.code === o.code) return;
+      box.dataset.code = o.code;
+      const real = box.querySelector('[data-buy=real]');
+      real.textContent = '🛒 Gửi yêu cầu mua hàng';
+      kvGet('buyReq').then((all) => {
+        if (all[o.code] && box.dataset.code === o.code && !box.dataset.busy) real.textContent = `✅ Đã gửi ${new Date(all[o.code].at).toLocaleDateString('vi-VN')} · gửi lại`;
+      }).catch(() => {});
+    }, 1500);
+  }
   // Trong lúc 🔄 Load giá: popup "Cảnh báo – Dài tấm phải lớn hơn hoặc bằng khổ tấm" → tự bấm "Bỏ qua" (cảnh báo khác vẫn để nguyên)
   async function reloadPaper(btn) {
     const guard = setInterval(() => {
