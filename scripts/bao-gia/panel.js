@@ -3635,6 +3635,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const files = [...(label?.nextElementSibling?.children || [])].map((r) => ({ img: r.querySelector('img')?.src || '', name: (r.innerText || '').replace(/^\s*\d+\.\s*/, '').trim() }));
     return { code: val(/#([A-Z]{1,12}\d+)/), title: lines[1] || '', group: val(/Nhóm đề nghị:\s*([^\n]+)/), who: val(/Người tạo:\s*([^\n]+)/), report: val(/Báo cáo sửa chữa:\s*([^\n]+)/), files };
   }
+  // Đưa tab Zalo lên trước (tab ẩn bị trình duyệt làm chậm / đóng băng nên ảnh không tải kịp) và không bao giờ tải lại tab đang có,
+  // tránh đứt tin đang gửi. Chỉ mở chat.zalo.me khi chưa có tab Zalo nào chạy.
+  function buyOpenZalo() {
+    try {
+      const w = window.open('', 'dg-zalo');
+      let blank = false;
+      try {
+        blank = w?.location.href === 'about:blank';
+      } catch {}
+      if (!blank) return w?.focus();
+      if (Date.now() - (state.zaloAliveAt || 0) < 90000) return w.close();
+      w.location.href = 'https://chat.zalo.me/';
+      w.focus();
+    } catch {}
+  }
   async function buySend(btn, test) {
     const m = buyModal();
     const sheetEl = m?.querySelector('.print-example');
@@ -3645,8 +3660,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const done = (await kvGet('buyReq'))[o.code];
       if (done && !confirm(`${o.code} đã gửi lúc ${new Date(done.at).toLocaleString('vi-VN')} (${done.by || ''}). Gửi lại?`)) return;
     }
-    // Tab Zalo chạy nền có thể tới 1 phút mới báo nhịp tim: còn báo trong 90 giây thì không mở lại, tránh tải lại tab làm đứt tin đang gửi
-    if (Date.now() - (state.zaloAliveAt || 0) > 90000) tkOpenZalo();
+    buyOpenZalo();
     const to = test ? MT_TEST_TO : BUY_GROUP;
     btn.textContent = '⏳ Đang lấy hình…';
     const shots = [];

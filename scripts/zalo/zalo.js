@@ -592,6 +592,10 @@
     busy = true;
     try {
       const jobs = await kvGet('zaloJobs');
+      // Tab tải lại giữa lúc gửi: việc cũ kẹt "sending" mãi. Báo lỗi để bên CRM biết, không tự gửi lại (có thể đã gửi rồi)
+      for (const [k, j] of Object.entries(jobs)) {
+        if (j?.status === 'sending' && j.tab !== TAB && Date.now() - (j.startAt || j.at || 0) > 180e3) await setStatus(k, { ...j, status: 'error', error: 'Tab Zalo bị tải lại lúc đang gửi – xem trong chat rồi bấm gửi lại', doneAt: Date.now() });
+      }
       const next = Object.entries(jobs)
         .filter(([, j]) => j?.status === 'pending' && Date.now() - j.at < 10 * 60e3)
         .sort((a, b) => a[1].at - b[1].at)[0];
