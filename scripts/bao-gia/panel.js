@@ -12659,17 +12659,42 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .map((g) => ({ ...g, ...csSize(g.name), prices: [...g.prices.values()].sort((a, b) => b.day - a.day || b.price - a.price) }))
       .sort((a, b) => dim(a.d) - dim(b.d) || dim(a.r) - dim(b.r) || dim(a.c) - dim(b.c) || a.tp.localeCompare(b.tp));
   }
+  // Cùng số lớp, cùng size và cùng các đơn giá → gộp 1 dòng: giữ mã TP và tên mới nhất, các mã còn lại chỉ đếm
+  function csMerge(groups) {
+    const seen = new Map();
+    const out = [];
+    for (const g of groups) {
+      const key = g.d != null && g.prices.length ? [g.ply, g.d, g.r, g.c, g.prices.map((p) => p.price).sort((a, b) => a - b)].join('|') : '';
+      const head = key && seen.get(key);
+      if (!head) {
+        const item = { ...g, more: 0, prices: g.prices.map((p) => ({ ...p })) };
+        if (key) seen.set(key, item);
+        out.push(item);
+        continue;
+      }
+      head.more++;
+      if (g.nameDay > head.nameDay) Object.assign(head, { tp: g.tp, name: g.name, short: g.short, nameDay: g.nameDay });
+      if (g.paper && g.paperDay > head.paperDay) Object.assign(head, { paper: g.paper, paperDay: g.paperDay });
+      for (const p of g.prices) {
+        const h = head.prices.find((x) => x.price === p.price);
+        if (p.day > h.day) Object.assign(h, { day: p.day, date: p.date });
+      }
+      head.prices.sort((a, b) => b.day - a.day || b.price - a.price);
+    }
+    return out;
+  }
   // "1264 | PNTP_140/125/125-C" → "140/125/125-C": chỉ giữ định lượng, không in mã nhà cung cấp
   const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
   function csSheet(name, cid, groups, nOrders) {
     const dimCell = (v) => `<td class="n">${v ?? '–'}</td>`;
-    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '–'}</td></tr>`;
+    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}${g.more ? `<small>+${g.more} mã cùng size, cùng giá</small>` : ''}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '–'}</td></tr>`;
+    const codes = (list) => list.reduce((n, g) => n + 1 + (g.more || 0), 0);
     // Phần 3 lớp, 5 lớp… theo thứ tự tăng dần; không rõ số lớp để cuối
     const plies = [...new Set(groups.map((g) => g.ply))].sort((a, b) => (a || Infinity) - (b || Infinity));
     const sections = plies
       .map((ply) => {
         const list = groups.filter((g) => g.ply === ply);
-        return `<h2>${ply ? `${ply} lớp` : 'Khác'} <small>${list.length} mã</small></h2><table><colgroup>${[4, 9, 30, 5, 5, 5, 23, 19].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+        return `<h2>${ply ? `${ply} lớp` : 'Khác'} <small>${list.length} dòng, ${codes(list)} mã</small></h2><table><colgroup>${[4, 9, 30, 5, 5, 5, 23, 19].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
       })
       .join('');
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Size khách mua - ${esc(name)}</title><style>
@@ -12687,7 +12712,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       th,td{border:1px solid #999;padding:4px 6px;vertical-align:top;text-align:left;overflow-wrap:anywhere}
       th{background:#eef2f7;font-weight:700}
       .c{text-align:center}
-      .tp{font-weight:700;white-space:nowrap}
+      .tp{font-weight:700}
+      .tp small{display:block;font-size:10px;font-weight:400;color:#555}
       .pr{white-space:nowrap}
       .pr div{display:flex;justify-content:space-between;gap:12px}
       .pr span{color:#555}
@@ -12695,7 +12721,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .pr .new b{font-weight:700}
       .pr.many{background:#fff8e1}
     </style></head><body><h1>Size khách mua: ${esc(name)}</h1>
-      <div class="sub">Mã khách ${esc(cid)} · ${groups.length} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá: mới nhất ở trên, ngày là đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá.</div>
+      <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá: mới nhất ở trên, ngày là đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
       ${sections}</body></html>`;
   }
   function csPrint(html) {
@@ -12735,7 +12761,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           if (!box.querySelector('button')?.innerText.includes(line)) name = line;
         }
         const rows = await csReadOrders(cid, (p) => (btn.textContent = `⏳ Đang đọc đơn, trang ${p}…`));
-        const groups = csGroup(rows);
+        const groups = csMerge(csGroup(rows));
         if (!groups.length) throw new Error('Khách này chưa có đơn nào để in size.');
         csPrint(csSheet(name || `Khách ${cid}`, cid, groups, new Set(rows.filter((r) => !r.order.dead).map((r) => r.order.code)).size));
         btn.textContent = LABEL;
