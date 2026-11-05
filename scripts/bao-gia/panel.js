@@ -3634,7 +3634,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const done = (await kvGet('buyReq'))[o.code];
       if (done && !confirm(`${o.code} đã gửi lúc ${new Date(done.at).toLocaleString('vi-VN')} (${done.by || ''}). Gửi lại?`)) return;
     }
-    tkOpenZalo();
+    // Tab Zalo chạy nền có thể tới 1 phút mới báo nhịp tim: còn báo trong 90 giây thì không mở lại, tránh tải lại tab làm đứt tin đang gửi
+    if (Date.now() - (state.zaloAliveAt || 0) > 90000) tkOpenZalo();
     const to = test ? MT_TEST_TO : BUY_GROUP;
     btn.textContent = '⏳ Đang lấy hình…';
     const shots = [];
@@ -3666,7 +3667,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
       if (!j) throw new Error('Việc gửi Zalo đã bị xoá');
       if (j.status === 'pending') btn.textContent = `⏳ Chờ tab Zalo… (${Math.round((i + 1) * 1.5)}s)`;
-      else if (j.status === 'sending') btn.textContent = '⏳ Zalo đang gửi…';
+      else if (j.status === 'sending') btn.textContent = `⏳ Đang gửi ${to}…`.slice(0, 40);
       else if (j.status === 'error') throw new Error(j.error || 'Lỗi gửi Zalo');
       else if (j.status === 'sent') {
         if (!test) await kvMerge('buyReq', { [o.code]: { at: j.doneAt || Date.now(), by: meName } }).catch(() => {});
@@ -3692,7 +3693,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         box = document.createElement('span');
         box.setAttribute('data-dg-buy', '1');
         box.setAttribute('style', 'display:inline-flex;gap:6px;align-items:stretch;');
-        box.innerHTML = `<button type="button" data-buy="real" title="Ghép phiếu in với hình đính kèm thành 1 ảnh và gửi vào nhóm Zalo “${esc(BUY_GROUP)}”" style="${BUY_BTN}padding:4px 14px;background:linear-gradient(90deg,#16a34a,#0d9488)"></button><button type="button" data-buy="test" title="Gửi test đúng tin này vào My Documents" style="${BUY_BTN}padding:4px 10px;background:#64748b;display:none">🧪 Gửi test</button>`;
+        box.innerHTML = `<button type="button" data-buy="real" title="Ghép phiếu in với hình đính kèm thành 1 ảnh và gửi vào nhóm Zalo “${esc(BUY_GROUP)}”" style="${BUY_BTN}padding:4px 14px;background:linear-gradient(90deg,#16a34a,#0d9488)"></button><button type="button" data-buy="test" title="Gửi test đúng tin này vào My Documents" style="${BUY_BTN}padding:4px 10px;background:#64748b;display:none">🧪 Test My Documents</button>`;
         for (const b of box.querySelectorAll('button')) {
           b.addEventListener('click', (e) => {
             e.preventDefault();
