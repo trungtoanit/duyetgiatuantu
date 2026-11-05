@@ -12572,6 +12572,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const tkFindTab = (doc, name) => [...(doc?.querySelectorAll('.ant-tabs-tab') || [])].find((t) => t.innerText.replace(/\d+\+?/g, '').trim() === name);
   // ---------- 🖨 In size khách mua (/khach-hang/view/{id}): đọc đủ tab Lịch sử mua hàng trong khung ẩn, gộp theo mã TP ----------
   // Mỗi mã TP: tên và định lượng giấy của đơn gần nhất, các đơn giá từng bán (mới nhất trước, kèm ngày đơn gần nhất có giá đó). Bỏ đơn đã huỷ.
+  // Chia theo số lớp (3 lớp, 5 lớp…), trong mỗi phần sắp theo dài → rộng → cao từ nhỏ tới lớn.
   const CS_DAY = (s) => {
     const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(s || '');
     return m ? Number(`${m[3]}${m[2]}${m[1]}`) : 0;
@@ -12633,6 +12634,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return rows;
     });
   }
+  // "Thùng carton BOX50 có in - 250D x 150R x 100C - 3 lớp" → dài 250, rộng 150, cao 100, 3 lớp, tên còn "Thùng carton BOX50 có in"
+  function csSize(name) {
+    const num = (x) => Number(x.replace(',', '.'));
+    const m = /(\d+(?:[.,]\d+)?)\s*D\s*x\s*(\d+(?:[.,]\d+)?)\s*R\s*x\s*(\d+(?:[.,]\d+)?)\s*C/i.exec(name);
+    const ply = Number(/(\d+)\s*lớp/i.exec(name)?.[1]) || 0;
+    const short = name.replace(m?.[0] || '\0', '').replace(/-?\s*\d+\s*lớp/i, '').replace(/(\s*-\s*)+/g, ' - ').replace(/^[\s-]+|[\s-]+$/g, '');
+    return { ply, short, ...(m ? { d: num(m[1]), r: num(m[2]), c: num(m[3]) } : {}) };
+  }
   function csGroup(rows) {
     const map = new Map();
     for (const r of rows) {
@@ -12645,20 +12654,32 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (r.paper && r.order.day > g.paperDay) [g.paper, g.paperDay] = [r.paper, r.order.day];
       if (r.price && r.order.day >= (g.prices.get(r.price)?.day || 0)) g.prices.set(r.price, { price: r.price, day: r.order.day, date: r.order.date });
     }
-    const num = (g) => Number(g.tp.match(/\d+/)?.[0]) || Infinity;
-    return [...map.values()].sort((a, b) => num(a) - num(b) || a.name.localeCompare(b.name, 'vi')).map((g) => ({ ...g, prices: [...g.prices.values()].sort((a, b) => b.day - a.day || b.price - a.price) }));
+    const dim = (v) => v ?? Infinity; // chưa đọc được size thì xếp cuối
+    return [...map.values()]
+      .map((g) => ({ ...g, ...csSize(g.name), prices: [...g.prices.values()].sort((a, b) => b.day - a.day || b.price - a.price) }))
+      .sort((a, b) => dim(a.d) - dim(b.d) || dim(a.r) - dim(b.r) || dim(a.c) - dim(b.c) || a.tp.localeCompare(b.tp));
   }
   // "1264 | PNTP_140/125/125-C" → "140/125/125-C": chỉ giữ định lượng, không in mã nhà cung cấp
   const csPaper = (s) => s.replace(/^[^|]*\|\s*/, '').replace(/^[^_]*_/, '');
   function csSheet(name, cid, groups, nOrders) {
-    const rows = groups
-      .map((g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.name)}</td><td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '–'}</td></tr>`)
+    const dimCell = (v) => `<td class="n">${v ?? '–'}</td>`;
+    const row = (g, i) => `<tr><td class="c">${i + 1}</td><td class="tp">${esc(g.tp || '–')}</td><td>${esc(g.short || g.name)}</td>${dimCell(g.d)}${dimCell(g.r)}${dimCell(g.c)}<td>${esc(csPaper(g.paper)) || '–'}</td><td class="pr${g.prices.length > 1 ? ' many' : ''}">${g.prices.map((p, k) => `<div${k ? '' : ' class="new"'}><b>${money(p.price)}</b><span>${esc(p.date)}</span></div>`).join('') || '–'}</td></tr>`;
+    // Phần 3 lớp, 5 lớp… theo thứ tự tăng dần; không rõ số lớp để cuối
+    const plies = [...new Set(groups.map((g) => g.ply))].sort((a, b) => (a || Infinity) - (b || Infinity));
+    const sections = plies
+      .map((ply) => {
+        const list = groups.filter((g) => g.ply === ply);
+        return `<h2>${ply ? `${ply} lớp` : 'Khác'} <small>${list.length} mã</small></h2><table><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th class="n">Dài</th><th class="n">Rộng</th><th class="n">Cao</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+      })
       .join('');
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Size khách mua - ${esc(name)}</title><style>
       @page{size:A4 landscape;margin:10mm}
       *{box-sizing:border-box}
       body{margin:0;font:12px/1.35 Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
       h1{font-size:17px;margin:0 0 2px}
+      h2{font-size:14px;margin:12px 0 4px;break-after:avoid}
+      h2 small{font-size:11px;font-weight:400;color:#555}
+      .n{text-align:right;width:48px;font-variant-numeric:tabular-nums}
       .sub{color:#555;margin-bottom:8px}
       table{width:100%;border-collapse:collapse}
       thead{display:table-header-group}
@@ -12675,7 +12696,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .pr.many{background:#fff8e1}
     </style></head><body><h1>Size khách mua: ${esc(name)}</h1>
       <div class="sub">Mã khách ${esc(cid)} · ${groups.length} mã sản phẩm từ ${nOrders} đơn (không tính đơn đã huỷ) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá: mới nhất ở trên, ngày là đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá.</div>
-      <table><thead><tr><th class="c">STT</th><th>Mã TP</th><th>Tên sản phẩm</th><th>Định lượng giấy gần nhất</th><th>Các đơn giá từng bán</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+      ${sections}</body></html>`;
   }
   function csPrint(html) {
     const f = document.createElement('iframe');
