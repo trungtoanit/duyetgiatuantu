@@ -12858,12 +12858,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const hoVisMs = () => visModalsTop().find((m) => /Bàn giao khách hàng/.test(m.querySelector('.ant-modal-title')?.textContent || ''));
   // Tên NVKD trong tiêu đề: phần tử lá dạng "(Tên)" nằm cạnh "Cập nhật cơ hội" / "#BG…"
   function hoNameEl() {
-    for (const e of document.querySelectorAll('span, a, div, b')) {
-      if (e.children.length || !/^\([^()]{3,60}\)$/.test(e.textContent.trim())) continue;
-      const box = e.parentElement;
-      if (box && /Cập nhật cơ hội|#BG\d+/.test(box.textContent) && box.textContent.length < 200 && !e.closest('.ant-modal-wrap, #dg-root')) return e;
+    // Phần tử nhỏ nhất có chữ đúng dạng "(Tên)" (có thể lồng thẻ con), tổ tiên gần (≤ 4 cấp) có "Cập nhật cơ hội" / "#BG…"
+    let best = null;
+    for (const e of document.querySelectorAll('span, a, div, b, small, strong, p, h1, h2, h3, h4, h5')) {
+      const t = (e.textContent || '').trim();
+      if (t.length > 70 || !/^\(\s*[^()]{3,60}\s*\)$/.test(t) || e.closest('.ant-modal-wrap, #dg-root, [data-dg-ho]')) continue;
+      let up = e.parentElement;
+      let ok = false;
+      for (let i = 0; i < 4 && up && !ok; i++, up = up.parentElement) ok = up.textContent.length < 400 && /Cập nhật cơ hội|Cập nhật báo giá|#BG\d+/.test(up.textContent);
+      if (ok && (!best || best.contains(e))) best = e;
     }
-    return null;
+    return best;
   }
   function hoMouse(el, types = ['mousedown', 'mouseup', 'click']) {
     for (const t of types) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
@@ -12902,7 +12907,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const nameEl = hoNameEl();
     const old = document.querySelector('[data-dg-ho]');
     if (!nameEl) return old?.remove();
-    const cur = nameEl.textContent.trim().slice(1, -1).trim();
+    const cur = nameEl.textContent.trim().replace(/^\(\s*|\s*\)$/g, '');
     const isTo = norm(cur) === norm(HO_TO.name);
     if (old && old.previousElementSibling === nameEl) {
       old.style.display = isTo && !old.disabled ? 'none' : '';
@@ -12921,7 +12926,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ev.preventDefault();
       ev.stopPropagation();
       const el = hoNameEl();
-      const who = el?.textContent.trim().slice(1, -1).trim() || '';
+      const who = el?.textContent.trim().replace(/^\(\s*|\s*\)$/g, '') || '';
       const cust = (document.querySelector('.ant-select-selection-item[title]')?.getAttribute('title') || '').trim();
       if (!el) return alert('Không thấy tên NVKD ở tiêu đề – F5 rồi thử lại.');
       if (!confirm(`Bàn giao khách${cust ? ` "${cust}"` : ''} từ ${who || '?'} cho ${HO_TO.name} (${HO_TO.code})?`)) return;
@@ -12929,7 +12934,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       b.textContent = '⏳ Đang bàn giao…';
       try {
         await hoRun(el);
-        const done = await waitFor(() => norm(hoNameEl()?.textContent.trim().slice(1, -1)) === norm(HO_TO.name), 6000);
+        const done = await waitFor(() => norm(hoNameEl()?.textContent.trim().replace(/^\(\s*|\s*\)$/g, '')) === norm(HO_TO.name), 6000);
         b.textContent = done ? `✅ Đã giao cho Liên` : '✅ Đã bấm Bàn giao – F5 để xem';
       } catch (err) {
         b.textContent = `⚠️ ${err.message}`;
