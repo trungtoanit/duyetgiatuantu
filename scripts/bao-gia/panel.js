@@ -564,6 +564,7 @@ Tiêu chí (chấm 1–5 mỗi tiêu chí):
 5. Hướng tới chốt đơn: có bước tiếp theo, cập nhật tình trạng báo giá.
 
 Yêu cầu:
+- "bông hồng" / "hh" trong bình luận = hoa hồng (% / tiền chi cho thu mua bên khách), không phải hoa.
 - Chỉ dựa trên dữ liệu được cung cấp; thiếu dữ liệu thì nói rõ là thiếu, không suy diễn.
 - Dòng đầu tiên đúng định dạng: "ĐIỂM: x/10".
 - Sau đó: bảng điểm 5 tiêu chí (mỗi dòng "Tên tiêu chí: x/5 – lý do ngắn"), "Điểm mạnh", "Cần cải thiện", "Gợi ý hành động" (cụ thể, làm được ngay).
@@ -10294,10 +10295,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     'Khách chưa chốt thì {p} thử gợi ý cho thu mua 1% xem sao?',
     'Thu mua bên này đã có % chưa {p}? Nếu chưa thử đề xuất 1% xem phản ứng thế nào.',
   ];
-  // Bình luận / tên cơ hội đã nhắc % hoa hồng cho thu mua chưa
-  const BUYER_PCT_RE = /hoa\s*hồng|(^|[^\p{L}])hh\s*\d|chi\s*(hh|hoa|\d+\s*%)|%\s*(cho\s*)?(thu\s*mua|tm|người\s*mua|mua\s*hàng)|(thu\s*mua|người\s*mua)\s*\d+(?:[.,]\d+)?\s*%|chiết\s*khấu|ck\s*\d/iu;
+  // Bình luận / tên cơ hội đã nhắc % hoa hồng cho thu mua chưa ("bông hồng" = hoa hồng)
+  const BUYER_PCT_RE = /(?:hoa|bông)\s*hồng|(^|[^\p{L}])hh\s*\d|chi\s*(hh|hoa|\d+\s*%)|%\s*(cho\s*)?(thu\s*mua|tm|người\s*mua|mua\s*hàng)|(thu\s*mua|người\s*mua)\s*\d+(?:[.,]\d+)?\s*%|chiết\s*khấu|ck\s*\d/iu;
   // % / tiền cho thu mua đọc từ tên cơ hội + bình luận: "hh 2%", "hoa hồng 2%", "chi 500đ", "thu mua 1%", "ck 3%"
-  const BUYER_VAL_RE = /(?:hoa\s*hồng|(?<![\p{L}])hh|chi(?:\s*(?:hh|hoa\s*hồng))?|cho\s*thu\s*mua|thu\s*mua|(?<![\p{L}])tm|chiết\s*khấu|(?<![\p{L}])ck)(?:\s*(?:thu\s*mua|tm))?(?:\s*cho\s*(?:khách(?:\s*hàng)?|(?<![\p{L}])kh(?![\p{L}])|bên\s*(?:khách|mua)))?\s*[:=(]?\s*(\d+(?:[.,]\d+)?)\s*(%|đ|k|ngàn|nghìn|vnđ)/iu;
+  const BUYER_VAL_RE = /(?:(?:hoa|bông)\s*hồng|(?<![\p{L}])hh|chi(?:\s*(?:hh|(?:hoa|bông)\s*hồng))?|cho\s*thu\s*mua|thu\s*mua|(?<![\p{L}])tm|chiết\s*khấu|(?<![\p{L}])ck)(?:\s*(?:thu\s*mua|tm))?(?:\s*cho\s*(?:khách(?:\s*hàng)?|(?<![\p{L}])kh(?![\p{L}])|bên\s*(?:khách|mua)))?\s*[:=(]?\s*(\d+(?:[.,]\d+)?)\s*(%|đ|k|ngàn|nghìn|vnđ)/iu;
   const BUYER_VAL_RE2 = /(\d+(?:[.,]\d+)?)\s*(%|đ|k)\s*(?:\/\s*[\p{L}]+\s*)?(?:cho\s*)?(?:thu\s*mua|người\s*mua|(?<![\p{L}])tm(?![\p{L}])|khách(?:\s*hàng)?(?![\p{L}]))/iu;
   function buyerHit(q, c) {
     const pick = (text) => {
@@ -10377,7 +10378,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   };
   // Báo giá còn mở mà chưa đề cập % / tiền cho thu mua (cả báo giá này lẫn các báo giá khác của khách)
   // "thu mua không lấy %", "không nhận chiết khấu", "khách không lấy hoa hồng"… → đã rõ, không gắn "Chưa cho thu mua"
-  const NO_BUYER_RE = /(thu\s*mua|(?<![\p{L}])tm(?![\p{L}])|người\s*mua|khách(\s*hàng)?|bên\s*(đó|kia|khách)|anh\s*ấy|chị\s*ấy|họ)\s*(cũng\s*)?(không|ko|k|chẳng|chả|hông)\s*(có\s*)?(lấy|nhận|cần|muốn|ăn|đòi|xin)\s*(gì\s*)?(%|phần\s*trăm|hoa\s*hồng|(?<![\p{L}])hh(?![\p{L}])|chiết\s*khấu|(?<![\p{L}])ck(?![\p{L}])|tiền|com|commission)|(không|ko|k|chẳng|chả)\s*(nhận|lấy|cần|có|đòi)\s*(%|phần\s*trăm|hoa\s*hồng|(?<![\p{L}])hh(?![\p{L}])|chiết\s*khấu|(?<![\p{L}])ck(?![\p{L}]))/iu;
+  const NO_BUYER_RE = /(thu\s*mua|(?<![\p{L}])tm(?![\p{L}])|người\s*mua|khách(\s*hàng)?|bên\s*(đó|kia|khách)|anh\s*ấy|chị\s*ấy|họ)\s*(cũng\s*)?(không|ko|k|chẳng|chả|hông)\s*(có\s*)?(lấy|nhận|cần|muốn|ăn|đòi|xin)\s*(gì\s*)?(%|phần\s*trăm|(?:hoa|bông)\s*hồng|(?<![\p{L}])hh(?![\p{L}])|chiết\s*khấu|(?<![\p{L}])ck(?![\p{L}])|tiền|com|commission)|(không|ko|k|chẳng|chả)\s*(nhận|lấy|cần|có|đòi)\s*(%|phần\s*trăm|(?:hoa|bông)\s*hồng|(?<![\p{L}])hh(?![\p{L}])|chiết\s*khấu|(?<![\p{L}])ck(?![\p{L}]))/iu;
   const noBuyerSaid = (q, c) => {
     if (NO_BUYER_RE.test(q?.name || '')) return true;
     let hit = false;
@@ -15660,6 +15661,7 @@ trực tiếp cùng NVKD, và khi sếp đi cùng thì có thể hỗ trợ thê
   ví dụ "Hẹn khách gặp trực tiếp thứ 5, rủ sếp đi cùng", "Báo sếp mức giá khách mong muốn để chốt phương án", "Đề xuất công nợ 30 ngày với sếp trước buổi gặp".
   Viết như lời nhắc việc tự nhiên, không giải thích lý do vì sao sếp hỗ trợ.
 → KHÁCH CŨ (đã lên đơn tổng hơn 50 triệu): KHÔNG gợi ý đi thăm xưởng / hẹn gặp khách cùng sếp nữa; chỉ gợi ý phối hợp với sếp về giá, điều kiện thanh toán để chốt nhanh.
+"bông hồng" / "hh" trong bình luận = hoa hồng (% / tiền chi cho thu mua bên khách), không phải hoa.
 Chỉ dựa trên dữ liệu được cung cấp, không bịa số liệu. Viết tiếng Việt tự nhiên, ngắn gọn, xưng hô với khách lịch sự (anh/chị).
 Trả về DUY NHẤT một JSON array, mỗi phần tử:
 {"code":"BGxxxxx","giai_doan":"...","suc_khoe":0-100,"con_thieu":["2–6 chữ mỗi mục"],"buoc_tiep":["bước 1","bước 2"],"cau_noi":"1 câu nhắn khách","rui_ro":"1 câu hoặc rỗng",
@@ -15842,6 +15844,7 @@ Không markdown, không giải thích ngoài JSON.`;
 Đọc từng báo giá (thông tin + luồng bình luận nội bộ giữa NVKD và quản lý) và chọn tối đa ${HOT.show} báo giá có khả năng chốt đơn cao nhất TRONG VÀI NGÀY TỚI.
 Tín hiệu chốt mạnh: khách đã ok giá / đồng ý / hứa lên đơn / hẹn ngày đặt; khách cho giá mục tiêu và mình đã đáp ứng; chỉ còn vướng thủ tục (cọc, hợp đồng, duyệt mẫu, maket); khách quen, tái bản; mới trao đổi gần đây.
 Tín hiệu yếu: khách chê giá cao chưa xử lý, im lặng lâu, khách đặt chỗ khác, chưa có giá, chỉ hỏi tham khảo.
+"bông hồng" / "hh" trong bình luận = hoa hồng (% / tiền chi cho thu mua bên khách), không phải hoa.
 Chỉ dựa trên dữ liệu được cung cấp, không bịa.
 Trả về DUY NHẤT một JSON array, xếp từ khả năng cao xuống thấp, mỗi phần tử:
 {"code":"BGxxxxx","kha_nang":0-100,"ly_do":"1 câu ngắn, nêu tín hiệu cụ thể trong bình luận",
