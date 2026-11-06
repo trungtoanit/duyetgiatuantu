@@ -3500,7 +3500,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- 🛒 Gửi yêu cầu mua hàng (form Thông tin đề nghị của phiếu bảo trì): phiếu in + hình đính kèm ghép thành 1 ảnh, gửi nhóm Zalo ----------
   // Nội dung lấy đúng khối .print-example mà nút In phiếu của CRM in ra (đã có sẵn, ẩn trong form) nên không bật hộp thoại in.
   const BUY_GROUP = 'Nhóm bảo trì mua vật tư cho MMTB';
-  const BUY_TAG = 'Uyên Kế Toán Tuấn Tú'; // tag @ trong tin (đúng tên hiển thị trong nhóm Zalo)
+  const BUY_TAG = 'Carton Tuấn Tú - Thủy Thumua'; // tag @ trong tin (đúng tên hiển thị trong nhóm Zalo)
   const buyLoad = async (url) => {
     const du = await Promise.race([rawCall({ type: 'http.dataUrl', url }), sleep(20000).then(() => null)]);
     if (!du) throw new Error('hết thời gian tải');
