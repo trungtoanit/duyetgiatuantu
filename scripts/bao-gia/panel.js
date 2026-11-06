@@ -16274,18 +16274,30 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
     const sumAmt = rows.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
     const sumDiff = rows.reduce((a, r) => a + (Number(r.diff) || 0), 0);
-    const body = rows
-      .map(({ x, q, staff, diff }, i) => {
-        const pct = x.pct == null ? '' : `<b class="${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</b>`;
-        const steps = x.steps?.length ? x.steps.map((st, k) => `<i>${k + 1}</i> ${esc(st)}`).join('<br>') : esc(x.next || '');
-        return `<tr><td class="c">${i + 1}</td>
+    // Gom theo NVKD – thứ tự theo deal xếp hạng cao nhất của mỗi người
+    const groups = new Map();
+    for (const r of rows) {
+      const who = r.staff || 'Chưa rõ NVKD';
+      if (!groups.has(who)) groups.set(who, []);
+      groups.get(who).push(r);
+    }
+    const line = ({ x, q, diff }, i) => {
+      const pct = x.pct == null ? '' : `<b class="${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</b>`;
+      const steps = x.steps?.length ? x.steps.map((st, k) => `<i>${k + 1}</i> ${esc(st)}`).join('<br>') : esc(x.next || '');
+      return `<tr><td class="c">${i + 1}</td>
           <td><b>${esc(q?.code || x.code || '')}</b>${x.pinned ? ' 📌' : ''}<div class="m">${esc(q?.customer?.code || '')}</div></td>
           <td><div>${esc(q?.customer?.name || '')}</div><div class="m">${esc((q?.name || '').replace(/\s+/g, ' ').trim())}</div></td>
-          <td>${esc(staff)}</td><td class="c">${pct}</td>
+          <td class="c">${pct}</td>
           <td class="r">${noPrice(q) ? '<span class="bad">Chưa cho giá</span>' : esc(money(q?.amount))}</td>
           <td class="r">${diff != null ? esc(money(Math.round(diff)) || '0đ') : ''}</td>
           <td><div>💡 ${esc(x.why || '')}</div>${x.missing?.length ? `<div class="miss">${x.missing.map((m) => `<span>${esc(m)}</span>`).join('')}</div>` : ''}</td>
           <td class="st">${steps}</td></tr>`;
+    };
+    const body = [...groups]
+      .map(([who, ls]) => {
+        const amt = ls.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
+        const dif = ls.reduce((a, r) => a + (Number(r.diff) || 0), 0);
+        return `<tr class="grp"><td colspan="4">👤 ${esc(who)} <span>· ${ls.length} báo giá</span></td><td class="r">${esc(money(amt) || '0đ')}</td><td class="r">${esc(money(Math.round(dif)) || '0đ')}</td><td colspan="2"></td></tr>${ls.map(line).join('')}`;
       })
       .join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>goi-y-chot-don-${stamp}</title><style>
@@ -16300,12 +16312,13 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       .miss span{display:inline-block;background:#fee2e2;color:#b91c1c;border-radius:3px;padding:0 4px;margin:2px 3px 0 0;font-size:10px}
       .st i{display:inline-block;background:#f97316;color:#fff;border-radius:50%;width:13px;height:13px;text-align:center;font-style:normal;font-size:9px;line-height:13px}
       .tot td{font-weight:bold;background:#f1f5f9}
+      .grp td{font-weight:bold;background:#dbeafe;color:#1e3a8a;font-size:12px;page-break-after:avoid}.grp span{font-weight:normal;color:#475569;font-size:11px}
     </style></head><body>
-      <h1>🔥 Gợi ý chốt đơn – ${rows.length} báo giá</h1>
+      <h1>🔥 Gợi ý chốt đơn – ${rows.length} báo giá · theo NVKD</h1>
       <div class="sub">${esc(SITE.name || '')} · xuất lúc ${d.toLocaleString('vi-VN')} · Tổng ${esc(money(sumAmt) || '0đ')} · Chênh lệch ${esc(money(Math.round(sumDiff)) || '0đ')}</div>
-      <table><colgroup><col style="width:3%"><col style="width:8%"><col style="width:19%"><col style="width:8%"><col style="width:5%"><col style="width:9%"><col style="width:9%"><col style="width:20%"><col style="width:19%"></colgroup>
-      <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>NVKD</th><th>Chốt</th><th>Số tiền</th><th>Chênh lệch</th><th>Nhận định AI · Còn thiếu</th><th>Bước tiếp theo</th></tr></thead>
-      <tbody>${body}<tr class="tot"><td colspan="5">Tổng ${rows.length} báo giá</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td class="r">${esc(money(Math.round(sumDiff)) || '0đ')}</td><td colspan="2"></td></tr></tbody></table>
+      <table><colgroup><col style="width:3%"><col style="width:8%"><col style="width:23%"><col style="width:5%"><col style="width:9%"><col style="width:9%"><col style="width:22%"><col style="width:21%"></colgroup>
+      <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>Chốt</th><th>Số tiền</th><th>Chênh lệch</th><th>Nhận định AI · Còn thiếu</th><th>Bước tiếp theo</th></tr></thead>
+      <tbody>${body}<tr class="tot"><td colspan="4">Tổng ${rows.length} báo giá · ${groups.size} NVKD</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td class="r">${esc(money(Math.round(sumDiff)) || '0đ')}</td><td colspan="2"></td></tr></tbody></table>
     </body></html>`;
     csPrint(html);
   }
