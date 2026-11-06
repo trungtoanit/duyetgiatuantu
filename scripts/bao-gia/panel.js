@@ -16297,8 +16297,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       })
       .join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>goi-y-chot-don-${stamp}</title><style>
-      @page{size:A4 landscape;margin:10mm}
-      body{font:11px/1.35 Arial,sans-serif;color:#0f172a;margin:0}
+      @page{size:A4 portrait;margin:10mm}
+      body{font:10px/1.35 Arial,sans-serif;color:#0f172a;margin:0}
       h1{font-size:16px;margin:0 0 2px}.sub{color:#64748b;margin-bottom:8px}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
       th,td{border:1px solid #cbd5e1;padding:4px 5px;vertical-align:top;word-wrap:break-word}
@@ -16311,7 +16311,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     </style></head><body>
       <h1>🔥 Gợi ý chốt đơn – ${rows.length} báo giá · theo NVKD</h1>
       <div class="sub">${esc(SITE.name || '')} · xuất lúc ${d.toLocaleString('vi-VN')} · Tổng ${esc(money(sumAmt) || '0đ')}</div>
-      <table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:35%"><col style="width:6%"><col style="width:11%"><col style="width:36%"></colgroup>
+      <table><colgroup><col style="width:4%"><col style="width:11%"><col style="width:29%"><col style="width:6%"><col style="width:12%"><col style="width:38%"></colgroup>
       <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>Chốt</th><th>Số tiền</th><th>Bước tiếp theo</th></tr></thead>
       <tbody>${body}<tr class="tot"><td colspan="4">Tổng ${rows.length} báo giá · ${groups.size} NVKD</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td></td></tr></tbody></table>
     </body></html>`;
