@@ -15626,7 +15626,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           .join('');
         return `<h2>${esc(staff)} <small>${rows.length} khách · tổng nợ ${n(sum(rows, 'totalDebt'))}đ · quá hạn ${n(sum(rows, 'overdueAmount'))}đ</small></h2>
           <table>${DEBT_COLS}<thead><tr><th>#</th><th>Mã KH</th><th>Khách hàng</th><th>Tổng công nợ</th><th>Quá hạn</th><th>Trễ</th><th>Chưa đến hạn</th><th>Đến hạn</th><th>Hạn mức (ngày)</th></tr></thead>
-          <tbody>${body}</tbody><tfoot><tr><td colspan="3">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n nd">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tfoot></table>`;
+          <tbody>${body}</tbody><tfoot><tr><td colspan="3">Cộng ${esc(staff)}</td><td class="n">${n(sum(rows, 'totalDebt'))}</td><td class="n od">${n(sum(rows, 'overdueAmount'))}</td><td></td><td class="n nd">${n(sum(rows, 'notDueAmount'))}</td><td colspan="2"></td></tr></tbody></table>`;
       })
       .join('');
     const w = window.open('', '_blank');
@@ -16123,8 +16123,8 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           <button class="zl-draft${lsGet('dgZaloDraft') !== '0' ? ' on' : ''}" data-act="zalo-draft" title="Bật: chỉ soạn sẵn tin trong ô chat Zalo, anh tự bấm gửi · Tắt: tự bấm gửi luôn">${lsGet('dgZaloDraft') !== '0' ? '📝 Chỉ soạn, chưa gửi' : '🚀 Tự gửi luôn'}</button>
           <span class="muted">Mỗi deal chỉ hỏi 1 lần · mỗi NVKD 1 tin / 30 phút. Bấm 💬 ở từng dòng để chọn deal muốn hỏi.</span></div>`
       : '';
-    const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button><button class="act hot-copy" data-act="hot-xlsx" title="Tải danh sách Gợi ý chốt đơn đang hiện ra file Excel">⬇️ Xuất Excel</button>` : '';
-    // Dữ liệu cho nút ⬇️ Xuất Excel (đúng thứ tự đang hiện)
+    const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button><button class="act hot-copy" data-act="hot-xlsx" title="Xuất danh sách Gợi ý chốt đơn đang hiện ra PDF (hộp thoại In → Lưu dưới dạng PDF)">🖨 Xuất PDF</button>` : '';
+    // Dữ liệu cho nút 🖨 Xuất PDF (đúng thứ tự đang hiện)
     state.hotExport = items.map((x) => {
       const q = quotes[x.id];
       const c = renderCtx.comments?.[x.id];
@@ -16262,44 +16262,52 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
   }
 
-  // ⬇️ Xuất Excel tab 🔥 Gợi ý chốt đơn
+  // 🖨 Xuất PDF tab 🔥 Gợi ý chốt đơn (mở hộp thoại In → chọn "Lưu dưới dạng PDF")
   function exportHot() {
     const rows = state.hotExport || [];
     if (!rows.length) {
       state.error = 'Gợi ý chốt đơn đang trống – không có gì để xuất.';
       return render();
     }
-    const head = ['#', 'Mã BG', 'Mã KH', 'Tên khách hàng', 'Tên cơ hội', 'NVKD', 'Khả năng chốt %', 'Số tiền', 'Chênh lệch', 'Nhận định AI', 'Còn thiếu', 'Bước tiếp theo', 'Thêm tay', 'Link'];
-    const data = rows.map(({ x, q, staff, diff }, i) => [
-      i + 1,
-      q?.code || x.code || '',
-      q?.customer?.code || '',
-      q?.customer?.name || '',
-      (q?.name || '').replace(/\s+/g, ' ').trim(),
-      staff,
-      x.pct ?? '',
-      noPrice(q) ? 'Chưa cho giá' : Number(q?.amount) || '',
-      diff != null ? Math.round(diff) : '',
-      x.why || '',
-      (x.missing || []).join(', '),
-      x.steps?.length ? x.steps.map((st, k) => `${k + 1}. ${st}`).join(' › ') : x.next || '',
-      x.pinned ? '📌' : '',
-      `${location.origin}/bao-gia/update/${x.id}`,
-    ]);
-    const widths = [5, 10, 14, 36, 50, 20, 10, 16, 16, 60, 36, 70, 8, 42];
-    const n = rows.length;
-    const sumCol = (name) => {
-      const ci = head.indexOf(name);
-      const L = String.fromCharCode(65 + ci);
-      const v = rows.reduce((a, r) => a + (Number(name === 'Số tiền' ? r.q?.amount : r.diff) || 0), 0);
-      return [ci, { f: `SUBTOTAL(9,${L}2:${L}${n + 1})`, v: Math.round(v), bold: true }];
-    };
-    const sums = Object.fromEntries([sumCol('Số tiền'), sumCol('Chênh lệch')]);
-    const ai = head.indexOf('Số tiền');
-    const sumRow = head.map((_, i) => sums[i] || (i === ai - 1 ? { t: `Tổng ${n} báo giá`, bold: true } : ''));
     const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-    downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Gợi ý chốt đơn', n + 1), `goi-y-chot-don-${stamp}.xlsx`);
+    const p2 = (v) => String(v).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+    const sumAmt = rows.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
+    const sumDiff = rows.reduce((a, r) => a + (Number(r.diff) || 0), 0);
+    const body = rows
+      .map(({ x, q, staff, diff }, i) => {
+        const pct = x.pct == null ? '' : `<b class="${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</b>`;
+        const steps = x.steps?.length ? x.steps.map((st, k) => `<i>${k + 1}</i> ${esc(st)}`).join('<br>') : esc(x.next || '');
+        return `<tr><td class="c">${i + 1}</td>
+          <td><b>${esc(q?.code || x.code || '')}</b>${x.pinned ? ' 📌' : ''}<div class="m">${esc(q?.customer?.code || '')}</div></td>
+          <td><div>${esc(q?.customer?.name || '')}</div><div class="m">${esc((q?.name || '').replace(/\s+/g, ' ').trim())}</div></td>
+          <td>${esc(staff)}</td><td class="c">${pct}</td>
+          <td class="r">${noPrice(q) ? '<span class="bad">Chưa cho giá</span>' : esc(money(q?.amount))}</td>
+          <td class="r">${diff != null ? esc(money(Math.round(diff)) || '0đ') : ''}</td>
+          <td><div>💡 ${esc(x.why || '')}</div>${x.missing?.length ? `<div class="miss">${x.missing.map((m) => `<span>${esc(m)}</span>`).join('')}</div>` : ''}</td>
+          <td class="st">${steps}</td></tr>`;
+      })
+      .join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>goi-y-chot-don-${stamp}</title><style>
+      @page{size:A4 landscape;margin:10mm}
+      body{font:11px/1.35 Arial,sans-serif;color:#0f172a;margin:0}
+      h1{font-size:16px;margin:0 0 2px}.sub{color:#64748b;margin-bottom:8px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      th,td{border:1px solid #cbd5e1;padding:4px 5px;vertical-align:top;word-wrap:break-word}
+      th{background:#e2e8f0;text-align:left}thead{display:table-header-group}tr{page-break-inside:avoid}
+      .c{text-align:center}.r{text-align:right;white-space:nowrap}.m{color:#64748b;font-size:10px}
+      .good{color:#15803d}.mid{color:#b45309}.bad{color:#dc2626}
+      .miss span{display:inline-block;background:#fee2e2;color:#b91c1c;border-radius:3px;padding:0 4px;margin:2px 3px 0 0;font-size:10px}
+      .st i{display:inline-block;background:#f97316;color:#fff;border-radius:50%;width:13px;height:13px;text-align:center;font-style:normal;font-size:9px;line-height:13px}
+      .tot td{font-weight:bold;background:#f1f5f9}
+    </style></head><body>
+      <h1>🔥 Gợi ý chốt đơn – ${rows.length} báo giá</h1>
+      <div class="sub">${esc(SITE.name || '')} · xuất lúc ${d.toLocaleString('vi-VN')} · Tổng ${esc(money(sumAmt) || '0đ')} · Chênh lệch ${esc(money(Math.round(sumDiff)) || '0đ')}</div>
+      <table><colgroup><col style="width:3%"><col style="width:8%"><col style="width:19%"><col style="width:8%"><col style="width:5%"><col style="width:9%"><col style="width:9%"><col style="width:20%"><col style="width:19%"></colgroup>
+      <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>NVKD</th><th>Chốt</th><th>Số tiền</th><th>Chênh lệch</th><th>Nhận định AI · Còn thiếu</th><th>Bước tiếp theo</th></tr></thead>
+      <tbody>${body}<tr class="tot"><td colspan="5">Tổng ${rows.length} báo giá</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td class="r">${esc(money(Math.round(sumDiff)) || '0đ')}</td><td colspan="2"></td></tr></tbody></table>
+    </body></html>`;
+    csPrint(html);
   }
 
   async function onClick(e) {
