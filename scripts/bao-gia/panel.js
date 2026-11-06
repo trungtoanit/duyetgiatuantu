@@ -680,7 +680,7 @@ Yêu cầu:
       },
       {
         khi: 'NVKD báo khách chê giá cao / giá bên mình cao mà CHƯA nói khách mong muốn giá bao nhiêu',
-        hoi: 'Xin giá khách mong muốn đi em.',
+        hoi: 'Xin giá target của khách nha em.',
       },
     ],
   };
@@ -9873,6 +9873,38 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     (c?.threads || []).forEach(walk);
     return hit ? { at: hit.createdAt, by: hit.staff?.name, text: hit.text } : null;
   }
+  // NVKD báo khách chê giá cao mà chuyện đó chưa được xử lý → không hỏi lại "giá đạt chưa".
+  // Trả về null nếu sếp đã cho giá mới / khách đã ok sau đó; known = đã biết giá khách muốn, hoặc đã xin mà khách không cho.
+  const HIGH_PRICE_G = new RegExp(HIGH_PRICE_RE.source, 'giu');
+  const SALE_HAS_PRICE_RE = /\d[\d.,]*\s*((đ|vnđ|vnd|k)(?![\p{L}\d])|\/\s*(thùng|hộp|cái|tấm|cuộn))/iu;
+  const SALE_NO_TARGET_RE = /xin\s*giá.{0,40}(không|ko|chưa)\s*(có\s*)?(phản\s*hồi|cho|trả\s*lời|báo|nói)/iu;
+  const SALE_OK_RE = /(khách|kh)\s*(hàng\s*)?(đã\s*)?(ok|oke|đồng\s*ý|chịu|chốt)/iu;
+  function priceObjection(q, c) {
+    const all = [];
+    const walk = (t) => {
+      all.push(t);
+      (t.children || []).forEach(walk);
+    };
+    (c?.threads || []).forEach(walk);
+    all.sort((a, b) => a.createdAt - b.createdAt);
+    const sale = new Set([q?.staff?.name, q?.creator?.name, staffOf(q, c)].filter(Boolean).map(norm));
+    sale.delete(norm(meName));
+    const isSale = (t) => sale.has(norm(t.staff?.name));
+    const said = (t) => String(t.text || '').trim();
+    let i = all.length - 1;
+    while (i >= 0 && !(isSale(all[i]) && HIGH_PRICE_RE.test(said(all[i])) && !/\?\s*$/.test(said(all[i])))) i--;
+    if (i < 0) return null;
+    const hit = all[i];
+    const after = all.slice(i + 1);
+    const hasImg = (t) => !!t.file && IMG_RE.test(t.file);
+    if (after.some((t) => !isSale(t) && (hasImg(t) || BOSS_PRICE_RE.test(said(t))))) return null; // sếp đã cho giá mới
+    if (after.some((t) => isSale(t) && (SALE_OK_RE.test(said(t)) || PROMISE_RE.test(said(t))))) return null; // khách đã ok / hứa lên đơn
+    // Bỏ cụm "giá cao" trước khi dò: "khách báo giá cao" không phải khách cho giá
+    const known =
+      all.some((t) => isSale(t) && TARGET_PRICE_RE.test(said(t).replace(HIGH_PRICE_G, ' '))) ||
+      [hit, ...after].some((t) => isSale(t) && (SALE_HAS_PRICE_RE.test(said(t)) || SALE_NO_TARGET_RE.test(said(t))));
+    return { at: hit.createdAt, by: hit.staff?.name, text: hit.text, known };
+  }
   const highPriceTag = (c) => {
     const t = highPriceInfo(c);
     return t ? ` <span class="hip" title="${esc(`${t.by || ''}: ${t.text}`.slice(0, 300))}">💸 Giá cao</span>` : '';
@@ -10166,6 +10198,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       "Giá có đúng kỳ vọng của khách không {p}?",
       "Khách phản hồi gì về giá chưa {p}, báo anh biết nhé."
   ];
+  // NVKD báo khách chê giá cao mà chưa có giá khách muốn
+  const HIGH_TARGET_ASK = [
+    'Xin giá target của khách nha {p}.',
+    'Khách nói giá cao thì {p} xin giá target của khách nha.',
+    '{P} xin giá target của khách giúp anh nha.',
+  ];
   const SILENT_LEAD = [
       "{d} chưa có phản hồi, báo cáo lại nhé {p}. ",
       "{d} rồi chưa thấy cập nhật, báo cáo lại nhé {p}. ",
@@ -10453,15 +10491,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     { id: 'handover', icon: '🔁', title: 'Đã bàn giao khách, NVKD chưa phản hồi', when: 'Có bình luận "Bàn giao khách hàng …" cho NVKD mới, quá 12 giờ chưa thấy NVKD đó phản hồi.', def: ['{P} liên hệ khách này được chưa, báo cáo lại cho anh'] },
     { id: 'longNoOrder', icon: '📦', title: 'Khách lâu chưa xuống đơn', when: 'Hoạt động gần nhất của khách (mọi báo giá cùng khách) là thông báo lên đơn hàng đã quá 30 ngày.', def: LONG_NO_ORDER },
     { id: 'noComment', icon: '📭', title: 'Báo giá chưa có bình luận', when: 'Báo giá tạo hơn 24 giờ, đã đọc mà không có bình luận nào.', def: ['Báo giá này chưa có thông tin gì, tình hình khách sao rồi {p}?'] },
+    { id: 'highTarget', icon: '💸', title: 'NVKD báo giá cao, chưa có giá khách muốn', when: `Bình luận gần nhất nói về giá của NVKD là khách chê giá cao, chưa thấy giá khách muốn, sếp chưa cho giá mới, im lặng từ ${FOLLOW_UP_HOURS} giờ (dưới ${MAX_FOLLOW_UP_DAYS} ngày).`, def: HIGH_TARGET_ASK },
     { id: 'bossOrder', icon: '✅', title: 'Sếp cho lấy đơn mà chưa lên đơn', when: 'Sếp bình luận "lấy / chốt / lên đơn này", "đồng ý lấy đơn", "giữ giá cũ" … quá 12 giờ báo giá vẫn chưa có đơn.', def: BOSS_ORDER_ASK },
-    { id: 'promise', icon: '🤝', title: 'Khách hứa lên đơn nhưng chưa lên', when: 'NVKD báo khách hứa / đồng ý lên đơn, quá 1 ngày chưa có đơn. Quá 3 ngày thì thêm câu mở đầu của bộ 12 ("x ngày chưa có phản hồi…") phía trước.', def: ['Khách hứa lên đơn mà sao chưa lên vậy {p}, lý do gì {p}?'] },
+    { id: 'promise', icon: '🤝', title: 'Khách hứa lên đơn nhưng chưa lên', when: 'NVKD báo khách hứa / đồng ý lên đơn, quá 1 ngày chưa có đơn. Quá 3 ngày thì thêm câu mở đầu của bộ 14 ("x ngày chưa có phản hồi…") phía trước.', def: ['Khách hứa lên đơn mà sao chưa lên vậy {p}, lý do gì {p}?'] },
     { id: 'bossPrice', icon: '💰', title: 'Sếp đã cho giá, NVKD chưa phản hồi', when: 'Bình luận cho giá mới nhất của sếp (kèm hình bảng giá, hoặc "cho em giá / duyệt giá") mà trong cùng luồng chưa ai trả lời, quá 12 giờ.', def: BOSS_PRICE_ASK },
     { id: 'connect', icon: '🔌', title: 'Báo giá chưa có Flexo / Offset (kết nối khách)', when: 'Bảng sản phẩm chưa có dòng Flexo hay Offset nào, báo giá tạo hơn 24 giờ (hỏi cả khi báo giá 0đ).', def: CONNECT_ASK },
     { id: 'reprint', icon: '🔁', title: 'Đơn tái bản', when: 'Sản phẩm đã có mã (tái bản), báo giá đã có giá, chưa có đơn.', def: ['Khách xuống đơn tái bản chưa {p}?'] },
     { id: 'offsetGap', icon: '🟪', title: 'Khách chưa dùng Offset', when: 'Khách chưa từng có báo giá Offset, báo giá gần nhất đã quá 30 ngày, sếp chưa hỏi về offset trong luồng.', def: ['Khách hàng này có dùng offset không {p}?'] },
     { id: 'buyerPct', icon: '🤝', title: 'Thử cho thu mua 1%', when: `Báo giá đã có giá, quá ${FOLLOW_UP_HOURS} giờ chưa chốt, trong bình luận / tên cơ hội chưa nhắc % hoa hồng cho thu mua (hh, hoa hồng, chi %, % thu mua…) → đề xuất NVKD thử cho thu mua 1% xem phản ứng.`, def: BUYER_PCT_ASK },
     { id: 'priceAsk', icon: '⏰', title: 'Quá 12 giờ chưa chốt', when: `Bình luận cuối đã quá ${FOLLOW_UP_HOURS} giờ (dưới ${MAX_FOLLOW_UP_DAYS} ngày), báo giá đã có giá, chưa chốt / chưa có đơn.`, def: PRICE_ASK },
-    { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu hỏi của bộ 6 (khách hứa lên đơn), 7 (sếp đã cho giá), 9 (tái bản), 11 (quá 12 giờ chưa chốt) khi đã hơn 3 ngày chưa có phản hồi – vd. "35 ngày chưa có phản hồi, báo cáo lại nhé em." {d} = khoảng thời gian.', def: SILENT_LEAD },
+    { id: 'silentLead', icon: '🔕', title: 'Câu mở đầu khi im lặng lâu', when: 'Ghép phía trước câu hỏi của bộ 5 (giá cao), 7 (khách hứa lên đơn), 8 (sếp đã cho giá), 10 (tái bản), 13 (quá 12 giờ chưa chốt) khi đã hơn 3 ngày chưa có phản hồi – vd. "35 ngày chưa có phản hồi, báo cáo lại nhé em." {d} = khoảng thời gian.', def: SILENT_LEAD },
     { id: 'reportBack', icon: '💤', title: 'Im lặng quá lâu / báo giá thất bại', when: `Bình luận cuối đã quá ${MAX_FOLLOW_UP_DAYS} ngày, hoặc báo giá Thất bại → chào lại khách.`, def: REPORT_BACK },
     { id: 'priceGive', icon: '🖨️', title: 'Câu kèm ảnh báo giá (In báo giá → dán)', when: 'Bấm "🖨️ In báo giá → dán vào bình luận": câu viết kèm ảnh bảng báo giá (chọn ngẫu nhiên 1 câu). Không thuộc thứ tự ưu tiên câu hỏi.', def: PRICE_GIVE },
     { id: 'zalo', icon: '💬', title: 'Hỏi NVKD qua Zalo (tab Gợi ý chốt đơn)', when: 'Bấm 💬 ở 1 deal trong tab 🔥 Gợi ý chốt đơn – câu hỏi thăm đặt trước dòng deal (mỗi deal 1 lần, mỗi NVKD 1 tin / 30 phút).', def: ZALO_ASK },
@@ -10579,13 +10618,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     return !asked;
   }
 
-  // Câu mở đầu khi im lặng lâu (bộ 12, có {d} = khoảng thời gian) – dùng chung cho các bộ 6, 7, 9, 11
+  // Câu mở đầu khi im lặng lâu (bộ 14, có {d} = khoảng thời gian) – dùng chung cho các bộ 5, 7, 8, 10, 13
   const silentLead = (q, hours, p, salt = qSalt(q)) => {
     if (!(hours >= 72)) return '';
     const t = fillP(pickFor(qbank('silentLead'), q.id, salt + 7), p, humanDuration(hours)).trim();
     return t ? `${t.charAt(0).toUpperCase()}${t.slice(1)} ` : '';
   };
-  // Câu hỏi đang hiện là câu số mấy trong bộ (và đoạn mở đầu thuộc câu mấy của bộ 12)
+  // Câu hỏi đang hiện là câu số mấy trong bộ (và đoạn mở đầu thuộc câu mấy của bộ 14)
   function qaLineOf(bankId, text, p, d = '') {
     const norm2 = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
     const T = norm2(text);
@@ -10620,6 +10659,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const noComments = !c?.threads?.length && (renderCtx.collected[q.id] || currentQuoteId() === q.id);
     if (noComments && q.createdAt && hoursSince(q.createdAt) >= 24) {
       return { bank: 'noComment', icon: '📭', why: 'Chưa có bình luận nào', text: selfFix(fillP(pickFor(qbank('noComment'), q.id, qSalt(q)), p), p) };
+    }
+    // NVKD báo khách chê giá cao, chưa có giá khách muốn → xin giá target (không hỏi lại "giá đạt chưa")
+    const po = mode === 'chaoLai' ? null : priceObjection(q, c);
+    const lastAny = lastComment(c);
+    const quietH = lastAny ? hoursSince(lastAny.createdAt) : 0;
+    if (po && !po.known && !noPrice(q) && quietH >= FOLLOW_UP_HOURS) {
+      return { bank: 'highTarget', icon: '💸', why: `NVKD báo khách chê giá cao ${humanDuration(hoursSince(po.at))} trước, chưa có giá khách muốn`, text: silentLead(q, quietH, p) + fillP(pickFor(qbank('highTarget'), q.id, qSalt(q)), p) };
     }
     // Sếp đã bảo "lấy đơn này / chốt đơn này / lên đơn đi" mà quá 12 giờ vẫn chưa có đơn → hỏi sao khách chưa lên đơn
     const bo = bossOrderInfo(c);
@@ -10669,6 +10715,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return { bank: 'buyerPct', icon: '🤝', why: 'Chưa thấy % cho thu mua – thử đề xuất 1%', text: lead + selfFix(fillP(pickFor(qbank('buyerPct'), q.id, qSalt(q)), p), p) };
     }
     if (mode === 'hoiNhanh') {
+      // NVKD đã báo giá cao và đã biết giá khách muốn → việc nằm ở sếp (cho giá mới), hỏi "giá đạt chưa" là thừa
+      if (po) return null;
       const salt = renderCtx.quickSent[q.id] ? Math.floor(renderCtx.quickSent[q.id].at / 1000) : 0;
       const lead2 = silentLead(q, h, p, salt);
       const text = lead2 + fillP(pickFor(qbank('priceAsk'), q.id, salt), p);
@@ -15176,7 +15224,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
 
   // Duyệt mọi báo giá: báo giá nào đang cần hỏi NVKD, bằng bộ câu nào, câu gì + điểm ưu tiên (tính lại tối đa 2 phút / lần)
-  const QA_WEIGHT = { buyerPct: 48, bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
+  const QA_WEIGHT = { highTarget: 95, buyerPct: 48, bossOrder: 100, promise: 90, bossPrice: 85, handover: 80, monthly: 60, longNoOrder: 55, priceAsk: 50, reprint: 50, noComment: 35, connect: 30, offsetGap: 25, reportBack: 20 };
   const QA_GAP = 4 * 3600e3; // 1 báo giá không xuất hiện lại trong 4 giờ sau khi đã hỏi
   // Mở tab lần đầu: lấy kết quả đã lưu trên máy để hiện ngay (đánh dấu cũ → vẫn tính lại ngầm)
   async function qaHydrate() {
