@@ -16272,7 +16272,6 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const d = new Date();
     const p2 = (v) => String(v).padStart(2, '0');
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
-    const sumAmt = rows.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
     // Gom theo NVKD – thứ tự theo deal xếp hạng cao nhất của mỗi người
     const groups = new Map();
     for (const r of rows) {
@@ -16282,39 +16281,37 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     }
     const line = ({ x, q }, i) => {
       const pct = x.pct == null ? '' : `<b class="${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</b>`;
-      const steps = x.steps?.length ? x.steps.map((st, k) => `<i>${k + 1}</i> ${esc(st)}`).join('<br>') : esc(x.next || '');
+      const steps = x.steps?.length ? x.steps.map((st, k) => `<i>${k + 1}</i>${esc(st)}`).join(' ') : esc(x.next || '');
+      const opp = (q?.name || '').replace(/\s+/g, ' ').trim();
       return `<tr><td class="c">${i + 1}</td>
-          <td><b>${esc(q?.code || x.code || '')}</b>${x.pinned ? ' 📌' : ''}<div class="m">${esc(q?.customer?.code || '')}</div></td>
-          <td><div>${esc(q?.customer?.name || '')}</div><div class="m">${esc((q?.name || '').replace(/\s+/g, ' ').trim())}</div></td>
+          <td><b>${esc(q?.code || x.code || '')}</b>${x.pinned ? '📌' : ''}<br><span class="m">${esc(q?.customer?.code || '')}</span></td>
+          <td>${esc(q?.customer?.name || '')}${opp ? `<br><span class="m">${esc(opp)}</span>` : ''}</td>
           <td class="c">${pct}</td>
           <td class="r">${noPrice(q) ? '<span class="bad">Chưa cho giá</span>' : esc(money(q?.amount))}</td>
           <td class="st">${steps}</td></tr>`;
     };
+    // Mỗi NVKD 1 bảng riêng, sang trang mới khi in (tách giao từng người)
+    const COLS = '<colgroup><col style="width:3%"><col style="width:11%"><col style="width:34%"><col style="width:5%"><col style="width:11%"><col style="width:36%"></colgroup>';
     const body = [...groups]
       .map(([who, ls]) => {
         const amt = ls.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
-        return `<tr class="grp"><td colspan="4">👤 ${esc(who)} <span>· ${ls.length} báo giá</span></td><td class="r">${esc(money(amt) || '0đ')}</td><td></td></tr>${ls.map(line).join('')}`;
+        return `<table class="sec">${COLS}<thead><tr class="grp"><td colspan="4">👤 ${esc(who)} <span>· ${ls.length} báo giá</span></td><td class="r">${esc(money(amt) || '0đ')}</td><td></td></tr>
+          <tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>Chốt</th><th>Số tiền</th><th>Bước tiếp theo</th></tr></thead>
+          <tbody>${ls.map(line).join('')}</tbody></table>`;
       })
       .join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>goi-y-chot-don-${stamp}</title><style>
-      @page{size:A4 portrait;margin:10mm}
-      body{font:10px/1.35 Arial,sans-serif;color:#0f172a;margin:0}
-      h1{font-size:16px;margin:0 0 2px}.sub{color:#64748b;margin-bottom:8px}
+      @page{size:A4 portrait;margin:7mm}
+      body{font:9.5px/1.25 Arial,sans-serif;color:#0f172a;margin:0}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #cbd5e1;padding:4px 5px;vertical-align:top;word-wrap:break-word}
+      .sec{page-break-after:always;break-after:page}.sec:last-child{page-break-after:auto;break-after:auto}
+      th,td{border:.5px solid #cbd5e1;padding:1.5px 3px;vertical-align:top;word-wrap:break-word}
       th{background:#e2e8f0;text-align:left}thead{display:table-header-group}tr{page-break-inside:avoid}
-      .c{text-align:center}.r{text-align:right;white-space:nowrap}.m{color:#64748b;font-size:10px}
+      .c{text-align:center}.r{text-align:right;white-space:nowrap}.m{color:#64748b}
       .good{color:#15803d}.mid{color:#b45309}.bad{color:#dc2626}
-      .st i{display:inline-block;background:#f97316;color:#fff;border-radius:50%;width:13px;height:13px;text-align:center;font-style:normal;font-size:9px;line-height:13px}
-      .tot td{font-weight:bold;background:#f1f5f9}
-      .grp td{font-weight:bold;background:#dbeafe;color:#1e3a8a;font-size:12px;page-break-after:avoid}.grp span{font-weight:normal;color:#475569;font-size:11px}
-    </style></head><body>
-      <h1>🔥 Gợi ý chốt đơn – ${rows.length} báo giá · theo NVKD</h1>
-      <div class="sub">${esc(SITE.name || '')} · xuất lúc ${d.toLocaleString('vi-VN')} · Tổng ${esc(money(sumAmt) || '0đ')}</div>
-      <table><colgroup><col style="width:4%"><col style="width:11%"><col style="width:29%"><col style="width:6%"><col style="width:12%"><col style="width:38%"></colgroup>
-      <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>Chốt</th><th>Số tiền</th><th>Bước tiếp theo</th></tr></thead>
-      <tbody>${body}<tr class="tot"><td colspan="4">Tổng ${rows.length} báo giá · ${groups.size} NVKD</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td></td></tr></tbody></table>
-    </body></html>`;
+      .st i{display:inline-block;background:#f97316;color:#fff;border-radius:50%;width:10px;height:10px;text-align:center;font-style:normal;font-size:7px;line-height:10px;margin:0 2px 0 3px}
+      .grp td{font-weight:bold;background:#dbeafe;color:#1e3a8a;font-size:10px;padding:2px 3px}.grp span{font-weight:normal;color:#475569}
+    </style></head><body>${body}</body></html>`;
     csPrint(html);
   }
 
