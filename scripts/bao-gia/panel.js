@@ -16123,7 +16123,13 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           <button class="zl-draft${lsGet('dgZaloDraft') !== '0' ? ' on' : ''}" data-act="zalo-draft" title="Bật: chỉ soạn sẵn tin trong ô chat Zalo, anh tự bấm gửi · Tắt: tự bấm gửi luôn">${lsGet('dgZaloDraft') !== '0' ? '📝 Chỉ soạn, chưa gửi' : '🚀 Tự gửi luôn'}</button>
           <span class="muted">Mỗi deal chỉ hỏi 1 lần · mỗi NVKD 1 tin / 30 phút. Bấm 💬 ở từng dòng để chọn deal muốn hỏi.</span></div>`
       : '';
-    const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button>` : '';
+    const copyBtn = items.length ? `<button class="act hot-copy" data-act="hot-copy" title="Copy tin nhắn tóm tắt (gom theo nhân viên) để dán vào nhóm Zalo">📋 Copy tin nhắn</button><button class="act hot-copy" data-act="hot-xlsx" title="Tải danh sách Gợi ý chốt đơn đang hiện ra file Excel">⬇️ Xuất Excel</button>` : '';
+    // Dữ liệu cho nút ⬇️ Xuất Excel (đúng thứ tự đang hiện)
+    state.hotExport = items.map((x) => {
+      const q = quotes[x.id];
+      const c = renderCtx.comments?.[x.id];
+      return { x, q, staff: staffOf(q, c) || '', diff: diffVal(q) };
+    });
     const btn = `<button class="act hero hot-btn" data-act="hot-run" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner light"></span> AI đang đọc các báo giá…' : hot ? '🔄 Phân tích lại' : '🔥 AI chọn đơn chốt được liền'}</button>`;
     const rows = items
       .map((x, i) => {
@@ -16254,6 +16260,46 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const total = rows.reduce((a, { q }) => a + (Number(q?.amount) || 0), 0);
     const sumRow = head.map((_, i) => (i === ai - 1 ? { t: `Tổng ${rows.length} báo giá`, bold: true } : i === ai ? { f: `SUBTOTAL(9,${colL}2:${colL}${rows.length + 1})`, v: total, bold: true } : ''));
     downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Báo giá', rows.length + 1), `bao-gia-kha-thi-${stamp}.xlsx`);
+  }
+
+  // ⬇️ Xuất Excel tab 🔥 Gợi ý chốt đơn
+  function exportHot() {
+    const rows = state.hotExport || [];
+    if (!rows.length) {
+      state.error = 'Gợi ý chốt đơn đang trống – không có gì để xuất.';
+      return render();
+    }
+    const head = ['#', 'Mã BG', 'Mã KH', 'Tên khách hàng', 'Tên cơ hội', 'NVKD', 'Khả năng chốt %', 'Số tiền', 'Chênh lệch', 'Nhận định AI', 'Còn thiếu', 'Bước tiếp theo', 'Thêm tay', 'Link'];
+    const data = rows.map(({ x, q, staff, diff }, i) => [
+      i + 1,
+      q?.code || x.code || '',
+      q?.customer?.code || '',
+      q?.customer?.name || '',
+      (q?.name || '').replace(/\s+/g, ' ').trim(),
+      staff,
+      x.pct ?? '',
+      noPrice(q) ? 'Chưa cho giá' : Number(q?.amount) || '',
+      diff != null ? Math.round(diff) : '',
+      x.why || '',
+      (x.missing || []).join(', '),
+      x.steps?.length ? x.steps.map((st, k) => `${k + 1}. ${st}`).join(' › ') : x.next || '',
+      x.pinned ? '📌' : '',
+      `${location.origin}/bao-gia/update/${x.id}`,
+    ]);
+    const widths = [5, 10, 14, 36, 50, 20, 10, 16, 16, 60, 36, 70, 8, 42];
+    const n = rows.length;
+    const sumCol = (name) => {
+      const ci = head.indexOf(name);
+      const L = String.fromCharCode(65 + ci);
+      const v = rows.reduce((a, r) => a + (Number(name === 'Số tiền' ? r.q?.amount : r.diff) || 0), 0);
+      return [ci, { f: `SUBTOTAL(9,${L}2:${L}${n + 1})`, v: Math.round(v), bold: true }];
+    };
+    const sums = Object.fromEntries([sumCol('Số tiền'), sumCol('Chênh lệch')]);
+    const ai = head.indexOf('Số tiền');
+    const sumRow = head.map((_, i) => sums[i] || (i === ai - 1 ? { t: `Tổng ${n} báo giá`, bold: true } : ''));
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    downloadBlob(buildXlsx([head, ...data, sumRow], widths, 'Gợi ý chốt đơn', n + 1), `goi-y-chot-don-${stamp}.xlsx`);
   }
 
   async function onClick(e) {
@@ -16798,6 +16844,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       await kvMerge('zaloNames', { [norm(who)]: { name: v.trim(), staff: who, at: Date.now(), by: meName } });
       render();
     }
+    else if (act === 'hot-xlsx') exportHot();
     else if (act === 'hot-copy') {
       try {
         try {
