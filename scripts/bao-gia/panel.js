@@ -12900,7 +12900,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const ok = [...ms.querySelectorAll('.ant-modal-footer button, button')].find((b) => b.innerText.trim() === 'Bàn giao');
     if (!ok) throw new Error('không thấy nút "Bàn giao"');
     ok.click();
-    if (!(await waitFor(() => !hoVisMs(), 10000))) throw new Error('đã bấm Bàn giao nhưng hộp chưa đóng – anh xem lỗi trên hộp');
+    // CRM hiện hộp "Bàn giao thành công" → tự bấm OK
+    const hoDone = () => visModalsTop().find((m) => /Bàn giao thành công/.test(m.textContent || ''));
+    const res = await waitFor(() => hoDone() || (!hoVisMs() && 'closed'), 10000);
+    if (!res) throw new Error('đã bấm Bàn giao nhưng hộp chưa đóng – anh xem lỗi trên hộp');
+    const okBtn = (await waitFor(hoDone, res === 'closed' ? 1500 : 10))?.querySelector('.ant-modal-confirm-btns button, .ant-btn-primary');
+    if (okBtn) {
+      okBtn.click();
+      await waitFor(() => !hoDone(), 3000);
+    }
   }
   function hoMount() {
     if (SITE.key !== 'tuantu' || !/^\/(co-hoi|bao-gia)\/update\/\d+/.test(location.pathname)) return;
