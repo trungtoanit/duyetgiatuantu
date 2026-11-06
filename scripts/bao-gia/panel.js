@@ -4645,13 +4645,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const pag = [...document.querySelectorAll('.ant-pagination')].find((p) => !p.closest('#dg-root') && p.getClientRects().length);
     if (!pag) return;
     // Bỏ khoảng trống còn lại: các khung bọc chỉ chứa hàng ô lọc (giờ rỗng) cũng ẩn; khung rỗng nằm giữa tabs và phân trang cũng ẩn
+    // Không bao giờ ẩn khung chứa bảng: lúc bảng đang tải khung chưa có chữ nên trông như rỗng, ẩn là trang trắng tới khi F5
+    const holdsTable = (x) => x.matches('.ant-spin-nested-loading, .ant-table-wrapper, .ant-spin') || !!x.querySelector('.ant-table, .ant-spin-nested-loading, .ant-spin');
     let el = row;
-    while (el.parentElement && !el.parentElement.contains(pag) && !(el.parentElement.innerText || '').trim()) {
+    while (el.parentElement && !el.parentElement.contains(pag) && !holdsTable(el.parentElement) && !(el.parentElement.innerText || '').trim()) {
       el = el.parentElement;
       el.style.setProperty('display', 'none', 'important');
     }
     for (const sib of el.parentElement ? [...el.parentElement.children] : []) {
-      if (sib === el || sib.contains(pag) || sib.querySelector('input, button, .ant-tabs')) continue;
+      if (sib === el || sib.contains(pag) || sib.querySelector('input, button, .ant-tabs') || holdsTable(sib)) continue;
       if (!(sib.innerText || '').trim() && sib.getBoundingClientRect().height > 0 && sib.getBoundingClientRect().top > row.parentElement.getBoundingClientRect().top - 200)
         sib.style.setProperty('display', 'none', 'important');
     }
@@ -9833,11 +9835,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Gồm: "làm (giá này) được không", "là được giá này không", "deal", "khách cho/báo/trả giá…", "giá mục tiêu"
   const TARGET_PRICE_RE =
     /(làm|lam|là|la)\s*((giá|gia)\s*(này|nay|đó|do|vậy|vay)\s*)?(được|duoc|đc|dc)\s*((giá|gia)\s*(này|nay|đó|do)\s*)?(không|khong|ko|k)\b|(khách|kh|khach)\s*(hàng\s*)?deal|\bdeal\s*(giá|gia|xuống|xuong|lại\s*giá)(?![\p{L}])|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot|trả|tra)\s*(giá|gia)(?![\p{L}])|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/iu;
+  // Khách cho giá thật: bỏ các cụm chỉ than về giá trước khi dò ("khách báo giá cao", "khách muốn giá rẻ hơn" không phải khách cho giá)
+  const saysTargetPrice = (txt) => TARGET_PRICE_RE.test(String(txt || '').replace(/(giá|gia)\s*(rẻ|re|tốt|tot|thấp|thap)(\s*hơn)?(?![\p{L}])/giu, ' ').replace(HIGH_PRICE_G, ' '));
   function targetPriceInfo(c) {
     let hit = null;
     const walk = (t) => {
       const txt = t.text || '';
-      if (t.staff?.name !== meName && TARGET_PRICE_RE.test(txt)) {
+      if (t.staff?.name !== meName && saysTargetPrice(txt)) {
         if (!hit || t.createdAt > hit.createdAt) hit = t;
       }
       (t.children || []).forEach(walk);
@@ -9901,7 +9905,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (after.some((t) => isSale(t) && (SALE_OK_RE.test(said(t)) || PROMISE_RE.test(said(t))))) return null; // khách đã ok / hứa lên đơn
     // Bỏ cụm "giá cao" trước khi dò: "khách báo giá cao" không phải khách cho giá
     const known =
-      all.some((t) => isSale(t) && TARGET_PRICE_RE.test(said(t).replace(HIGH_PRICE_G, ' '))) ||
+      all.some((t) => isSale(t) && saysTargetPrice(said(t))) ||
       [hit, ...after].some((t) => isSale(t) && (SALE_HAS_PRICE_RE.test(said(t)) || SALE_NO_TARGET_RE.test(said(t))));
     return { at: hit.createdAt, by: hit.staff?.name, text: hit.text, known };
   }
