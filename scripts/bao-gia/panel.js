@@ -16263,11 +16263,58 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
   }
 
   // 🖨 Xuất PDF tab 🔥 Gợi ý chốt đơn (mở hộp thoại In → chọn "Lưu dưới dạng PDF")
-  function exportHot() {
-    const rows = state.hotExport || [];
+  // Hỏi lại CRM NVKD đang phụ trách từng khách (khách chuyển người thì báo giá cũ vẫn mang tên người cũ trong dữ liệu đã lưu)
+  // Chỉ đọc API khách hàng; tên mới ghi lại vào 'quotes' để các bảng khác cũng đúng
+  async function hotFreshStaff(rows) {
+    const tok = JSON.parse(localStorage.getItem('UserStore') || '{}').token;
+    const ver = (document.body.innerText.match(/v(\d+\.\d+\.\d+)/) || [])[1];
+    if (!tok || !ver) return 0;
+    const cids = [...new Set(rows.map((r) => r.q?.customer?.id).filter(Boolean))];
+    const got = {};
+    let i = 0;
+    const one = async () => {
+      while (i < cids.length) {
+        const cid = cids[i++];
+        try {
+          const ac = new AbortController();
+          const tm = setTimeout(() => ac.abort(), 8000);
+          const r = await fetch(`${API_BASE}/v1/admin/customer/${cid}`, { headers: { token: tok, version: ver, 'X-Client-Version': ver }, signal: ac.signal });
+          clearTimeout(tm);
+          const d = (await r.json())?.data;
+          if (r.ok && d?.staff?.name) got[cid] = { id: d.staff.id, name: d.staff.name, avatar: d.staff.avatar || undefined };
+        } catch {}
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(5, cids.length) }, one));
+    const patch = {};
+    for (const r of rows) {
+      const st = got[r.q?.customer?.id];
+      if (!st || st.name === r.staff) continue;
+      r.staff = st.name;
+      if (r.q?.staff?.name !== st.name) patch[r.q.id] = { ...r.q, staff: st, staffKey: 'customer.staff' };
+    }
+    if (Object.keys(patch).length) await kvMerge('quotes', patch).catch(() => {});
+    return Object.keys(patch).length;
+  }
+
+  async function exportHot(btn) {
+    const rows = (state.hotExport || []).map((r) => ({ ...r }));
     if (!rows.length) {
       state.error = 'Gợi ý chốt đơn đang trống – không có gì để xuất.';
       return render();
+    }
+    const label = btn?.textContent;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang kiểm tra NVKD…';
+    }
+    try {
+      await hotFreshStaff(rows);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
     }
     const d = new Date();
     const p2 = (v) => String(v).padStart(2, '0');
@@ -16857,7 +16904,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       await kvMerge('zaloNames', { [norm(who)]: { name: v.trim(), staff: who, at: Date.now(), by: meName } });
       render();
     }
-    else if (act === 'hot-xlsx') exportHot();
+    else if (act === 'hot-xlsx') exportHot(e.target.closest('button'));
     else if (act === 'hot-copy') {
       try {
         try {
