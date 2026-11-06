@@ -7315,6 +7315,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- Băng vàng đầu trang CRM ("1. CÔNG TY … (xxđ) 2. …") → thay bằng danh sách 🔥 Gợi ý chốt đơn ----------
   // Ẩn nội dung gốc của CRM và chèn danh sách deal ưu tiên (bấm để mở báo giá). NVKD chỉ thấy deal của mình.
   let topHotHtml = '';
+  let topHotScroll = 0;
   async function topHotBanner() {
     if (!IS_TOP || !root) return;
     let host = document.querySelector('[data-dg-hotbar]');
@@ -7510,10 +7511,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     document.querySelectorAll('[data-dg-hidden]').forEach((e) => (e.style.display = 'none'));
     host.style.display = 'none';
+    // Nhớ chỗ đang cuộn trong danh sách deal: vẽ lại (hoặc CRM dựng lại băng) không nhảy về đầu
+    if (!box.dataset.dgScroll) {
+      box.dataset.dgScroll = '1';
+      box.addEventListener('scroll', (e) => e.target.classList?.contains('dgh-l') && (topHotScroll = e.target.scrollTop), true);
+    }
     if (html !== topHotHtml || !box.innerHTML) {
       topHotHtml = html;
       box.innerHTML = html;
     }
+    const lst = box.querySelector('.dgh-l');
+    if (lst && topHotScroll && Math.abs(lst.scrollTop - topHotScroll) > 1) lst.scrollTop = topHotScroll;
   }
   if (IS_TOP) {
     setInterval(() => topHotBanner().catch(() => {}), 4000);
