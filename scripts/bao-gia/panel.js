@@ -9836,7 +9836,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   const TARGET_PRICE_RE =
     /(làm|lam|là|la)\s*((giá|gia)\s*(này|nay|đó|do|vậy|vay)\s*)?(được|duoc|đc|dc)\s*((giá|gia)\s*(này|nay|đó|do)\s*)?(không|khong|ko|k)\b|(khách|kh|khach)\s*(hàng\s*)?deal|\bdeal\s*(giá|gia|xuống|xuong|lại\s*giá)(?![\p{L}])|(khách|kh|khach)\s*(hàng\s*)?(cho|báo|bao|đưa|dua|chào|chao|muốn|muon|chốt|chot|trả|tra)\s*(giá|gia)(?![\p{L}])|giá\s*(mục tiêu|khách mong muốn|mong muốn|khách muốn|target)|target\s*price/iu;
   // Khách cho giá thật: bỏ các cụm chỉ than về giá trước khi dò ("khách báo giá cao", "khách muốn giá rẻ hơn" không phải khách cho giá)
-  const saysTargetPrice = (txt) => TARGET_PRICE_RE.test(String(txt || '').replace(/(giá|gia)\s*(rẻ|re|tốt|tot|thấp|thap)(\s*hơn)?(?![\p{L}])/giu, ' ').replace(HIGH_PRICE_G, ' '));
+  // Câu nói rõ số tiền khách muốn / đang mua thì luôn tính: "khách xin giá 2.500đ/ thùng", "giá khách đang lấy là 25.000đ"
+  const CUSTOMER_AMOUNT_RE = /(khách|kh)\s*(hàng\s*)?(đang\s*)?(xin|muốn|lấy|mua|dùng|trả|chào)[^.\n]{0,25}?\d[\d.,]*\s*((đ|vnđ|vnd)(?![\p{L}\d])|\/\s*(thùng|hộp|cái|tấm|cuộn))/iu;
+  const saysTargetPrice = (txt) => CUSTOMER_AMOUNT_RE.test(String(txt || '')) || TARGET_PRICE_RE.test(String(txt || '').replace(/(giá|gia)\s*(rẻ|re|tốt|tot|thấp|thap)(\s*hơn)?(?![\p{L}])/giu, ' ').replace(HIGH_PRICE_G, ' '));
   function targetPriceInfo(c) {
     let hit = null;
     const walk = (t) => {
