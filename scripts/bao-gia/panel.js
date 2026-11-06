@@ -16273,7 +16273,6 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
     const p2 = (v) => String(v).padStart(2, '0');
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
     const sumAmt = rows.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
-    const sumDiff = rows.reduce((a, r) => a + (Number(r.diff) || 0), 0);
     // Gom theo NVKD – thứ tự theo deal xếp hạng cao nhất của mỗi người
     const groups = new Map();
     for (const r of rows) {
@@ -16281,7 +16280,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       if (!groups.has(who)) groups.set(who, []);
       groups.get(who).push(r);
     }
-    const line = ({ x, q, diff }, i) => {
+    const line = ({ x, q }, i) => {
       const pct = x.pct == null ? '' : `<b class="${x.pct >= 75 ? 'good' : x.pct >= 50 ? 'mid' : 'bad'}">${x.pct}%</b>`;
       const steps = x.steps?.length ? x.steps.map((st, k) => `<i>${k + 1}</i> ${esc(st)}`).join('<br>') : esc(x.next || '');
       return `<tr><td class="c">${i + 1}</td>
@@ -16289,15 +16288,13 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
           <td><div>${esc(q?.customer?.name || '')}</div><div class="m">${esc((q?.name || '').replace(/\s+/g, ' ').trim())}</div></td>
           <td class="c">${pct}</td>
           <td class="r">${noPrice(q) ? '<span class="bad">Chưa cho giá</span>' : esc(money(q?.amount))}</td>
-          <td class="r">${diff != null ? esc(money(Math.round(diff)) || '0đ') : ''}</td>
           <td><div>💡 ${esc(x.why || '')}</div>${x.missing?.length ? `<div class="miss">${x.missing.map((m) => `<span>${esc(m)}</span>`).join('')}</div>` : ''}</td>
           <td class="st">${steps}</td></tr>`;
     };
     const body = [...groups]
       .map(([who, ls]) => {
         const amt = ls.reduce((a, r) => a + (Number(r.q?.amount) || 0), 0);
-        const dif = ls.reduce((a, r) => a + (Number(r.diff) || 0), 0);
-        return `<tr class="grp"><td colspan="4">👤 ${esc(who)} <span>· ${ls.length} báo giá</span></td><td class="r">${esc(money(amt) || '0đ')}</td><td class="r">${esc(money(Math.round(dif)) || '0đ')}</td><td colspan="2"></td></tr>${ls.map(line).join('')}`;
+        return `<tr class="grp"><td colspan="4">👤 ${esc(who)} <span>· ${ls.length} báo giá</span></td><td class="r">${esc(money(amt) || '0đ')}</td><td colspan="2"></td></tr>${ls.map(line).join('')}`;
       })
       .join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>goi-y-chot-don-${stamp}</title><style>
@@ -16315,10 +16312,10 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       .grp td{font-weight:bold;background:#dbeafe;color:#1e3a8a;font-size:12px;page-break-after:avoid}.grp span{font-weight:normal;color:#475569;font-size:11px}
     </style></head><body>
       <h1>🔥 Gợi ý chốt đơn – ${rows.length} báo giá · theo NVKD</h1>
-      <div class="sub">${esc(SITE.name || '')} · xuất lúc ${d.toLocaleString('vi-VN')} · Tổng ${esc(money(sumAmt) || '0đ')} · Chênh lệch ${esc(money(Math.round(sumDiff)) || '0đ')}</div>
-      <table><colgroup><col style="width:3%"><col style="width:8%"><col style="width:23%"><col style="width:5%"><col style="width:9%"><col style="width:9%"><col style="width:22%"><col style="width:21%"></colgroup>
-      <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>Chốt</th><th>Số tiền</th><th>Chênh lệch</th><th>Nhận định AI · Còn thiếu</th><th>Bước tiếp theo</th></tr></thead>
-      <tbody>${body}<tr class="tot"><td colspan="4">Tổng ${rows.length} báo giá · ${groups.size} NVKD</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td class="r">${esc(money(Math.round(sumDiff)) || '0đ')}</td><td colspan="2"></td></tr></tbody></table>
+      <div class="sub">${esc(SITE.name || '')} · xuất lúc ${d.toLocaleString('vi-VN')} · Tổng ${esc(money(sumAmt) || '0đ')}</div>
+      <table><colgroup><col style="width:3%"><col style="width:8%"><col style="width:25%"><col style="width:5%"><col style="width:9%"><col style="width:26%"><col style="width:24%"></colgroup>
+      <thead><tr><th>#</th><th>Mã BG / KH</th><th>Khách hàng / Tên cơ hội</th><th>Chốt</th><th>Số tiền</th><th>Nhận định AI · Còn thiếu</th><th>Bước tiếp theo</th></tr></thead>
+      <tbody>${body}<tr class="tot"><td colspan="4">Tổng ${rows.length} báo giá · ${groups.size} NVKD</td><td class="r">${esc(money(sumAmt) || '0đ')}</td><td colspan="2"></td></tr></tbody></table>
     </body></html>`;
     csPrint(html);
   }
