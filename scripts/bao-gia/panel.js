@@ -12851,6 +12851,96 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     edit.parentElement.before(item);
   }
   if (IS_TOP) setInterval(csMount, 1500);
+  // ---------- 🤝 Bàn giao khách cho Liên (Tuấn Tú) ----------
+  // Trang cơ hội / báo giá: nút cạnh tên NVKD ở tiêu đề "(Đoàn Thị Hương)" → bấm tên (CRM mở hộp "Bàn giao khách hàng")
+  // → chọn nhân viên NV0440 → bấm "Bàn giao". Hỏi xác nhận trước khi làm.
+  const HO_TO = { code: 'NV0440', name: 'Nguyễn Mỹ Liên' };
+  const hoVisMs = () => visModalsTop().find((m) => /Bàn giao khách hàng/.test(m.querySelector('.ant-modal-title')?.textContent || ''));
+  // Tên NVKD trong tiêu đề: phần tử lá dạng "(Tên)" nằm cạnh "Cập nhật cơ hội" / "#BG…"
+  function hoNameEl() {
+    for (const e of document.querySelectorAll('span, a, div, b')) {
+      if (e.children.length || !/^\([^()]{3,60}\)$/.test(e.textContent.trim())) continue;
+      const box = e.parentElement;
+      if (box && /Cập nhật cơ hội|#BG\d+/.test(box.textContent) && box.textContent.length < 200 && !e.closest('.ant-modal-wrap, #dg-root')) return e;
+    }
+    return null;
+  }
+  function hoMouse(el, types = ['mousedown', 'mouseup', 'click']) {
+    for (const t of types) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+  }
+  async function hoRun(nameEl) {
+    if (!hoVisMs()) {
+      hoMouse(nameEl);
+      if (!(await waitFor(hoVisMs, 6000))) throw new Error('không mở được hộp Bàn giao (bấm tên NVKD không có phản hồi)');
+    }
+    const ms = hoVisMs();
+    const item = [...ms.querySelectorAll('.ant-form-item, .ant-row')].find((x) => /Nhân viên mới/.test(x.querySelector('label')?.textContent || ''));
+    const sel = (item || ms).querySelector('.ant-select');
+    if (!sel) throw new Error('không thấy ô "Nhân viên mới"');
+    hoMouse(sel.querySelector('.ant-select-selector') || sel, ['mousedown']);
+    const inp = sel.querySelector('input');
+    if (inp) {
+      inp.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, HO_TO.code);
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const opt = await waitFor(() => {
+      const dd = [...document.querySelectorAll('.ant-select-dropdown')].filter((d) => getComputedStyle(d).display !== 'none' && !d.classList.contains('ant-select-dropdown-hidden'));
+      return dd.flatMap((d) => [...d.querySelectorAll('.ant-select-item-option')]).find((o) => (o.textContent || '').includes(`(${HO_TO.code})`));
+    }, 8000);
+    if (!opt) throw new Error(`không thấy nhân viên ${HO_TO.code} trong danh sách`);
+    hoMouse(opt);
+    const picked = await waitFor(() => (sel.querySelector('.ant-select-selection-item')?.textContent || '').includes(HO_TO.code) || (sel.querySelector('.ant-select-selection-item')?.textContent || '').includes(HO_TO.name), 3000);
+    if (!picked) throw new Error('chọn nhân viên không ăn – anh chọn tay giúp em');
+    const ok = [...ms.querySelectorAll('.ant-modal-footer button, button')].find((b) => b.innerText.trim() === 'Bàn giao');
+    if (!ok) throw new Error('không thấy nút "Bàn giao"');
+    ok.click();
+    if (!(await waitFor(() => !hoVisMs(), 10000))) throw new Error('đã bấm Bàn giao nhưng hộp chưa đóng – anh xem lỗi trên hộp');
+  }
+  function hoMount() {
+    if (SITE.key !== 'tuantu' || !/^\/(co-hoi|bao-gia)\/update\/\d+/.test(location.pathname)) return;
+    const nameEl = hoNameEl();
+    const old = document.querySelector('[data-dg-ho]');
+    if (!nameEl) return old?.remove();
+    const cur = nameEl.textContent.trim().slice(1, -1).trim();
+    const isTo = norm(cur) === norm(HO_TO.name);
+    if (old && old.previousElementSibling === nameEl) {
+      old.style.display = isTo && !old.disabled ? 'none' : '';
+      return;
+    }
+    old?.remove();
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('data-dg-ho', '1');
+    const LABEL = '🤝 Bàn giao cho Liên';
+    b.textContent = LABEL;
+    b.title = `Bàn giao khách của cơ hội này cho ${HO_TO.name} (${HO_TO.code}) – như bấm tên NVKD → chọn nhân viên → Bàn giao`;
+    b.setAttribute('style', 'margin-left:10px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0ea5e9,#6366f1);border:0;border-radius:999px;padding:3px 12px');
+    if (isTo) b.style.display = 'none';
+    b.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const el = hoNameEl();
+      const who = el?.textContent.trim().slice(1, -1).trim() || '';
+      const cust = (document.querySelector('.ant-select-selection-item[title]')?.getAttribute('title') || '').trim();
+      if (!el) return alert('Không thấy tên NVKD ở tiêu đề – F5 rồi thử lại.');
+      if (!confirm(`Bàn giao khách${cust ? ` "${cust}"` : ''} từ ${who || '?'} cho ${HO_TO.name} (${HO_TO.code})?`)) return;
+      b.disabled = true;
+      b.textContent = '⏳ Đang bàn giao…';
+      try {
+        await hoRun(el);
+        const done = await waitFor(() => norm(hoNameEl()?.textContent.trim().slice(1, -1)) === norm(HO_TO.name), 6000);
+        b.textContent = done ? `✅ Đã giao cho Liên` : '✅ Đã bấm Bàn giao – F5 để xem';
+      } catch (err) {
+        b.textContent = `⚠️ ${err.message}`;
+        setTimeout(() => (b.textContent = LABEL), 8000);
+      } finally {
+        b.disabled = false;
+      }
+    });
+    nameEl.after(b);
+  }
+  if (IS_TOP) setInterval(hoMount, 1500);
   // ---------- 🏭 Việc Thành phẩm theo bảng "10 ngày doanh số + báo cáo TP" (/dashboard/ke-hoach) ----------
   // Tổng Báo cáo TP < tổng Báo giá → sản xuất yếu hơn kinh doanh; ngày làm việc gần nhất (trừ Chủ nhật) dưới trung bình → hỏi tình hình.
   // Thứ 2–7 từ 8 giờ đọc 1 lần / ngày, ghi kv 'tpCheck' (YYYY-MM-DD) → quy tắc 'tp' tạo việc giao cho nhóm Zalo, luồng nhắc việc gửi tin vào nhóm.
