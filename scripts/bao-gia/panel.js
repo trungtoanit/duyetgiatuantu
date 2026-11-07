@@ -5,6 +5,50 @@
   if (window.__dgPanel) return;
   window.__dgPanel = true;
 
+  // ---------- Chỉ tab đang xem mới quét / chạy định kỳ (đỡ nặng máy) ----------
+  // Mọi setInterval trong file chạy qua cổng này. Tab CRM đang hiện → chạy. Tab ẩn → nghỉ, trừ đúng 1 tab
+  // "dẫn" (tab CRM xem gần nhất) để việc tự động (nhắc việc, gửi Zalo, đọc dữ liệu) vẫn chạy khi đang ở cửa sổ khác.
+  // Khung iframe thu thập (do tab đó mở) không bị chặn. Vòng chờ trong lúc đang thao tác dùng window.setInterval.
+  const DG_TOP = window.top === window;
+  const DG_TAB = Math.random().toString(36).slice(2);
+  const LEAD_KEY = 'dgLeadTab';
+  const LEAD_STALE = 150e3; // tab dẫn im lặng quá lâu (đã đóng / treo) → tab ẩn khác nhận thay
+  const leadGet = () => {
+    try {
+      return JSON.parse(localStorage.getItem(LEAD_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  };
+  const leadSet = () => {
+    try {
+      localStorage.setItem(LEAD_KEY, JSON.stringify({ tab: DG_TAB, at: Date.now() }));
+    } catch {}
+  };
+  const dgActive = () => {
+    if (!DG_TOP) return true;
+    if (document.visibilityState === 'visible') return true;
+    const v = leadGet();
+    if (v && v.tab !== DG_TAB && Date.now() - v.at < LEAD_STALE) return false;
+    if (!v || v.tab !== DG_TAB) leadSet();
+    return true;
+  };
+  if (DG_TOP) {
+    const beatLead = () => {
+      if (document.visibilityState === 'visible' || leadGet()?.tab === DG_TAB) leadSet();
+    };
+    beatLead();
+    window.setInterval(beatLead, 20e3);
+    document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && leadSet());
+    window.addEventListener('focus', leadSet);
+    window.addEventListener('pagehide', () => {
+      try {
+        if (leadGet()?.tab === DG_TAB) localStorage.removeItem(LEAD_KEY);
+      } catch {}
+    });
+  }
+  const setInterval = (fn, ms, ...args) => window.setInterval(() => dgActive() && fn(...args), ms);
+
   // ---------- Kết nối với background của extension ----------
   const NEED_RELOAD =
     'Extension trên máy này chưa được cập nhật. Vào chrome://extensions, bấm nút tải lại (↻) của "Duyệt giá Tuấn Tú", rồi tải lại trang này.';
@@ -1807,7 +1851,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       render2();
     };
     let lastV = range.value;
-    const poll = setInterval(() => {
+    const poll = window.setInterval(() => {
       if (!box.isConnected) return clearInterval(poll);
       if (range.value !== lastV) {
         lastV = range.value;
@@ -2033,7 +2077,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       sync();
     };
     for (const ev of ['input', 'change', 'pointermove', 'pointerup', 'mousemove', 'mouseup', 'keyup', 'touchmove']) range.addEventListener(ev, onMove);
-    const poll = setInterval(() => (box.isConnected ? onMove() : clearInterval(poll)), 120);
+    const poll = window.setInterval(() => (box.isConnected ? onMove() : clearInterval(poll)), 120);
     // Lịch sử deal (cột trái): bấm % ở 1 dòng → dùng mức đó
     const histBody = box.querySelector('.ph-body');
     const showHist = (list, note = '') => {
@@ -3751,7 +3795,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Trong lúc 🔄 Load giá: popup "Cảnh báo – Dài tấm phải lớn hơn hoặc bằng khổ tấm" → tự bấm "Bỏ qua" (cảnh báo khác vẫn để nguyên)
   async function reloadPaper(btn) {
-    const guard = setInterval(() => {
+    const guard = window.setInterval(() => {
       for (const m of document.querySelectorAll('.ant-modal-confirm, .ant-modal')) {
         if (!m.getClientRects().length || !/Dài tấm phải lớn hơn hoặc bằng khổ tấm/i.test(m.innerText || '')) continue;
         [...m.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Bỏ qua')?.click();
@@ -5083,7 +5127,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         : '<div style="padding:20px;text-align:center;color:#15803d;font-weight:700">✅ Mọi đơn đã có chênh lệch</div>';
     };
     draw();
-    const tm = setInterval(() => {
+    const tm = window.setInterval(() => {
       if (!box.isConnected) return clearInterval(tm);
       fillDayDiffs().catch(() => {});
       draw();
@@ -9807,7 +9851,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (nav.q?.staff?.avatar) avatars[nav.q.staff.name] = nav.q.staff.avatar;
     showLoading(nav.code, nav.q);
     const t0 = Date.now();
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       if ((nav.code && document.title.includes(nav.code)) || Date.now() - t0 > 20000) {
         clearInterval(timer);
         hideLoading();
@@ -10874,7 +10918,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     saveRun();
     if (custRefetch.running) return render();
     custRefetch.running = true;
-    const beat = setInterval(saveRun, 10000);
+    const beat = window.setInterval(saveRun, 10000);
     try {
       while (custRefetch.queue.length) {
         custRefetch.current = custRefetch.queue.shift();
@@ -16528,7 +16572,7 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       document.dispatchEvent(new CustomEvent('dg:navigate', { detail: href })); // hook.js chuyển trang trong app
       const arrived = () => location.pathname === href && (!code || document.title.includes(code));
       const started = Date.now();
-      const timer = setInterval(() => {
+      const timer = window.setInterval(() => {
         if (arrived() || /^\/login\b/.test(location.pathname)) {
           // Tới nơi, hoặc bị đẩy về trang đăng nhập (hết phiên) → tắt thẻ chờ, không tải lại
           clearInterval(timer);
