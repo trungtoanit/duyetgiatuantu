@@ -13208,6 +13208,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .map((g) => ({ ...g, ...csSize(g.name), tiers: [...g.tiers.values()].sort((a, b) => a.qty - b.qty) }))
       .sort((a, b) => dim(a.d ?? a.l) - dim(b.d ?? b.l) || dim(a.r ?? a.w) - dim(b.r ?? b.w) || dim(a.c ?? a.h) - dim(b.c ?? b.h) || a.name.localeCompare(b.name, 'vi'));
   }
+  // Cùng loại, cùng số lớp, cùng size và cùng các mốc số lượng – đơn giá → gộp 1 dòng (giữ tên mới nhất, các mẫu còn lại chỉ đếm)
+  function cpMerge(groups) {
+    const seen = new Map();
+    const out = [];
+    for (const g of groups) {
+      const sz = g.d != null ? [g.d, g.r, g.c] : g.l ? [g.l, g.w, g.h] : null;
+      const key = sz && g.tiers.length ? [g.kind, g.ply, ...sz, g.tiers.map((t) => `${t.qty}:${t.price}`).join(',')].join('|') : '';
+      const head = key && seen.get(key);
+      if (!head) {
+        const item = { ...g, more: 0, tiers: g.tiers.map((t) => ({ ...t })) };
+        if (key) seen.set(key, item);
+        out.push(item);
+        continue;
+      }
+      head.more++;
+      if (g.lastAt > head.lastAt) Object.assign(head, { name: g.name, short: g.short, lastAt: g.lastAt, tp: g.tp || head.tp });
+      for (const t of g.tiers) {
+        const h = head.tiers.find((x) => x.qty === t.qty);
+        if (t.at > h.at) Object.assign(h, { at: t.at, code: t.code, status: t.status, won: t.won });
+        else if (t.won) h.won = true;
+      }
+    }
+    return out;
+  }
   function cpSheet(name, cid, groups, opps) {
     const num = (n) => Math.round(n).toLocaleString('vi-VN');
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
@@ -13217,8 +13241,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sections = parts
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
-        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
-        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Đơn giá theo số lượng (số lượng · đơn giá · báo giá mới nhất có mốc đó)</th></tr></thead><tbody>${rows}</tbody></table>`;
+        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size, cùng giá</span>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
+        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Đơn giá theo số lượng (số lượng · đơn giá · báo giá mới nhất có mốc đó)</th></tr></thead><tbody>${rows}</tbody></table>`;
       })
       .join('');
     const tiers = groups.reduce((n, g) => n + g.tiers.length, 0);
@@ -13231,14 +13255,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       th,td{border:1px solid #cbd5e1;padding:3px 5px;vertical-align:top;text-align:left}
       th{background:#eef2ff;font-weight:700;font-size:10.5px}
       tr{break-inside:avoid}td.c{text-align:center}td.n{white-space:nowrap}
-      .tp{color:#1d4ed8}
+      .tp{color:#1d4ed8}.more{color:#64748b;font-size:10px;white-space:nowrap}
       .tiers{padding:2px 4px}
       .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dotted #e2e8f0}
       .t:last-child{border-bottom:0}
       .t .q{text-align:right;color:#334155}.t .p{text-align:right;font-weight:700}.t .m{color:#64748b;font-size:10px}
       .t.won .p{color:#15803d}.t.lost .p{color:#94a3b8;text-decoration:line-through}
     </style></head><body><h1>Đơn giá theo số lượng: ${esc(name)}</h1>
-      <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.length} sản phẩm · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
+      <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm (gộp còn ${groups.length} dòng: cùng size, cùng số lượng và đơn giá chỉ hiện 1) · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
       ${sections}</body></html>`;
   }
   async function cpRun(btn, cid, name) {
@@ -13254,7 +13278,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         // đọc đủ → thay hẳn bản lưu (báo giá đã xoá trên CRM không còn trong bản lưu)
         await kvMerge('custPrices', { [cid]: { opps: Object.fromEntries(opps.map((o) => [o.id, cpSlim(o)])), total: opps.length, fullAt: Date.now(), seenAt: Date.now(), name: name || '' } });
       }
-      const groups = cpGroup(opps);
+      const groups = cpMerge(cpGroup(opps));
       if (!groups.length) throw new Error('Khách này chưa có báo giá nào có số lượng và đơn giá.');
       csPrint(cpSheet(name || `Khách ${cid}`, cid, groups, opps));
       btn.textContent = label;
