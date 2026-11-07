@@ -4272,6 +4272,82 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     inBtn.after(b);
   }
   if (IS_TOP) setInterval(() => injectPdfTopButton(), 2000);
+  // ---------- ✏️ Đổi số lượng hàng loạt (trang báo giá / cơ hội): nút cạnh tiêu đề cột "Số lượng" ----------
+  // Lần lượt bấm số lượng từng dòng → hộp "Tính giá …" mở ra → nhập số lượng mới vào ô Số lượng → bấm Lưu của hộp.
+  // Không bấm "Cập nhật" của báo giá: người dùng xem lại giá rồi tự lưu.
+  function bqTable() {
+    return [...document.querySelectorAll('table')].find((t) => !t.closest('.ant-modal-wrap, #dg-root') && [...t.querySelectorAll('thead th')].some((th) => th.innerText.trim().startsWith('Số lượng')) && [...t.querySelectorAll('thead th')].some((th) => /^Giá thực bán/.test(th.innerText.trim())));
+  }
+  const bqModal = () => visModalsTop().find((m) => m.querySelector('input#quantity') && m.querySelector('.ant-modal')?.offsetParent);
+  async function bqRun(btn, qty) {
+    const t = bqTable();
+    if (!t) throw new Error('Không thấy bảng sản phẩm.');
+    const qi = [...t.querySelectorAll('thead th')].findIndex((th) => th.innerText.trim().startsWith('Số lượng'));
+    const rows = () => [...t.querySelectorAll('tbody tr.ant-table-row')].filter((tr) => tr.cells[qi]?.querySelector('button'));
+    const n = rows().length;
+    if (!n) throw new Error('Bảng chưa có dòng sản phẩm nào.');
+    let changed = 0;
+    for (let i = 0; i < n; i++) {
+      const cellBtn = rows()[i]?.cells[qi]?.querySelector('button');
+      if (!cellBtn) throw new Error(`Không thấy ô số lượng dòng ${i + 1}.`);
+      if (Number(cellBtn.innerText.replace(/[^\d]/g, '')) === qty) continue;
+      btn.textContent = `⏳ Dòng ${i + 1}/${n}…`;
+      if (bqModal()) throw new Error('Đang có hộp Tính giá mở – đóng hộp đó rồi thử lại.');
+      cellBtn.click();
+      const m = await waitFor(bqModal, 8000, 150);
+      if (!m) throw new Error(`Dòng ${i + 1}: không mở được hộp Tính giá.`);
+      await sleep(500);
+      const inp = m.querySelector('input#quantity');
+      inp.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, String(qty));
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      inp.blur();
+      await sleep(900); // CRM tính lại giá theo số lượng mới
+      const save = [...m.querySelectorAll('.ant-modal-footer button')].find((b) => b.innerText.trim() === 'Lưu');
+      if (!save) throw new Error(`Dòng ${i + 1}: không thấy nút Lưu của hộp Tính giá.`);
+      save.click();
+      const closed = await waitFor(() => !bqModal(), 10000, 200);
+      if (!closed) throw new Error(`Dòng ${i + 1}: CRM chưa đóng hộp sau khi Lưu – xem thông báo trong hộp.`);
+      await sleep(400);
+      changed++;
+    }
+    return { n, changed };
+  }
+  function bqMount() {
+    if (!currentQuoteId()) return;
+    const t = bqTable();
+    const th = t && [...t.querySelectorAll('thead th')].find((x) => x.innerText.trim() === 'Số lượng' || x.querySelector('.dg-bq'));
+    if (!th || th.querySelector('.dg-bq')) return;
+    const b = document.createElement('span');
+    b.className = 'dg-bq';
+    const LABEL = '✏️ Hàng loạt';
+    b.textContent = LABEL;
+    b.title = 'Đổi số lượng cho mọi dòng sản phẩm: lần lượt mở hộp Tính giá từng dòng, nhập số lượng mới rồi bấm Lưu';
+    b.setAttribute('style', 'display:inline-block;margin-left:6px;cursor:pointer;color:#fff;background:linear-gradient(90deg,#f59e0b,#ea580c);border-radius:999px;padding:0 8px;font-weight:700;font-size:11px;white-space:nowrap;vertical-align:middle');
+    b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.dataset.busy) return;
+      const v = prompt('Số lượng mới cho TẤT CẢ các dòng sản phẩm:', '');
+      if (v == null) return;
+      const qty = Number(String(v).replace(/[^\d]/g, ''));
+      if (!qty) return alert('Số lượng không hợp lệ.');
+      b.dataset.busy = '1';
+      try {
+        const r = await bqRun(b, qty);
+        b.textContent = r.changed ? `✅ Đã đổi ${r.changed}/${r.n} dòng – kiểm tra giá rồi bấm Cập nhật` : '✅ Các dòng đã đúng số lượng này';
+      } catch (err) {
+        b.textContent = `⚠️ ${err.message}`;
+      }
+      setTimeout(() => {
+        b.textContent = LABEL;
+        delete b.dataset.busy;
+      }, 8000);
+    });
+    th.append(b);
+  }
+  if (IS_TOP) setInterval(bqMount, 1500);
 
   // ---------- Trang chi tiết báo giá: trang trí lại nhóm nút "Tình trạng báo giá" ----------
   const ST_LOOK = {
