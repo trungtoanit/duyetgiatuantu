@@ -7816,6 +7816,123 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!items.length) throw new Error('Không thấy khoản tiền nào');
     return { items, total: items.reduce((t, x) => t + x.amount, 0), note: String(j.note || '').trim() };
   }
+  // Bảng tính tổng → ảnh PNG (nền trắng, đóng watermark) để dán vào bình luận
+  async function sumToPng(r, code) {
+    const S = 2;
+    const W = 620;
+    const PAD = 22;
+    const ROW = 34;
+    const head = 58;
+    const H = head + r.items.length * ROW + 64 + (r.note ? 30 : 0);
+    const c = document.createElement('canvas');
+    c.width = W * S;
+    c.height = H * S;
+    const x = c.getContext('2d');
+    x.scale(S, S);
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, W, H);
+    x.fillStyle = '#eef2ff';
+    x.fillRect(0, 0, W, head - 8);
+    const F = '-apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    x.textBaseline = 'middle';
+    x.fillStyle = '#312e81';
+    x.font = `800 18px ${F}`;
+    x.fillText(`🧮 TỔNG HỢP CHI PHÍ${code ? ` – ${code}` : ''}`, PAD, (head - 8) / 2);
+    const fit = (t, max) => {
+      let s = t;
+      while (s.length > 3 && x.measureText(s).width > max) s = s.slice(0, -2);
+      return s === t ? t : `${s.trimEnd()}…`;
+    };
+    let y = head;
+    r.items.forEach((it, i) => {
+      if (i % 2) {
+        x.fillStyle = '#f8fafc';
+        x.fillRect(PAD - 8, y, W - 2 * PAD + 16, ROW);
+      }
+      const amt = `${it.qty > 1 ? `${it.qty} × ${fmtVnd(it.price)} = ` : ''}${fmtVnd(it.amount)}`;
+      x.font = `600 15px ${F}`;
+      const aw = x.measureText(amt).width;
+      x.fillStyle = '#0f172a';
+      x.textAlign = 'right';
+      x.fillText(amt, W - PAD, y + ROW / 2);
+      x.textAlign = 'left';
+      x.font = `15px ${F}`;
+      x.fillStyle = '#334155';
+      x.fillText(fit(`${i + 1}. ${it.label}`, W - 2 * PAD - aw - 16), PAD, y + ROW / 2);
+      y += ROW;
+    });
+    x.fillStyle = '#6366f1';
+    x.fillRect(PAD - 8, y + 8, W - 2 * PAD + 16, 2);
+    y += 14;
+    x.font = `800 17px ${F}`;
+    x.fillStyle = '#0f172a';
+    x.fillText(`Tổng cộng (${r.items.length} khoản)`, PAD, y + 22);
+    x.textAlign = 'right';
+    x.fillStyle = '#4338ca';
+    x.font = `800 21px ${F}`;
+    x.fillText(fmtVnd(r.total), W - PAD, y + 22);
+    x.textAlign = 'left';
+    y += 46;
+    if (r.note) {
+      x.font = `13px ${F}`;
+      x.fillStyle = '#64748b';
+      x.fillText(fit(`Ghi chú: ${r.note}`, W - 2 * PAD), PAD, y + 8);
+    }
+    drawWatermark(x, c.width, c.height, 0.05);
+    return new Promise((res) => c.toBlob(res, 'image/png'));
+  }
+  // Bấm nút gửi của CRM ngay cạnh ô nhập (Trả lời / Bình luận) rồi chờ ô được xoá
+  async function clickCommentSend(ta) {
+    let box = ta.parentElement;
+    let btn = null;
+    while (box && !btn) {
+      btn = [...box.querySelectorAll('button')].find((b) => ['Trả lời', 'Bình luận'].includes(b.innerText.trim()));
+      box = box.parentElement;
+    }
+    if (!btn) throw new Error('Không tìm thấy nút gửi bình luận.');
+    for (let i = 0; i < 50 && btn.disabled; i++) await sleep(200);
+    if (btn.disabled) throw new Error('Nút gửi của CRM chưa bấm được.');
+    btn.click();
+    for (let i = 0; i < 100; i++) {
+      await sleep(150);
+      if (!ta.isConnected || ta.value === '') return true;
+    }
+    throw new Error('CRM chưa xác nhận đã gửi – kiểm tra lại phần bình luận.');
+  }
+  // 📤 Ảnh bảng tổng → dán vào ô "Trả lời" của chính bình luận đó + dòng tổng → gửi luôn
+  async function sendSumToComment(one, r, show) {
+    let top = one;
+    while (top.parentElement?.closest('.ant-comment')) top = top.parentElement.closest('.ant-comment');
+    const code = [...top.querySelectorAll(':scope > .ant-comment-inner .ant-tag')].map((t) => t.textContent.trim()).find((t) => /^[A-Z]{1,4}\d{3,}$/.test(t)) || '';
+    const own = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content > ul.ant-comment-actions');
+    const cm = own ? one : top;
+    const actions = own || top.querySelector(':scope > .ant-comment-inner > .ant-comment-content > ul.ant-comment-actions');
+    show('⏳ Đang mở ô trả lời…');
+    let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
+    if (!ta) {
+      const before = new Set(document.querySelectorAll('textarea'));
+      const reply = [...(actions?.querySelectorAll('*') || [])].reverse().find((e) => !e.closest('.dg-printq-reply, .dg-setprice') && e.childElementCount <= 1 && e.textContent.trim() === 'Trả lời');
+      if (!reply) throw new Error('Không thấy nút "Trả lời" của bình luận này.');
+      reply.click();
+      ta = await waitFor(() => cm.querySelector('textarea') || [...document.querySelectorAll('textarea')].find((t) => !before.has(t) && t.offsetParent), 4000, 100);
+    }
+    if (!ta) throw new Error('Không mở được ô "Trả lời" – bấm Trả lời rồi thử lại.');
+    show('📸 Đang tạo ảnh…');
+    const png = await sumToPng(r, code);
+    // khối chứa ô nhập + nút gửi → đếm ảnh trước / sau khi dán để biết CRM đã nhận ảnh
+    let form = ta.parentElement;
+    while (form && ![...form.querySelectorAll('button')].some((b) => ['Trả lời', 'Bình luận'].includes(b.innerText.trim()))) form = form.parentElement;
+    form ||= ta.parentElement;
+    const imgs0 = form.querySelectorAll('img, .ant-upload-list-item').length;
+    show('📋 Đang dán ảnh…');
+    await pasteImageToComment(png, `tong-chi-phi${code ? `-${code}` : ''}.png`, async () => ta);
+    const got = await waitFor(() => form.querySelectorAll('img, .ant-upload-list-item').length > imgs0 && !form.querySelector('.ant-upload-list-item-uploading, .ant-spin-spinning'), 20000, 250);
+    if (!got) throw new Error('CRM chưa nhận ảnh (20 giây) – ảnh đã chép vào clipboard, dán tay (Ctrl+V) rồi gửi.');
+    await sleep(600);
+    setTextarea(ta, `Tổng cộng ${r.items.length} khoản: ${fmtVnd(r.total)}`);
+    show('📤 Đang gửi…');
+    await clickCommentSend(ta);
+  }
   function injectSumButtons() {
     if (!MY_ADMIN) return;
     for (const one of document.querySelectorAll('.ant-comment')) {
@@ -7834,11 +7951,36 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const out = document.createElement('div');
       out.setAttribute('style', 'margin-top:4px;padding:6px 10px;border:1px solid #c7d2fe;border-radius:8px;background:#eef2ff;width:max-content;max-width:100%');
       out.hidden = true;
+      const send = document.createElement('span');
+      send.textContent = '📤 Gửi ảnh vào bình luận';
+      send.title = 'Chuyển bảng tổng thành ảnh, dán vào ô Trả lời của bình luận này kèm dòng tổng rồi gửi luôn';
+      send.setAttribute('style', 'display:inline-block;margin-left:8px;cursor:pointer;color:#fff;background:linear-gradient(90deg,#16a34a,#059669);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px');
+      send.hidden = true;
+      let last = null;
       const show = (r) => {
         out.innerHTML = sumBoxHtml(r);
         out.hidden = false;
         btn.textContent = '🧮 Tính lại (AI)';
+        last = r.err ? null : r;
+        send.hidden = !last;
       };
+      send.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!last || send.dataset.busy) return;
+        const label = '📤 Gửi ảnh vào bình luận';
+        send.dataset.busy = '1';
+        try {
+          await sendSumToComment(one, last, (t) => (send.textContent = t));
+          send.textContent = '✅ Đã gửi';
+        } catch (err) {
+          send.textContent = `⚠️ ${err.message || err}`;
+        }
+        setTimeout(() => {
+          send.textContent = label;
+          delete send.dataset.busy;
+        }, 6000);
+      });
       if (sumCache.has(text)) show(sumCache.get(text));
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
@@ -7854,7 +7996,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!r.err) sumCache.set(text, r);
         show(r);
       });
-      wrap.append(btn, out);
+      wrap.append(btn, send, out);
       detail.after(wrap);
     }
   }
