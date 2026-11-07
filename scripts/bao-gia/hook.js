@@ -542,6 +542,28 @@
       emitNotifs(d);
       return;
     }
+    // Tab "Cơ hội" của trang khách hàng: mọi báo giá của khách kèm từng dòng sản phẩm → báo lên tab ngoài cùng
+    // (nút 🧾 In đơn giá theo số lượng đọc trong khung ẩn). Danh sách này không có mã TP (product = null).
+    if (/\/opportunity\?/.test(url) && /[?&]customerId=\d+/.test(url) && Array.isArray(d.opportunities)) {
+      const cid = Number(url.match(/[?&]customerId=(\d+)/)[1]);
+      const page = Number(url.match(/[?&]page=(\d+)/)?.[1] || 1);
+      const list = d.opportunities.map((o) => ({
+        id: o.id,
+        code: o.code,
+        name: o.name,
+        createdAt: o.createdAt,
+        quoteStatus: o.quoteStatus,
+        hasOrder: !!(o.misaOrderCode || o.misaOrder || o.misaOrders?.length),
+        staff: o.staff?.name || '',
+        lines: (o.opportunityProducts || [])
+          .filter((p) => !p.isDeleted)
+          .map((p) => ({ name: p.name || '', subname: p.subname || '', unit: p.unit || '', qty: Number(p.quantity) || 0, price: Number(p.price) || 0, type: p.productType || '', rep: p.republishType || '', l: p.length, w: p.width, h: p.height, layer: p.layer, tp: p.product?.code || '' })),
+      }));
+      try {
+        (window.top || window).document.dispatchEvent(new CustomEvent('dg:custOpps', { detail: JSON.stringify({ cid, page, total: d.total, list }) }));
+      } catch {}
+      return;
+    }
     // Danh sách báo giá (trang /bao-gia)
     if (/\/opportunity\?/.test(url) && /[?&]type=2\b/.test(url) && Array.isArray(d.opportunities)) {
       // Vị trí trên danh sách ERP (để sắp xếp y như ERP)

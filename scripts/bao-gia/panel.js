@@ -13117,6 +13117,179 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     edit.parentElement.before(item);
   }
   if (IS_TOP) setInterval(csMount, 1500);
+  // ---------- 🧾 In đơn giá theo số lượng: mọi báo giá của khách (tab Cơ hội của trang khách hàng, đọc trong khung ẩn) ----------
+  // Mỗi sản phẩm (theo tên + size) 1 dòng; mỗi mốc số lượng 1 ô: đơn giá của báo giá MỚI NHẤT có mốc đó (kèm mã BG, ngày).
+  async function cpReadCust(cid, onProg) {
+    const pages = new Map();
+    let total = null;
+    const onEv = (e) => {
+      try {
+        const m = JSON.parse(e.detail);
+        if (String(m.cid) !== String(cid)) return;
+        pages.set(m.page, m.list);
+        total = Number(m.total) || 0;
+      } catch {}
+    };
+    document.addEventListener('dg:custOpps', onEv);
+    try {
+      return await tkInFrame(`/khach-hang/view/${cid}`, async (doc) => {
+        let tab = null;
+        for (let i = 0; i < 100 && !tab; i++) {
+          tab = tkFindTab(doc(), 'Cơ hội');
+          if (!tab) await sleep(300);
+        }
+        if (!tab) throw new Error('Không thấy tab "Cơ hội" của khách.');
+        (tab.querySelector('[role=tab]') || tab).click();
+        for (let i = 0; i < 100 && total == null; i++) await sleep(300);
+        if (total == null) throw new Error('Không đọc được danh sách báo giá của khách.');
+        const all = () => [...new Map([...pages.values()].flat().map((o) => [o.id, o])).values()];
+        for (let page = 2; all().length < total && page <= 50; page++) {
+          onProg?.(all().length, total);
+          const li = doc()?.querySelector(`.ant-tabs-tabpane-active .ant-pagination-item-${page}`);
+          if (!li) break;
+          li.click();
+          for (let i = 0; i < 70 && !pages.has(page); i++) await sleep(300);
+          if (!pages.has(page)) throw new Error(`Không chuyển được sang trang ${page} của danh sách báo giá.`);
+        }
+        const list = all();
+        if (list.length < total) throw new Error(`Mới đọc được ${list.length}/${total} báo giá, chưa in. Hãy thử lại.`);
+        return list;
+      });
+    } finally {
+      document.removeEventListener('dg:custOpps', onEv);
+    }
+  }
+  const CP_ST = { DRAFF: 'Bản thảo', REJECT: 'Thất bại', SUCCESS: 'Thành công', APPROVE: 'Duyệt lên đơn' };
+  const cpDay = (sec) => (sec ? new Date((sec > 1e11 ? sec : sec * 1000) + 7 * 3600e3).toISOString().slice(0, 10).split('-').reverse().join('/') : '');
+  // Phụ phí (bản in, khuôn, vận chuyển…) không phải sản phẩm → không đưa vào bảng
+  const cpExtra = (n) => /^(bản in|phí|khuôn|trục in|dụng cụ|gia công|vận chuyển|cước)/i.test(String(n).trim());
+  function cpGroup(opps) {
+    const map = new Map();
+    for (const o of opps) {
+      for (const ln of o.lines) {
+        if (!ln.qty || !ln.price || cpExtra(ln.name)) continue;
+        const key = normName(ln.name);
+        const g = map.get(key) || { name: ln.name, tp: '', subname: ln.subname, unit: ln.unit, l: ln.l, w: ln.w, h: ln.h, layer: ln.layer, lastAt: 0, tiers: new Map() };
+        map.set(key, g);
+        if (ln.tp && !g.tp) g.tp = ln.tp;
+        if ((o.createdAt || 0) >= g.lastAt) Object.assign(g, { name: ln.name, lastAt: o.createdAt || 0, unit: ln.unit || g.unit });
+        const cur = g.tiers.get(ln.qty);
+        const won = o.hasOrder || o.quoteStatus === 'SUCCESS' || o.quoteStatus === 'APPROVE';
+        if (!cur || (o.createdAt || 0) > cur.at) g.tiers.set(ln.qty, { qty: ln.qty, price: ln.price, at: o.createdAt || 0, code: o.code, status: o.quoteStatus, won, n: (cur?.n || 0) + 1 });
+        else cur.n++;
+      }
+    }
+    const dim = (v) => (v > 0 ? v : Infinity);
+    return [...map.values()]
+      .map((g) => ({ ...g, ...csSize(g.name), tiers: [...g.tiers.values()].sort((a, b) => a.qty - b.qty) }))
+      .sort((a, b) => dim(a.d ?? a.l) - dim(b.d ?? b.l) || dim(a.r ?? a.w) - dim(b.r ?? b.w) || dim(a.c ?? a.h) - dim(b.c ?? b.h) || a.name.localeCompare(b.name, 'vi'));
+  }
+  function cpSheet(name, cid, groups, opps) {
+    const num = (n) => Math.round(n).toLocaleString('vi-VN');
+    const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
+    const parts = [...new Map(groups.map((g) => [`${g.kind}|${g.ply}`, { kind: g.kind, ply: g.ply }])).values()].sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || a.kind.localeCompare(b.kind, 'vi') || (a.ply || 99) - (b.ply || 99));
+    const size = (g) => (g.d != null ? `${g.d} x ${g.r} x ${g.c}` : g.l ? `${g.l} x ${g.w} x ${g.h}` : '–');
+    const tier = (t) => `<div class="t${t.won ? ' won' : t.status === 'REJECT' ? ' lost' : ''}"><span class="q">${num(t.qty)}</span><span class="p">${num(t.price)}đ</span><span class="m">${esc(t.code)} · ${cpDay(t.at)}${t.won ? ' ✓' : t.status === 'REJECT' ? ' ✗' : ''}</span></div>`;
+    const sections = parts
+      .map(({ kind, ply }) => {
+        const list = groups.filter((g) => g.kind === kind && g.ply === ply);
+        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
+        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Đơn giá theo số lượng (số lượng · đơn giá · báo giá mới nhất có mốc đó)</th></tr></thead><tbody>${rows}</tbody></table>`;
+      })
+      .join('');
+    const tiers = groups.reduce((n, g) => n + g.tiers.length, 0);
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Đơn giá theo số lượng - ${esc(name)}</title><style>
+      @page{size:A4 portrait;margin:8mm}
+      body{font:11px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;margin:0}
+      h1{font-size:16px;margin:0 0 2px}.sub{color:#475569;margin-bottom:8px}
+      h2{font-size:13px;margin:12px 0 4px;color:#1e3a8a;break-after:avoid}h2 small{font-weight:400;color:#64748b;font-size:11px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      th,td{border:1px solid #cbd5e1;padding:3px 5px;vertical-align:top;text-align:left}
+      th{background:#eef2ff;font-weight:700;font-size:10.5px}
+      tr{break-inside:avoid}td.c{text-align:center}td.n{white-space:nowrap}
+      .tp{color:#1d4ed8}
+      .tiers{padding:2px 4px}
+      .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dotted #e2e8f0}
+      .t:last-child{border-bottom:0}
+      .t .q{text-align:right;color:#334155}.t .p{text-align:right;font-weight:700}.t .m{color:#64748b;font-size:10px}
+      .t.won .p{color:#15803d}.t.lost .p{color:#94a3b8;text-decoration:line-through}
+    </style></head><body><h1>Đơn giá theo số lượng: ${esc(name)}</h1>
+      <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.length} sản phẩm · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
+      ${sections}</body></html>`;
+  }
+  async function cpRun(btn, cid, name) {
+    const label = btn.textContent;
+    btn.disabled = true;
+    try {
+      btn.textContent = '⏳ Đang đọc báo giá của khách…';
+      const opps = await cpReadCust(cid, (n, t) => (btn.textContent = `⏳ Đang đọc báo giá ${n}/${t}…`));
+      const groups = cpGroup(opps);
+      if (!groups.length) throw new Error('Khách này chưa có báo giá nào có số lượng và đơn giá.');
+      csPrint(cpSheet(name || `Khách ${cid}`, cid, groups, opps));
+      btn.textContent = label;
+    } catch (err) {
+      btn.textContent = `⚠️ ${err.message}`;
+      setTimeout(() => (btn.textContent = label), 6000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  const CP_LABEL = '🧾 In đơn giá theo SL';
+  const CP_TITLE = 'In mọi sản phẩm khách đã được báo giá: mỗi mốc số lượng kèm đơn giá của báo giá mới nhất có mốc đó';
+  function cpMount() {
+    // Trang khách hàng: cạnh nút 🖨 In size khách mua
+    const cid = location.pathname.match(/^\/khach-hang\/view\/(\d+)/)?.[1];
+    if (cid && !document.querySelector('[data-dg-cp]')) {
+      const sizes = document.querySelector('[data-dg-sizes]');
+      if (sizes) {
+        const item = document.createElement('div');
+        item.className = 'ant-space-item';
+        item.setAttribute('data-dg-cp', '1');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ant-btn ant-btn-default';
+        btn.textContent = CP_LABEL;
+        btn.title = CP_TITLE;
+        btn.addEventListener('click', () => {
+          const edit = [...document.querySelectorAll('.ant-space-item > button')].find((b) => b.innerText.trim() === 'Chỉnh sửa');
+          let box = edit?.closest('.ant-space')?.parentElement;
+          let name = '';
+          for (let i = 0; i < 4 && box && !name; i++, box = box.parentElement) {
+            const line = box.innerText.trim().split('\n')[0].trim();
+            if (!box.querySelector('button')?.innerText.includes(line)) name = line;
+          }
+          cpRun(btn, cid, name);
+        });
+        item.append(btn);
+        sizes.after(item);
+      }
+    }
+    // Trang báo giá / cơ hội: cạnh nút 📄 In PDF
+    const qid = currentQuoteId();
+    if (qid && !document.querySelector('.dg-cp-top')) {
+      const pdf = document.querySelector('.dg-pdf-top');
+      if (!pdf) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = pdf.className.replace('dg-pdf-top', 'dg-cp-top');
+      b.textContent = CP_LABEL;
+      b.title = CP_TITLE;
+      b.setAttribute('style', 'margin-left:8px;background:linear-gradient(90deg,#0ea5e9,#2563eb);border-color:#2563eb;color:#fff;font-weight:700');
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (b.disabled) return;
+        const q = renderCtx.quotes?.[qid] || (await kvGet('quotes'))[qid];
+        if (!q?.customer?.id) {
+          b.textContent = '⚠️ Chưa biết khách của báo giá này – thử lại sau vài giây';
+          return setTimeout(() => (b.textContent = CP_LABEL), 5000);
+        }
+        cpRun(b, q.customer.id, q.customer.name);
+      });
+      pdf.after(b);
+    }
+  }
+  if (IS_TOP) setInterval(cpMount, 1500);
   // ---------- 🤝 Bàn giao khách cho Liên (Tuấn Tú) ----------
   // Trang cơ hội / báo giá: nút cạnh tên NVKD ở tiêu đề "(Đoàn Thị Hương)" → bấm tên (CRM mở hộp "Bàn giao khách hàng")
   // → chọn nhân viên NV0440 → bấm "Bàn giao". Hỏi xác nhận trước khi làm.
