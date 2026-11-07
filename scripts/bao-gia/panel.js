@@ -7788,6 +7788,78 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectPriceButtons(), 2000);
 
+  // ---------- 🧮 Tính tổng (AI): bình luận có từ 2 khoản tiền trở lên (vd. phí bản in từng size + phí vận chuyển) ----------
+  // AI chỉ đọc ra từng khoản (tên + số tiền); tổng do máy tự cộng lại để không sai số. Không gửi gì lên CRM.
+  const SUM_MONEY_RE = /\d[\d.,]*\s*(?:k|đ|vnđ|vnd|tr|triệu|nghìn|ngàn)(?![a-zà-ỹ])/giu;
+  const sumCache = new Map(); // nội dung bình luận → kết quả (CRM vẽ lại bình luận thì hiện lại, không gọi AI lần nữa)
+  const fmtVnd = (n) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
+  function sumBoxHtml(r) {
+    if (r.err) return `<span style="color:#b91c1c">⚠️ ${esc(r.err)}</span>`;
+    const rows = r.items.map((x) => `<tr><td style="padding:2px 10px 2px 0">${esc(x.label)}</td><td style="padding:2px 0;text-align:right;font-variant-numeric:tabular-nums">${x.qty > 1 ? `${x.qty} × ${fmtVnd(x.price)} = ` : ''}${fmtVnd(x.amount)}</td></tr>`).join('');
+    return `<table style="border-collapse:collapse;font-size:13px">${rows}<tr style="border-top:1px solid #c7d2fe"><td style="padding:4px 10px 0 0;font-weight:800">Tổng cộng (${r.items.length} khoản)</td><td style="padding:4px 0 0;text-align:right;font-weight:800;color:#4338ca;font-size:15px">${fmtVnd(r.total)}</td></tr></table>${r.note ? `<div style="margin-top:4px;color:#64748b;font-size:12px">ℹ️ ${esc(r.note)}</div>` : ''}`;
+  }
+  async function aiSum(text) {
+    const system = 'Bạn đọc tin nhắn tiếng Việt và liệt kê từng khoản tiền cần cộng. Quy ước: "k" = nghìn đồng (420k = 420000), "tr"/"triệu" = 1.000.000, "750.000đ" = 750000. Kích thước dạng 330x300x90 là tên khoản, không phải số tiền. Nếu khoản có số lượng (vd. 2 bản x 300k) thì ghi qty và price. Chỉ trả về JSON, không giải thích.';
+    const prompt = `Tin nhắn:\n<<<\n${text}\n>>>\nTrả về đúng JSON: {"items":[{"label":"tên khoản ngắn gọn","qty":1,"price":số_đồng,"amount":số_đồng}],"note":"ghi chú nếu có khoản không rõ, không thì để trống"}`;
+    const raw = await call({ type: 'claude', system, prompt, maxTokens: 2000 });
+    const m = String(raw).match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('AI không trả về kết quả đọc được');
+    const j = JSON.parse(m[0]);
+    const items = (j.items || [])
+      .map((x) => {
+        const qty = Number(x.qty) > 0 ? Number(x.qty) : 1;
+        const price = Number(x.price) || 0;
+        const amount = price ? qty * price : Number(x.amount) || 0;
+        return { label: String(x.label || '').trim() || 'Khoản', qty, price: price || amount, amount };
+      })
+      .filter((x) => x.amount > 0);
+    if (!items.length) throw new Error('Không thấy khoản tiền nào');
+    return { items, total: items.reduce((t, x) => t + x.amount, 0), note: String(j.note || '').trim() };
+  }
+  function injectSumButtons() {
+    if (!MY_ADMIN) return;
+    for (const one of document.querySelectorAll('.ant-comment')) {
+      const content = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+      const detail = content?.querySelector('.ant-comment-content-detail');
+      if (!detail || content.querySelector(':scope > .dg-sum')) continue;
+      const text = (detail.innerText || '').trim();
+      if ((text.match(SUM_MONEY_RE) || []).length < 2) continue;
+      const wrap = document.createElement('div');
+      wrap.className = 'dg-sum';
+      wrap.setAttribute('style', 'margin:4px 0 2px');
+      const btn = document.createElement('span');
+      btn.textContent = '🧮 Tính tổng (AI)';
+      btn.title = 'Nhờ AI đọc các khoản tiền trong bình luận này rồi cộng tổng';
+      btn.setAttribute('style', 'display:inline-block;cursor:pointer;color:#fff;background:linear-gradient(90deg,#4f46e5,#0ea5e9);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px');
+      const out = document.createElement('div');
+      out.setAttribute('style', 'margin-top:4px;padding:6px 10px;border:1px solid #c7d2fe;border-radius:8px;background:#eef2ff;width:max-content;max-width:100%');
+      out.hidden = true;
+      const show = (r) => {
+        out.innerHTML = sumBoxHtml(r);
+        out.hidden = false;
+        btn.textContent = '🧮 Tính lại (AI)';
+      };
+      if (sumCache.has(text)) show(sumCache.get(text));
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.textContent.startsWith('⏳')) return;
+        btn.textContent = '⏳ AI đang tính…';
+        let r;
+        try {
+          r = await aiSum(text);
+        } catch (err) {
+          r = { err: err.message || String(err) };
+        }
+        if (!r.err) sumCache.set(text, r);
+        show(r);
+      });
+      wrap.append(btn, out);
+      detail.after(wrap);
+    }
+  }
+  if (IS_TOP) setInterval(() => injectSumButtons(), 2000);
+
   // Dòng hàng trong 1 PO (giấy tấm): Mã TP → "Thành tiền", quy đổi theo "Tổng thanh toán" của PO → giấy tấm từng sản phẩm
   function readPoLines(modal, total) {
     const t = [...modal.querySelectorAll('table')].find((x) => [...x.querySelectorAll('th')].some((th) => th.innerText.trim() === 'Mã TP'));
