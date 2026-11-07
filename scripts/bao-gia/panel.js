@@ -13119,14 +13119,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   if (IS_TOP) setInterval(csMount, 1500);
   // ---------- 🧾 In đơn giá theo số lượng: mọi báo giá của khách (tab Cơ hội của trang khách hàng, đọc trong khung ẩn) ----------
   // Mỗi sản phẩm (theo tên + size) 1 dòng; mỗi mốc số lượng 1 ô: đơn giá của báo giá MỚI NHẤT có mốc đó (kèm mã BG, ngày).
+  // Lần tải danh sách nhỏ (vd. limit=1 để lấy báo giá gần nhất ở tab thông tin) không phải danh sách đầy đủ → bỏ qua
+  const CP_MIN_LIMIT = 10;
   async function cpReadCust(cid, onProg) {
     const pages = new Map();
     let total = null;
     const onEv = (e) => {
       try {
         const m = JSON.parse(e.detail);
-        if (String(m.cid) !== String(cid)) return;
-        pages.set(m.page, m.list);
+        if (String(m.cid) !== String(cid) || (m.limit && m.limit < CP_MIN_LIMIT)) return;
+        if ((pages.get(m.page)?.length || 0) <= m.list.length) pages.set(m.page, m.list);
         total = Number(m.total) || 0;
       } catch {}
     };
@@ -13159,6 +13161,28 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       document.removeEventListener('dg:custOpps', onEv);
     }
   }
+  // Lưu báo giá đã đọc của từng khách (kv 'custPrices', đồng bộ lên máy chủ) → lần sau in ngay, không phải đọc lại.
+  // Ai mở tab Cơ hội của khách trên CRM cũng tự cập nhật thêm vào bản lưu.
+  const CP_FRESH_MS = 6 * 3600e3; // bản lưu đủ và mới hơn 6 giờ → dùng luôn
+  const cpSlim = (o) => ({ ...o, lines: o.lines.map(({ l, w, h, ...x }) => x) });
+  if (IS_TOP)
+    document.addEventListener('dg:custOpps', (e) => {
+      let m;
+      try {
+        m = JSON.parse(e.detail);
+      } catch {
+        return;
+      }
+      if (!m?.cid || !m.list?.length || (m.limit && m.limit < CP_MIN_LIMIT)) return;
+      kvGet('custPrices')
+        .then((all) => {
+          const cur = all[m.cid] || { opps: {} };
+          const opps = { ...cur.opps };
+          for (const o of m.list) opps[o.id] = cpSlim(o);
+          return kvMerge('custPrices', { [m.cid]: { ...cur, opps, total: Number(m.total) || cur.total || 0, seenAt: Date.now() } });
+        })
+        .catch(() => {});
+    });
   const CP_ST = { DRAFF: 'Bản thảo', REJECT: 'Thất bại', SUCCESS: 'Thành công', APPROVE: 'Duyệt lên đơn' };
   const cpDay = (sec) => (sec ? new Date((sec > 1e11 ? sec : sec * 1000) + 7 * 3600e3).toISOString().slice(0, 10).split('-').reverse().join('/') : '');
   // Phụ phí (bản in, khuôn, vận chuyển…) không phải sản phẩm → không đưa vào bảng
@@ -13221,8 +13245,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const label = btn.textContent;
     btn.disabled = true;
     try {
-      btn.textContent = '⏳ Đang đọc báo giá của khách…';
-      const opps = await cpReadCust(cid, (n, t) => (btn.textContent = `⏳ Đang đọc báo giá ${n}/${t}…`));
+      const saved = (await kvGet('custPrices'))[cid];
+      let opps;
+      if (saved?.fullAt && Date.now() - saved.fullAt < CP_FRESH_MS) opps = Object.values(saved.opps || {});
+      else {
+        btn.textContent = '⏳ Đang đọc báo giá của khách…';
+        opps = await cpReadCust(cid, (n, t) => (btn.textContent = `⏳ Đang đọc báo giá ${n}/${t}…`));
+        // đọc đủ → thay hẳn bản lưu (báo giá đã xoá trên CRM không còn trong bản lưu)
+        await kvMerge('custPrices', { [cid]: { opps: Object.fromEntries(opps.map((o) => [o.id, cpSlim(o)])), total: opps.length, fullAt: Date.now(), seenAt: Date.now(), name: name || '' } });
+      }
       const groups = cpGroup(opps);
       if (!groups.length) throw new Error('Khách này chưa có báo giá nào có số lượng và đơn giá.');
       csPrint(cpSheet(name || `Khách ${cid}`, cid, groups, opps));

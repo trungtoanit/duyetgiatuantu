@@ -547,6 +547,7 @@
     if (/\/opportunity\?/.test(url) && /[?&]customerId=\d+/.test(url) && Array.isArray(d.opportunities)) {
       const cid = Number(url.match(/[?&]customerId=(\d+)/)[1]);
       const page = Number(url.match(/[?&]page=(\d+)/)?.[1] || 1);
+      const limit = Number(url.match(/[?&]limit=(\d+)/)?.[1] || 0);
       const list = d.opportunities.map((o) => ({
         id: o.id,
         code: o.code,
@@ -560,7 +561,7 @@
           .map((p) => ({ name: p.name || '', subname: p.subname || '', unit: p.unit || '', qty: Number(p.quantity) || 0, price: Number(p.price) || 0, type: p.productType || '', rep: p.republishType || '', l: p.length, w: p.width, h: p.height, layer: p.layer, tp: p.product?.code || '' })),
       }));
       try {
-        (window.top || window).document.dispatchEvent(new CustomEvent('dg:custOpps', { detail: JSON.stringify({ cid, page, total: d.total, list }) }));
+        (window.top || window).document.dispatchEvent(new CustomEvent('dg:custOpps', { detail: JSON.stringify({ cid, page, limit, total: d.total, list }) }));
       } catch {}
       return;
     }

@@ -1,5 +1,5 @@
 {
-  "version": "1.2.500",
+  "version": "1.2.501",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -121,6 +121,5 @@
     "zaloSent",
     "donGuiPending",
     "tpCheck",
-  "buyReq"
-  ]
+  "buyReq", "custPrices", "dd.custPrices"]
 }
