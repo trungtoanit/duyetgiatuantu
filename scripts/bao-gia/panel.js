@@ -13320,24 +13320,28 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
         const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size, cùng giá</span>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
-        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Đơn giá theo số lượng (số lượng · đơn giá · báo giá mới nhất có mốc đó)</th></tr></thead><tbody>${rows}</tbody></table>`;
+        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Số lượng · Đơn giá · Báo giá mới nhất có mốc đó</th></tr></thead><tbody>${rows}</tbody></table>`;
       })
       .join('');
     const tiers = groups.reduce((n, g) => n + g.tiers.length, 0);
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Đơn giá theo số lượng - ${esc(name)}</title><style>
       @page{size:A4 portrait;margin:8mm}
-      body{font:11px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;margin:0}
-      h1{font-size:16px;margin:0 0 2px}.sub{color:#475569;margin-bottom:8px}
-      h2{font-size:13px;margin:12px 0 4px;color:#1e3a8a;break-after:avoid}h2 small{font-weight:400;color:#64748b;font-size:11px}
+      *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{font:11px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;margin:0}
+      h1{font-size:17px;margin:0 0 4px;text-align:center;text-transform:uppercase;padding-top:6px;border-top:3px double #e3141b}
+      .sub{color:#475569;margin-bottom:8px;text-align:center}
+      h2{font-size:13px;margin:12px 0 4px;color:#e3141b;break-after:avoid}h2 small{font-weight:400;color:#64748b;font-size:11px}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #cbd5e1;padding:3px 5px;vertical-align:top;text-align:left}
-      th{background:#eef2ff;font-weight:700;font-size:10.5px}
+      th,td{padding:4px 6px;vertical-align:middle;text-align:left}
+      th{background:#e3141b;color:#fff;font-weight:700;font-size:10.5px;text-transform:uppercase;line-height:1.2}
+      tbody tr:nth-child(odd) td{background:#f3f4f6}tbody tr:nth-child(even) td{background:#e5e7eb}
+      td{font-weight:600}
       tr{break-inside:avoid}td.c{text-align:center}td.n{white-space:nowrap}
-      .tp{color:#1d4ed8}.more{color:#64748b;font-size:10px;white-space:nowrap}
+      .tp{color:#e3141b}.more{color:#64748b;font-size:10px;font-weight:400;white-space:nowrap}
       .tiers{padding:2px 4px}
-      .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dotted #e2e8f0}
+      .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dashed #cbd5e1}
       .t:last-child{border-bottom:0}
-      .t .q{text-align:right;color:#334155}.t .p{text-align:right;font-weight:700}.t .m{color:#64748b;font-size:10px}
+      .t .q{text-align:right;color:#334155}.t .p{text-align:right;font-weight:700}.t .m{color:#64748b;font-size:10px;font-weight:400}
       .t.won .p{color:#15803d}.t.lost .p{color:#94a3b8;text-decoration:line-through}
     </style></head><body><h1>Đơn giá theo số lượng: ${esc(name)}</h1>
       <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm (gộp còn ${groups.length} dòng: cùng size, cùng số lượng và đơn giá chỉ hiện 1) · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
