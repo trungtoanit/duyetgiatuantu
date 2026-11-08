@@ -13459,9 +13459,10 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (mgNum(cq.innerText) !== bl.qty || mgNum(cp.innerText) !== Math.round(bl.price)) throw new Error(`Dòng ${i + 1} trên mẫu in khác dữ liệu báo giá (có thay đổi chưa lưu?) – bấm Cập nhật rồi thử lại.`);
       const ls = maps.map((m) => m[i]);
       const unit = /đ|₫/.test(ct.innerText) ? ' đ' : '';
-      cq.innerHTML = stack(ls.map((l) => (l ? mgFmt(l.qty) : '–')));
-      cp.innerHTML = stack(ls.map((l) => (l ? mgFmt(l.price) : '–')));
-      ct.innerHTML = stack(ls.map((l) => (l ? `${mgFmt(l.qty * l.price)}${unit}` : '–')), true);
+      const has = ls.filter(Boolean); // mốc nào không có sản phẩm này thì bỏ, không hiện '–'
+      cq.innerHTML = stack(has.map((l) => mgFmt(l.qty)));
+      cp.innerHTML = stack(has.map((l) => mgFmt(l.price)));
+      ct.innerHTML = stack(has.map((l) => `${mgFmt(l.qty * l.price)}${unit}`), true);
     });
     // Khu tổng: Trước thuế / VAT / TỔNG TIỀN – mỗi mốc 1 dòng (VAT theo tỉ lệ của báo giá gốc)
     const leaf = (re) => [...doc.querySelectorAll('td, th, div, span, b, strong, p')].find((e) => re.test((e.textContent || '').trim()) && ![...e.children].some((c) => re.test((c.textContent || '').trim())));
@@ -13475,13 +13476,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     const vPre = valOf(leaf(/^Trước thuế$/i));
     const vVat = valOf(leaf(/^VAT\b/i));
-    const vTot = valOf(leaf(/^TỔNG TIỀN$/i));
     const basePre = mgNum(vPre?.innerText);
-    const rate = basePre ? mgNum(vVat?.innerText) / basePre : 0.08;
-    const sums = tiers.map((o) => {
-      const pre = o.lines.reduce((t, l) => t + l.qty * l.price, 0);
+    const baseVat = mgNum(vVat?.innerText);
+    let vTot = valOf(leaf(/^T[ỔổO]NG\s*(TI[ỀềE]N|C[ỘộO]NG)\s*:?$/i));
+    if (!vTot || mgNum(vTot.innerText) !== basePre + baseVat) {
+      // Dự phòng: ô lá có giá trị đúng bằng tổng tiền gốc (không nằm trong bảng sản phẩm)
+      const want = basePre + baseVat;
+      const hit = want && [...doc.querySelectorAll('td, th, div, span, b, strong, p')].filter((e) => !table.contains(e) && e !== vPre && e !== vVat && !vPre?.contains(e) && !vVat?.contains(e) && mgNum(e.textContent) === want && ![...e.children].some((c) => mgNum(c.textContent) === want));
+      if (hit && hit.length) vTot = hit[hit.length - 1];
+    }
+    const rate = basePre ? baseVat / basePre : 0.08;
+    // Chỉ cộng các dòng khớp với báo giá đang mở (báo giá ghép có thể có thêm sản phẩm khác)
+    const sums = maps.map((m) => {
+      const ls = m.filter(Boolean);
+      const pre = ls.reduce((t, l) => t + l.qty * l.price, 0);
       const vat = Math.round(pre * rate);
-      return { lab: `SL ${mgFmt(o.lines[0]?.qty || 0)}`, pre, vat, tot: pre + vat };
+      return { lab: `SL ${mgFmt(ls[0]?.qty || 0)}`, pre, vat, tot: pre + vat };
     });
     const put = (el, key) => {
       if (!el) return;
