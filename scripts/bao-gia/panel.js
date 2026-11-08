@@ -13039,8 +13039,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const num = (x) => Number(x.replace(',', '.'));
     const m = /(\d+(?:[.,]\d+)?)\s*D\s*x\s*(\d+(?:[.,]\d+)?)\s*R\s*x\s*(\d+(?:[.,]\d+)?)\s*C/i.exec(name);
     const ply = Number(/(\d+)\s*lớp/i.exec(name)?.[1]) || 0;
-    // Tên hiển thị: bỏ cụm " - ( … )" phía sau (vd thùng carton "… có in - ( Kiểu A1 - PNTP_140/140/120 - C)")
-    const short = name.replace(/\s*-\s*\([\s\S]*$/, '').replace(m?.[0] || '\0', '').replace(/-?\s*\d+\s*lớp/i, '').replace(/(\s*-\s*)+/g, ' - ').replace(/^[\s-]+|[\s-]+$/g, '');
+    // Tên hiển thị: bỏ size, số lớp, rồi cắt cụm " - ( … )" phía sau (vd "… có in - 535D x 320R x 430C - 3 lớp( Kiểu A1 - PNTP_…)" → "… có in")
+    const short = name.replace(m?.[0] || '\0', '').replace(/-?\s*\d+\s*lớp/i, '').replace(/(\s*-\s*)+/g, ' - ').replace(/\s*-\s*\([\s\S]*$/, '').replace(/^[\s-]+|[\s-]+$/g, '') || name.replace(/\s*\([\s\S]*$/, '').trim();
     const kw = /^\s*(hộp|thùng|tấm|tem|túi|vách)\s+(giấy|carton)/i.exec(name);
     const kind = kw ? `${kw[1][0].toUpperCase()}${kw[1].slice(1).toLowerCase()} ${kw[2].toLowerCase()}` : 'Khác';
     return { kind, ply, short, ...(m ? { d: num(m[1]), r: num(m[2]), c: num(m[3]) } : {}) };
