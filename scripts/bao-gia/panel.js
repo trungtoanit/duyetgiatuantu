@@ -13292,21 +13292,29 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const out = [];
     for (const g of groups) {
       const sz = g.d != null ? [g.d, g.r, g.c] : g.l ? [g.l, g.w, g.h] : null;
-      const key = sz && g.tiers.length ? [g.kind, g.ply, ...sz, g.tiers.map((t) => `${t.qty}:${t.price}`).join(',')].join('|') : '';
+      // Cùng loại, cùng số lớp, cùng size → 1 dòng; mỗi mốc số lượng giữ đơn giá của báo giá mới nhất
+      const key = sz && g.tiers.length ? [g.kind, g.ply, ...sz].join('|') : '';
       const head = key && seen.get(key);
       if (!head) {
-        const item = { ...g, more: 0, tiers: g.tiers.map((t) => ({ ...t })) };
+        const item = { ...g, more: 0, names: [g.short || g.name], tiers: g.tiers.map((t) => ({ ...t })) };
         if (key) seen.set(key, item);
         out.push(item);
         continue;
       }
       head.more++;
+      head.names.push(g.short || g.name);
       if (g.lastAt > head.lastAt) Object.assign(head, { name: g.name, short: g.short, lastAt: g.lastAt, tp: g.tp || head.tp });
       for (const t of g.tiers) {
         const h = head.tiers.find((x) => x.qty === t.qty);
-        if (t.at > h.at) Object.assign(h, { at: t.at, code: t.code, status: t.status, won: t.won });
-        else if (t.won) h.won = true;
+        if (!h) head.tiers.push({ ...t });
+        else if (t.at > h.at) Object.assign(h, { price: t.price, at: t.at, code: t.code, status: t.status, won: t.won });
+        else if (t.at === h.at && t.won) h.won = true;
       }
+    }
+    for (const g of out) {
+      g.tiers.sort((a, b) => a.qty - b.qty);
+      const main = normName(g.short || g.name);
+      g.others = [...new Map((g.names || []).filter((n) => normName(n) !== main).map((n) => [normName(n), n])).values()];
     }
     return out;
   }
@@ -13319,7 +13327,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sections = parts
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
-        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size, cùng giá</span>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
+        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size</span>` : ''}${g.others?.length ? `<div class="oth">${g.others.slice(0, 4).map(esc).join(' · ')}${g.others.length > 4 ? ` · +${g.others.length - 4}` : ''}</div>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
         return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Số lượng · Đơn giá · Báo giá mới nhất có mốc đó</th></tr></thead><tbody>${rows}</tbody></table>`;
       })
       .join('');
@@ -13337,14 +13345,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       tbody tr:nth-child(odd) td{background:#f3f4f6}tbody tr:nth-child(even) td{background:#e5e7eb}
       td{font-weight:600}
       tr{break-inside:avoid}td.c{text-align:center}td.n{white-space:nowrap}
-      .tp{color:#e3141b}.more{color:#64748b;font-size:10px;font-weight:400;white-space:nowrap}
+      .tp{color:#e3141b}.more{color:#64748b;font-size:10px;font-weight:400;white-space:nowrap}.oth{color:#64748b;font-size:9.5px;font-weight:400;margin-top:1px}
       .tiers{padding:2px 4px}
       .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dashed #cbd5e1}
       .t:last-child{border-bottom:0}
       .t .q{text-align:right;color:#334155}.t .p{text-align:right;font-weight:700}.t .m{color:#64748b;font-size:10px;font-weight:400}
       .t.won .p{color:#15803d}.t.lost .p{color:#94a3b8;text-decoration:line-through}
     </style></head><body><h1>Đơn giá theo số lượng: ${esc(name)}</h1>
-      <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm (gộp còn ${groups.length} dòng: cùng size, cùng số lượng và đơn giá chỉ hiện 1) · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
+      <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm (gộp còn ${groups.length} dòng: cùng size chỉ hiện 1, mỗi mốc lấy đơn giá báo giá mới nhất) · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
       ${sections}</body></html>`;
   }
   async function cpRun(btn, cid, name) {
