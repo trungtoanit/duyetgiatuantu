@@ -13707,6 +13707,63 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     nameEl.after(b);
   }
   if (IS_TOP) setInterval(hoMount, 1500);
+  // ---------- ❌ Thất bại nhanh (Tuấn Tú – danh sách /bao-gia): nút trên từng dòng ----------
+  // Bấm → hỏi xác nhận → mở báo giá ở tab mới (#dg-reject) → trang chi tiết tự bấm nút "Thất bại" ở nhóm Tình trạng báo giá.
+  // Hộp hỏi / lý do CRM hiện ra sau đó (nếu có) để người dùng tự xử lý.
+  function rjMount() {
+    if (SITE.key !== 'tuantu' || !/^\/bao-gia\/?$/.test(location.pathname)) return;
+    for (const t of document.querySelectorAll('table')) {
+      if (t.closest('.ant-modal-wrap, #dg-root')) continue;
+      const ths = [...t.querySelectorAll('thead th')];
+      const ci = ths.findIndex((th) => th.innerText.trim() === 'Mã báo giá');
+      if (ci < 0) continue;
+      for (const tr of t.querySelectorAll('tbody tr.ant-table-row')) {
+        const cell = tr.cells[ci];
+        if (!cell || cell.querySelector('[data-dg-rj]')) continue;
+        const code = cell.innerText.match(/BG(\d{3,})/)?.[0];
+        if (!code) continue;
+        const b = document.createElement('span');
+        b.setAttribute('data-dg-rj', '1');
+        b.textContent = '❌';
+        b.title = `Mở ${code} và chọn Thất bại`;
+        b.setAttribute('style', 'margin-left:6px;cursor:pointer;font-size:11px;opacity:.55;vertical-align:middle');
+        b.addEventListener('mouseenter', () => (b.style.opacity = '1'));
+        b.addEventListener('mouseleave', () => (b.style.opacity = '.55'));
+        for (const ev of ['mousedown', 'mouseup']) b.addEventListener(ev, (e) => e.stopPropagation());
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const name = tr.innerText.replace(/\s+/g, ' ').trim().slice(0, 140);
+          if (!confirm(`Chuyển ${code} sang THẤT BẠI?\n\n${name}`)) return;
+          window.open(`/bao-gia/update/${code.slice(2)}#dg-reject`, '_blank');
+        });
+        cell.append(b);
+      }
+    }
+  }
+  if (IS_TOP) setInterval(rjMount, 1500);
+  // Trang chi tiết mở bằng #dg-reject: chờ nhóm nút Tình trạng báo giá rồi bấm "Thất bại" (1 lần)
+  async function rjAuto() {
+    if (SITE.key !== 'tuantu' || location.hash !== '#dg-reject' || !/^\/bao-gia\/update\/\d+/.test(location.pathname)) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    const find = () => {
+      const lbl = [...document.querySelectorAll('label, span, div')].find((e) => e.childElementCount === 0 && e.textContent.trim() === 'Tình trạng báo giá' && !e.closest('#dg-root'));
+      let scope = lbl?.parentElement;
+      for (let k = 0; k < 6 && scope; k++, scope = scope.parentElement) {
+        const leaf = [...scope.querySelectorAll('*')].find((e) => e.childElementCount === 0 && e.textContent.replace(/[✓✔]/g, '').trim() === 'Thất bại');
+        if (leaf) return leaf;
+      }
+      return null;
+    };
+    const leaf = await waitFor(find, 25000, 300);
+    if (!leaf) return alert('Không thấy nút "Thất bại" ở Tình trạng báo giá – bấm tay giúp em.');
+    await sleep(600);
+    const btn = leaf.closest('[data-dg-st], button, label, .ant-radio-button-wrapper, [role="button"]') || leaf;
+    if (btn.getAttribute('data-on') === '1' || /checked|active|selected/.test(String(btn.className))) return;
+    btn.scrollIntoView({ block: 'center' });
+    btn.click();
+  }
+  if (IS_TOP) setTimeout(rjAuto, 800);
   // ---------- 🏭 Việc Thành phẩm theo bảng "10 ngày doanh số + báo cáo TP" (/dashboard/ke-hoach) ----------
   // Tổng Báo cáo TP < tổng Báo giá → sản xuất yếu hơn kinh doanh; ngày làm việc gần nhất (trừ Chủ nhật) dưới trung bình → hỏi tình hình.
   // Thứ 2–7 từ 8 giờ đọc 1 lần / ngày, ghi kv 'tpCheck' (YYYY-MM-DD) → quy tắc 'tp' tạo việc giao cho nhóm Zalo, luồng nhắc việc gửi tin vào nhóm.
