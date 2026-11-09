@@ -4292,7 +4292,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cellBtn = rows()[i]?.cells[qi]?.querySelector('button');
       if (!cellBtn) throw new Error(`Không thấy ô số lượng dòng ${i + 1}.`);
       if (Number(cellBtn.innerText.replace(/[^\d]/g, '')) === qty) continue;
-      btn.textContent = `⏳ Dòng ${i + 1}/${n}…`;
+      btn.dataset.label = `⏳ Dòng ${i + 1}/${n}…`;
       if (bqModal()) throw new Error('Đang có hộp Tính giá mở – đóng hộp đó rồi thử lại.');
       cellBtn.click();
       const m = await waitFor(bqModal, 8000, 150);
@@ -4322,8 +4322,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!th || th.querySelector('.dg-bq')) return;
     const b = document.createElement('span');
     b.className = 'dg-bq';
+    // Nhãn vẽ bằng ::after (không nằm trong innerText) để tiêu đề cột vẫn đúng là "Số lượng" – các nút khác tìm bảng theo tiêu đề này
+    if (!document.getElementById('dg-bq-css')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-bq-css">.dg-bq::after{content:attr(data-label)}</style>');
     const LABEL = '✏️ Hàng loạt';
-    b.textContent = LABEL;
+    b.dataset.label = LABEL;
     b.title = 'Đổi số lượng cho mọi dòng sản phẩm: lần lượt mở hộp Tính giá từng dòng, nhập số lượng mới rồi bấm Lưu';
     b.setAttribute('style', 'display:inline-block;margin-left:6px;cursor:pointer;color:#fff;background:linear-gradient(90deg,#f59e0b,#ea580c);border-radius:999px;padding:0 8px;font-weight:700;font-size:11px;white-space:nowrap;vertical-align:middle');
     b.addEventListener('click', async (e) => {
@@ -4337,12 +4339,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       b.dataset.busy = '1';
       try {
         const r = await bqRun(b, qty);
-        b.textContent = r.changed ? `✅ Đã đổi ${r.changed}/${r.n} dòng – kiểm tra giá rồi bấm Cập nhật` : '✅ Các dòng đã đúng số lượng này';
+        b.dataset.label = r.changed ? `✅ Đã đổi ${r.changed}/${r.n} dòng – kiểm tra giá rồi bấm Cập nhật` : '✅ Các dòng đã đúng số lượng này';
       } catch (err) {
-        b.textContent = `⚠️ ${err.message}`;
+        b.dataset.label = `⚠️ ${err.message}`;
       }
       setTimeout(() => {
-        b.textContent = LABEL;
+        b.dataset.label = LABEL;
         delete b.dataset.busy;
       }, 8000);
     });
