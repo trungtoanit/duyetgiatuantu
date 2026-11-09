@@ -13708,8 +13708,78 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(hoMount, 1500);
   // ---------- ❌ Thất bại nhanh (Tuấn Tú – danh sách /bao-gia): nút trên từng dòng ----------
-  // Bấm → hỏi xác nhận → mở báo giá ở tab mới (#dg-reject) → trang chi tiết tự bấm nút "Thất bại" ở nhóm Tình trạng báo giá.
-  // Hộp hỏi / lý do CRM hiện ra sau đó (nếu có) để người dùng tự xử lý.
+  // Bấm → hỏi xác nhận → mở báo giá trong khung ẩn, chờ tải xong → bấm "Thất bại" ở Tình trạng báo giá → OK các hộp xác nhận
+  // → tải lại danh sách (sang trang bên cạnh rồi về lại trang đang xem; chỉ 1 trang thì đổi tab rồi về).
+  async function rjReject(doc) {
+    const find = () => {
+      const d = doc();
+      if (!d || !/^\/bao-gia\/update\/\d+/.test(d.location?.pathname || '')) return null;
+      const lbl = [...d.querySelectorAll('label, span, div')].find((e) => e.childElementCount === 0 && e.textContent.trim() === 'Tình trạng báo giá' && !e.closest('#dg-root'));
+      let scope = lbl?.parentElement;
+      for (let k = 0; k < 6 && scope; k++, scope = scope.parentElement) {
+        const leaf = [...scope.querySelectorAll('*')].find((e) => e.childElementCount === 0 && e.textContent.replace(/[✓✔]/g, '').trim() === 'Thất bại');
+        if (leaf) return leaf;
+      }
+      return null;
+    };
+    const leaf = await waitFor(find, 30000, 300);
+    if (!leaf) throw new Error('Không thấy nút "Thất bại" ở Tình trạng báo giá');
+    await sleep(800);
+    const btn = leaf.closest('[data-dg-st], button, label, .ant-radio-button-wrapper, [role="button"]') || leaf;
+    const isOn = () => btn.getAttribute('data-on') === '1' || /checked|active|selected/.test(String(btn.className));
+    if (isOn()) return 'already';
+    const d = doc();
+    const mods = () => [...d.querySelectorAll('.ant-modal-wrap')].filter((m) => d.defaultView.getComputedStyle(m).display !== 'none');
+    const before = new Set(mods());
+    btn.click();
+    // Hộp hỏi xác nhận CRM hiện ra sau khi bấm Thất bại → bấm OK; nếu sau đó có hộp báo thành công cũng bấm OK
+    for (let round = 0; round < 2; round++) {
+      const m = await waitFor(() => mods().find((x) => !before.has(x) && x.querySelector('.ant-modal')?.offsetParent), round ? 4000 : 6000, 150);
+      if (!m) break;
+      before.add(m);
+      await sleep(300);
+      const ok = [...m.querySelectorAll('.ant-modal-confirm-btns button, .ant-modal-footer button')].find((b) => /^(OK|Đồng ý|Xác nhận|Có|Lưu|Thất bại)$/i.test(b.innerText.trim())) || m.querySelector('.ant-modal-confirm-btns .ant-btn-primary, .ant-modal-footer .ant-btn-primary');
+      if (!ok) throw new Error('Hộp xác nhận không có nút OK – mở báo giá bấm tay giúp em');
+      ok.click();
+      const gone = await waitFor(() => !m.querySelector('.ant-modal')?.offsetParent, 5000, 150);
+      if (!gone) throw new Error('Hộp xác nhận chưa đóng (CRM cần nhập thêm?) – mở báo giá bấm tay giúp em');
+    }
+    await sleep(1500); // chờ CRM lưu xong trước khi gỡ khung
+    return isOn() ? 'done' : 'sent';
+  }
+  // Tải lại bảng danh sách: sang trang bên cạnh rồi về trang đang xem; chỉ có 1 trang thì sang tab khác rồi về
+  async function rjReloadList() {
+    const rowsSig = () => [...document.querySelectorAll('tbody tr.ant-table-row')].filter((r) => !r.closest('#dg-root, .ant-modal-wrap')).map((r) => r.getAttribute('data-row-key') || r.innerText.slice(0, 40)).join('|');
+    const changed = async (sig) => !!(await waitFor(() => rowsSig() !== sig, 10000, 200));
+    const pg = [...document.querySelectorAll('.ant-pagination')].find((p) => !p.closest('#dg-root, .ant-modal-wrap'));
+    const cur = Number(pg?.querySelector('.ant-pagination-item-active')?.title || pg?.querySelector('.ant-pagination-item-active')?.innerText);
+    const side = pg?.querySelector('.ant-pagination-prev:not(.ant-pagination-disabled)') || pg?.querySelector('.ant-pagination-next:not(.ant-pagination-disabled)');
+    if (side && cur) {
+      let sig = rowsSig();
+      side.click();
+      await changed(sig);
+      await sleep(300);
+      const back = pg.querySelector(`.ant-pagination-item-${cur}`);
+      sig = rowsSig();
+      if (back) {
+        back.click();
+        await changed(sig);
+      }
+      return;
+    }
+    const tabs = [...document.querySelectorAll('.ant-tabs-tab')].filter((t) => !t.closest('#dg-root, .ant-modal-wrap'));
+    const act = tabs.find((t) => t.classList.contains('ant-tabs-tab-active'));
+    const other = tabs.find((t) => t !== act && t.parentElement === act?.parentElement);
+    if (!act || !other) return;
+    let sig = rowsSig();
+    (other.querySelector('.ant-tabs-tab-btn') || other).click();
+    await changed(sig);
+    await sleep(300);
+    sig = rowsSig();
+    (act.querySelector('.ant-tabs-tab-btn') || act).click();
+    await changed(sig);
+  }
+  let rjBusy = false;
   function rjMount() {
     if (SITE.key !== 'tuantu' || !/^\/bao-gia\/?$/.test(location.pathname)) return;
     for (const t of document.querySelectorAll('table')) {
@@ -13725,17 +13795,41 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const b = document.createElement('span');
         b.setAttribute('data-dg-rj', '1');
         b.textContent = '❌';
-        b.title = `Mở ${code} và chọn Thất bại`;
-        b.setAttribute('style', 'margin-left:6px;cursor:pointer;font-size:11px;opacity:.55;vertical-align:middle');
+        b.title = `Chuyển ${code} sang Thất bại (chạy ngầm, xong tự tải lại danh sách)`;
+        b.setAttribute('style', 'margin-left:6px;cursor:pointer;font-size:11px;opacity:.55;vertical-align:middle;white-space:nowrap');
         b.addEventListener('mouseenter', () => (b.style.opacity = '1'));
         b.addEventListener('mouseleave', () => (b.style.opacity = '.55'));
         for (const ev of ['mousedown', 'mouseup']) b.addEventListener(ev, (e) => e.stopPropagation());
-        b.addEventListener('click', (e) => {
+        b.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (b.dataset.busy) return;
+          if (rjBusy) return alert('Đang chuyển một báo giá khác sang Thất bại – đợi xong rồi bấm tiếp.');
           const name = tr.innerText.replace(/\s+/g, ' ').trim().slice(0, 140);
           if (!confirm(`Chuyển ${code} sang THẤT BẠI?\n\n${name}`)) return;
-          window.open(`/bao-gia/update/${code.slice(2)}#dg-reject`, '_blank');
+          rjBusy = true;
+          b.dataset.busy = '1';
+          b.style.opacity = '1';
+          b.textContent = '⏳ đang mở…';
+          tr.style.opacity = '.6';
+          try {
+            const r = await tkInFrame(`/bao-gia/update/${code.slice(2)}`, async (doc) => {
+              b.textContent = '⏳ bấm Thất bại…';
+              return rjReject(doc);
+            });
+            b.textContent = r === 'already' ? '✅ đã Thất bại sẵn' : '✅ Thất bại';
+            b.title = r === 'sent' ? 'Đã bấm Thất bại (chưa đọc được trạng thái – xem lại sau khi tải lại)' : b.title;
+            await sleep(500);
+            await rjReloadList();
+          } catch (err) {
+            tr.style.opacity = '';
+            b.textContent = '⚠️';
+            b.title = err.message;
+            alert(`${code}: ${err.message}`);
+          } finally {
+            rjBusy = false;
+            delete b.dataset.busy;
+          }
         });
         cell.append(b);
       }
