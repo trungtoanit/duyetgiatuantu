@@ -13761,7 +13761,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const btn = leaf.closest('[data-dg-st], button, label, .ant-radio-button-wrapper, [role="button"]') || leaf;
     if (btn.getAttribute('data-on') === '1' || /checked|active|selected/.test(String(btn.className))) return;
     btn.scrollIntoView({ block: 'center' });
+    const before = new Set(visModalsTop());
     btn.click();
+    // Hộp hỏi xác nhận CRM hiện ra sau khi bấm Thất bại → bấm OK; nếu sau đó có hộp báo thành công cũng bấm OK
+    for (let round = 0; round < 2; round++) {
+      const m = await waitFor(() => visModalsTop().find((x) => !before.has(x) && x.querySelector('.ant-modal')?.offsetParent), round ? 4000 : 6000, 150);
+      if (!m) break;
+      before.add(m);
+      await sleep(300);
+      const ok = [...m.querySelectorAll('.ant-modal-confirm-btns button, .ant-modal-footer button')].find((b) => /^(OK|Đồng ý|Xác nhận|Có|Lưu|Thất bại)$/i.test(b.innerText.trim())) || m.querySelector('.ant-modal-confirm-btns .ant-btn-primary, .ant-modal-footer .ant-btn-primary');
+      if (!ok) break;
+      ok.click();
+      await waitFor(() => !m.querySelector('.ant-modal')?.offsetParent, 5000, 150);
+    }
   }
   if (IS_TOP) setTimeout(rjAuto, 800);
   // ---------- 🏭 Việc Thành phẩm theo bảng "10 ngày doanh số + báo cáo TP" (/dashboard/ke-hoach) ----------
