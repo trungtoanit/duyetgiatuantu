@@ -13352,6 +13352,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .dgcp .t:last-child{border-bottom:0}
       .dgcp .t .q{text-align:right;color:#334155}.dgcp .t .p{text-align:right;font-weight:700}.dgcp .t .m{color:#64748b;font-size:10px;font-weight:400}
       .dgcp .t.won .p{color:#15803d}.dgcp .t.lost .p{color:#94a3b8;text-decoration:line-through}
+      .dgcp .more,.dgcp .oth,.dgcp h2 small{display:none !important}
       </style>${sections}</div>`;
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Đơn giá theo số lượng - ${esc(name)}</title><style>
       @page{size:A4 portrait;margin:8mm}
