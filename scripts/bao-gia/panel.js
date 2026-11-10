@@ -13337,7 +13337,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
         const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size</span>` : ''}${g.others?.length ? `<div class="oth">${g.others.slice(0, 4).map(esc).join(' · ')}${g.others.length > 4 ? ` · +${g.others.length - 4}` : ''}</div>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(cpUnit(g.unit))}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
-        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 46, 13, 7, 30].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Số lượng · Đơn giá · Báo giá mới nhất có mốc đó</th></tr></thead><tbody>${rows}</tbody></table>`;
+        return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 34, 14, 8, 40].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Số lượng · Đơn giá · Báo giá mới nhất có mốc đó</th></tr></thead><tbody>${rows}</tbody></table>`;
       })
       .join('');
     const tiers = groups.reduce((n, g) => n + g.tiers.length, 0);
@@ -13357,7 +13357,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .dgcp .tiers{padding:2px 4px !important}
       .dgcp .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dashed #cbd5e1}
       .dgcp .t:last-child{border-bottom:0}
-      .dgcp .t .q{text-align:right;color:#334155}.dgcp .t .p{text-align:right;font-weight:700}.dgcp .t .m{color:#64748b;font-size:10px;font-weight:400}
+      .dgcp .t .q{text-align:right;color:#334155}.dgcp .t .p{text-align:right;font-weight:700}.dgcp .t .m{color:#64748b;font-size:10px;font-weight:400;white-space:nowrap}
       .dgcp .t.won .p{color:#15803d}.dgcp .t.lost .p{color:#94a3b8;text-decoration:line-through}
       .dgcp .more,.dgcp .oth,.dgcp h2 small{display:none !important}
       </style>${sections}</div>`;
