@@ -13320,7 +13320,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     return out;
   }
-  function cpSheet(name, cid, groups, opps) {
+  function cpSheet(name, cid, groups, opps, inTpl = false) {
     const num = (n) => Math.round(n).toLocaleString('vi-VN');
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
     const parts = [...new Map(groups.map((g) => [`${g.kind}|${g.ply}`, { kind: g.kind, ply: g.ply }])).values()].sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || a.kind.localeCompare(b.kind, 'vi') || (a.ply || 99) - (b.ply || 99));
@@ -13334,6 +13334,25 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       })
       .join('');
     const tiers = groups.reduce((n, g) => n + g.tiers.length, 0);
+    const sub = `${opps.length} báo giá · ${groups.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm (gộp còn ${groups.length} dòng) · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch)`;
+    // Ghép vào mẫu in báo giá của CRM: chỉ phần bảng (CSS giới hạn trong .dgcp, xoá viền / nền của CSS mẫu)
+    if (inTpl)
+      return `<div class="dgcp"><style>
+      .dgcp{font:11px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;margin:6px 0 10px;text-align:left}
+      .dgcp .sub{color:#475569;margin-bottom:4px;font-size:10.5px}
+      .dgcp h2{font-size:13px;margin:10px 0 4px;color:#e3141b;font-weight:700}.dgcp h2 small{font-weight:400;color:#64748b;font-size:11px}
+      .dgcp table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0}
+      .dgcp th,.dgcp td{padding:4px 6px !important;vertical-align:middle;text-align:left;border:0 !important;font-size:11px}
+      .dgcp th{background:#e3141b !important;color:#fff !important;font-weight:700;font-size:10.5px;text-transform:uppercase;line-height:1.2}
+      .dgcp tbody tr:nth-child(odd) td{background:#f3f4f6 !important}.dgcp tbody tr:nth-child(even) td{background:#e5e7eb !important}
+      .dgcp td{font-weight:600}.dgcp td.c{text-align:center}.dgcp td.n{white-space:nowrap}
+      .dgcp .tp{color:#e3141b}.dgcp .more{color:#64748b;font-size:10px;font-weight:400;white-space:nowrap}.dgcp .oth{color:#64748b;font-size:9.5px;font-weight:400;margin-top:1px}
+      .dgcp .tiers{padding:2px 4px !important}
+      .dgcp .t{display:grid;grid-template-columns:62px 72px 1fr;gap:4px;align-items:baseline;padding:1px 0;border-bottom:1px dashed #cbd5e1}
+      .dgcp .t:last-child{border-bottom:0}
+      .dgcp .t .q{text-align:right;color:#334155}.dgcp .t .p{text-align:right;font-weight:700}.dgcp .t .m{color:#64748b;font-size:10px;font-weight:400}
+      .dgcp .t.won .p{color:#15803d}.dgcp .t.lost .p{color:#94a3b8;text-decoration:line-through}
+      </style><div class="sub">Đơn giá theo số lượng · ${sub}</div>${sections}</div>`;
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Đơn giá theo số lượng - ${esc(name)}</title><style>
       @page{size:A4 portrait;margin:8mm}
       *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -13357,6 +13376,31 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <div class="sub">Mã khách ${esc(cid)} · ${opps.length} báo giá · ${groups.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm (gộp còn ${groups.length} dòng: cùng size chỉ hiện 1, mỗi mốc lấy đơn giá báo giá mới nhất) · ${tiers} mốc số lượng · ✓ đã lên đơn / thành công, ✗ thất bại (gạch) · In lúc ${esc(new Date().toLocaleString('vi-VN'))}</div>
       ${sections}</body></html>`;
   }
+  // Mẫu in báo giá → thay bảng sản phẩm bằng bảng đơn giá theo SL, bỏ khu tổng tiền (Trước thuế / VAT / Tổng / Bằng chữ)
+  function cpMutate(doc, html) {
+    const table = [...doc.querySelectorAll('table')].find((t) => /SẢN PHẨM/i.test(t.innerText) && /THÀNH TIỀN/i.test(t.innerText) && /SỐ\s*LƯỢNG/i.test(t.innerText));
+    if (!table) throw new Error('Không thấy bảng sản phẩm trong mẫu in.');
+    const TOT = /^(Trước thuế|VAT\b.*|Thuế( giá trị gia tăng| GTGT)?.*|T[ỔổO]NG\s*(TI[ỀềE]N|C[ỘộO]NG).*|Tổng tiền thanh toán.*|Bằng chữ.*|Số tiền bằng chữ.*)$/i;
+    // khu tổng nằm ngoài bảng sản phẩm: xoá dòng / khối nhỏ nhất chứa nhãn
+    const labs = [...doc.querySelectorAll('td, th, div, span, b, strong, p, i')].filter((e) => !table.contains(e) && TOT.test((e.textContent || '').trim()) && (e.textContent || '').length < 120 && ![...e.children].some((c) => TOT.test((c.textContent || '').trim())));
+    for (const l of labs) {
+      if (!l.isConnected) continue;
+      const tr = l.closest('tr');
+      if (tr) {
+        const t = tr.closest('table');
+        tr.remove();
+        if (t && !t.rows.length) t.remove();
+        continue;
+      }
+      let box = l;
+      // leo lên khối chỉ chứa nhãn + giá trị của dòng tổng
+      while (box.parentElement && box.parentElement !== doc.body && (box.parentElement.textContent || '').trim().length < 160 && !box.parentElement.querySelector('table, img')) box = box.parentElement;
+      box.remove();
+    }
+    const wrap = doc.createElement('div');
+    wrap.innerHTML = html;
+    table.replaceWith(wrap);
+  }
   async function cpRun(btn, cid, name) {
     const label = btn.textContent;
     btn.disabled = true;
@@ -13372,6 +13416,25 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       }
       const groups = cpMerge(cpGroup(opps));
       if (!groups.length) throw new Error('Khách này chưa có báo giá nào có số lượng và đơn giá.');
+      // Trang báo giá: dùng mẫu in "BẢNG BÁO GIÁ" của CRM (đầu trang, khách, ghi chú, chữ ký… giữ nguyên), chỉ thay bảng sản phẩm
+      if (currentQuoteId() && [...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'In')) {
+        const show = (t) => (btn.textContent = t);
+        const { png } = await captureQuotePng(show, (doc) => cpMutate(doc, cpSheet(name || `Khách ${cid}`, cid, groups, opps, true)));
+        show('📄 Đang tạo PDF…');
+        const pdf = await pngToPdf(png);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(pdf);
+        a.download = `don-gia-theo-sl-${String(name || cid).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60)}.pdf`;
+        document.body.append(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 5000);
+        show('✅ Đã tải PDF');
+        setTimeout(() => (btn.textContent = label), 4000);
+        return;
+      }
       csPrint(cpSheet(name || `Khách ${cid}`, cid, groups, opps));
       btn.textContent = label;
     } catch (err) {
