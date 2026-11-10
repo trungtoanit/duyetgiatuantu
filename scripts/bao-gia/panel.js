@@ -13320,6 +13320,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     return out;
   }
+  // Đơn vị tính CRM ghi không dấu (thung, cai…) → tiếng Việt có dấu
+  const CP_UNIT = { thung: 'Thùng', cai: 'Cái', hop: 'Hộp', to: 'Tờ', bo: 'Bộ', cuon: 'Cuộn', tam: 'Tấm', chiec: 'Chiếc', tui: 'Túi', con: 'Con', cap: 'Cặp', kien: 'Kiện', bao: 'Bao', goi: 'Gói', xap: 'Xấp', ram: 'Ram', quyen: 'Quyển', cay: 'Cây', thanh: 'Thanh', mieng: 'Miếng', tem: 'Tem', nhan: 'Nhãn', khay: 'Khay', lo: 'Lô', m2: 'm²', m: 'Mét', met: 'Mét', kg: 'Kg' };
+  const cpUnit = (u) => {
+    const t = String(u || '').trim();
+    const k = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+    return CP_UNIT[k] || (t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : '');
+  };
   function cpSheet(name, cid, groups, opps, inTpl = false) {
     const num = (n) => Math.round(n).toLocaleString('vi-VN');
     const kindRank = (k) => (k === 'Khác' ? 99 : CS_KINDS.includes(k) ? CS_KINDS.indexOf(k) : 50);
@@ -13329,7 +13336,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const sections = parts
       .map(({ kind, ply }) => {
         const list = groups.filter((g) => g.kind === kind && g.ply === ply);
-        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size</span>` : ''}${g.others?.length ? `<div class="oth">${g.others.slice(0, 4).map(esc).join(' · ')}${g.others.length > 4 ? ` · +${g.others.length - 4}` : ''}</div>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(String(g.unit || '').toLowerCase())}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
+        const rows = list.map((g, i) => `<tr><td class="c">${i + 1}</td><td>${g.tp ? `<b class="tp">${esc(g.tp)}</b> ` : ''}${esc(g.short || g.name)}${g.more ? ` <span class="more">+${g.more} mẫu cùng size</span>` : ''}${g.others?.length ? `<div class="oth">${g.others.slice(0, 4).map(esc).join(' · ')}${g.others.length > 4 ? ` · +${g.others.length - 4}` : ''}</div>` : ''}</td><td class="n">${size(g)}</td><td class="c">${esc(cpUnit(g.unit))}</td><td class="tiers">${g.tiers.map(tier).join('')}</td></tr>`).join('');
         return `<h2>${esc(kind)}${ply ? ` - ${ply} lớp` : ''} <small>${list.length} dòng, ${list.reduce((n, g) => n + 1 + (g.more || 0), 0)} sản phẩm</small></h2><table><colgroup>${[4, 34, 13, 5, 44].map((w) => `<col style="width:${w}%">`).join('')}</colgroup><thead><tr><th>STT</th><th>Sản phẩm</th><th>Size (D x R x C)</th><th>ĐVT</th><th>Số lượng · Đơn giá · Báo giá mới nhất có mốc đó</th></tr></thead><tbody>${rows}</tbody></table>`;
       })
       .join('');
