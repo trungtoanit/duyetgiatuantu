@@ -13352,7 +13352,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .dgcp .t:last-child{border-bottom:0}
       .dgcp .t .q{text-align:right;color:#334155}.dgcp .t .p{text-align:right;font-weight:700}.dgcp .t .m{color:#64748b;font-size:10px;font-weight:400}
       .dgcp .t.won .p{color:#15803d}.dgcp .t.lost .p{color:#94a3b8;text-decoration:line-through}
-      </style><div class="sub">Đơn giá theo số lượng · ${sub}</div>${sections}</div>`;
+      </style>${sections}</div>`;
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Đơn giá theo số lượng - ${esc(name)}</title><style>
       @page{size:A4 portrait;margin:8mm}
       *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -13380,26 +13380,24 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   function cpMutate(doc, html) {
     const table = [...doc.querySelectorAll('table')].find((t) => /SẢN PHẨM/i.test(t.innerText) && /THÀNH TIỀN/i.test(t.innerText) && /SỐ\s*LƯỢNG/i.test(t.innerText));
     if (!table) throw new Error('Không thấy bảng sản phẩm trong mẫu in.');
-    const TOT = /^(Trước thuế|VAT\b.*|Thuế( giá trị gia tăng| GTGT)?.*|T[ỔổO]NG\s*(TI[ỀềE]N|C[ỘộO]NG).*|Tổng tiền thanh toán.*|Bằng chữ.*|Số tiền bằng chữ.*)$/i;
-    // khu tổng nằm ngoài bảng sản phẩm: xoá dòng / khối nhỏ nhất chứa nhãn
-    const labs = [...doc.querySelectorAll('td, th, div, span, b, strong, p, i')].filter((e) => !table.contains(e) && TOT.test((e.textContent || '').trim()) && (e.textContent || '').length < 120 && ![...e.children].some((c) => TOT.test((c.textContent || '').trim())));
-    for (const l of labs) {
-      if (!l.isConnected) continue;
-      const tr = l.closest('tr');
-      if (tr) {
-        const t = tr.closest('table');
-        tr.remove();
-        if (t && !t.rows.length) t.remove();
-        continue;
-      }
-      let box = l;
-      // leo lên khối chỉ chứa nhãn + giá trị của dòng tổng
-      while (box.parentElement && box.parentElement !== doc.body && (box.parentElement.textContent || '').trim().length < 160 && !box.parentElement.querySelector('table, img')) box = box.parentElement;
-      box.remove();
-    }
     const wrap = doc.createElement('div');
     wrap.innerHTML = html;
     table.replaceWith(wrap);
+    // Bỏ khu tổng tiền (Trước thuế / VAT / TỔNG TIỀN / Bằng chữ) – so chữ đã chuẩn hoá (NFC, in hoa, gộp khoảng trắng)
+    const txt = (e) => (e.textContent || '').normalize('NFC').replace(/\s+/g, ' ').trim().toUpperCase();
+    const TOT = /^(TRƯỚC THUẾ|VAT\b|THUẾ GIÁ TRỊ GIA TĂNG|THUẾ GTGT|TỔNG TIỀN|TỔNG CỘNG|BẰNG CHỮ|SỐ TIỀN BẰNG CHỮ)/;
+    for (const tr of [...doc.querySelectorAll('tr')]) {
+      if (wrap.contains(tr) || !tr.isConnected || !TOT.test(txt(tr)) || txt(tr).length > 200) continue;
+      const t = tr.closest('table');
+      tr.remove();
+      if (t && !t.rows.length) t.remove();
+    }
+    for (const e of [...doc.body.querySelectorAll('*')]) {
+      if (!e.isConnected || wrap.contains(e) || e.contains(wrap) || !TOT.test(txt(e)) || txt(e).length > 200 || e.querySelector('table, img')) continue;
+      let box = e;
+      while (box.parentElement && box.parentElement !== doc.body && !box.parentElement.contains(wrap) && txt(box.parentElement).length <= 200 && !box.parentElement.querySelector('table, img')) box = box.parentElement;
+      box.remove();
+    }
   }
   async function cpRun(btn, cid, name) {
     const label = btn.textContent;
