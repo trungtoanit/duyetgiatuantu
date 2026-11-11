@@ -7118,6 +7118,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 18px;border-top:1px solid #e2e8f0;flex:none">
           <span data-tst style="color:#64748b;font-size:12px;margin-right:auto">Gửi thành từng tin riêng: câu mở đầu + tổng, rồi mỗi NVKD 1 tin.</span>
+          <button data-t="pdf" title="In phiếu làm việc với sale (PDF, dạng bảng): trang tổng hợp + mỗi NVKD 1 trang – khách, báo giá, giá trị, cột trống ghi tình trạng / hướng xử lý / hẹn ngày, chữ ký" style="border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit;font-weight:700">🖨 In PDF làm việc</button>
           <button data-t="test" title="Gửi thử đúng các tin này (theo câu đang soạn) vào chat Zalo “My Documents” – không tính là đã nhắc ca này" style="border:1px solid #fed7aa;background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit;font-weight:700">🧪 Gửi test</button>
           <button data-t="x" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:7px 16px;cursor:pointer;font:inherit">Huỷ</button>
           <button data-t="save" style="border:0;background:linear-gradient(90deg,#0068ff,#7c3aed);color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font:inherit;font-weight:800">💾 Lưu</button></div></div>`;
@@ -7185,6 +7186,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!list.length) list.push(TEAM_TPL_DEFAULT[0]);
         pick = Math.min(pick, list.length - 1);
         draw();
+        return;
+      }
+      if (b.dataset.t === 'pdf') {
+        if (!(state.teamItems || []).length) return alert('Chưa có danh sách Gợi ý chốt đơn trên trang này – mở trang Báo giá rồi thử lại.');
+        const keepTpl = state.teamTpl;
+        state.teamTpl = read();
+        try {
+          csPrint(teamPdfHtml());
+        } finally {
+          state.teamTpl = keepTpl;
+        }
         return;
       }
       if (b.dataset.t === 'test') {
@@ -7270,6 +7282,82 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       })),
     ];
     return { text, html, parts, n: byCust.size, groups, head, val };
+  }
+  // 🖨 Phiếu làm việc với sale (PDF dạng bảng): trang tổng hợp theo NVKD + mỗi NVKD 1 trang chi tiết khách (cột trống để ghi khi họp)
+  function teamPdfHtml() {
+    const items = state.teamItems || [];
+    const byCust = new Map();
+    for (const { q } of items) {
+      const who = staffOf(q, renderCtx.comments?.[q.id]) || 'Chưa rõ NVKD';
+      if (isExcluded(who)) continue;
+      const key = custKey(q) || q.code;
+      const cur = byCust.get(key) || { who, code: q.customer?.code || '', name: q.customer?.name || '', amt: 0, qs: [] };
+      cur.amt += Number(q.amount) || 0;
+      cur.qs.push(q);
+      byCust.set(key, cur);
+    }
+    const by = new Map();
+    for (const c of byCust.values()) (by.get(c.who) || by.set(c.who, []).get(c.who)).push(c);
+    const sum = (cs) => cs.reduce((t, c) => t + c.amt, 0);
+    const groups = [...by].map(([who, cs]) => [who, cs.sort((a, b) => b.amt - a.amt)]).sort((a, b) => sum(b[1]) - sum(a[1]));
+    const all = groups.reduce((t, [, cs]) => t + sum(cs), 0);
+    const nQ = groups.reduce((t, [, cs]) => t + cs.reduce((k, c) => k + c.qs.length, 0), 0);
+    const nC = groups.reduce((t, [, cs]) => t + cs.length, 0);
+    const money = (v) => (v ? Math.round(v).toLocaleString('vi-VN') : '–');
+    const big = (v) => (v >= 1e9 ? `${(Math.round(v / 1e7) / 100).toLocaleString('vi-VN')} tỷ` : `${Math.round(v / 1e6).toLocaleString('vi-VN')} tr`);
+    const now = new Date();
+    const day = now.toLocaleDateString('vi-VN');
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const company = SITE.key === 'daiduong' ? 'CÔNG TY BAO BÌ ĐẠI DƯƠNG' : 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ';
+    const head = (title, sub) => `<div class="hd"><div class="co">${esc(company)}</div><div class="dt">Ngày ${esc(day)}</div></div><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ''}`;
+    const sign = (left) => `<table class="sg"><tr><td><b>${esc(left)}</b><i>(Ký, ghi rõ họ tên)</i></td><td><b>Quản lý kinh doanh</b><i>(Ký, ghi rõ họ tên)</i></td></tr></table>`;
+    // Trang 1: tổng hợp
+    const summary = `<section>${head('BẢNG TỔNG HỢP KÉO ĐƠN VỀ', `Danh sách Gợi ý chốt đơn · ${nC} khách · ${nQ} báo giá · Tổng có thể có đơn <b>${esc(big(all))}</b>`)}
+      <div class="msg">“${esc(teamHead())}”</div>
+      <table class="tb"><colgroup><col style="width:6%"><col style="width:26%"><col style="width:10%"><col style="width:10%"><col style="width:18%"><col style="width:10%"><col style="width:20%"></colgroup>
+      <thead><tr><th>STT</th><th>Nhân viên kinh doanh</th><th class="r">Số khách</th><th class="r">Số BG</th><th class="r">Có thể có đơn (đ)</th><th class="r">Tỷ trọng</th><th>Cam kết chốt (đ)</th></tr></thead>
+      <tbody>${groups.map(([who, cs], i) => `<tr><td class="c">${i + 1}</td><td><b>${esc(who)}</b></td><td class="r">${cs.length}</td><td class="r">${cs.reduce((k, c) => k + c.qs.length, 0)}</td><td class="r b">${money(sum(cs))}</td><td class="r">${all ? Math.round((sum(cs) / all) * 100) : 0}%</td><td></td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="2">TỔNG CỘNG</td><td class="r">${nC}</td><td class="r">${nQ}</td><td class="r">${money(all)}</td><td class="r">100%</td><td></td></tr></tfoot></table>
+      ${sign('Người lập')}</section>`;
+    // Mỗi NVKD 1 trang
+    const pages = groups
+      .map(([who, cs]) => {
+        const rows = cs
+          .map((c, i) => {
+            const bgs = c.qs.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+            return `<tr><td class="c">${i + 1}</td><td><b>${esc(c.code || '')}</b><div class="nm">${esc(c.name || '')}</div></td><td class="bg">${bgs.slice(0, 4).map((q) => `<div>${esc(q.code)}${q.name ? ` <span>${esc(String(q.name).slice(0, 38))}</span>` : ''}</div>`).join('')}${bgs.length > 4 ? `<div><span>+${bgs.length - 4} báo giá</span></div>` : ''}</td><td class="r b">${money(c.amt)}</td><td></td><td></td><td></td></tr>`;
+          })
+          .join('');
+        return `<section>${head('PHIẾU LÀM VIỆC – KÉO ĐƠN VỀ', `Nhân viên kinh doanh: <b>${esc(who)}</b> · ${cs.length} khách · Có thể có đơn <b>${esc(big(sum(cs)))}</b>`)}
+          <table class="tb"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:22%"><col style="width:12%"><col style="width:15%"><col style="width:15%"><col style="width:9%"></colgroup>
+          <thead><tr><th>STT</th><th>Khách hàng</th><th>Báo giá</th><th class="r">Giá trị (đ)</th><th>Tình trạng / vướng mắc</th><th>Hướng xử lý</th><th>Hẹn chốt</th></tr></thead>
+          <tbody>${rows}</tbody><tfoot><tr><td colspan="3">TỔNG</td><td class="r">${money(sum(cs))}</td><td colspan="3"></td></tr></tfoot></table>
+          <div class="note"><b>Ghi chú / cam kết:</b><div class="ln"></div><div class="ln"></div></div>
+          ${sign('Nhân viên kinh doanh')}</section>`;
+      })
+      .join('');
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>phieu-lam-viec-sale-${stamp}</title><style>
+      @page{size:A4 portrait;margin:10mm}
+      *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
+      body{font:11px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;margin:0}
+      section{break-after:page}section:last-child{break-after:auto}
+      .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px double #e3141b;padding-bottom:4px}
+      .co{font-weight:800;font-size:12px;color:#e3141b}.dt{color:#475569}
+      h1{font-size:18px;text-align:center;margin:12px 0 2px;letter-spacing:.5px}
+      .sub{text-align:center;color:#334155;margin-bottom:8px}
+      .msg{font-style:italic;color:#475569;text-align:center;margin:-2px 0 10px}
+      .tb{width:100%;border-collapse:collapse;table-layout:fixed}
+      .tb th{background:#e3141b;color:#fff;font-size:10px;text-transform:uppercase;padding:5px 5px;text-align:left;border:1px solid #c81017}
+      .tb td{border:1px solid #cbd5e1;padding:4px 5px;vertical-align:top;height:34px}
+      .tb tbody tr:nth-child(even) td{background:#f8fafc}
+      .tb tr{break-inside:avoid}.tb thead{display:table-header-group}
+      .tb tfoot td{font-weight:800;background:#fef2f2;height:auto}
+      .c,.tb .c{text-align:center}.r,.tb .r{text-align:right}.b{font-weight:700}.tb td{vertical-align:middle}
+      .nm{color:#64748b;font-size:9.5px;margin-top:1px}
+      .bg div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.bg span{font-weight:400;color:#64748b;font-size:9.5px}
+      .note{margin-top:10px}.ln{border-bottom:1px dotted #94a3b8;height:20px}
+      .sg{width:100%;margin-top:16px;break-inside:avoid}.sg td{width:50%;text-align:center;vertical-align:top;height:80px}.sg b,.sg i{display:block}.sg i{color:#64748b;font-size:10px}
+    </style></head><body>${summary}${pages}</body></html>`;
   }
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
   async function drawTeamImage() {
