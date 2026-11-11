@@ -8065,10 +8065,41 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const rows = r.items.map((x) => `<tr><td style="padding:2px 10px 2px 0">${esc(x.label)}</td><td style="padding:2px 0;text-align:right;font-variant-numeric:tabular-nums">${x.qty > 1 ? `${x.qty} × ${fmtVnd(x.price)} = ` : ''}${fmtVnd(x.amount)}</td></tr>`).join('');
     return `<table style="border-collapse:collapse;font-size:13px">${rows}<tr style="border-top:1px solid #c7d2fe"><td style="padding:4px 10px 0 0;font-weight:800">Tổng cộng (${r.items.length} khoản)</td><td style="padding:4px 0 0;text-align:right;font-weight:800;color:#4338ca;font-size:15px">${fmtVnd(r.total)}</td></tr></table>${r.note ? `<div style="margin-top:4px;color:#64748b;font-size:12px">ℹ️ ${esc(r.note)}</div>` : ''}`;
   }
+  // OpenAI cho nút Tính tổng: key + model lưu trên máy này (kv 'aiCfg' không đồng bộ lên máy chủ); chưa có key thì dùng Claude của extension
+  const OAI_MODEL = 'gpt-4.1-mini';
+  async function aiCfgGet() {
+    return (await kvGet('aiCfg').catch(() => ({}))) || {};
+  }
+  async function aiCfgEdit() {
+    const cur = await aiCfgGet();
+    const key = prompt(`OpenAI API key cho nút 🧮 Tính tổng (chỉ lưu trên máy này)\n${cur.openaiKey ? `Đang dùng: …${cur.openaiKey.slice(-4)} · để trống rồi OK = xoá key, dùng lại Claude` : 'Chưa có key – đang dùng Claude'}`, '');
+    if (key == null) return null;
+    const k = key.trim();
+    if (!k) {
+      await call({ type: 'kv.set', key: 'aiCfg', value: { ...cur, openaiKey: '' } });
+      return alert('Đã xoá OpenAI key – nút Tính tổng dùng Claude.');
+    }
+    if (!/^sk-/.test(k)) return alert('Key OpenAI phải bắt đầu bằng "sk-".');
+    const model = prompt('Model OpenAI:', cur.openaiModel || OAI_MODEL);
+    if (model == null) return null;
+    await call({ type: 'kv.set', key: 'aiCfg', value: { ...cur, openaiKey: k, openaiModel: model.trim() || OAI_MODEL } });
+    alert(`Đã lưu OpenAI key …${k.slice(-4)} (model ${model.trim() || OAI_MODEL}).`);
+  }
+  async function callOpenAI(key, model, system, prompt) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
+    return j.choices?.[0]?.message?.content || '';
+  }
   async function aiSum(text) {
     const system = 'Bạn đọc tin nhắn tiếng Việt và liệt kê từng khoản tiền cần cộng. Quy ước: "k" = nghìn đồng (420k = 420000), "tr"/"triệu" = 1.000.000, "750.000đ" = 750000. Kích thước dạng 330x300x90 là tên khoản, không phải số tiền. Nếu khoản có số lượng (vd. 2 bản x 300k) thì ghi qty và price. Chỉ trả về JSON, không giải thích.';
     const prompt = `Tin nhắn:\n<<<\n${text}\n>>>\nTrả về đúng JSON: {"items":[{"label":"tên khoản ngắn gọn","qty":1,"price":số_đồng,"amount":số_đồng}],"note":"ghi chú nếu có khoản không rõ, không thì để trống"}`;
-    const raw = await call({ type: 'claude', system, prompt, maxTokens: 2000 });
+    const cfg = await aiCfgGet();
+    const raw = cfg.openaiKey ? await callOpenAI(cfg.openaiKey, cfg.openaiModel || OAI_MODEL, system, prompt) : await call({ type: 'claude', system, prompt, maxTokens: 2000 });
     const m = String(raw).match(/\{[\s\S]*\}/);
     if (!m) throw new Error('AI không trả về kết quả đọc được');
     const j = JSON.parse(m[0]);
@@ -8263,7 +8294,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         if (!r.err) sumCache.set(text, r);
         show(r);
       });
-      wrap.append(btn, send, out);
+      const gear = document.createElement('span');
+      gear.textContent = '⚙️';
+      gear.title = 'Cài OpenAI API key cho nút Tính tổng (lưu trên máy này)';
+      gear.setAttribute('style', 'display:inline-block;margin-left:6px;cursor:pointer;font-size:12px;opacity:.6');
+      gear.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        aiCfgEdit().catch((err) => alert(err.message));
+      });
+      aiCfgGet().then((c) => (btn.title = `Nhờ AI (${c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude'}) đọc các khoản tiền trong bình luận này rồi cộng tổng`));
+      wrap.append(btn, gear, send, out);
       detail.after(wrap);
     }
   }
