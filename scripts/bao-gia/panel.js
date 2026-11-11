@@ -7358,7 +7358,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bg{font-weight:600;font-size:10px}
       .note{margin-top:10px}.ln{border-bottom:1px dotted #94a3b8;height:20px}
       .sg{width:100%;margin-top:16px;break-inside:avoid}.sg td{width:50%;text-align:center;vertical-align:top;height:80px}.sg b,.sg i{display:block}.sg i{color:#64748b;font-size:10px}
-    </style></head><body>${summary}${pages}</body></html>`;
+    </style></head><body>${pages}</body></html>`; // bỏ trang tổng hợp (summary) – chỉ in mỗi NVKD 1 trang
   }
   // Ảnh tin nhắc cả đội (vẽ thẳng canvas): mỗi NVKD 1 thẻ – tên, số khách, tổng tiền, các khách (mã + tiền)
   async function drawTeamImage() {
