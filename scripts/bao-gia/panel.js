@@ -5699,6 +5699,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         else if (j.status === 'sent') {
           // ghi nhận lượt gửi thành công (đồng bộ) → ô 🔧 Bảo trì đếm ngược 1 tiếng tới lượt nhắc kế
           if (!pre.test) await kvMerge('maintSent', { [jobId]: { at: j.doneAt || Date.now(), id: r.id, by: meName, to: j.via || to, img: images.length } }).catch(() => {});
+          MS.at = 0;
           state.mtPaint?.();
           return show(`✅ Đã gửi #${r.id} cho ${j.via || to}${images.length ? ` (kèm ${images.length} ảnh)` : ''}`), mtLog(run, 'đã gửi');
         }
@@ -5708,6 +5709,56 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!pre.test) await kvMerge('maintAsked', { [r.id]: { at: Date.now(), by: meName, to } });
     return true;
   }
+  // ---------- 📨 Trang Bảo trì → Báo cáo: dấu "đã gửi Zalo" trên từng dòng (theo kv 'maintSent') ----------
+  const MS = { at: 0, by: {} };
+  async function msLoad() {
+    if (Date.now() - MS.at < 10000) return MS.by;
+    MS.at = Date.now();
+    const by = {};
+    for (const x of Object.values(await kvGet('maintSent').catch(() => ({})))) {
+      if (!x?.at || x.id == null) continue;
+      const k = String(x.id);
+      const cur = by[k] || (by[k] = { n: 0, last: null });
+      cur.n++;
+      if (!cur.last || x.at > cur.last.at) cur.last = x;
+    }
+    return (MS.by = by);
+  }
+  async function msMount() {
+    if (!/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
+    const t = [...document.querySelectorAll('table')].find((x) => !x.closest('#dg-root, .ant-modal-wrap') && [...x.querySelectorAll('thead th')].some((th) => th.innerText.trim() === '#ID'));
+    if (!t) return;
+    const ci = [...t.querySelectorAll('thead th')].findIndex((th) => th.innerText.trim() === '#ID');
+    const by = await msLoad();
+    const ago = (ms) => {
+      const m = Math.floor((Date.now() - ms) / 60000);
+      return m < 60 ? `${Math.max(1, m)} phút` : m < 1440 ? `${Math.floor(m / 60)} giờ` : `${Math.floor(m / 1440)} ngày`;
+    };
+    for (const tr of t.querySelectorAll('tbody tr.ant-table-row')) {
+      const cell = tr.cells[ci];
+      if (!cell) continue;
+      const id = cell.innerText.match(/\d+/)?.[0];
+      const s = id && by[id];
+      let b = cell.querySelector('[data-dg-ms]');
+      if (!s) {
+        b?.remove();
+        continue;
+      }
+      const tip = `Đã gửi Zalo ${s.n} lần · gần nhất ${new Date(s.last.at).toLocaleString('vi-VN')} (${ago(s.last.at)} trước) cho ${s.last.to || '?'}${s.last.by ? ` – ${s.last.by} gửi` : ''}`;
+      const sig = `${s.n}|${s.last.at}`;
+      if (b?.dataset.sig === sig) continue;
+      if (!b) {
+        b = document.createElement('span');
+        b.setAttribute('data-dg-ms', '1');
+        b.setAttribute('style', 'display:inline-flex;align-items:center;gap:2px;margin-left:4px;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
+        cell.append(b);
+      }
+      b.dataset.sig = sig;
+      b.title = tip;
+      b.textContent = `✓Zalo${s.n > 1 ? ` ×${s.n}` : ''}`;
+    }
+  }
+  if (IS_TOP) setInterval(msMount, 2000);
   // 📨 trong khung 🔧 Bảo trì (banner): chọn ngẫu nhiên 1 việc + câu hỏi rồi mở khung xem lại tin (gửi trong khung)
   async function maintZaloQuick(btn) {
     const [all, asked] = await Promise.all([kvGet('maintReports'), kvGet('maintAsked')]);
