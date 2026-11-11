@@ -5745,11 +5745,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!t) return;
     const ths = [...t.querySelectorAll('thead th')];
     const ci = ths.findIndex((th) => th.innerText.trim() === '#ID');
-    // nhãn ✓Zalo nằm ở cột "Đề nghị" (đề nghị sửa chữa SUACHUA…); không có cột đó thì cột YC sửa, rồi #ID
-    let yi = ths.findIndex((th) => /^Đề nghị/i.test(th.innerText.trim()));
-    if (yi < 0) yi = ths.findIndex((th) => /^YC sửa/i.test(th.innerText.trim()));
+    // ✓Zalo (đã nhắc bảo trì qua Zalo) ở cột YC sửa; cột "Đề nghị": phiếu đề nghị sửa chữa (SUACHUA…) đã gửi nhóm hỏi hàng chưa (kv buyReq)
+    let yi = ths.findIndex((th) => /^YC sửa/i.test(th.innerText.trim()));
     if (yi < 0) yi = ci;
+    const di = ths.findIndex((th) => /^Đề nghị/i.test(th.innerText.trim()));
     const by = await msLoad();
+    const sentBuy = di >= 0 ? await kvGet('buyReq').catch(() => ({})) : {};
     const ago = (ms) => {
       const m = Math.floor((Date.now() - ms) / 60000);
       return m < 60 ? `${Math.max(1, m)} phút` : m < 1440 ? `${Math.floor(m / 60)} giờ` : `${Math.floor(m / 1440)} ngày`;
@@ -5758,7 +5759,31 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const idCell = tr.cells[ci];
       const cell = tr.cells[yi];
       if (!idCell || !cell) continue;
-      for (const c of tr.cells) if (c !== cell) c.querySelector('[data-dg-ms]')?.remove(); // nhãn cũ nằm ở cột khác (#ID, YC sửa)
+      for (const c of tr.cells) if (c !== cell) c.querySelector('[data-dg-ms]')?.remove(); // nhãn cũ nằm ở cột khác
+      const dc = di >= 0 ? tr.cells[di] : null;
+      if (dc) {
+        const codes = [...new Set((dc.innerText.match(/\b[A-Z]{2,12}\d{3,}\b/g) || []))];
+        const sig = codes.map((c) => `${c}:${sentBuy[c]?.at || 0}`).join(',');
+        let q = dc.querySelector('[data-dg-buy]');
+        if (!codes.length) q?.remove();
+        else if (q?.dataset.sig !== sig) {
+          if (!q) {
+            q = document.createElement('div');
+            q.setAttribute('data-dg-buy', '1');
+            q.setAttribute('style', 'display:flex;flex-wrap:wrap;gap:3px;margin-top:2px');
+            dc.append(q);
+          }
+          q.dataset.sig = sig;
+          q.innerHTML = codes
+            .map((c) => {
+              const x = sentBuy[c];
+              return x
+                ? `<span title="${esc(`${c} đã gửi nhóm hỏi hàng lúc ${new Date(x.at).toLocaleString('vi-VN')}${x.by ? ` – ${x.by}` : ''}`)}" style="padding:0 6px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;cursor:help">✓ Đã gửi hỏi hàng ${new Date(x.at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>`
+                : `<span title="${esc(`${c} chưa gửi vào nhóm hỏi hàng – mở phiếu đề nghị, bấm 📨 Gửi`)}" style="padding:0 6px;border-radius:999px;background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;cursor:help">✗ Chưa gửi hỏi hàng</span>`;
+            })
+            .join('');
+        }
+      }
       const id = idCell.innerText.match(/\d+/)?.[0];
       const s = id && by[id];
       let b = cell.querySelector('[data-dg-ms]');
@@ -5772,7 +5797,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (!b) {
         b = document.createElement('span');
         b.setAttribute('data-dg-ms', '1');
-        b.setAttribute('style', 'display:flex;width:max-content;align-items:center;gap:2px;margin:2px 0;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
+        b.setAttribute('style', 'display:inline-flex;align-items:center;gap:2px;margin:2px 0;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
         cell.append(b);
       }
       b.dataset.sig = sig;
