@@ -5745,7 +5745,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!t) return;
     const ths = [...t.querySelectorAll('thead th')];
     const ci = ths.findIndex((th) => th.innerText.trim() === '#ID');
-    let yi = ths.findIndex((th) => /^YC sửa/i.test(th.innerText.trim()));
+    // nhãn ✓Zalo nằm ở cột "Đề nghị" (đề nghị sửa chữa SUACHUA…); không có cột đó thì cột YC sửa, rồi #ID
+    let yi = ths.findIndex((th) => /^Đề nghị/i.test(th.innerText.trim()));
+    if (yi < 0) yi = ths.findIndex((th) => /^YC sửa/i.test(th.innerText.trim()));
     if (yi < 0) yi = ci;
     const by = await msLoad();
     const ago = (ms) => {
@@ -5756,7 +5758,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const idCell = tr.cells[ci];
       const cell = tr.cells[yi];
       if (!idCell || !cell) continue;
-      if (yi !== ci) idCell.querySelector('[data-dg-ms]')?.remove(); // nhãn cũ nằm ở cột #ID
+      for (const c of tr.cells) if (c !== cell) c.querySelector('[data-dg-ms]')?.remove(); // nhãn cũ nằm ở cột khác (#ID, YC sửa)
       const id = idCell.innerText.match(/\d+/)?.[0];
       const s = id && by[id];
       let b = cell.querySelector('[data-dg-ms]');
@@ -5770,7 +5772,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (!b) {
         b = document.createElement('span');
         b.setAttribute('data-dg-ms', '1');
-        b.setAttribute('style', 'display:inline-flex;align-items:center;gap:2px;margin:2px 0;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
+        b.setAttribute('style', 'display:flex;width:max-content;align-items:center;gap:2px;margin:2px 0;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
         cell.append(b);
       }
       b.dataset.sig = sig;
