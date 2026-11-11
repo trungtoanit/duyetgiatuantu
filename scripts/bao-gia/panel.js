@@ -8099,15 +8099,42 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
+    aiLast = { model: j.model || model, tin: j.usage?.prompt_tokens || 0, tout: j.usage?.completion_tokens || 0 };
     return j.choices?.[0]?.message?.content || '';
+  }
+  // Nhật ký gọi AI trên máy này (localStorage dgAiLog, 40 lần gần nhất) – xem ở tab ⚙️ Cài đặt hoặc console [DG AI]
+  let aiLast = null;
+  const AI_LOG = 'dgAiLog';
+  const aiLogGet = () => {
+    try {
+      return JSON.parse(localStorage.getItem(AI_LOG) || '[]');
+    } catch {
+      return [];
+    }
+  };
+  function aiLogAdd(e) {
+    console.info('[DG AI]', e.prov, e.model || '', e.what, `${e.ms}ms`, e.err || `${e.tin || 0}+${e.tout || 0} tokens`);
+    try {
+      localStorage.setItem(AI_LOG, JSON.stringify([e, ...aiLogGet()].slice(0, 40)));
+    } catch {}
   }
   // Mọi lệnh AI của dự án (gợi ý chốt đơn, chấm báo giá, phân tích…) đi qua đây: máy có OpenAI key → OpenAI, không thì Claude của extension
   let aiCfgCache = null;
   async function aiCall(msg) {
     if (!aiCfgCache || Date.now() - aiCfgCache.at > 30e3) aiCfgCache = { at: Date.now(), v: await aiCfgGet() };
     const c = aiCfgCache.v;
-    if (!c.openaiKey) return rawCall(msg);
-    return callOpenAI(c.openaiKey, c.openaiModel || OAI_MODEL, msg.system, msg.prompt, { json: false, maxTokens: msg.maxTokens });
+    const what = msg.what || String(msg.system || msg.prompt || '').replace(/\s+/g, ' ').slice(0, 60);
+    const t0 = Date.now();
+    const prov = c.openaiKey ? 'OpenAI' : 'Claude';
+    try {
+      aiLast = null;
+      const out = c.openaiKey ? await callOpenAI(c.openaiKey, c.openaiModel || OAI_MODEL, msg.system, msg.prompt, { json: !!msg.json, maxTokens: msg.maxTokens }) : await rawCall(msg);
+      aiLogAdd({ at: t0, prov, model: aiLast?.model || (c.openaiKey ? c.openaiModel || OAI_MODEL : ''), what, ms: Date.now() - t0, tin: aiLast?.tin, tout: aiLast?.tout, page: location.pathname });
+      return out;
+    } catch (err) {
+      aiLogAdd({ at: t0, prov, model: c.openaiKey ? c.openaiModel || OAI_MODEL : '', what, ms: Date.now() - t0, err: String(err.message || err).slice(0, 160), page: location.pathname });
+      throw err;
+    }
   }
   // Tab ⚙️ Cài đặt: dòng "AI của dự án" + nút cài key (bảng vẽ lại bằng innerHTML → bắt sự kiện chung)
   if (IS_TOP) {
@@ -8122,13 +8149,26 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const c = await aiCfgGet();
       const t = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL} (key …${c.openaiKey.slice(-4)})` : 'Claude (chưa cài OpenAI key)';
       els.forEach((el) => el.textContent !== t && (el.textContent = t));
+      const log = aiLogGet();
+      const sig = `${log[0]?.at || 0}|${log.length}`;
+      document.querySelectorAll('[data-ai-log]').forEach((el) => {
+        if (el.dataset.sig === sig) return;
+        el.dataset.sig = sig;
+        const oai = log.filter((x) => x.prov === 'OpenAI' && !x.err);
+        el.innerHTML = log.length
+          ? `<div style="margin:4px 0">OpenAI: <b>${oai.length}</b> lần thành công · ${oai.reduce((a, x) => a + (x.tin || 0) + (x.tout || 0), 0).toLocaleString('vi-VN')} tokens (trong ${log.length} lần gọi gần nhất)</div><table style="border-collapse:collapse;font-size:11.5px">${log
+              .slice(0, 15)
+              .map((x) => `<tr style="border-top:1px solid #e2e8f0"><td style="padding:2px 6px;white-space:nowrap">${esc(new Date(x.at).toLocaleString('vi-VN'))}</td><td style="padding:2px 6px;white-space:nowrap;font-weight:700;color:${x.prov === 'OpenAI' ? '#047857' : '#7c3aed'}">${esc(x.prov)}${x.model ? ` · ${esc(x.model)}` : ''}</td><td style="padding:2px 6px">${esc(x.what || '')}</td><td style="padding:2px 6px;white-space:nowrap">${(x.ms / 1000).toFixed(1)}s</td><td style="padding:2px 6px;white-space:nowrap;color:${x.err ? '#dc2626' : '#475569'}">${x.err ? `⚠️ ${esc(x.err)}` : x.tin != null ? `${x.tin}+${x.tout} tokens` : '✓'}</td></tr>`)
+              .join('')}</table>`
+          : '<div style="margin:4px 0">Chưa có lần gọi AI nào trên máy này.</div>';
+      });
     }, 1500);
   }
   async function aiSum(text) {
     const system = 'Bạn đọc tin nhắn tiếng Việt và liệt kê từng khoản tiền cần cộng. Quy ước: "k" = nghìn đồng (420k = 420000), "tr"/"triệu" = 1.000.000, "750.000đ" = 750000. Kích thước dạng 330x300x90 là tên khoản, không phải số tiền. Nếu khoản có số lượng (vd. 2 bản x 300k) thì ghi qty và price. Chỉ trả về JSON, không giải thích.';
     const prompt = `Tin nhắn:\n<<<\n${text}\n>>>\nTrả về đúng JSON: {"items":[{"label":"tên khoản ngắn gọn","qty":1,"price":số_đồng,"amount":số_đồng}],"note":"ghi chú nếu có khoản không rõ, không thì để trống"}`;
     const cfg = await aiCfgGet();
-    const raw = cfg.openaiKey ? await callOpenAI(cfg.openaiKey, cfg.openaiModel || OAI_MODEL, system, prompt) : await call({ type: 'claude', system, prompt, maxTokens: 2000 });
+    const raw = await call({ type: 'claude', system, prompt, maxTokens: 2000, json: !!cfg.openaiKey, what: 'Tính tổng chi phí trong bình luận' });
     const m = String(raw).match(/\{[\s\S]*\}/);
     if (!m) throw new Error('AI không trả về kết quả đọc được');
     const j = JSON.parse(m[0]);
@@ -16855,7 +16895,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       ${admin ? await zipCard() : ''}
       ${admin ? `<div class="sx-perm">${await permsCard(quotes)}</div>` : ''}
       <div class="muted ct-note">🔐 Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic nhập trong popup của extension (biểu tượng trên thanh Chrome).</div>
-      ${admin ? `<div class="muted ct-note">🤖 AI của dự án trên máy này: <b data-ai-now>…</b> <button type="button" data-ai-cfg style="margin-left:6px;cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 10px;font:inherit;font-weight:700">⚙️ Cài OpenAI key</button></div>` : ''}</div>`;
+      ${admin ? `<div class="muted ct-note">🤖 AI của dự án trên máy này: <b data-ai-now>…</b> <button type="button" data-ai-cfg style="margin-left:6px;cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 10px;font:inherit;font-weight:700">⚙️ Cài OpenAI key</button><div data-ai-log></div></div>` : ''}</div>`;
   }
 
   // ---------- Tab "💰 Công nợ": tổng quan công nợ từ trang /cong-no (quá hạn, sắp đến hạn, đã thu 30 ngày) ----------
