@@ -7325,11 +7325,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const rows = cs
           .map((c, i) => {
             const bgs = c.qs.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
-            return `<tr><td class="c">${i + 1}</td><td><b>${esc(c.code || '')}</b><div class="nm">${esc(c.name || '')}</div></td><td class="bg">${bgs.slice(0, 4).map((q) => `<div>${esc(q.code)}${q.name ? ` <span>${esc(String(q.name).slice(0, 38))}</span>` : ''}</div>`).join('')}${bgs.length > 4 ? `<div><span>+${bgs.length - 4} báo giá</span></div>` : ''}</td><td class="r b">${money(c.amt)}</td><td></td><td></td><td></td></tr>`;
+            // 1 dòng gọn: mã khách (tên đầy đủ khi rê chuột / cắt bằng …), các mã BG cách dấu phẩy
+            return `<tr><td class="c">${i + 1}</td><td class="one" title="${esc(c.name || '')}"><b>${esc(c.code || c.name || '')}</b></td><td class="one bg">${bgs.map((q) => esc(q.code)).join(', ')}</td><td class="r b">${money(c.amt)}</td><td></td><td></td><td></td></tr>`;
           })
           .join('');
         return `<section>${head('PHIẾU LÀM VIỆC – KÉO ĐƠN VỀ', `Nhân viên kinh doanh: <b>${esc(who)}</b> · ${cs.length} khách · Có thể có đơn <b>${esc(big(sum(cs)))}</b>`)}
-          <table class="tb"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:22%"><col style="width:12%"><col style="width:15%"><col style="width:15%"><col style="width:9%"></colgroup>
+          <table class="tb"><colgroup><col style="width:5%"><col style="width:17%"><col style="width:21%"><col style="width:13%"><col style="width:17%"><col style="width:17%"><col style="width:10%"></colgroup>
           <thead><tr><th>STT</th><th>Khách hàng</th><th>Báo giá</th><th class="r">Giá trị (đ)</th><th>Tình trạng / vướng mắc</th><th>Hướng xử lý</th><th>Hẹn chốt</th></tr></thead>
           <tbody>${rows}</tbody><tfoot><tr><td colspan="3">TỔNG</td><td class="r">${money(sum(cs))}</td><td colspan="3"></td></tr></tfoot></table>
           <div class="note"><b>Ghi chú / cam kết:</b><div class="ln"></div><div class="ln"></div></div>
@@ -7348,13 +7349,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .msg{font-style:italic;color:#475569;text-align:center;margin:-2px 0 10px}
       .tb{width:100%;border-collapse:collapse;table-layout:fixed}
       .tb th{background:#e3141b;color:#fff;font-size:10px;text-transform:uppercase;padding:5px 5px;text-align:left;border:1px solid #c81017}
-      .tb td{border:1px solid #cbd5e1;padding:4px 5px;vertical-align:top;height:34px}
+      .tb td{border:1px solid #cbd5e1;padding:3px 5px;vertical-align:top;height:24px}
       .tb tbody tr:nth-child(even) td{background:#f8fafc}
       .tb tr{break-inside:avoid}.tb thead{display:table-header-group}
       .tb tfoot td{font-weight:800;background:#fef2f2;height:auto}
       .c,.tb .c{text-align:center}.r,.tb .r{text-align:right}.b{font-weight:700}.tb td{vertical-align:middle}
       .nm{color:#64748b;font-size:9.5px;margin-top:1px}
-      .bg div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.bg span{font-weight:400;color:#64748b;font-size:9.5px}
+      .one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bg{font-weight:600;font-size:10px}
       .note{margin-top:10px}.ln{border-bottom:1px dotted #94a3b8;height:20px}
       .sg{width:100%;margin-top:16px;break-inside:avoid}.sg td{width:50%;text-align:center;vertical-align:top;height:80px}.sg b,.sg i{display:block}.sg i{color:#64748b;font-size:10px}
     </style></head><body>${summary}${pages}</body></html>`;
