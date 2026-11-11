@@ -5494,7 +5494,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // ---------- 💬 Hỏi bảo trì (trang Bảo trì → Báo cáo): 1 khung cạnh tiêu đề "Khắc phục" ----------
   // Chọn ngẫu nhiên 1 việc đang tồn đọng (ưu tiên khẩn / cao, để lâu; bỏ việc đã nhắc trong 24 giờ) → soạn tin: thông tin báo cáo + 1 câu hỏi
   // ngẫu nhiên trong bộ câu hỏi dùng chung (⚙️ cài đặt, kv 'qbank' → mtAsk) → 📋 Chép / 📨 Gửi Zalo (người nhận cài 1 lần, kv maintCfg)
-  const mtOpen = (r) => r && !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || '');
+  // Còn mở: chưa có dấu đã xử lý trong dữ liệu đã lưu VÀ (nếu có danh sách đọc đủ các tab Mới / Đang xử lý / Đã có đề nghị trong 1 ngày) có trong danh sách đó.
+  // Dữ liệu đã lưu có thể cũ (báo cáo đã xử lý / bị xoá mà chưa cập nhật) → đếm dư so với tab "Tất cả" của CRM.
+  let mtSnap = null;
+  const mtSnapLoad = async () => {
+    try {
+      mtSnap = await kvGet('maintOpen');
+    } catch {}
+    return mtSnap;
+  };
+  const mtOpen = (r) => {
+    if (!r || r.resolvedAt > 0 || /DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || '')) return false;
+    const src = mtSnap?._src;
+    if (src?.complete && Array.isArray(src.ids) && Date.now() - src.at < 24 * 3600e3) return src.ids.includes(String(r.id));
+    return true;
+  };
   function maintChoose(all, asked, skip) {
     const now = Date.now() / 1000;
     const open = Object.values(all).filter(mtOpen);
@@ -5614,6 +5628,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     mtBusy = true;
     try {
       state.mtAll = await kvGet('maintReports');
+      await mtSnapLoad();
       const have = document.querySelector('[data-dg-mtcard]');
       if (have) {
         paintMaintOld(have);
@@ -7700,7 +7715,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         state.mtSentN = sent.length;
         tickMt();
         const all = Object.values(await kvGet('maintReports')).filter(Boolean);
-        const open = all.filter((r) => !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || ''));
+        await mtSnapLoad();
+        const open = all.filter(mtOpen);
         const urgent = open.filter((r) => /CRITICAL|HIGH/i.test(r.level || ''));
         const el = mt.querySelector('[data-mtn]');
         el.innerHTML = all.length ? `<b style="font-size:16px">${open.length}</b> chưa xử lý${urgent.length ? `<br><span style="color:#dc2626">🚨 ${urgent.length} khẩn / cao</span>` : ''}` : '<span style="color:#94a3b8">chưa có dữ liệu</span>';
@@ -13004,7 +13020,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (s0.rule === 'maint') {
       const r = data.maint?.[s0.sid];
       const snap = data.maintOpen;
-      if (snap?._src?.complete && snap._src.at > (t.at || 0) && !snap[s0.sid]) return 'báo cáo bảo trì không còn chưa xử lý';
+      if (snap?._src?.complete && snap._src.at > (t.at || 0) && !(Array.isArray(snap._src.ids) ? snap._src.ids.includes(String(s0.sid)) : snap[s0.sid])) return 'báo cáo bảo trì không còn chưa xử lý';
       return r && !mtOpen(r) ? (/REJECT|CANCEL/i.test(r.status || '') ? 'báo cáo bảo trì bị từ chối' : 'báo cáo bảo trì đã xử lý') : '';
     }
     if (s0.rule === 'debt') {
@@ -14499,13 +14515,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   // Có danh sách đọc đủ từ các tab chưa xử lý thì theo danh sách đó; chưa có thì theo trạng thái đã lưu
   function tkMtPending(r, data) {
     const snap = data.maintOpen;
+    if (snap?._src?.complete && Array.isArray(snap._src.ids)) return snap._src.ids.includes(String(r.id));
     return snap?._src?.complete ? !!snap[r.id] : mtOpen(r);
   }
   async function tkReadMaint() {
     if (!MY_ADMIN || Date.now() - tkMaintAt < 15 * 60e3) return;
     const tasks = await kvGet('tasks');
     const maintOn = tkAutoCfg((await kvGet('taskCfg')).auto).maint.on;
-    if (!maintOn && !Object.values(tasks).some((t) => t?.src?.rule === 'maint' && t.status !== 'done' && t.status !== 'cancel')) return;
+    // Đọc cả khi quy tắc tắt nhưng còn báo cáo đang mở → số trên khung 🔧 Bảo trì khớp tab "Tất cả" của CRM
+    if (!maintOn && !Object.values(tasks).some((t) => t?.src?.rule === 'maint' && t.status !== 'done' && t.status !== 'cancel') && !Object.values(await kvGet('maintReports')).some((r) => r && !(r.resolvedAt > 0) && !/DONE|RESOLVED|COMPLETE|FINISH|REJECT|CANCEL/i.test(r.status || ''))) return;
     if (!tabLock('dgTkMaintLock', 5 * 60e3)) return;
     tkMaintAt = Date.now();
     const old = await kvGet('maintOpen');
@@ -14555,7 +14573,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       await sleep(1500);
     });
     if (complete) {
-      const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length } };
+      // ids: danh sách mã đang mở của lần đọc này (các dòng cũ trên server có thể không xoá được → không dựa vào khoá)
+      const patch = { ...got, _src: { at: Date.now(), complete, n: Object.keys(got).length, ids: Object.keys(got) } };
       for (const k of Object.keys(old)) if (k !== '_src' && !got[k]) patch[k] = null;
       await kvMerge('maintOpen', patch);
     }
