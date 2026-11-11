@@ -5728,16 +5728,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (!/^\/bao-tri\/bao-cao/.test(location.pathname)) return;
     const t = [...document.querySelectorAll('table')].find((x) => !x.closest('#dg-root, .ant-modal-wrap') && [...x.querySelectorAll('thead th')].some((th) => th.innerText.trim() === '#ID'));
     if (!t) return;
-    const ci = [...t.querySelectorAll('thead th')].findIndex((th) => th.innerText.trim() === '#ID');
+    const ths = [...t.querySelectorAll('thead th')];
+    const ci = ths.findIndex((th) => th.innerText.trim() === '#ID');
+    let yi = ths.findIndex((th) => /^YC sửa/i.test(th.innerText.trim()));
+    if (yi < 0) yi = ci;
     const by = await msLoad();
     const ago = (ms) => {
       const m = Math.floor((Date.now() - ms) / 60000);
       return m < 60 ? `${Math.max(1, m)} phút` : m < 1440 ? `${Math.floor(m / 60)} giờ` : `${Math.floor(m / 1440)} ngày`;
     };
     for (const tr of t.querySelectorAll('tbody tr.ant-table-row')) {
-      const cell = tr.cells[ci];
-      if (!cell) continue;
-      const id = cell.innerText.match(/\d+/)?.[0];
+      const idCell = tr.cells[ci];
+      const cell = tr.cells[yi];
+      if (!idCell || !cell) continue;
+      if (yi !== ci) idCell.querySelector('[data-dg-ms]')?.remove(); // nhãn cũ nằm ở cột #ID
+      const id = idCell.innerText.match(/\d+/)?.[0];
       const s = id && by[id];
       let b = cell.querySelector('[data-dg-ms]');
       if (!s) {
@@ -5750,7 +5755,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (!b) {
         b = document.createElement('span');
         b.setAttribute('data-dg-ms', '1');
-        b.setAttribute('style', 'display:inline-flex;align-items:center;gap:2px;margin-left:4px;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
+        b.setAttribute('style', 'display:inline-flex;align-items:center;gap:2px;margin:2px 0;padding:0 5px;border-radius:999px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10.5px;font-weight:800;line-height:16px;white-space:nowrap;vertical-align:middle;cursor:help');
         cell.append(b);
       }
       b.dataset.sig = sig;
