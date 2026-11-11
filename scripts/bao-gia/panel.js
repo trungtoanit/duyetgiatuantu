@@ -7329,7 +7329,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
             return `<tr><td class="c">${i + 1}</td><td class="one" title="${esc(c.name || '')}"><b>${esc(c.code || c.name || '')}</b></td><td class="one bg">${bgs.map((q) => esc(q.code)).join(', ')}</td><td class="r b">${money(c.amt)}</td><td></td><td></td><td></td></tr>`;
           })
           .join('');
-        return `<section>${head('PHIẾU LÀM VIỆC – KÉO ĐƠN VỀ', `Nhân viên kinh doanh: <b>${esc(who)}</b> · ${cs.length} khách · Có thể có đơn <b>${esc(big(sum(cs)))}</b>`)}
+        return `<section>${head(`PHIẾU LÀM VIỆC – ${String(who).toUpperCase()}`, `${cs.length} khách · Có thể có đơn <b>${esc(big(sum(cs)))}</b>`)}
           <table class="tb"><colgroup><col style="width:5%"><col style="width:17%"><col style="width:21%"><col style="width:13%"><col style="width:17%"><col style="width:17%"><col style="width:10%"></colgroup>
           <thead><tr><th>STT</th><th>Khách hàng</th><th>Báo giá</th><th class="r">Giá trị (đ)</th><th>Tình trạng / vướng mắc</th><th>Hướng xử lý</th><th>Hẹn chốt</th></tr></thead>
           <tbody>${rows}</tbody><tfoot><tr><td colspan="3">TỔNG</td><td class="r">${money(sum(cs))}</td><td colspan="3"></td></tr></tfoot></table>
