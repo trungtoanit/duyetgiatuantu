@@ -64,6 +64,7 @@
   const SHARED_NS = new Set(['zaloJobs', 'zaloAlive', 'zaloDebug', 'zaloNames', 'zaloSent', 'machine', 'files', 'badge', 'popupCards', 'popupPrefs']);
   const siteNs = (k) => (SITE.prefix && k && !SHARED_NS.has(k) && !String(k).startsWith(SITE.prefix) ? SITE.prefix + k : k);
   const call = (msg0) => {
+    if (msg0.type === 'claude') return aiCall(msg0);
     const msg = { ...msg0 };
     if (/^kv\.(get|set|merge)$/.test(msg.type) && msg.key) msg.key = siteNs(msg.key);
     if (msg.type === 'remote.push' && msg.ns) msg.ns = siteNs(msg.ns);
@@ -8077,23 +8078,51 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const k = key.trim();
     if (!k) {
       await call({ type: 'kv.set', key: 'aiCfg', value: { ...cur, openaiKey: '' } });
+      aiCfgCache = null;
       return alert('Đã xoá OpenAI key – nút Tính tổng dùng Claude.');
     }
     if (!/^sk-/.test(k)) return alert('Key OpenAI phải bắt đầu bằng "sk-".');
     const model = prompt('Model OpenAI:', cur.openaiModel || OAI_MODEL);
     if (model == null) return null;
     await call({ type: 'kv.set', key: 'aiCfg', value: { ...cur, openaiKey: k, openaiModel: model.trim() || OAI_MODEL } });
+    aiCfgCache = null;
     alert(`Đã lưu OpenAI key …${k.slice(-4)} (model ${model.trim() || OAI_MODEL}).`);
   }
-  async function callOpenAI(key, model, system, prompt) {
+  async function callOpenAI(key, model, system, prompt, { json = true, maxTokens } = {}) {
+    const body = { model, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }] };
+    if (json) body.response_format = { type: 'json_object' };
+    if (maxTokens) body.max_completion_tokens = maxTokens;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }),
+      body: JSON.stringify(body),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
     return j.choices?.[0]?.message?.content || '';
+  }
+  // Mọi lệnh AI của dự án (gợi ý chốt đơn, chấm báo giá, phân tích…) đi qua đây: máy có OpenAI key → OpenAI, không thì Claude của extension
+  let aiCfgCache = null;
+  async function aiCall(msg) {
+    if (!aiCfgCache || Date.now() - aiCfgCache.at > 30e3) aiCfgCache = { at: Date.now(), v: await aiCfgGet() };
+    const c = aiCfgCache.v;
+    if (!c.openaiKey) return rawCall(msg);
+    return callOpenAI(c.openaiKey, c.openaiModel || OAI_MODEL, msg.system, msg.prompt, { json: false, maxTokens: msg.maxTokens });
+  }
+  // Tab ⚙️ Cài đặt: dòng "AI của dự án" + nút cài key (bảng vẽ lại bằng innerHTML → bắt sự kiện chung)
+  if (IS_TOP) {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest?.('[data-ai-cfg]')) return;
+      e.preventDefault();
+      aiCfgEdit().catch((err) => alert(err.message));
+    });
+    setInterval(async () => {
+      const els = document.querySelectorAll('[data-ai-now]');
+      if (!els.length) return;
+      const c = await aiCfgGet();
+      const t = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL} (key …${c.openaiKey.slice(-4)})` : 'Claude (chưa cài OpenAI key)';
+      els.forEach((el) => el.textContent !== t && (el.textContent = t));
+    }, 1500);
   }
   async function aiSum(text) {
     const system = 'Bạn đọc tin nhắn tiếng Việt và liệt kê từng khoản tiền cần cộng. Quy ước: "k" = nghìn đồng (420k = 420000), "tr"/"triệu" = 1.000.000, "750.000đ" = 750000. Kích thước dạng 330x300x90 là tên khoản, không phải số tiền. Nếu khoản có số lượng (vd. 2 bản x 300k) thì ghi qty và price. Chỉ trả về JSON, không giải thích.';
@@ -16825,7 +16854,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       </div>
       ${admin ? await zipCard() : ''}
       ${admin ? `<div class="sx-perm">${await permsCard(quotes)}</div>` : ''}
-      <div class="muted ct-note">🔐 Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic nhập trong popup của extension (biểu tượng trên thanh Chrome).</div></div>`;
+      <div class="muted ct-note">🔐 Khoá API, Supabase, mật khẩu nhóm và số dư Anthropic nhập trong popup của extension (biểu tượng trên thanh Chrome).</div>
+      ${admin ? `<div class="muted ct-note">🤖 AI của dự án trên máy này: <b data-ai-now>…</b> <button type="button" data-ai-cfg style="margin-left:6px;cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 10px;font:inherit;font-weight:700">⚙️ Cài OpenAI key</button></div>` : ''}</div>`;
   }
 
   // ---------- Tab "💰 Công nợ": tổng quan công nợ từ trang /cong-no (quá hạn, sắp đến hạn, đã thu 30 ngày) ----------
