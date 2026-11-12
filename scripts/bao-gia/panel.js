@@ -8134,7 +8134,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <div data-log style="display:flex;flex-direction:column;gap:8px"></div>
         <div data-recent style="display:flex;flex-wrap:wrap;gap:4px"></div>
         <textarea data-q rows="3" placeholder="Nhập câu hỏi / yêu cầu cho AI… (Ctrl+V dán ảnh, kéo thả ảnh vào đây · Ctrl+Enter để gửi)" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font:inherit;resize:vertical"></textarea>
-        ${pool.length ? `<div style="font-size:11.5px;color:#475569"><b>🖼 Ảnh có sẵn trong bình luận</b> (${pool.length}) – bấm ảnh để thêm / bỏ${cImgs.length ? ` · viền xanh: ảnh của bình luận này` : ''}</div><div data-pool style="display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px">${pool.map((x, i) => `<img data-p="${i}" src="${esc(x.u)}" title="${esc(x.who ? `Ảnh của ${x.who}` : 'Ảnh trong bình luận')}" style="flex:none;width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${cImgs.includes(x.u) ? '#22c55e' : '#e2e8f0'};opacity:.8">`).join('')}</div>` : ''}
+        ${pool.length ? `<div style="font-size:11.5px;color:#475569"><b>🖼 Ảnh có sẵn trong bình luận</b> (${pool.length}) – bấm ảnh để thêm / bỏ${cImgs.length ? ` · viền xanh: ảnh của bình luận này` : ''}</div><div data-pool style="display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px">${pool.map((x, i) => `<div data-p="${i}" title="${esc(x.who ? `Ảnh của ${x.who}` : 'Ảnh trong bình luận')} – bấm để thêm / bỏ" style="flex:none;width:64px;height:64px;background:#f8fafc url('${esc(x.u)}') center/cover no-repeat;border-radius:6px;cursor:pointer;border:2px solid ${cImgs.includes(x.u) ? '#22c55e' : '#e2e8f0'};opacity:.8;position:relative"></div>`).join('')}</div>` : ''}
         <div data-thumbs style="display:flex;flex-wrap:wrap;gap:6px"></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <label style="cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 12px;font-weight:700">📎 Chọn ảnh<input type="file" accept="image/*" multiple data-file hidden></label>
@@ -8154,6 +8154,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     document.addEventListener('keydown', onKey, true);
     wrap.addEventListener('mousedown', (e) => e.target === wrap && close());
+    // không cho CRM bắt cú bấm trong hộp (vd. bấm ảnh mở xem ảnh lớn)
+    for (const ev of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup']) wrap.addEventListener(ev, (e) => e.stopPropagation());
     $('[data-x]').onclick = close;
     const paintProv = () => aiCfgGet().then((c) => ($('[data-prov]').textContent = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude (chưa có OpenAI key – không gửi được ảnh)'));
     paintProv();
@@ -8170,13 +8172,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (r) (qa.value = recent[Number(r.dataset.r)]), qa.focus();
     };
     const paintThumbs = () => {
-      $('[data-thumbs]').innerHTML = imgs.map((m, i) => `<div style="position:relative"><img src="${m.url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"><span data-rm="${i}" title="Bỏ ảnh" style="position:absolute;top:-6px;right:-6px;cursor:pointer;background:#ef4444;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-size:11px">✕</span></div>`).join('');
+      $('[data-thumbs]').innerHTML = imgs.map((m, i) => `<div style="position:relative"><div style="width:72px;height:72px;background:url('${m.url}') center/cover no-repeat;border-radius:6px;border:1px solid #e2e8f0"></div><span data-rm="${i}" title="Bỏ ảnh" style="position:absolute;top:-6px;right:-6px;cursor:pointer;background:#ef4444;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-size:11px">✕</span></div>`).join('');
     };
     const paintPool = () =>
       wrap.querySelectorAll('[data-p]').forEach((el) => {
         const on = imgs.some((m) => m.src === pool[Number(el.dataset.p)].u);
         el.style.opacity = on ? '1' : '.8';
         el.style.outline = on ? '3px solid #4f46e5' : '';
+        el.innerHTML = on ? '<span style="position:absolute;right:2px;bottom:2px;background:#4f46e5;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-size:11px">✓</span>' : '';
       });
     $('[data-thumbs]').onclick = (e) => {
       const r = e.target.closest('[data-rm]');
@@ -8257,7 +8260,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const prompt = `${useCtx ? `Bình luận${author ? ` của ${author}` : ''}${code ? ` (báo giá ${code})` : ''}:\n<<<\n${text}\n>>>\n\n` : ''}${q || 'Đọc các ảnh này và cho biết nội dung chính.'}`;
       const shots = imgs.splice(0);
       if (q) akRemember(q);
-      bubble('Bạn', `${esc(q || '(chỉ gửi ảnh)')}${shots.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${shots.map((m) => `<img src="${m.url}" style="width:48px;height:48px;object-fit:cover;border-radius:4px">`).join('')}</div>` : ''}`, '#eef2ff');
+      bubble('Bạn', `${esc(q || '(chỉ gửi ảnh)')}${shots.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${shots.map((m) => `<div style="width:48px;height:48px;background:url('${m.url}') center/cover no-repeat;border-radius:4px"></div>`).join('')}</div>` : ''}`, '#eef2ff');
       qa.value = '';
       paintThumbs();
       paintPool();
