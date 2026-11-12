@@ -8105,6 +8105,62 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       throw err;
     }
   }
+  // Markdown đơn giản của AI → HTML (bảng |…|, tiêu đề #, **đậm**, danh sách -, 1.)
+  function akMd(md) {
+    const inl = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    const lines = String(md || '').replace(/\r/g, '').split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^\s*\|.*\|\s*$/.test(l)) {
+        const rows = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(lines[i++]);
+        i--;
+        const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+        const body = rows.filter((r) => !/^[\s|:-]+$/.test(r)); // bỏ dòng |---|---|
+        const [h, ...rs] = body;
+        const num = (c) => /^[\d.,\s]+(đ|₫|%)?(\/cái)?$/.test(c) && /\d/.test(c);
+        out.push(`<table class="ak-t"><thead><tr>${cells(h).map((c) => `<th>${inl(c)}</th>`).join('')}</tr></thead><tbody>${rs.map((r) => `<tr>${cells(r).map((c) => `<td${num(c) ? ' class="n"' : ''}>${inl(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+        continue;
+      }
+      let m;
+      if ((m = /^\s*(#{1,4})\s+(.*)$/.exec(l))) out.push(`<div class="ak-h">${inl(m[2])}</div>`);
+      else if ((m = /^\s*[-*•]\s+(.*)$/.exec(l))) out.push(`<div class="ak-li">• ${inl(m[1])}</div>`);
+      else if ((m = /^\s*(\d+)[.)]\s+(.*)$/.exec(l))) out.push(`<div class="ak-li">${m[1]}. ${inl(m[2])}</div>`);
+      else if (!l.trim()) out.push('<div style="height:6px"></div>');
+      else out.push(`<div>${inl(l)}</div>`);
+    }
+    return out.join('');
+  }
+  const AK_CSS = '.ak-md{white-space:normal;line-height:1.5}.ak-md .ak-h{font-weight:800;font-size:14px;margin:6px 0 2px;color:#0f172a}.ak-md .ak-li{padding-left:6px}.ak-md code{background:#e2e8f0;border-radius:4px;padding:0 3px}.ak-t{border-collapse:collapse;margin:6px 0;font-size:12.5px;width:max-content;max-width:100%}.ak-t th{background:#e3141b;color:#fff;font-weight:700;padding:5px 8px;text-align:left;white-space:nowrap}.ak-t td{padding:4px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}.ak-t tbody tr:nth-child(odd) td{background:#f8fafc}.ak-t tbody tr:nth-child(even) td{background:#eef2f7}.ak-t td.n{text-align:right;white-space:nowrap}';
+  // Kết quả (HTML) → ảnh PNG: vẽ qua SVG foreignObject, nền trắng, đóng watermark
+  async function akToPng(html, title) {
+    const W = 1100;
+    const box = document.createElement('div');
+    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;max-width:${W}px;background:#fff;padding:20px 24px;font:14px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
+    box.innerHTML = `<style>${AK_CSS}</style><div style="font-size:16px;font-weight:800;color:#e3141b;border-bottom:3px double #e3141b;padding-bottom:6px;margin-bottom:8px">${esc(title)}</div><div class="ak-md">${html}</div>`;
+    document.body.append(box);
+    const w = Math.ceil(box.scrollWidth);
+    const h = Math.ceil(box.scrollHeight);
+    box.style.width = `${w}px`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(box)}</foreignObject></svg>`;
+    box.remove();
+    const img = new Image();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace('position:fixed;left:-20000px;top:0;', ''))}`;
+    await img.decode();
+    const S = 2;
+    const c = document.createElement('canvas');
+    c.width = w * S;
+    c.height = h * S;
+    const x = c.getContext('2d');
+    x.scale(S, S);
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, w, h);
+    x.drawImage(img, 0, 0);
+    drawWatermark(x, c.width, c.height, 0.05);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+    return Object.assign(blob, { w, h });
+  }
   function akOpen(one) {
     document.getElementById('dg-ask')?.remove();
     const content = one?.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
@@ -8131,7 +8187,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const wrap = document.createElement('div');
     wrap.id = 'dg-ask';
     wrap.setAttribute('style', 'position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.45);display:grid;place-items:center;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif');
-    wrap.innerHTML = `<div data-box style="width:min(760px,94vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+    wrap.innerHTML = `<style>${AK_CSS}</style><div data-box style="width:min(760px,94vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
       <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:linear-gradient(90deg,#0f766e,#4f46e5);color:#fff">
         <b style="font-size:15px">🤖 Hỏi AI${code ? ` · ${esc(code)}` : ''}</b><span data-prov style="font-size:11px;opacity:.85"></span>
         <span style="flex:1"></span><span data-cfg title="Cài OpenAI key / model" style="cursor:pointer">⚙️</span><span data-x title="Đóng (Esc)" style="cursor:pointer;font-size:18px;margin-left:8px">✕</span></div>
@@ -8287,7 +8343,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       btn.textContent = '⏳ Đang hỏi…';
       const ans = bubble('AI', '<i style="color:#94a3b8">đang trả lời…</i>', '#f0fdfa');
       try {
-        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ.';
+        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy Tuấn Tú (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ. Khi cần trình bày bảng (so sánh, liệt kê nhiều cột) dùng bảng Markdown chuẩn (| cột | cột |, dòng thứ 2 là |---|---|), không chèn ghi chú vào giữa bảng. Nếu người dùng muốn kết quả dạng hình ảnh: vẫn trả bảng Markdown – hệ thống sẽ tự chuyển thành ảnh.';
         const cfg = await aiCfgGet();
         let out;
         if (cfg.openaiKey) {
@@ -8301,7 +8357,45 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           out = await call({ type: 'claude', system: sys, prompt: prev ? `${prev}\n\nNgười dùng: ${prompt}` : prompt, maxTokens: 4000, what: `Hỏi AI: ${(q || '').slice(0, 50)}` });
           hist.push({ role: 'user', content: prompt }, { role: 'assistant', content: out });
         }
-        ans.innerHTML = `<div style="font-size:11px;font-weight:800;color:#0f766e;margin-bottom:2px">AI</div>${esc(out)}<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-copy style="cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px">📋 Chép</button>${one ? '<button type="button" data-ins style="cursor:pointer;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px;font-weight:700">↩️ Chèn vào ô Trả lời</button>' : ''}</div>`;
+        const md = akMd(out);
+        const bt = (k, label, st) => `<button type="button" data-${k} style="cursor:pointer;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px;font-weight:700;${st}">${label}</button>`;
+        ans.style.whiteSpace = 'normal';
+        ans.innerHTML = `<div style="font-size:11px;font-weight:800;color:#0f766e;margin-bottom:2px">AI</div><div class="ak-md" style="overflow-x:auto">${md}</div><div data-pic style="margin-top:6px"></div><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${bt('copy', '📋 Chép chữ', 'border:1px solid #cbd5e1;background:#fff;font-weight:400')}${one ? bt('ins', '↩️ Chèn chữ vào ô Trả lời', 'border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8') : ''}${bt('png', '🖼 Tạo ảnh', 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c')}${one ? bt('pst', '📤 Dán ảnh vào ô Trả lời', 'border:0;background:linear-gradient(90deg,#2563eb,#7c3aed);color:#fff') : ''}</div>`;
+        let png = null;
+        const title = `${code ? `${code} · ` : ''}${(q || 'Kết quả AI').slice(0, 90)}`;
+        const makePng = async () => {
+          if (png) return png;
+          png = await akToPng(md, title);
+          const u = URL.createObjectURL(png);
+          ans.querySelector('[data-pic]').innerHTML = `<div style="font-size:11px;color:#64748b;margin-bottom:2px">🖼 Ảnh kết quả (đã chép vào clipboard – Ctrl+V để dán)</div><a href="${u}" download="ket-qua-ai${code ? `-${code}` : ''}.png" title="Bấm để tải ảnh về"><div style="width:min(100%,${png.w}px);aspect-ratio:${png.w}/${png.h};border:1px solid #e2e8f0;border-radius:6px;background:#fff url('${u}') center/100% 100% no-repeat"></div></a>`;
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+          } catch {}
+          return png;
+        };
+        ans.querySelector('[data-png]').onclick = async (e) => {
+          const b = e.currentTarget;
+          b.textContent = '⏳ Đang tạo ảnh…';
+          try {
+            await makePng();
+            b.textContent = '✓ Đã tạo ảnh (đã chép)';
+          } catch (err) {
+            b.textContent = `⚠️ ${err.message}`;
+          }
+        };
+        ans.querySelector('[data-pst]')?.addEventListener('click', async (e) => {
+          const b = e.currentTarget;
+          b.textContent = '⏳ Đang dán…';
+          try {
+            const p = await makePng();
+            await pasteImageToComment(p, `ket-qua-ai${code ? `-${code}` : ''}.png`, () => akReplyBox(one));
+            b.textContent = '✓ Đã dán – xem lại rồi bấm Trả lời';
+          } catch (err) {
+            b.textContent = `⚠️ ${err.message}`;
+          }
+        });
+        // câu hỏi muốn kết quả dạng hình ảnh → tự tạo ảnh luôn
+        if (/(dạng|định dạng|xuất|trả về|thành|ra)\s*(file\s*)?(hình|ảnh|image|png)/i.test(q)) ans.querySelector('[data-png]').click();
         ans.querySelector('[data-copy]').onclick = (e) => navigator.clipboard.writeText(out).then(() => (e.target.textContent = '✓ Đã chép'));
         ans.querySelector('[data-ins]')?.addEventListener('click', async (e) => {
           try {
