@@ -14387,7 +14387,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   function haHtml(d) {
     const f = (n) => `${Math.round(n).toLocaleString('vi-VN')} đ`;
     const body = d.rows
-      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map(esc).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
+      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map((x, j) => (j ? esc(x) : `<b>${esc(x)}</b>`)).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
       .join('');
     const tot =
       d.grand > d.sub + 1
