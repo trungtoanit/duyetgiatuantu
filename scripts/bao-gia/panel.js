@@ -14422,6 +14422,12 @@ tr.t:last-child td{background:#cfe8fb}
 .sg{display:flex;justify-content:space-between;margin-top:8px;padding:0 60px;page-break-inside:avoid;line-height:1.4}
 .sg>div{text-align:center}
 .sg .gap{height:72px}
+.ap{display:flex;align-items:center;justify-content:center}
+.apx{border:1px solid #1e293b;padding:2px;background:#fff;text-align:center;line-height:1.25}
+.apt{font-size:10.5px;font-weight:700;color:#1e2f86;margin:1px 0 2px}.apt i,.ap1 i{font-weight:400}
+.apb{position:relative;background:#dff3d0;padding:3px 8px;color:#1e2f86;overflow:hidden}
+.apb svg{position:absolute;left:50%;top:50%;width:46px;height:37px;transform:translate(-50%,-50%);opacity:.45}
+.ap1,.ap2,.ap3{position:relative}.ap1{font-size:10px;font-weight:700}.ap2{font-size:9.5px;font-weight:700;white-space:nowrap}.ap3{font-size:9.5px}
 </style></head><body>
 <div class="top"><img src="${HA_LOGO}" alt="HA"><div class="co"><b>${esc(HA_CO.name)}</b><i>${esc(HA_CO.addr)}</i></div>
 <div class="meta"><b>Ngày báo giá</b><span>${esc(d.date)}</span><b>Số báo giá</b><span>${esc(d.code)}</span><b>Hiệu lực đến</b><span>${esc(d.until)}</span></div></div>
@@ -14440,8 +14446,8 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
 <div>• Số tài khoản VND : ${esc(HA_CO.acc)}</div>
 <div>• Ngân hàng: ${esc(HA_CO.bank)}</div>
 <div>4. Thời gian hoàn thành đơn đặt hàng này là <b>3-4 ngày kể từ ngày đặt hàng</b></div></div>
-<div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>${esc(d.staff)}</b></div>
-<div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: ${esc(HA_CO.bossTitle)}</div><b>${esc(HA_CO.boss)}</b></div></div>
+<div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>&nbsp;</b></div>
+<div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap ap"><div class="apx"><div class="apt">Người duyệt giá <i>(Approver)</i></div><div class="apb"><svg viewBox="0 0 100 80" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="ap1">Đã duyệt giá bởi <i>(Approved by)</i></div><div class="ap2">${esc(HA_CO.name)}</div><div class="ap3">${esc(HA_CO.boss)} · Ngày: ${esc(new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }))}</div></div></div></div><div>Chức vụ: ${esc(HA_CO.bossTitle)}</div><b>${esc(HA_CO.boss)}</b></div></div>
 </body></html>`;
   }
   const HA_LABEL = '🖨 In HA';
