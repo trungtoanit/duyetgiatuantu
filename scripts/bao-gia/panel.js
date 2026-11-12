@@ -8056,6 +8056,281 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   if (IS_TOP) setInterval(() => injectPriceButtons(), 2000);
 
+  // ---------- 🤖 Hỏi AI tại mỗi bình luận: hộp nhập câu hỏi + nhiều ảnh (chọn file / dán / kéo thả / ảnh của bình luận) → OpenAI trả lời tại chỗ ----------
+  // Kèm nội dung bình luận làm ngữ cảnh; hỏi tiếp được (giữ hội thoại); chép / chèn câu trả lời vào ô Trả lời. Ảnh cần OpenAI key (⚙️), không ảnh mà chưa có key thì dùng Claude.
+  const AK_PROMPTS = 'dgAskPrompts';
+  const akRecent = () => {
+    try {
+      return JSON.parse(localStorage.getItem(AK_PROMPTS) || '[]');
+    } catch {
+      return [];
+    }
+  };
+  const akRemember = (p) => {
+    try {
+      localStorage.setItem(AK_PROMPTS, JSON.stringify([p, ...akRecent().filter((x) => x !== p)].slice(0, 8)));
+    } catch {}
+  };
+  // ảnh → JPEG dataURL, cạnh dài tối đa 1600px (đỡ nặng khi gửi)
+  async function akToData(src) {
+    const blob = src instanceof Blob ? src : await (await fetch(src, { credentials: 'include' })).blob();
+    const bmp = await createImageBitmap(blob);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k);
+    c.height = Math.round(bmp.height * k);
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(bmp, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.85);
+  }
+  async function oaiChat(messages, maxTokens = 4000, what = 'Hỏi AI') {
+    const c = await aiCfgGet();
+    if (!c.openaiKey) throw new Error('Gửi ảnh cần OpenAI key – bấm ⚙️ trong hộp để cài.');
+    const model = c.openaiModel || OAI_MODEL;
+    const t0 = Date.now();
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${c.openaiKey}` },
+        body: JSON.stringify({ model, messages, max_completion_tokens: maxTokens }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
+      aiLogAdd({ at: t0, prov: 'OpenAI', model: j.model || model, what, ms: Date.now() - t0, tin: j.usage?.prompt_tokens || 0, tout: j.usage?.completion_tokens || 0, page: location.pathname });
+      return j.choices?.[0]?.message?.content || '';
+    } catch (err) {
+      aiLogAdd({ at: t0, prov: 'OpenAI', model, what, ms: Date.now() - t0, err: String(err.message || err).slice(0, 160), page: location.pathname });
+      throw err;
+    }
+  }
+  function akOpen(one) {
+    document.getElementById('dg-ask')?.remove();
+    const content = one?.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+    const detail = content?.querySelector('.ant-comment-content-detail');
+    const author = content?.querySelector('.ant-comment-content-author-name')?.innerText.trim() || '';
+    const text = (detail?.innerText || '').trim();
+    const cImgs = [...(detail?.querySelectorAll('img') || [])].map((i) => i.currentSrc || i.src).filter((u) => u && !/^data:image\/svg/.test(u));
+    const code = document.title.match(/#(BG\d+)/)?.[1] || '';
+    const imgs = []; // { url (dataURL) }
+    const hist = []; // hội thoại OpenAI
+    const wrap = document.createElement('div');
+    wrap.id = 'dg-ask';
+    wrap.setAttribute('style', 'position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.45);display:grid;place-items:center;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif');
+    wrap.innerHTML = `<div data-box style="width:min(760px,94vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:linear-gradient(90deg,#0f766e,#4f46e5);color:#fff">
+        <b style="font-size:15px">🤖 Hỏi AI${code ? ` · ${esc(code)}` : ''}</b><span data-prov style="font-size:11px;opacity:.85"></span>
+        <span style="flex:1"></span><span data-cfg title="Cài OpenAI key / model" style="cursor:pointer">⚙️</span><span data-x title="Đóng (Esc)" style="cursor:pointer;font-size:18px;margin-left:8px">✕</span></div>
+      <div data-body style="padding:10px 14px;overflow:auto;display:flex;flex-direction:column;gap:8px">
+        ${text ? `<label style="display:flex;gap:6px;align-items:flex-start;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px"><input type="checkbox" data-ctx checked style="margin-top:3px"><span><b>Kèm bình luận</b>${author ? ` của ${esc(author)}` : ''}: <span style="color:#475569;white-space:pre-wrap">${esc(text.length > 400 ? `${text.slice(0, 400)}…` : text)}</span></span></label>` : ''}
+        <div data-log style="display:flex;flex-direction:column;gap:8px"></div>
+        <div data-recent style="display:flex;flex-wrap:wrap;gap:4px"></div>
+        <textarea data-q rows="3" placeholder="Nhập câu hỏi / yêu cầu cho AI… (Ctrl+V dán ảnh, kéo thả ảnh vào đây · Ctrl+Enter để gửi)" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font:inherit;resize:vertical"></textarea>
+        <div data-thumbs style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label style="cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 12px;font-weight:700">📎 Chọn ảnh<input type="file" accept="image/*" multiple data-file hidden></label>
+          ${cImgs.length ? `<button type="button" data-cimg style="cursor:pointer;border:1px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:999px;padding:3px 12px;font:inherit;font-weight:700">🖼 Thêm ${cImgs.length} ảnh của bình luận</button>` : ''}
+          <span style="flex:1"></span>
+          <button type="button" data-send style="cursor:pointer;border:0;background:linear-gradient(90deg,#0f766e,#4f46e5);color:#fff;border-radius:999px;padding:6px 18px;font:inherit;font-weight:800">🚀 Gửi</button></div>
+      </div></div>`;
+    document.documentElement.append(wrap);
+    const $ = (s) => wrap.querySelector(s);
+    const qa = $('[data-q]');
+    const close = () => {
+      wrap.remove();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', onKey, true);
+    wrap.addEventListener('mousedown', (e) => e.target === wrap && close());
+    $('[data-x]').onclick = close;
+    const paintProv = () => aiCfgGet().then((c) => ($('[data-prov]').textContent = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude (chưa có OpenAI key – không gửi được ảnh)'));
+    paintProv();
+    $('[data-cfg]').onclick = async () => {
+      await aiCfgEdit().catch((err) => alert(err.message));
+      paintProv();
+    };
+    const recent = akRecent();
+    $('[data-recent]').innerHTML = recent.map((p, i) => `<span data-r="${i}" title="${esc(p)}" style="cursor:pointer;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;font-size:11.5px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p)}</span>`).join('');
+    $('[data-recent]').onclick = (e) => {
+      const r = e.target.closest('[data-r]');
+      if (r) (qa.value = recent[Number(r.dataset.r)]), qa.focus();
+    };
+    const paintThumbs = () => {
+      $('[data-thumbs]').innerHTML = imgs.map((m, i) => `<div style="position:relative"><img src="${m.url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"><span data-rm="${i}" title="Bỏ ảnh" style="position:absolute;top:-6px;right:-6px;cursor:pointer;background:#ef4444;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-size:11px">✕</span></div>`).join('');
+    };
+    $('[data-thumbs]').onclick = (e) => {
+      const r = e.target.closest('[data-rm]');
+      if (r) imgs.splice(Number(r.dataset.rm), 1), paintThumbs();
+    };
+    const addBlobs = async (list) => {
+      for (const f of list) {
+        if (!/^image\//.test(f.type || '')) continue;
+        try {
+          imgs.push({ url: await akToData(f) });
+        } catch {}
+      }
+      paintThumbs();
+    };
+    $('[data-file]').onchange = (e) => addBlobs([...e.target.files]).then(() => (e.target.value = ''));
+    wrap.addEventListener('paste', (e) => {
+      const fs = [...(e.clipboardData?.items || [])].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean);
+      if (fs.length) e.preventDefault(), addBlobs(fs);
+    });
+    wrap.addEventListener('dragover', (e) => e.preventDefault());
+    wrap.addEventListener('drop', (e) => {
+      e.preventDefault();
+      addBlobs([...(e.dataTransfer?.files || [])]);
+    });
+    $('[data-cimg]')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      b.textContent = '⏳ Đang lấy ảnh…';
+      let ok = 0;
+      for (const u of cImgs) {
+        try {
+          imgs.push({ url: await akToData(u) });
+          ok++;
+        } catch {}
+      }
+      paintThumbs();
+      b.textContent = ok === cImgs.length ? `✓ Đã thêm ${ok} ảnh` : `⚠️ Thêm được ${ok}/${cImgs.length} ảnh`;
+      b.disabled = true;
+    });
+    const log = $('[data-log]');
+    const bubble = (who, html, bg) => {
+      const d = document.createElement('div');
+      d.setAttribute('style', `border-radius:10px;padding:8px 10px;background:${bg};white-space:pre-wrap;word-break:break-word`);
+      d.innerHTML = `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:2px">${who}</div>${html}`;
+      log.append(d);
+      d.scrollIntoView({ block: 'nearest' });
+      return d;
+    };
+    const send = async () => {
+      const q = qa.value.trim();
+      if (!q && !imgs.length) return qa.focus();
+      const btn = $('[data-send]');
+      if (btn.disabled) return;
+      const useCtx = !hist.length && $('[data-ctx]')?.checked && text;
+      const prompt = `${useCtx ? `Bình luận${author ? ` của ${author}` : ''}${code ? ` (báo giá ${code})` : ''}:\n<<<\n${text}\n>>>\n\n` : ''}${q || 'Đọc các ảnh này và cho biết nội dung chính.'}`;
+      const shots = imgs.splice(0);
+      if (q) akRemember(q);
+      bubble('Bạn', `${esc(q || '(chỉ gửi ảnh)')}${shots.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${shots.map((m) => `<img src="${m.url}" style="width:48px;height:48px;object-fit:cover;border-radius:4px">`).join('')}</div>` : ''}`, '#eef2ff');
+      qa.value = '';
+      paintThumbs();
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang hỏi…';
+      const ans = bubble('AI', '<i style="color:#94a3b8">đang trả lời…</i>', '#f0fdfa');
+      try {
+        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ.';
+        const cfg = await aiCfgGet();
+        let out;
+        if (cfg.openaiKey) {
+          if (!hist.length) hist.push({ role: 'system', content: sys });
+          hist.push({ role: 'user', content: shots.length ? [{ type: 'text', text: prompt }, ...shots.map((m) => ({ type: 'image_url', image_url: { url: m.url } }))] : prompt });
+          out = await oaiChat(hist, 4000, `Hỏi AI: ${(q || 'ảnh').slice(0, 50)}`);
+          hist.push({ role: 'assistant', content: out });
+        } else {
+          if (shots.length) throw new Error('Gửi ảnh cần OpenAI key – bấm ⚙️ ở góc hộp để cài.');
+          const prev = hist.map((m) => `${m.role === 'user' ? 'Người dùng' : 'AI'}: ${m.content}`).join('\n\n');
+          out = await call({ type: 'claude', system: sys, prompt: prev ? `${prev}\n\nNgười dùng: ${prompt}` : prompt, maxTokens: 4000, what: `Hỏi AI: ${(q || '').slice(0, 50)}` });
+          hist.push({ role: 'user', content: prompt }, { role: 'assistant', content: out });
+        }
+        ans.innerHTML = `<div style="font-size:11px;font-weight:800;color:#0f766e;margin-bottom:2px">AI</div>${esc(out)}<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-copy style="cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px">📋 Chép</button>${one ? '<button type="button" data-ins style="cursor:pointer;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px;font-weight:700">↩️ Chèn vào ô Trả lời</button>' : ''}</div>`;
+        ans.querySelector('[data-copy]').onclick = (e) => navigator.clipboard.writeText(out).then(() => (e.target.textContent = '✓ Đã chép'));
+        ans.querySelector('[data-ins]')?.addEventListener('click', async (e) => {
+          try {
+            const ta = await akReplyBox(one);
+            setTextarea(ta, ta.value ? `${ta.value}\n${out}` : out);
+            close();
+            ta.focus();
+          } catch (err) {
+            e.target.textContent = `⚠️ ${err.message}`;
+          }
+        });
+        akMirror(one, q, out);
+      } catch (err) {
+        imgs.unshift(...shots);
+        paintThumbs();
+        ans.innerHTML = `<div style="font-size:11px;font-weight:800;color:#dc2626">Lỗi</div>${esc(err.message)}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Gửi';
+        qa.focus();
+      }
+    };
+    $('[data-send]').onclick = send;
+    qa.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) e.preventDefault(), send();
+    });
+    qa.focus();
+  }
+  // Câu trả lời gần nhất cũng hiện ngay dưới bình luận (đóng hộp vẫn xem được)
+  function akMirror(one, q, out) {
+    const content = one?.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
+    if (!content) return;
+    let box = content.querySelector(':scope > .dg-ask-out');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'dg-ask-out';
+      box.setAttribute('style', 'margin:4px 0;padding:6px 10px;border:1px solid #99f6e4;border-radius:8px;background:#f0fdfa;white-space:pre-wrap;word-break:break-word;font-size:13px;max-width:100%');
+      const detail = content.querySelector(':scope > .ant-comment-content-detail');
+      (detail || content.firstChild)?.after(box);
+    }
+    box.innerHTML = `<div style="font-size:11px;font-weight:800;color:#0f766e">🤖 AI${q ? `: <span style="font-weight:600;color:#475569">${esc(q.slice(0, 120))}</span>` : ''} <span data-x title="Ẩn" style="cursor:pointer;float:right">✕</span></div>${esc(out)}`;
+    box.querySelector('[data-x]').onclick = () => box.remove();
+  }
+  async function akReplyBox(one) {
+    let top = one;
+    while (top.parentElement?.closest('.ant-comment')) top = top.parentElement.closest('.ant-comment');
+    const own = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content > ul.ant-comment-actions');
+    const cm = own ? one : top;
+    const actions = own || top.querySelector(':scope > .ant-comment-inner > .ant-comment-content > ul.ant-comment-actions');
+    let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
+    if (ta) return ta;
+    const before = new Set(document.querySelectorAll('textarea'));
+    const reply = [...(actions?.querySelectorAll('*') || [])].reverse().find((e) => !e.closest('.dg-printq-reply, .dg-setprice, .dg-askai') && e.childElementCount <= 1 && e.textContent.trim() === 'Trả lời');
+    if (!reply) throw new Error('Không thấy nút Trả lời');
+    reply.click();
+    ta = await waitFor(() => cm.querySelector('textarea') || [...document.querySelectorAll('textarea')].find((t) => !before.has(t) && t.offsetParent), 4000, 100);
+    if (!ta) throw new Error('Không mở được ô Trả lời');
+    return ta;
+  }
+  function injectAskAi() {
+    if (!IS_TOP || !MY_ADMIN) return;
+    for (const one of document.querySelectorAll('.ant-comment')) {
+      if (one.closest('#dg-root, #dg-ask')) continue;
+      const actions = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content > ul.ant-comment-actions');
+      if (!actions || actions.querySelector('.dg-askai')) continue;
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="dg-askai" title="Hỏi AI về bình luận này: nhập câu hỏi, gửi kèm nhiều ảnh, xem trả lời tại chỗ" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#0f766e,#4f46e5);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">🤖 Hỏi AI</span>';
+      li.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        akOpen(one);
+      });
+      actions.append(li);
+    }
+    // cạnh tiêu đề "Bình luận" (sau Set giá): hỏi AI không kèm bình luận
+    const head = document.querySelector('.dg-setprice-head') || document.querySelector('.dg-printq');
+    if (head && !head.parentElement.querySelector('.dg-askai-head')) {
+      const b = document.createElement('span');
+      b.className = 'dg-askai-head';
+      b.textContent = '🤖 Hỏi AI';
+      b.title = 'Hỏi AI: nhập câu hỏi, gửi kèm nhiều ảnh, xem trả lời tại chỗ';
+      b.setAttribute('style', 'display:inline-block;margin-left:8px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0f766e,#4f46e5);border-radius:999px;padding:3px 12px');
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        akOpen(null);
+      });
+      head.after(b);
+    }
+  }
+  if (IS_TOP) setInterval(injectAskAi, 2000);
+
   // ---------- 🧮 Tính tổng (AI): bình luận có từ 2 khoản tiền trở lên (vd. phí bản in từng size + phí vận chuyển) ----------
   // AI chỉ đọc ra từng khoản (tên + số tiền); tổng do máy tự cộng lại để không sai số. Không gửi gì lên CRM.
   const SUM_MONEY_RE = /\d[\d.,]*\s*(?:k|đ|vnđ|vnd|tr|triệu|nghìn|ngàn)(?![a-zà-ỹ])/giu;
