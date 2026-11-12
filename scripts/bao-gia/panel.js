@@ -8107,7 +8107,21 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   // Markdown đơn giản của AI → HTML (bảng |…|, tiêu đề #, **đậm**, danh sách -, 1.)
   function akMd(md) {
-    const inl = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    // cho phép vài định dạng an toàn: **đậm**, [đỏ]…[/đỏ], [xanh]…[/xanh], và thẻ HTML đơn giản AI hay dùng (<b>, <strong>, <br>, <span style="color:…;font-weight:bold">)
+    const COL = { đỏ: '#dc2626', red: '#dc2626', xanh: '#16a34a', green: '#16a34a', 'xanh dương': '#2563eb', blue: '#2563eb', cam: '#ea580c', orange: '#ea580c' };
+    const colOk = (c) => (/^#[0-9a-f]{3,6}$/i.test(c) ? c : COL[String(c).toLowerCase()] || '');
+    const inl = (t) =>
+      esc(String(t).replace(/<br\s*\/?>/gi, '\n'))
+        .replace(/&lt;span style=(?:&quot;|&#39;)([^&]*?)(?:&quot;|&#39;)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (m0, st, txt) => {
+          const c = colOk((/color\s*:\s*([#\w]+)/i.exec(st) || [])[1] || '');
+          const b = /font-weight\s*:\s*(bold|[6-9]00)/i.test(st);
+          return `<span style="${c ? `color:${c};` : ''}${b ? 'font-weight:700' : ''}">${txt}</span>`;
+        })
+        .replace(/&lt;(b|strong)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<b>$2</b>')
+        .replace(/\[(đỏ|xanh dương|xanh|cam|red|green|blue|orange)\]([\s\S]*?)\[\/\1\]/gi, (m0, c, txt) => `<span style="color:${colOk(c)};font-weight:700">${txt}</span>`)
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
     const lines = String(md || '').replace(/\r/g, '').split('\n');
     const out = [];
     for (let i = 0; i < lines.length; i++) {
@@ -8120,7 +8134,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         const body = rows.filter((r) => !/^[\s|:-]+$/.test(r)); // bỏ dòng |---|---|
         const [h, ...rs] = body;
         const num = (c) => /^[\d.,\s]+(đ|₫|%)?(\/cái)?$/.test(c) && /\d/.test(c);
-        out.push(`<table class="ak-t"><thead><tr>${cells(h).map((c) => `<th>${inl(c)}</th>`).join('')}</tr></thead><tbody>${rs.map((r) => `<tr>${cells(r).map((c) => `<td${num(c) ? ' class="n"' : ''}>${inl(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+        out.push(`<table class="ak-t"><thead><tr>${cells(h).map((c) => `<th>${inl(c)}</th>`).join('')}</tr></thead><tbody>${rs.map((r) => `<tr>${cells(r).map((c) => `<td${num(c) ? ' class="n"' : c.length <= 22 ? ' class="s"' : ''}>${inl(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
         continue;
       }
       let m;
@@ -8132,7 +8146,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     return out.join('');
   }
-  const AK_CSS = '.ak-md{white-space:normal;line-height:1.5}.ak-md .ak-h{font-weight:800;font-size:14px;margin:6px 0 2px;color:#0f172a}.ak-md .ak-li{padding-left:6px}.ak-md code{background:#e2e8f0;border-radius:4px;padding:0 3px}.ak-t{border-collapse:collapse;margin:6px 0;font-size:12.5px;width:max-content;max-width:100%}.ak-t th{background:#e3141b;color:#fff;font-weight:700;padding:5px 8px;text-align:left;white-space:nowrap}.ak-t td{padding:4px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}.ak-t tbody tr:nth-child(odd) td{background:#f8fafc}.ak-t tbody tr:nth-child(even) td{background:#eef2f7}.ak-t td.n{text-align:right;white-space:nowrap}';
+  const AK_CSS = '.ak-md{white-space:normal;line-height:1.5}.ak-md .ak-h{font-weight:800;font-size:14px;margin:6px 0 2px;color:#0f172a}.ak-md .ak-li{padding-left:6px}.ak-md code{background:#e2e8f0;border-radius:4px;padding:0 3px}.ak-t{border-collapse:collapse;margin:6px 0;font-size:12.5px;width:max-content;max-width:100%}.ak-t th{background:#e3141b;color:#fff;font-weight:700;padding:5px 8px;text-align:left;white-space:nowrap}.ak-t td{padding:4px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}.ak-t tbody tr:nth-child(odd) td{background:#f8fafc}.ak-t tbody tr:nth-child(even) td{background:#eef2f7}.ak-t td.n{text-align:right;white-space:nowrap}.ak-t td.s{white-space:nowrap}';
   // Kết quả (HTML) → ảnh PNG: vẽ qua SVG foreignObject, nền trắng, đóng watermark
   async function akToPng(html, title) {
     const W = 1100;
@@ -8347,7 +8361,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       btn.textContent = '⏳ Đang hỏi…';
       const ans = bubble('AI', '<i style="color:#94a3b8">đang trả lời…</i>', '#f0fdfa');
       try {
-        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy Tuấn Tú (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ. Khi cần trình bày bảng (so sánh, liệt kê nhiều cột) dùng bảng Markdown chuẩn (| cột | cột |, dòng thứ 2 là |---|---|), không chèn ghi chú vào giữa bảng. Nếu người dùng muốn kết quả dạng hình ảnh: vẫn trả bảng Markdown – hệ thống sẽ tự chuyển thành ảnh. Tuyệt đối không tạo / chèn đường link ảnh (imgur, ![...](...)) vì bạn không tạo được ảnh.';
+        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy Tuấn Tú (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ. Khi cần trình bày bảng (so sánh, liệt kê nhiều cột) dùng bảng Markdown chuẩn (| cột | cột |, dòng thứ 2 là |---|---|), không chèn ghi chú vào giữa bảng. Nếu người dùng muốn kết quả dạng hình ảnh: vẫn trả bảng Markdown – hệ thống sẽ tự chuyển thành ảnh. Tuyệt đối không tạo / chèn đường link ảnh (imgur, ![...](...)) vì bạn không tạo được ảnh. Không dùng thẻ HTML: muốn tô đậm dùng **chữ**, muốn tô màu dùng [đỏ]chữ[/đỏ] hoặc [xanh]chữ[/xanh].';
         const cfg = await aiCfgGet();
         let out;
         if (cfg.openaiKey) {
