@@ -14589,7 +14589,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
     const body = d.rows
       .map((r, i) => {
         const { name, spec } = ddSplit(r.name);
-        return `<tr><td class="n">${i + 1}</td><td class="p">${esc(name)}</td><td class="s">${spec.map(esc).join(' · ')}</td><td class="c">${esc(r.unit)}</td><td class="r">${esc(r.qty)}</td><td class="r">${esc(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
+        return `<tr><td class="n">${i + 1}</td><td class="p">${esc(name)}</td><td class="s">${spec.map((x) => `<span class="k">${esc(x)}</span>`).join(' · ')}</td><td class="c">${esc(r.unit)}</td><td class="r">${esc(r.qty)}</td><td class="r">${esc(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
       })
       .join('');
     const vat = d.grand > d.sub + 1;
@@ -14616,7 +14616,7 @@ table.it{width:100%;border-collapse:collapse;margin:6px 0 0}
 .it td{border-bottom:1px solid #d6e2f0;padding:6px 6px;vertical-align:top}
 .it .n{text-align:center;color:#6b7280}
 .it .p{font-weight:700;color:#111827}
-.it .s{color:#1565c0;font-size:11.5px}
+.it .s{color:#1565c0;font-size:11.5px}.it .s .k{white-space:nowrap}
 .c{text-align:center}.r{text-align:right;white-space:nowrap}.b{font-weight:700}
 .sum{display:flex;justify-content:flex-end;margin:8px 0 10px}
 .sum>div{min-width:300px;border:1px solid #90caf9;border-radius:6px;overflow:hidden}
