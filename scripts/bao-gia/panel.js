@@ -14467,26 +14467,27 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
   }
   const HA_LABEL = '🖨 In HA';
   // Hộp sửa Số báo giá + tên NVKD trước khi in (giá trị lần trước của báo giá này lấy từ cloud)
-  function haAsk(v) {
+  function haAsk(v, o = { title: '🖨 In báo giá Hải Âu', grad: 'linear-gradient(90deg,#38bdf8,#0284c7)', btn: '#0284c7' }) {
     return new Promise((res) => {
       const ov = document.createElement('div');
       ov.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.45);display:grid;place-items:center;font-family:Arial,Helvetica,sans-serif');
       const inp = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-top:4px';
       ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:420px;max-width:calc(100vw - 32px);box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">
-        <div style="background:linear-gradient(90deg,#38bdf8,#0284c7);color:#fff;font-weight:800;padding:10px 14px;font-size:15px">🖨 In báo giá Hải Âu</div>
+        <div style="background:${o.grad};color:#fff;font-weight:800;padding:10px 14px;font-size:15px">${esc(o.title)}</div>
         <div style="padding:14px;display:grid;gap:10px;font-size:13px;color:#334155">
           <label><b>Số báo giá</b>${v.crmCode && v.crmCode !== v.code ? ` <span style="color:#94a3b8">(CRM: ${esc(v.crmCode)})</span>` : ''}<input data-h="code" style="${inp}" value="${esc(v.code)}"></label>
           <label><b>Đơn vị</b>${v.crmCust && v.crmCust !== v.cust ? ` <span style="color:#94a3b8">(CRM: ${esc(v.crmCust)})</span>` : ''}<input data-h="cust" style="${inp}" value="${esc(v.cust)}" placeholder="Tên đơn vị / khách hàng"></label>
           <label><b>Nhân viên kinh doanh</b> <span style="color:#94a3b8">(in dưới Người biên soạn, để trống = không in)</span><input data-h="staff" style="${inp}" value="${esc(v.staff)}" placeholder="Họ tên NVKD"></label>
-          <div style="color:#64748b;font-size:12px">Số báo giá, Đơn vị, NVKD được lưu lên cloud cho báo giá này – lần in sau, máy khác đều dùng lại.</div>
-          <div style="display:flex;justify-content:flex-end;gap:8px"><button data-h="no" style="padding:7px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer">Huỷ</button><button data-h="ok" style="padding:7px 16px;border-radius:8px;border:0;background:#0284c7;color:#fff;font-weight:700;cursor:pointer">🖨 Lưu &amp; In</button></div>
+          ${'boss' in v ? `<label><b>Người đại diện</b> <span style="color:#94a3b8">(in dưới Người đại diện + khung duyệt giá, để trống = không in tên)</span><input data-h="boss" style="${inp}" value="${esc(v.boss)}" placeholder="Họ tên người đại diện"></label>` : ''}
+          <div style="color:#64748b;font-size:12px">Các ô trên được lưu lên cloud cho báo giá này – lần in sau, máy khác đều dùng lại.</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><button data-h="no" style="padding:7px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer">Huỷ</button><button data-h="ok" style="padding:7px 16px;border-radius:8px;border:0;background:${o.btn};color:#fff;font-weight:700;cursor:pointer">🖨 Lưu &amp; In</button></div>
         </div></div>`;
       const q = (k) => ov.querySelector(`[data-h="${k}"]`);
       const done = (r) => {
         ov.remove();
         res(r);
       };
-      const ok = () => done({ code: q('code').value.trim() || v.crmCode || '', staff: q('staff').value.trim(), cust: q('cust').value.trim() || v.crmCust || '' });
+      const ok = () => done({ code: q('code').value.trim() || v.crmCode || '', staff: q('staff').value.trim(), cust: q('cust').value.trim() || v.crmCust || '', boss: q('boss')?.value.trim() || '' });
       q('ok').onclick = ok;
       q('no').onclick = () => done(null);
       ov.addEventListener('click', (e) => e.target === ov && done(null));
@@ -14545,6 +14546,158 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
     pdf.after(b);
   }
   if (IS_TOP) setInterval(haMount, 1500);
+
+  // ---------- 🅳 In ĐD: in báo giá đang mở theo mẫu CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG ----------
+  // Cùng nguồn dữ liệu với In HA (mẫu in "BẢNG BÁO GIÁ" của CRM). Đầu trang, ghi chú lấy theo mẫu in của CRM Đại Dương
+  // (quanly.baobidaiduong.com, logo = /logo.png thu nhỏ 240px). Bảng khác HA: tách cột Quy cách, chỉ kẻ ngang, tổng tiền là khung riêng.
+  const DD_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAAAXNSR0IArs4c6QAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAhGVYSWZNTQAqAAAACAAFARIAAwAAAAEAAQAAARoABQAAAAEAAABKARsABQAAAAEAAABSASgAAwAAAAEAAgAAh2kABAAAAAEAAABaAAAAAAAAAEgAAAABAAAASAAAAAEAA6ABAAMAAAABAAEAAKACAAQAAAABAAAA8KADAAQAAAABAAAA8AAAAAAm0kfIAAAACXBIWXMAAAsTAAALEwEAmpwYAAAB8WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyI+CiAgICAgICAgIDx0aWZmOllSZXNvbHV0aW9uPjcyPC90aWZmOllSZXNvbHV0aW9uPgogICAgICAgICA8dGlmZjpPcmllbnRhdGlvbj4xPC90aWZmOk9yaWVudGF0aW9uPgogICAgICAgICA8dGlmZjpYUmVzb2x1dGlvbj43MjwvdGlmZjpYUmVzb2x1dGlvbj4KICAgICAgICAgPHRpZmY6UmVzb2x1dGlvblVuaXQ+MjwvdGlmZjpSZXNvbHV0aW9uVW5pdD4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgIDwvcmRmOlJERj4KPC94OnhtcG1ldGE+Cm3DRCoAADZRSURBVHgB7Z0JnFxFtf+r6i7dPUuSSWbJvgDBQEICgiAom/xRQSFgHBBURJ/iCjxRVCBAC0lQeIoLgvtDUVAiS56C+nDhqSBiWJIQdgiQZJLMZJ+lu+9S9f+d29OTns7MZJbumcnMuZ/PTN+tlvu9dW5VnTp1SgjemAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYABNgAkyACTABJsAEmAATYAJMgAkwASbABJgAE2ACTIAJMAEmwASYwH5DQO43Od0PMzozue7wwK58eyhDTwShEYoeImx/Egu/dEK3H9O+375PP7nruVN0X2HY3DX67W/YPfEaaXtCu6nAsltFqFssYbZXZLbvlI7Z9XLyoGYhpMlPkfeHnoA99FkYuTnwRGyD1mZGxo190Y6XCRlkooc1koQ19+0koaT93DHJSG4fu522nq7RjT1d7+laLmw2Cmno3lBoY/zdicp0KMX2cct2bnXMztecMLVOW9ZaKzQvxPXmV15JLmik0LwNDYHuSsrQ5GaEplq9bNOJUrrflpa7wHieMFSRGQixpNpvX4LV8x0UmrbuXmRPsfcctj1GKUWolLCMJSx8eEIrFCTf0k8LLeUWZcLnlTCPa2P/PS7ST25YPG1jNkf8fzAIdPfeByPtEZdG/crtY0Vdlbd8mkwVPtz0G16v8sLyZVq6n9IKEqDzm7x77s5vpOr2t5MTNLqL6u7clmt8547p9txf7tOQu0a/Aw0bZRvxRPmCYAsItFS2UArN/TAjjB9sd4z9hJb+AzJMPbQ5OePZ/PR5v/gE2otI8SMejTGeuXbXQZa2rkfb89L7FlR22bSsW7L9PCGtm7Uj64yPJjXVxLS1S26hANMLyhfg/BeWfz6Kg6Jp/ysUbro+0LBRwwHxmPyIOuI1QkKglUwIbSFnfktKS/WYbfSvHOM9wDUzvYHibwWvovgJjKYY7zbGumt1sMY4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';
+  const DD_CO = {
+    name: 'CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG',
+    addr: '902 QL1A, Phường Bình Trị Đông A, Quận Bình Tân, TPHCM',
+    phone: '0822 025 745',
+    email: 'baobidaiduongcom@gmail.com',
+    web: 'https://baobidaiduong.com/',
+  };
+  const DD_NOTES = [
+    'Kích thước trong báo giá là theo quy cách Dài x Rộng x Cao, đơn vị tính là milimet, kích thước thùng là kích thước phủ bì.',
+    'Báo giá có hiệu lực trong vòng 10 ngày kể từ ngày lập báo giá.',
+    'Phương thức thanh toán là <b>chuyển khoản trước 100% giá trị đơn hàng</b>.',
+    'Giao hàng không bao gồm chi phí lên lầu, lên gác hoặc vận chuyển quá xa từ khu vực đỗ xe.',
+    'Thời gian hoàn thành đơn đặt hàng này là <b>7-10 ngày</b> không bao gồm chủ nhật, ngày lễ.',
+    'Số lượng đặt hàng có thể thay đổi ±5% (đối với thùng carton sản xuất theo yêu cầu), số tiền thanh toán theo số lượng giao hàng thực tế. Kích thước mỗi cạnh dung sai ± 0,5cm.',
+    'Màu sắc khi in sẽ giống với màu trên hình 70-80% do màu trên màn hình kỹ thuật số và ngoài thực tế khác nhau.',
+    'Khách cần quấn PE thùng carton, thu thêm 2% chi phí.',
+  ];
+  // Tên sản phẩm của CRM: "Thùng carton … có in - 160 x 100 x 100 - 3 lớp( Kiểu A1 - …)" → tên + quy cách
+  function ddSplit(lines) {
+    const split = (t) => String(t || '').split(/\s+-\s+(?![^(]*\))/).map((x) => x.trim()).filter(Boolean);
+    const [first = '', ...more] = lines;
+    const segs = split(first);
+    const name = segs.shift() || first;
+    const spec = [];
+    for (const sg of [...segs, ...more.flatMap(split)]) {
+      const m = sg.match(/^(\d+(?:[.,]\d+)?)\s*D?\s*[xX×*]\s*(\d+(?:[.,]\d+)?)\s*R?\s*[xX×*]\s*(\d+(?:[.,]\d+)?)\s*C?(?![\p{L}])\s*(.*)$/u);
+      if (m) {
+        spec.push(`${m[1]} × ${m[2]} × ${m[3]} mm`);
+        if (m[4]) spec.push(m[4].replace(/^[-\s]+/, ''));
+      } else spec.push(sg.replace(/\s*\(\s*/g, ' (').replace(/\s*\)/g, ')').trim());
+    }
+    return { name, spec: spec.filter(Boolean) };
+  }
+  function ddHtml(d) {
+    const f = (n) => Math.round(n).toLocaleString('vi-VN');
+    const body = d.rows
+      .map((r, i) => {
+        const { name, spec } = ddSplit(r.name);
+        return `<tr><td class="n">${i + 1}</td><td class="p">${esc(name)}</td><td class="s">${spec.map(esc).join(' · ')}</td><td class="c">${esc(r.unit)}</td><td class="r">${esc(r.qty)}</td><td class="r">${esc(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
+      })
+      .join('');
+    const vat = d.grand > d.sub + 1;
+    const sum = `${vat ? `<div><span>Cộng tiền hàng</span><b>${f(d.sub)} đ</b></div><div><span>Thuế GTGT${d.vatPct ? ` (${d.vatPct}%)` : ''}</span><b>${f(d.grand - d.sub)} đ</b></div>` : ''}<div class="g"><span>Tổng tiền thanh toán</span><b>${f(vat ? d.grand : d.sub)} đ</b></div>`;
+    const today = new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const title = `${(d.code || 'BG').split('/')[0]}_${d.cust}`.replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 120);
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+@page{size:A4 portrait;margin:9mm 12mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;color:#1f2937;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.top{display:flex;align-items:center;gap:12px;padding-bottom:8px;border-bottom:3px solid #1976d2}
+.top img{height:62px;flex:none}
+.co{flex:1}
+.co b{display:block;font-size:15px;color:#0d47a1;letter-spacing:.2px}
+.co div{font-size:12px;color:#374151;line-height:1.45}
+.meta{flex:none;border:1px solid #90caf9;border-radius:6px;padding:5px 10px;background:#f3f9ff;display:grid;grid-template-columns:auto auto;column-gap:16px;font-size:12.5px}
+.meta span{text-align:right;font-weight:700;color:#0d47a1}
+h1{text-align:center;font-size:21px;margin:12px 0 2px;color:#0d47a1;letter-spacing:1px}
+.to{margin:6px 0 2px}.to b{color:#0d47a1}
+.intro{font-style:italic;color:#4b5563;margin:4px 0 6px}
+table.it{width:100%;border-collapse:collapse;margin:6px 0 0}
+.it th{background:#1976d2;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:6px 6px;text-align:center;border:0}
+.it th:first-child{border-top-left-radius:5px}.it th:last-child{border-top-right-radius:5px}
+.it td{border-bottom:1px solid #d6e2f0;padding:6px 6px;vertical-align:top}
+.it .n{text-align:center;color:#6b7280}
+.it .p{font-weight:700;color:#111827}
+.it .s{color:#1565c0;font-size:11.5px}
+.c{text-align:center}.r{text-align:right;white-space:nowrap}.b{font-weight:700}
+.sum{display:flex;justify-content:flex-end;margin:8px 0 10px}
+.sum>div{min-width:300px;border:1px solid #90caf9;border-radius:6px;overflow:hidden}
+.sum>div>div{display:flex;justify-content:space-between;gap:20px;padding:4px 10px;border-bottom:1px solid #e3eefa}
+.sum>div>div:last-child{border-bottom:0}
+.sum .g{background:#0d47a1;color:#fff;font-size:13.5px;padding:6px 10px}
+.note{border-left:3px solid #1976d2;padding:2px 0 2px 10px;line-height:1.45}
+.note u{font-weight:700;color:#0d47a1}
+.note ol{margin:2px 0 0;padding-left:18px}
+.sg{display:flex;justify-content:space-between;margin-top:10px;padding:0 60px;page-break-inside:avoid;line-height:1.4}
+.sg>div{text-align:center}
+.sg .gap{height:72px}
+.ap{display:flex;align-items:center;justify-content:center}
+.apx{border:1px solid #0d47a1;padding:2px;background:#fff;text-align:center;line-height:1.25}
+.apt{font-size:10.5px;font-weight:700;color:#0d47a1;margin:1px 0 2px}.apt i,.ap1 i{font-weight:400}
+.apb{position:relative;background:#e3f2fd;padding:3px 8px;color:#0d47a1;overflow:hidden}
+.apb svg{position:absolute;left:50%;top:50%;width:46px;height:37px;transform:translate(-50%,-50%);opacity:.4}
+.ap1,.ap2,.ap3{position:relative}.ap1{font-size:10px;font-weight:700}.ap2{font-size:9.5px;font-weight:700;white-space:nowrap}.ap3{font-size:9.5px}
+</style></head><body>
+<div class="top"><img src="${DD_LOGO}" alt="Đại Dương"><div class="co"><b>${esc(DD_CO.name)}</b><div>Đ/C: ${esc(DD_CO.addr)}</div><div>Điện thoại: ${esc(DD_CO.phone)} · Email: ${esc(DD_CO.email)}</div><div>Website: ${esc(DD_CO.web)}</div></div>
+<div class="meta"><b>Ngày báo giá</b><span>${esc(d.date)}</span><b>Số báo giá</b><span>${esc(d.code)}</span><b>Hiệu lực đến</b><span>${esc(d.until)}</span></div></div>
+<h1>BẢNG BÁO GIÁ</h1>
+<div class="to"><b>Kính gửi:</b> <b>${esc(d.cust)}</b></div>
+${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
+<div class="intro">Công ty chúng tôi rất cảm ơn sự ủng hộ của Quý công ty đối với sản phẩm sản xuất tại ${esc(DD_CO.name)}. Chúng tôi xin báo giá sản phẩm Quý công ty yêu cầu như sau:</div>
+<table class="it"><colgroup><col style="width:5%"><col style="width:31%"><col style="width:21%"><col style="width:7%"><col style="width:11%"><col style="width:10%"><col style="width:15%"></colgroup>
+<thead><tr><th>STT</th><th style="text-align:left">Sản phẩm</th><th style="text-align:left">Quy cách</th><th>ĐVT</th><th style="text-align:right">Số lượng</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Thành tiền</th></tr></thead>
+<tbody>${body}</tbody></table>
+<div class="sum"><div>${sum}</div></div>
+<div class="note"><u>Ghi chú:</u><ol>${DD_NOTES.map((x) => `<li>${x}</li>`).join('')}</ol></div>
+<div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>${d.staff ? esc(d.staff) : '&nbsp;'}</b></div>
+<div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap ap"><div class="apx"><div class="apt">Người duyệt giá <i>(Approver)</i></div><div class="apb"><svg viewBox="0 0 100 80" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#1976d2" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="ap1">Đã duyệt giá bởi <i>(Approved by)</i></div><div class="ap2">${esc(DD_CO.name)}</div><div class="ap3">${d.boss ? `${esc(d.boss)} · ` : ''}Ngày: ${esc(today)}</div></div></div></div><div>&nbsp;</div><b>${d.boss ? esc(d.boss) : '&nbsp;'}</b></div></div>
+</body></html>`;
+  }
+  const DD_LABEL = '🖨 In ĐD';
+  async function ddRun(btn) {
+    const show = (t) => (btn.textContent = t);
+    btn.disabled = true;
+    try {
+      const doc = await captureQuoteDoc(show);
+      const d = haParse(doc);
+      // Số báo giá / đơn vị / NVKD / người đại diện in trên mẫu ĐD: sửa được, lưu cloud (kv 'ddPrint': id báo giá → {code, staff, cust, boss})
+      show('✏️ Kiểm tra số báo giá / NVKD…');
+      const qid = currentQuoteId();
+      const saved = (await kvGet('ddPrint').catch(() => ({}))) || {};
+      const cur = saved[qid] || {};
+      const ok = await haAsk(
+        { code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust, boss: cur.boss ?? saved._boss ?? '' },
+        { title: '🖨 In báo giá Đại Dương', grad: 'linear-gradient(90deg,#42a5f5,#0d47a1)', btn: '#0d47a1' },
+      );
+      if (!ok) return show(DD_LABEL);
+      Object.assign(d, { code: ok.code, staff: ok.staff, cust: ok.cust, boss: ok.boss });
+      kvMerge('ddPrint', { [qid]: { code: ok.code, staff: ok.staff, cust: ok.cust, boss: ok.boss, by: meName, at: Date.now() }, ...(ok.staff ? { _staff: ok.staff } : {}), ...(ok.boss ? { _boss: ok.boss } : {}) }).catch(() => {});
+      show('🧾 Đang dựng mẫu Đại Dương…');
+      csPrint(ddHtml(d));
+      show(DD_LABEL);
+    } catch (err) {
+      show(`⚠️ ${err.message}`);
+      setTimeout(() => show(DD_LABEL), 6000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  function ddMount() {
+    if (!currentQuoteId() || document.querySelector('.dg-dd-top')) return;
+    const ha = document.querySelector('.dg-ha-top');
+    if (!ha) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = ha.className.replace(/dg-ha-top/, 'dg-dd-top');
+    b.textContent = DD_LABEL;
+    b.title = 'In báo giá này theo mẫu CÔNG TY TNHH SẢN XUẤT XNK ĐẠI DƯƠNG (logo, thông tin công ty, ghi chú Đại Dương; bảng tách cột Quy cách) – nội dung lấy từ báo giá đang mở';
+    b.setAttribute('style', 'margin-left:8px;background:linear-gradient(90deg,#42a5f5,#0d47a1);border-color:#0d47a1;color:#fff;font-weight:700');
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!b.disabled) ddRun(b);
+    });
+    ha.after(b);
+  }
+  if (IS_TOP) setInterval(ddMount, 1500);
 
   // ---------- ✨ Gợi ý AI dưới ô Bình luận / Trả lời (trang báo giá) ----------
   // AI (OpenAI nếu có key, không thì Claude) đọc 18 bộ câu hỏi (tab 💬 Bộ câu hỏi: điều kiện + câu mẫu đang dùng),
@@ -14880,7 +15033,7 @@ Quy tắc:
   // ---------- 🖨 Gom các nút In (In, In PDF, In đơn giá theo SL, Ghép mốc SL, In HA) vào 1 menu thả xuống ----------
   // Nút "In" của CRM được ẩn tại chỗ (không dời DOM của CRM), mục "🖨 In" trong menu bấm hộ nút đó.
   // Nút đang chạy (đổi chữ ⏳ / ⚠️ / ✅) thì chữ đó hiện lên nút menu để vẫn thấy tiến trình khi menu đóng.
-  const PM_ORDER = ['dg-pm-in', 'dg-pdf-top', 'dg-cp-top', 'dg-mg-top', 'dg-ha-top'];
+  const PM_ORDER = ['dg-pm-in', 'dg-pdf-top', 'dg-cp-top', 'dg-mg-top', 'dg-ha-top', 'dg-dd-top'];
   const PM_LABEL = '🖨 In ▾';
   function pmCss() {
     if (document.getElementById('dg-pm-css')) return;
@@ -14908,7 +15061,7 @@ Quy tắc:
       tg.type = 'button';
       tg.className = `${inBtn.className.replace(/\bdg-\S+/g, '')} dg-pm-toggle`;
       tg.textContent = PM_LABEL;
-      tg.title = 'Các kiểu in báo giá: In, In PDF, In đơn giá theo SL, Ghép mốc SL, In HA';
+      tg.title = 'Các kiểu in báo giá: In, In PDF, In đơn giá theo SL, Ghép mốc SL, In HA, In ĐD';
       tg.setAttribute('style', 'font-weight:700');
       const menu = document.createElement('div');
       menu.className = 'dg-pm-menu';
