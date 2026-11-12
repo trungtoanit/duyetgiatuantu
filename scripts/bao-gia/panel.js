@@ -8137,16 +8137,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   async function akToPng(html, title) {
     const W = 1100;
     const box = document.createElement('div');
-    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;max-width:${W}px;background:#fff;padding:20px 24px;font:14px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
+    const base = 'box-sizing:border-box;background:#fff;padding:20px 24px;font:14px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;';
+    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;max-width:${W}px;${base}`);
     box.innerHTML = `<style>${AK_CSS}</style><div style="font-size:16px;font-weight:800;color:#e3141b;border-bottom:3px double #e3141b;padding-bottom:6px;margin-bottom:8px">${esc(title)}</div><div class="ak-md">${html}</div>`;
     document.body.append(box);
     const w = Math.ceil(box.scrollWidth);
     const h = Math.ceil(box.scrollHeight);
-    box.style.width = `${w}px`;
+    // ảnh vẽ ở toạ độ 0,0: đặt lại style (bỏ position đẩy ra ngoài màn hình – trình duyệt đã chuẩn hoá chuỗi style nên không thay thế chữ được)
+    box.setAttribute('style', `${base}width:${w}px;height:${h}px`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(box)}</foreignObject></svg>`;
     box.remove();
     const img = new Image();
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace('position:fixed;left:-20000px;top:0;', ''))}`;
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     await img.decode();
     const S = 2;
     const c = document.createElement('canvas');
