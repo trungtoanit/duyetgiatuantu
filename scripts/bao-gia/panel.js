@@ -14614,7 +14614,7 @@ Quy tắc:
       const reply = ta.__dgReplyTo || '';
       const rows = await sgLearnLoad();
       const user = [
-        `Sếp: ${meName} · NVKD phụ trách: ${staff || '?'} · gọi NVKD là "${pp}" · Bây giờ: ${fmtTime(Date.now() / 1000)}`,
+        `Sếp: ${meName} · NVKD phụ trách: ${staff || '?'} · gọi NVKD là "${pp}", sếp tự xưng "${pp === 'em' ? 'anh' : 'em'}" (KHÔNG xưng "${pp === 'em' ? 'em' : 'anh'}") · Bây giờ: ${fmtTime(Date.now() / 1000)}`,
         qq ? `BỘ ĐANG KHỚP: [${qq.bank}] – ${qq.why}. Câu mẫu đã điền: "${qq.text}"` : 'BỘ ĐANG KHỚP: không bộ nào khớp – tự chọn ý hợp nhất với luồng bình luận.',
         noPrice(q) ? 'Báo giá đang 0đ (sếp chưa cho giá).' : '',
         reply ? `ĐANG TRẢ LỜI bình luận này:\n"${sgCut(reply, 600)}"` : 'Đang viết bình luận mới cho báo giá.',
