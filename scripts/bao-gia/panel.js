@@ -8161,6 +8161,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
     return Object.assign(blob, { w, h });
   }
+  const AK_WANT_IMG = /(dạng|định dạng|xuất|trả về|thành|ra|bằng)\s*(file\s*)?(hình|ảnh|image|png)/i;
   function akOpen(one) {
     document.getElementById('dg-ask')?.remove();
     const content = one?.querySelector(':scope > .ant-comment-inner > .ant-comment-content');
@@ -8343,13 +8344,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       btn.textContent = '⏳ Đang hỏi…';
       const ans = bubble('AI', '<i style="color:#94a3b8">đang trả lời…</i>', '#f0fdfa');
       try {
-        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy Tuấn Tú (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ. Khi cần trình bày bảng (so sánh, liệt kê nhiều cột) dùng bảng Markdown chuẩn (| cột | cột |, dòng thứ 2 là |---|---|), không chèn ghi chú vào giữa bảng. Nếu người dùng muốn kết quả dạng hình ảnh: vẫn trả bảng Markdown – hệ thống sẽ tự chuyển thành ảnh.';
+        const sys = 'Bạn là trợ lý của công ty sản xuất bao bì giấy Tuấn Tú (thùng carton, hộp giấy offset/flexo). Trả lời tiếng Việt, ngắn gọn, đúng trọng tâm; số tiền viết dạng 1.234.000đ. Khi cần trình bày bảng (so sánh, liệt kê nhiều cột) dùng bảng Markdown chuẩn (| cột | cột |, dòng thứ 2 là |---|---|), không chèn ghi chú vào giữa bảng. Nếu người dùng muốn kết quả dạng hình ảnh: vẫn trả bảng Markdown – hệ thống sẽ tự chuyển thành ảnh. Tuyệt đối không tạo / chèn đường link ảnh (imgur, ![...](...)) vì bạn không tạo được ảnh.';
         const cfg = await aiCfgGet();
         let out;
         if (cfg.openaiKey) {
           if (!hist.length) hist.push({ role: 'system', content: sys });
           hist.push({ role: 'user', content: shots.length ? [{ type: 'text', text: prompt }, ...shots.map((m) => ({ type: 'image_url', image_url: { url: m.url, detail: 'high' } }))] : prompt });
           out = await oaiChat(hist, 4000, `Hỏi AI: ${(q || 'ảnh').slice(0, 50)}`);
+          // muốn ảnh mà AI bịa link ảnh / không có bảng → hỏi lại 1 lần để lấy bảng Markdown (máy tự vẽ ảnh)
+          if (AK_WANT_IMG.test(q) && (/!\[[^\]]*\]\([^)]+\)/.test(out) || !/^\s*\|.*\|\s*$/m.test(out))) {
+            ans.innerHTML = '<i style="color:#94a3b8">đang lấy lại kết quả dạng bảng để tạo ảnh…</i>';
+            hist.push({ role: 'assistant', content: out }, { role: 'user', content: 'Bạn không tạo được ảnh. Hãy trình bày lại toàn bộ kết quả bằng bảng Markdown chuẩn (không link ảnh); hệ thống sẽ tự chuyển bảng thành ảnh.' });
+            out = await oaiChat(hist, 4000, `Hỏi AI (lấy bảng): ${(q || '').slice(0, 40)}`);
+          }
+          out = out.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
           hist.push({ role: 'assistant', content: out });
         } else {
           if (shots.length) throw new Error('Gửi ảnh cần OpenAI key – bấm ⚙️ ở góc hộp để cài.');
@@ -8395,7 +8403,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           }
         });
         // câu hỏi muốn kết quả dạng hình ảnh → tự tạo ảnh luôn
-        if (/(dạng|định dạng|xuất|trả về|thành|ra)\s*(file\s*)?(hình|ảnh|image|png)/i.test(q)) ans.querySelector('[data-png]').click();
+        if (AK_WANT_IMG.test(q)) ans.querySelector('[data-png]').click();
         ans.querySelector('[data-copy]').onclick = (e) => navigator.clipboard.writeText(out).then(() => (e.target.textContent = '✓ Đã chép'));
         ans.querySelector('[data-ins]')?.addEventListener('click', async (e) => {
           try {
