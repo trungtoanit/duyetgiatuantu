@@ -1422,7 +1422,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     !fx || fx.mode !== FLEXO_MODE || (fx.missing?.length > 0 && Date.now() / 1000 - fx.at > 3600) || flexoAmountChanged(fx, q) ||
     (!!q && q.noSheetAt == null && (fx.at || 0) < SHEET_SINCE) ||
     // đã lên đơn (thường đã có PO thật) mà số cũ là PO nháp → tính lại theo PO thật (24 giờ / lần)
-    (!!q && (q.hasOrder || q.orderCode) && !fx.fromPo && Date.now() / 1000 - (fx.poCheckAt || 0) > 86400);
+    (!!q && (q.hasOrder || q.orderCode) && !fx.fromPo && Date.now() / 1000 - (fx.poCheckAt || 0) > 86400) ||
+    // PO thật đọc bằng bản cũ có gộp nhiều PO (có thể đã cộng trùng PO / tính cả PO khuôn bế) → đọc lại 1 lần
+    (fx.fromPo && !fx.poV && (fx.suppliers || []).some((x) => String(x.po || '').includes(',')));
 
   // ---------- 💲 Set giá nhanh cho báo giá Flexo ----------
   // Bình luận NVKD xin giá ("Sếp cho em xin báo giá đơn này") → nút "💲 Set giá" cạnh "Trả lời".
@@ -8921,9 +8923,19 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const [i, b] of btns.entries()) {
       const po = b.innerText.trim();
       setStep(`Đọc PO thật ${po} (${i + 1}/${btns.length})…`);
+      // hộp PO trước còn đang đóng → chờ tắt hẳn, không thì đọc nhầm "Tổng thanh toán" của PO trước (cộng trùng)
+      await waitFor(() => !vis().some((m) => /Cập nhật PO/.test(m.innerText)), 4000, 200);
       b.click();
-      const modal = await waitFor(() => vis().find((m) => /Cập nhật PO/.test(m.innerText)), 10000, 250);
+      // đúng hộp của PO này (tiêu đề có "#mã PO")
+      const modal = await waitFor(() => vis().find((m) => (m.innerText || '').includes(`#${po}`)), 10000, 250);
       if (!modal) continue;
+      // chỉ PO giấy tấm ("Cập nhật PO #…"); PO khuôn bế / bản in / mua hàng khác không tính vào giấy tấm
+      if (!new RegExp(`Cập nhật PO\\s*#${po}`).test(modal.innerText)) {
+        modal.querySelector('.ant-modal-close')?.click();
+        await waitFor(() => !vis().includes(modal), 4000, 200);
+        await sleep(300);
+        continue;
+      }
       const read = () => Number((modal.innerText.match(/Tổng thanh toán:\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
       let last = -1;
       let same = 0;
@@ -8939,7 +8951,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       if (total) {
         addTp(byTp, readPoLines(modal, total));
         const ex = suppliers.find((x) => x.code === code);
-        if (ex) {
+        if (ex?.po?.split(', ').includes(po)) {
+          // cùng 1 PO đọc 2 lần → không cộng
+        } else if (ex) {
           ex.total += total;
           ex.po += `, ${po}`;
         } else suppliers.push({ code, name: sel.split('|').slice(1).join('|').trim() || sel, total, po });
@@ -8955,7 +8969,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     if (inp) pageTotal = Number(String(inp.value).replace(/[^\d]/g, '')) || 0;
     const all = await kvGet('margins');
     const cur = all[q.code] || { products: {} };
-    cur.flexo = { suppliers, byTp, missing: [], quoteTotal: pageTotal || q.amount || 0, amountAt: q.amount || 0, mode: FLEXO_MODE, fromPo: true, at: Math.floor(Date.now() / 1000), poCheckAt: Math.floor(Date.now() / 1000) };
+    cur.flexo = { suppliers, byTp, missing: [], quoteTotal: pageTotal || q.amount || 0, amountAt: q.amount || 0, mode: FLEXO_MODE, fromPo: true, poV: 2, at: Math.floor(Date.now() / 1000), poCheckAt: Math.floor(Date.now() / 1000) };
     await kvMerge('margins', { [q.code]: cur });
     return true;
   }
