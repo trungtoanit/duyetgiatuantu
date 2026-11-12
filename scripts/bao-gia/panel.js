@@ -14673,11 +14673,13 @@ Quy tắc:
       // ô nhập nằm TRƯỚC nút gửi, trong cùng khối (≤ 4 cấp)
       let ta = null;
       let box = b.parentElement;
-      for (let i = 0; i < 4 && box && !ta; i++, box = box.parentElement) {
+      for (let i = 0; i < 12 && box && !ta; i++, box = box.parentElement) {
         const tas = [...box.querySelectorAll('textarea:not(#privateNote)')];
+        if (!tas.length) continue;
         // khối chỉ gồm ô nhập + nút gửi (không lẫn danh sách bình luận) – tránh gắn nhầm vào link "Trả lời" dưới mỗi bình luận
-        if (tas.length !== 1 || (box.innerText || '').length > 200) continue;
+        if (tas.length !== 1 || (box.innerText || '').length > 200) break;
         if (tas[0].compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ta = tas[0];
+        break;
       }
       if (!ta) continue;
       b.dataset.dgSg = '1';
@@ -14701,7 +14703,7 @@ Quy tắc:
         e.stopPropagation();
         sgAsk(ta, row);
       });
-      (b.parentElement || b).after(row);
+      (b.closest('.ant-form-item') || b.parentElement || b).after(row);
       // bấm gửi → ghi nhận (capture: trước khi CRM xoá ô)
       b.addEventListener('click', () => sgRecord(ta), true);
       ta.addEventListener('keydown', (e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && sgRecord(ta), true);
