@@ -14877,6 +14877,89 @@ Quy tắc:
     cp.after(b);
   }
   if (IS_TOP) setInterval(mgMount, 1500);
+  // ---------- 🖨 Gom các nút In (In, In PDF, In đơn giá theo SL, Ghép mốc SL, In HA) vào 1 menu thả xuống ----------
+  // Nút "In" của CRM được ẩn tại chỗ (không dời DOM của CRM), mục "🖨 In" trong menu bấm hộ nút đó.
+  // Nút đang chạy (đổi chữ ⏳ / ⚠️ / ✅) thì chữ đó hiện lên nút menu để vẫn thấy tiến trình khi menu đóng.
+  const PM_ORDER = ['dg-pm-in', 'dg-pdf-top', 'dg-cp-top', 'dg-mg-top', 'dg-ha-top'];
+  const PM_LABEL = '🖨 In ▾';
+  function pmCss() {
+    if (document.getElementById('dg-pm-css')) return;
+    const st = document.createElement('style');
+    st.id = 'dg-pm-css';
+    st.textContent = `.dg-pm-menu{position:fixed;z-index:1060;display:none;flex-direction:column;min-width:230px;padding:6px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.dg-pm-menu.open{display:flex}
+.dg-pm-menu>button{display:block!important;width:100%!important;margin:0!important;height:auto!important;padding:8px 12px!important;text-align:left!important;background:transparent!important;border:0!important;box-shadow:none!important;color:#111827!important;font-weight:600!important;border-radius:6px!important;white-space:nowrap}
+.dg-pm-menu>button:hover{background:#eff6ff!important;color:#1d4ed8!important}
+.dg-pm-menu>button[disabled]{opacity:.6}`;
+    document.head.append(st);
+  }
+  function pmMount() {
+    if (!currentQuoteId()) return;
+    const inBtn = [...document.querySelectorAll('button')].find((x) => x.innerText.trim() === 'In' && !x.closest('.ant-modal-wrap, #dg-root, .dg-pm-menu'));
+    let wrap = document.querySelector('.dg-pm-wrap');
+    if (!wrap) {
+      const pdf = document.querySelector('.dg-pdf-top');
+      if (!inBtn || !pdf) return;
+      pmCss();
+      wrap = document.createElement('span');
+      wrap.className = 'dg-pm-wrap';
+      wrap.setAttribute('style', 'display:inline-block;margin-left:0');
+      const tg = document.createElement('button');
+      tg.type = 'button';
+      tg.className = `${inBtn.className.replace(/\bdg-\S+/g, '')} dg-pm-toggle`;
+      tg.textContent = PM_LABEL;
+      tg.title = 'Các kiểu in báo giá: In, In PDF, In đơn giá theo SL, Ghép mốc SL, In HA';
+      tg.setAttribute('style', 'font-weight:700');
+      const menu = document.createElement('div');
+      menu.className = 'dg-pm-menu';
+      const it = document.createElement('button');
+      it.type = 'button';
+      it.className = 'dg-pm-in';
+      it.textContent = '🖨 In';
+      it.title = 'In báo giá (nút In của CRM)';
+      it.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const b = [...document.querySelectorAll('button')].find((x) => x.innerText.trim() === 'In' && !x.closest('.ant-modal-wrap, #dg-root, .dg-pm-menu'))
+          || [...document.querySelectorAll('button[data-dg-pm-hidden]')][0];
+        b?.click();
+      });
+      menu.append(it);
+      tg.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (menu.classList.toggle('open')) {
+          const r = tg.getBoundingClientRect();
+          menu.style.top = `${r.bottom + 4}px`;
+          menu.style.left = `${Math.min(r.left, window.innerWidth - 250)}px`;
+        }
+      });
+      // bấm 1 mục → đóng menu (mục vẫn chạy); bấm ra ngoài → đóng
+      menu.addEventListener('click', () => setTimeout(() => menu.classList.remove('open'), 0));
+      document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) menu.classList.remove('open'); }, true);
+      window.addEventListener('scroll', () => menu.classList.remove('open'), true);
+      wrap.append(tg, menu);
+      inBtn.after(wrap);
+    }
+    if (inBtn && inBtn.style.display !== 'none') {
+      inBtn.style.display = 'none';
+      inBtn.setAttribute('data-dg-pm-hidden', '1');
+    }
+    const menu = wrap.querySelector('.dg-pm-menu');
+    const tg = wrap.querySelector('.dg-pm-toggle');
+    // đưa các nút In của extension vào menu, đúng thứ tự
+    for (const cls of PM_ORDER) {
+      const b = menu.querySelector(`.${cls}`) || document.querySelector(`.${cls}`);
+      if (!b) continue;
+      if (!b.dataset.pmLbl) b.dataset.pmLbl = b.textContent;
+      menu.append(b); // append theo thứ tự PM_ORDER → luôn sắp đúng
+    }
+    // nút nào đang chạy (chữ khác nhãn gốc) → hiện chữ đó trên nút menu
+    const busy = [...menu.children].find((b) => b.dataset.pmLbl && b.textContent !== b.dataset.pmLbl);
+    const want = busy ? `${busy.textContent} ▾` : PM_LABEL;
+    if (tg.textContent !== want) tg.textContent = want;
+  }
+  if (IS_TOP) setInterval(pmMount, 700);
   // ---------- 🤝 Bàn giao khách cho Liên (Tuấn Tú) ----------
   // Trang cơ hội / báo giá: nút cạnh tên NVKD ở tiêu đề "(Đoàn Thị Hương)" → bấm tên (CRM mở hộp "Bàn giao khách hàng")
   // → chọn nhân viên NV0440 → bấm "Bàn giao". Hỏi xác nhận trước khi làm.
