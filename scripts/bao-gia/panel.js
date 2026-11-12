@@ -14599,7 +14599,7 @@ h1{text-align:center;font-size:21px;margin:12px 0 2px;color:#0d47a1;letter-spaci
 table.it{width:100%;border-collapse:collapse;margin:6px 0 0}
 .it th{background:#1976d2;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:6px 6px;text-align:center;border:0}
 .it th:first-child{border-top-left-radius:5px}.it th:last-child{border-top-right-radius:5px}
-.it td{border-bottom:1px solid #d6e2f0;padding:4px 6px;vertical-align:top;line-height:1.4}
+.it td{border-bottom:1px solid #d6e2f0;padding:4px 6px;vertical-align:middle;line-height:1.4}
 .it .n{text-align:center;color:#6b7280}
 .it .p b{color:#111827}
 .it .p b{display:block}.it .p .s{display:block;color:#dc2626}
