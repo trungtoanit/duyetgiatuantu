@@ -3342,7 +3342,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!document.getElementById('dg-hard-css')) {
       const st = document.createElement('style');
       st.id = 'dg-hard-css';
-      st.textContent = 'td[data-dg-hard]::after{content:attr(data-dg-hard);display:block;width:max-content;max-width:100%;margin-top:4px;padding:2px 8px;border-radius:6px;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-weight:700;font-size:12px;white-space:normal}';
+      st.textContent = 'td[data-dg-hard]::after{content:attr(data-dg-hard);display:block;width:max-content;max-width:100%;margin-top:4px;padding:2px 8px;border-radius:6px;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-weight:700;font-size:12px;white-space:normal;transform-origin:left center;animation:dgHardShake 2.4s ease-in-out infinite,dgHardGlow 1.2s ease-in-out infinite alternate}@keyframes dgHardShake{0%,70%,100%{transform:none}74%{transform:rotate(-2deg) scale(1.04)}78%{transform:rotate(2deg) scale(1.06)}82%{transform:rotate(-2deg) scale(1.04)}86%{transform:rotate(1deg)}90%{transform:none}}@keyframes dgHardGlow{from{box-shadow:0 0 0 0 rgba(239,68,68,.0);background:#fef2f2}to{box-shadow:0 0 0 4px rgba(239,68,68,.25);background:#fee2e2}}@media (prefers-reduced-motion:reduce){td[data-dg-hard]::after{animation:none}}';
       document.head.append(st);
     }
     for (const tr of document.querySelectorAll('.ant-table-tbody > tr:not(.ant-table-measure-row)')) {
