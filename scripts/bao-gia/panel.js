@@ -14545,6 +14545,169 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
     pdf.after(b);
   }
   if (IS_TOP) setInterval(haMount, 1500);
+
+  // ---------- ✨ Gợi ý AI dưới ô Bình luận / Trả lời (trang báo giá) ----------
+  // AI (OpenAI nếu có key, không thì Claude) đọc 18 bộ câu hỏi (tab 💬 Bộ câu hỏi: điều kiện + câu mẫu đang dùng),
+  // bộ đang khớp với báo giá, luồng bình luận, câu đang trả lời → 3 câu gợi ý. Bấm câu → điền vào ô.
+  // Tự học: mỗi lần quản lý gửi bình luận ở ô đã có gợi ý, lưu cloud (kv 'aiSugLearn'): tình huống, AI gợi ý gì,
+  // quản lý thực sự gửi gì → lần sau đưa vào đề bài để AI viết giống cách quản lý chọn / sửa.
+  const SG_LEARN = 'aiSugLearn';
+  const SG_SKIP = new Set(['priceGive', 'zalo', 'mtAsk']);
+  let sgLearnCache = null;
+  async function sgLearnLoad(force) {
+    if (!force && sgLearnCache && Date.now() - sgLearnCache.at < 60e3) return sgLearnCache.rows;
+    const o = (await kvGet(SG_LEARN).catch(() => null)) || {};
+    const rows = Object.entries(o).filter(([, x]) => x?.sent).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+    // giữ 300 lần gần nhất
+    if (rows.length > 300) kvMerge(SG_LEARN, Object.fromEntries(rows.slice(300).map(([k]) => [k, null]))).catch(() => {});
+    sgLearnCache = { at: Date.now(), rows: rows.slice(0, 300).map(([, x]) => x) };
+    return sgLearnCache.rows;
+  }
+  const sgCut = (t, n) => {
+    const x = String(t || '').replace(/\s+/g, ' ').trim();
+    return x.length > n ? `${x.slice(0, n)}…` : x;
+  };
+  function sgSystem() {
+    const rules = QBANKS.filter((b) => !SG_SKIP.has(b.id))
+      .map((b, i) => `${i + 1}. [${b.id}] ${b.title}\n   Khi: ${b.when}\n   Câu mẫu: ${qbank(b.id).map((x) => `"${x}"`).join(' / ')}`)
+      .join('\n');
+    return `Bạn viết THAY quản lý kinh doanh (sếp) của ${SITE.name} (bao bì giấy carton) một bình luận ngắn trên CRM, hỏi / nhắc nhân viên kinh doanh (NVKD) về báo giá.
+
+BỘ CÂU HỎI CỦA SẾP – xét theo thứ tự ưu tiên 1 → ${QBANKS.filter((b) => !SG_SKIP.has(b.id)).length}, điều kiện nào khớp trước thì dùng ý của bộ đó:
+${rules}
+
+Biến trong câu mẫu: {p} = cách gọi NVKD (em / chị / anh), {P} = viết hoa chữ đầu, {d} = khoảng thời gian im lặng. Sếp tự xưng "anh"; nếu gọi NVKD là "chị" hoặc "anh" thì sếp xưng "em".
+
+Quy tắc:
+- Viết như sếp tự nhắn: ngắn (thường 1 câu), thân mật, không chào hỏi dài, không cảm ơn, không ký tên, không giọng "AI".
+- Nếu đề bài cho biết bộ đang khớp thì gợi ý 1 PHẢI theo đúng ý bộ đó (có thể dùng nguyên câu mẫu). Gợi ý 2, 3: cách nói khác cùng ý, hoặc ý hợp hơn với bình luận vừa rồi của NVKD.
+- Đang TRẢ LỜI một bình luận cụ thể thì trả lời đúng nội dung bình luận đó trước (vd. NVKD báo khách chê giá cao → xin giá target; báo khách hứa lên đơn → hỏi khi nào lên…).
+- Không hỏi lại điều đã được trả lời trong luồng. Báo giá 0đ (chưa cho giá) thì không hỏi "khách phản hồi giá".
+- Phần "SẾP ĐÃ CHỌN / SỬA LẦN TRƯỚC" là cách sếp thật sự gửi khi được gợi ý: học theo từ ngữ, độ dài, xưng hô; câu sếp hay sửa / không chọn thì tránh.
+- Chỉ trả về JSON: {"goiy":["câu 1","câu 2","câu 3"]} – không giải thích, không markdown.`;
+  }
+  function sgLearnText(rows, staff) {
+    const k = norm(staff || '');
+    const mine = rows.filter((x) => k && norm(x.staff || '') === k).slice(0, 12);
+    const rest = rows.filter((x) => !mine.includes(x)).slice(0, 25 - mine.length);
+    const list = [...mine, ...rest];
+    if (!list.length) return '';
+    return `SẾP ĐÃ CHỌN / SỬA LẦN TRƯỚC (${list.length} lần gần nhất, ưu tiên NVKD này):\n${list
+      .map((x) => `- [${x.bank || '?'} · NVKD ${x.staff || '?'}]${x.ctx ? ` Tình huống: "${sgCut(x.ctx, 160)}"` : ''}${x.sugs?.length ? ` | AI gợi ý: ${x.sugs.map((s2) => `"${sgCut(s2, 80)}"`).join(' / ')}` : ''} | SẾP GỬI: "${sgCut(x.sent, 200)}"${x.pick === -1 ? ' (tự viết / sửa)' : ` (chọn gợi ý ${x.pick + 1})`}`)
+      .join('\n')}`;
+  }
+  async function sgAsk(ta, row) {
+    const out = row.querySelector('[data-sg-out]');
+    const btn = row.querySelector('[data-sg-go]');
+    btn.disabled = true;
+    btn.textContent = '⏳ AI đang nghĩ…';
+    try {
+      const qid = currentQuoteId();
+      const q = renderCtx.quotes?.[qid] || (await kvGet('quotes'))[qid];
+      const c = renderCtx.comments?.[qid] || (await kvGet('comments'))[qid];
+      const staff = staffOf(q, c) || '';
+      const pp = addressFor(staff, renderCtx.comments || {}, renderCtx.quotes || {}) || 'em';
+      let qq = null;
+      try {
+        qq = q ? quickQuestion(q, c, followMode(q, c), pp) : null;
+      } catch {}
+      const reply = ta.__dgReplyTo || '';
+      const rows = await sgLearnLoad();
+      const user = [
+        `Sếp: ${meName} · NVKD phụ trách: ${staff || '?'} · gọi NVKD là "${pp}" · Bây giờ: ${fmtTime(Date.now() / 1000)}`,
+        qq ? `BỘ ĐANG KHỚP: [${qq.bank}] – ${qq.why}. Câu mẫu đã điền: "${qq.text}"` : 'BỘ ĐANG KHỚP: không bộ nào khớp – tự chọn ý hợp nhất với luồng bình luận.',
+        noPrice(q) ? 'Báo giá đang 0đ (sếp chưa cho giá).' : '',
+        reply ? `ĐANG TRẢ LỜI bình luận này:\n"${sgCut(reply, 600)}"` : 'Đang viết bình luận mới cho báo giá.',
+        threadText(q, c),
+        sgLearnText(rows, staff),
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+      const cfg = await aiCfgGet();
+      const raw = cfg.openaiKey
+        ? await oaiChat([{ role: 'system', content: sgSystem() }, { role: 'user', content: user }], 1500, 'Gợi ý bình luận')
+        : await call({ type: 'claude', system: sgSystem(), prompt: user, maxTokens: 1500 });
+      let sugs = [];
+      try {
+        const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+        sugs = (j.goiy || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 3);
+      } catch {
+        sugs = raw.split('\n').map((x) => x.replace(/^[-\d.)\s"]+|"$/g, '').trim()).filter((x) => x.length > 3).slice(0, 3);
+      }
+      if (!sugs.length) throw new Error('AI không trả về gợi ý');
+      ta.__dgSug = { sugs, pick: -1, bank: qq?.bank || '', staff, ctx: reply || (lastComment(c)?.text || ''), bg: q?.code || '' };
+      out.innerHTML = sugs.map((x, i) => `<span data-sg-i="${i}" title="Bấm để điền vào ô" style="cursor:pointer;background:#f5f3ff;border:1px solid #c4b5fd;color:#4c1d95;border-radius:999px;padding:3px 10px;font-size:12.5px;line-height:1.35">${esc(x)}</span>`).join('');
+      out.onclick = (e) => {
+        const it = e.target.closest('[data-sg-i]');
+        if (!it) return;
+        const i = Number(it.dataset.sgI);
+        setTextarea(ta, sugs[i]);
+        ta.__dgSug.pick = i;
+        ta.focus();
+      };
+      btn.textContent = '✨ Gợi ý khác';
+    } catch (err) {
+      out.innerHTML = `<span style="color:#b91c1c;font-size:12px">⚠️ ${esc(err.message)}</span>`;
+      btn.textContent = '✨ Gợi ý AI';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  // Ghi nhận câu sếp gửi (ô đã có gợi ý) → cloud
+  function sgRecord(ta) {
+    const s0 = ta?.__dgSug;
+    const sent = String(ta?.value || '').trim();
+    if (!s0 || !sent) return;
+    const pick = s0.sugs.findIndex((x) => x.trim() === sent);
+    const rec = { at: Date.now(), by: meName, bg: s0.bg, staff: s0.staff, bank: s0.bank, ctx: sgCut(s0.ctx, 300), sugs: s0.sugs, sent: sgCut(sent, 500), pick };
+    kvMerge(SG_LEARN, { [`s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`]: rec }).catch(() => {});
+    if (sgLearnCache) sgLearnCache.rows.unshift(rec);
+    ta.__dgSug = null;
+  }
+  function sgMount() {
+    if (!currentQuoteId()) return;
+    for (const b of document.querySelectorAll('button')) {
+      const t = b.innerText.trim();
+      if (t !== 'Bình luận' && t !== 'Trả lời') continue;
+      if (b.closest('.ant-modal-wrap') || b.dataset.dgSg) continue;
+      // ô nhập nằm TRƯỚC nút gửi, trong cùng khối (≤ 4 cấp)
+      let ta = null;
+      let box = b.parentElement;
+      for (let i = 0; i < 4 && box && !ta; i++, box = box.parentElement) {
+        const tas = [...box.querySelectorAll('textarea:not(#privateNote)')];
+        // khối chỉ gồm ô nhập + nút gửi (không lẫn danh sách bình luận) – tránh gắn nhầm vào link "Trả lời" dưới mỗi bình luận
+        if (tas.length !== 1 || (box.innerText || '').length > 200) continue;
+        if (tas[0].compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ta = tas[0];
+      }
+      if (!ta) continue;
+      b.dataset.dgSg = '1';
+      // bình luận đang được trả lời: khối bình luận gần nhất phía trên ô trả lời
+      if (t === 'Trả lời') {
+        let p = ta.parentElement;
+        for (let i = 0; i < 8 && p; i++, p = p.parentElement) {
+          const txt = (p.innerText || '').replace(/Trả lời|🤖 Hỏi AI|✨ Gợi ý AI|✨ Gợi ý khác/g, '').trim();
+          if (txt.length > 15 && /trước|\d{2}\/\d{2}/.test(txt)) {
+            ta.__dgReplyTo = txt.slice(0, 800);
+            break;
+          }
+        }
+      }
+      const row = document.createElement('div');
+      row.setAttribute('data-dg-sgrow', '1');
+      row.setAttribute('style', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px');
+      row.innerHTML = `<button type="button" data-sg-go style="all:unset;cursor:pointer;background:linear-gradient(90deg,#8b5cf6,#6366f1);color:#fff;font-weight:700;font-size:12.5px;border-radius:999px;padding:4px 12px">✨ Gợi ý AI</button><span data-sg-out style="display:flex;flex-wrap:wrap;gap:6px"></span>`;
+      row.querySelector('[data-sg-go]').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        sgAsk(ta, row);
+      });
+      (b.parentElement || b).after(row);
+      // bấm gửi → ghi nhận (capture: trước khi CRM xoá ô)
+      b.addEventListener('click', () => sgRecord(ta), true);
+      ta.addEventListener('keydown', (e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && sgRecord(ta), true);
+    }
+  }
+  if (IS_TOP) setInterval(sgMount, 1500);
   // ---------- 🧩 Ghép mốc SL: nhiều báo giá cùng sản phẩm, khác số lượng → 1 bảng báo giá in chung ----------
   // Lấy mẫu in của báo giá đang mở (giữ nguyên định dạng, che SĐT, chữ ký, khung duyệt), chỉ thay cột Số lượng / Đơn giá /
   // Thành tiền và phần tổng: mỗi ô xếp các mốc số lượng (nhỏ → lớn) của các báo giá được chọn.
