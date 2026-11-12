@@ -2693,6 +2693,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 
   // In báo giá (chặn hộp thoại in) → chụp thành ảnh PNG (dùng chung cho dán bình luận / xuất PDF)
   async function captureQuotePng(show, mutate) {
+    const doc = await captureQuoteDoc(show);
+    show('📸 Đang chụp…');
+    if (mutate) await mutate(doc); // vd. 🧩 Ghép mốc SL: thay cột số lượng / đơn giá trước khi chụp
+    return Promise.race([docToPng(doc), sleep(45000).then(() => Promise.reject(new Error('Chụp báo giá quá lâu (45s) – thử lại.')))]);
+  }
+  // Bấm "In" của CRM (chặn hộp thoại in) → trả về document của khung in đã có "BẢNG BÁO GIÁ"
+  async function captureQuoteDoc(show) {
     {
       const inBtn = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'In');
       if (!inBtn) throw new Error('Không thấy nút "In" của CRM.');
@@ -2712,9 +2719,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       }, 15000, 300);
       if (!doc) throw new Error('CRM chưa dựng bảng báo giá để in (không thấy "BẢNG BÁO GIÁ").');
       await sleep(800); // chờ ảnh / font trong khung in
-      show('📸 Đang chụp…');
-      if (mutate) await mutate(doc); // vd. 🧩 Ghép mốc SL: thay cột số lượng / đơn giá trước khi chụp
-      return Promise.race([docToPng(doc), sleep(45000).then(() => Promise.reject(new Error('Chụp báo giá quá lâu (45s) – thử lại.')))]);
+      return doc;
     }
   }
   async function printQuoteToComment(btn, getBox) {
@@ -14303,6 +14308,172 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
   }
   if (IS_TOP) setInterval(cpMount, 1500);
+  // ---------- 🅷 In HA: in báo giá đang mở theo mẫu CÔNG TY TNHH SẢN XUẤT HẢI ÂU ----------
+  // Nội dung (ngày, số BG, khách, địa chỉ, bảng sản phẩm, tổng tiền, NVKD) lấy từ mẫu in "BẢNG BÁO GIÁ" của CRM;
+  // đầu trang, ghi chú, tài khoản, người đại diện theo mẫu Hải Âu. Mở hộp thoại In → Lưu dưới dạng PDF.
+  const HA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAD/BAMAAAAu31GpAAAAMFBMVEX///////v//vz9/v77/PvS7fpfv/w0rf0rqv8rqf4pqv8pqf8pqf0pqP0jp/0cpP0e+E43AAAQWElEQVR42tWdT1QTSR7HWzp4FpNwxkmcc+fP45yQCHskjDOM7zkoGvXNeztyIbq7s8LJt45ocnKXEEyO64iDp312J4E9ueIMwokHO+PMnkKYUfGUBt84sE3Sf6o61d3VTLrTVTehJR+K6l/9fr/v71dFhePiiFEMVR/+uKNHNEZRyr/oBjPlcja0MLvUlSvX6+PatYg404H+a9cdO65du56gqLFtcez0idBH/rC37eBRc1PU1VviqMrQA+wtp46p25OjEQE6V6oPFoAuOXawS7wnRhr0cubCASVZ0NOb8Qhh0AvfZpKeHsKgi0vVj+qQRC2PuykPRRp0uToYIw46/dRHkQbNLSYixEGXa5JPRxB0Y2MhC1rYwSnSoMuFiyHioFk+pkBLXt96TIQOORM6k3TL0GNv9xtjp6+rMQIDr5w40ZsJ6TWkqMvyOH26EYOdHnYiNLfp6ZOhjx8TV3J3VYrDJhy5sxRGY26ZOtQY4d5fxW8vvnLoixiPU6rh6t4tOXqwmWSYOGhhc4kFGdKgBaPnP0Yc9DQfJ2+mi5PJUIg06BLH90WJg2YfJ93EQZduCU4TQxp0aTIZ7iEO+gEfJW+muUzSFyMNuvSEj0WJgy4WQANCCLTg7EWVDcbVSwZ06WCqgyK0v3tLihbvOBr6ayFlIytd/XtisLj/m6OXx8qQIMnJapccLF5xMvRUxQ1Kcsd6pLzHKwdbj3yiD5TkYjExWhx28ETfqfmIE4rEbC9Z0I8qftKEIsF0JMgTinIV8oQidnEwSBx03UaTJhT9QKBQ9GiNPKGIXUjgC0XFB3ChSA71E2egR6Zz+h9v/PMQI/svE0JR8X/70HiJ+IHlVfiZN7ofDz+M6emwLwYZfOjFa5ehMYGYmvJ/4GeuTukqEfDPw4POrylxljF04cIH4DiBAiqvHQcf6RrTg87d6wIe7jp3G4e5/CzRZwb6YggcYRR0sQI9E9eDLqeTcfDhs99j+aS8R8l4yK7pE0mSC6hc08J5OH+GhqbBZ6J60KygnoAP977GMtLbwP9SJLmexp+r54QqCGg1dPmnIRCaxksDlF9UlKlWXoiPpTFsMXQ1Aj5Le3/CexPTCfl37RLfoK7u6p+z9TF9w+LlwUPPUmFdU6OMlYpsp8NSkNX/Tlo9r62FLlbgJHNgDA/6QToRx9ZcWg1dGu+BfmDfZ7gb+aaHaRd0ZhT+6HD/Fh7z3cKF9kEnVNDdu9/hbeTT9ULTtkBXh1TQ3l1Mn2nh8WiboFneA69pOjyB6+jN8h8wbYHmarRK4cY1HwdCwGicaQd0OdUEPYILXfqe97QFujCqriUwkTy8szoaY9oArTYe2N6H9EbE2gD99WATtHcLG3phddRnP7RQINNUauK98R32TG/wsXZAu9TQHdGx7/DXxypg5m1bHoqvpjx+7k8mFnXE/plOj/uaoJmzs9hZJqgQwfWhPdCZ86EmaKoX+00s8j3Ae3yke0du27ESevKjZmgTNi+TjIFdcv37GpJcS6HZaoRphva+LuE6H3GGQUpyn1sJzbubVwd2xFV6fLH+ObIkx59oRIsnLI3G2RoKGtdlEox8fXFdbUSz2VvVuBQtDlg40+nUMQR0dGQGy3SsXsBtGWkpdOZiBAEdHNjCmeoZXvSW7IZOoKDDR99hxAFZwXRQbYBeWk8wCGi6830Ox3S4mXZAc3wXCppy/WUKx0aHqHZAC/01PRTSfOQwVnScaQt08R6NYqZC54yhVy+YaBlpJXQ+iWSmGOM+BJaPMe2BVmeXTHgfsumwHfqbhAa0d3fKqGXE09cm6M0oenm4vF8aQHPVoUh7oIGeMYpmfIohoaNG3kcxn1IyU7ZCv6yA0AHAd2IMzQdbTcTbAV3Mj4Ocp4F/BM8Y7S7l+ZS/LTNdAGItOnoJCHFpwyQ1N1NNSEbPuFqshdB5IFFDx6+5QZtnHCamU1Iib2xf7pI7ZvnyWE+AVm4TnGnvz4bQG1XJRfzERkkOirVo7w6YIfdPGm7k2Xlpqo+LXYhd3e+XG2PFMnULirXo7t9ASSCKEXEVq6I+rkTjuyL0y1nL1nQKSNR09L8F9/QoRpJ6IS0ZEEadrCl/axE0l072Ad7omVUwU80MGC9qbqmaiNksX7CZ0QiY/789DnofR3ESNvMpT4+90NxLIEDsCIxlaz7AAnbiJGxmqlCMaQN0mQfzu+GJW6CAQruwNC7BVtubn4aUfPrkL8JZLsCbGMTKMhWrg/amessVSHl4t8GCNi9wDgeam3/qthU6DSr5B5+XBkOCwDBmYe+grUoAFGv5B7bgL2D2rLDisTV2QRegiR3JlTLjILR3dw7rTWzZ8mBxoGXnV0qUlp9CWaYJDOgnO4nDvYi3HzYPDGhYyT8i/O4sKJPTIYyETSmT8hxOsf0RMeASHyT085obfBFvzKmqmXCyTOxO4nDa+MeocZoxhL4L7dqdW+q6seCZHwyhJ1OHE/SPdKHG8R5DaMhW0EffC0b3BSQ59+8aZ5lUDhOuJEeFkIMyhIaMR7he91gA6kexskwpWPw40r2LJ8nhDCT0P8FpDXy6VJ980BR4vzc2HTFVECBLcr9aAg3rWtGR+3OqPZKOT0wZmo7Go5/Lkpz8Ul2xBrrman4C9EY6jCIuxXSMLTYUuVc78kulL8kdennc8zcph6rZP5fVn+hLkumQ9je2Ki+UAUtmOg2kaoVQXFQzgK8dCQ1s6DE/46ORpgxTBC/DdEjoYuY8aPG89cpWbn0QP0kN9DGbTosddqZnB5nmiDANfVFXIhfamGN2Q8NKPj2w1ZTcExa6Tk/DwmTSF7IdGnrnmE8bH7uSDGFK5Jyyom2EBq2bkI7+sv7VXAouC5rSO7CGsR06D+0jQbHUaqYG2sHo8PScpuQSjdkPDe3YtEd0+FneDzok/TtzOEeL2QadhiIObzYnssQguUi7kjoDlqjaBL0MKfmCH9z42GIZdMTpTu2qsSdgGs8maA4qx6XlyBuuPKV1zAcY0doFDebtKOVIPljCDehkmZ7sDDI2Qy9AVdNBORk9Pw5V2HymE5BPpDw2Q8NKflD+/u018Jeh+3/WFRIPXTpBM4eBhteuS/7+LJR70D3OhZuU/1p//EpsflrHleTQB+Ef04cuw9ByjKJ6QXUrqZ/IyWlFkuvClOTQ0bh+CgG2x3TnrqLTR8FNx68bcckGBCXJtT7v8YAHC5BDH76Tv3Mf3HQ6GN2IaxpKTtej8V+lWshX+tCT+4hR00+LLa+B0HFAU4a2d8GRmjHQAaAsRrgXN8P0BeoA/6f60AVQyaeCw1q1NsxA0aASwcbmHNjZDwB1EotQz5xBxMXeT/ntg16B8l+gsw8niespPv2ptk3dYtehF8h/VSuiob03dHMf7N0UbRs0THbyDvA28FBKMa6fsGG59YRd6hZcNU137ilmZ+89tHKCBhoXO5WyqzlncRzKqp6ETDy0cvoMNC526qlN0EJHHrQGguCeD++loV59XZ9VBxPWQadVVdPamW268x3eVQHWQ28gS72RpZCdun067JZtJo/jQ9iueFjXfMzfdNlVOsHWaGzooG5z/9aQbdt4+Sk+dGBEp2Muf9NjWzdzOslgQ7t0qgrZLVUDpqXQF0xA67hM6ZviHhWi5T55KWx72GroxQQ+dNirWbNelk1HQIyXPN07Ym/RbLbV0JCSb2TztMuC0jelDzl1qhGYfixLcnutLiZs6snXhdaMuAQbLf3uX0iK3N9wY0TT0FzFFLSWy3RfSdaMSV/bOW5VgWx+3Eyip2N4S8P/B9JisiRnWSmyVssFZaoR43clIM1DryZMQXuR0JD3bz00W42YWR70yS/RE+2j7IRGdqia1KhLT36XfGEeuuYxB31uFqW5xCN2QpdStCnowPBD3b4+W6DTqoNmjEao9x36OAHGPmg2kzD1ImpUUkPnCVg/089hf5JGFEDBD3Qulwym2vqZ3owxpmZa+IQc8r6fJG0fNGzxwqdQ2e0gRuv7tHKxgeXQRSjop6Jnr2fV40bSB2tcWpo+bRd0flwlEiw3D7joMzSwhVTmsvJUWw4Np/qFbzXX1z6Ao3W/1mFjmaTbJuj5IRBakIJQ250PbgPVqKSWDQhwl5xkgFrqmi6tQwdrIUU3DnapQmGNSmrBgPhVklwUry7PJPQGfLAW2lvOw6ZcO+Li+2KHk+TMQS/UMKCh8jdQOlePx40Lw5S75JQLu1sJPT8Ou0sDv6Cc5dEQ7DL9rHm0QN/BsgYkOfGVnGppsiYNx1oMMut1N+XDbH1Pg/VXlmWY0nCshc4vTtf8jHHEJa7qHuuhq0PwKYRIv4JVva3eG3Oax89esr53i4XFK5c3j4SG9H6qwz/2lVYh5G0wDrIKGj4NyOV9j5xD7iN4rz+nBc1ugxX5FkE/v+fByYmqTv5jzmokqV/MVNzWv4iFJPSH1+ppV+dztA4b25hP2HAGZOE8BB04q2XJ4IhLoxXkx3TFhoMr536CN2itpsPyTZoy1vXLL+cTIeuVAHYzgiUDqaUkdMS1kK64bZAv1NklrYw5Bzun6CzTNxvbCTuOvWXhqdEItA+cU/hmzOjILYTp+FY10RZBq2ItTRGZm4eTI4EBFmmjI3ZAq2Kt0NF3mufKRlQRV/NEq0yHVdBqJT84sKV5knYE/pM0H+/8cr4pz23JwZVctQ+u5vhMq2doUXUIp6vZZcorB96c6GjcDtDVvfW8kYVYWm4dNO8zbq4UxSTV6fDqTykuAaZDDrKUu+TetAx6Q2V+4zpnQ8IzHRxRLY/yCpD0+eKvYprnmQUx4qIqNe2dKGEeaBkY/kH1p3gG2GipG5cD7pKDt6F59YUdOdRfNww+Is2ocB4Y9F9Padf6yOKadG3Brk59vpKs0ZLk0qNwAS8KurgGPyNCFxLwl3XEevWj6oirfN9UI0Ma4xKa4t+Rl9AsX1aNX7RLOdSPqpdHHliBGBcrqa77Qf6JC/uoK3w4Ve3vXk4Tmnurelb9/a9XBk10yanuQbqFcVeS3Fusqv39Sqc8SV0n3PTAcsVEI4NTRnZ7MEQc9MOViosh71q2FQKvZeOWKz6GNOgiOz8YI+6qQaGVx00e9MxKItRD3EWlM5v19Cpht6sWzpMHnXtU80RIgy6VMwcnlAN3yZFwzXExfxDiKHfJHTvR6HfrcvSF0o8ODoP/5BMjSc5pBkQ43ES5S25PnPO9N46G/ncyDtwlJx+0M+dgZA6o+jBob3UQ9Fu8636cFQnw8Rhp0NnHF/Gac5w08riXhTlpRWNfy+Yg5hk+jNmc4yjTgau5OMlGe8iDfpuMUKRBC7cqEQedzYy6GdKg83ycoQiD5laTcYo06Gk+EFL36IZ7dx2+GSabq/SBu+SyjoyzQNMhR1tX5Bz8aydCp0cBSVKpNXV0jMhCl0lfFQ/a+cfmcY0CWYesaaijSDm4UuMuOWeMxYrPTJ+LQ1JLb0xd9+OQRZ0Dbt0hJpfHvRiKkSfJ5df8BOqIiyYORHPMmFkjUEeclQ0ISTpiruIOEqducd8QqCNyK2sE6ojZBRJ1xHzDgJAFPbud0IL+b9axY3btIMnUDB04ozREOW/sJ5HQdP9lJ49Lbur/kB1pOLncN34AAAAASUVORK5CYII=';
+  const HA_CO = {
+    name: 'CÔNG TY TNHH SẢN XUẤT HẢI ÂU',
+    addr: '47/30B Ao Đôi, P. Bình Trị Đông A, Q. Bình Tân, TP.HCM',
+    phone: '0877.77.22.55',
+    email: 'bangkeohaiau@gmail.com',
+    web: 'www.bangkeohaiau.com',
+    acc: '88699688',
+    bank: 'Techcombank - Ngân hàng Thương mại cổ phần Kỹ thương Việt Nam – PGD Bình Dương',
+    boss: 'Trần Đình Hùng',
+    bossTitle: 'Giám Đốc',
+  };
+  function haParse(doc) {
+    const nf = (x) => String(x || '').normalize('NFC').replace(/ /g, ' ');
+    const one = (x) => nf(x).replace(/\s+/g, ' ').trim();
+    const lines = nf(doc.body.innerText).split('\n').map(one).filter(Boolean);
+    const ti = lines.findIndex((l) => /^BẢNG BÁO GIÁ$/i.test(l));
+    const after = ti >= 0 ? lines.slice(ti + 1) : lines;
+    const val = (re, arr = lines) => {
+      for (let i = 0; i < arr.length; i++) {
+        const m = arr[i].match(re);
+        if (m) return (m[1] || '').trim() || (arr[i + 1] && !/:\s*$/.test(arr[i + 1]) ? arr[i + 1] : '');
+      }
+      return '';
+    };
+    const all = lines.join('\n');
+    const dmy = (re) => {
+      const m = all.match(re);
+      return m ? m[1] : '';
+    };
+    const vn = all.match(/ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})/i);
+    const today = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const date = dmy(/Ngày(?:\s*báo giá)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i) || (vn ? `${vn[1].padStart(2, '0')}/${vn[2].padStart(2, '0')}/${vn[3]}` : '') || today;
+    const q = renderCtx.quotes?.[currentQuoteId()];
+    const code = (all.match(/\b(BG\d+(?:\/\d+)?)/) || [])[1] || q?.code || '';
+    const until = dmy(/Hiệu lực(?:\s*đến)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i) || date;
+    const cust = val(/^(?:Đơn vị|Kính gửi|Khách hàng|Tên khách hàng|Công ty)\s*:\s*(.*)$/i, after) || q?.customer?.name || '';
+    const addr = val(/^Địa chỉ(?:\s*giao hàng)?\s*:\s*(.*)$/i, after);
+    // bảng sản phẩm
+    const table = [...doc.querySelectorAll('table')].find((t) => /SẢN PHẨM/i.test(t.innerText) && /THÀNH TIỀN/i.test(t.innerText));
+    if (!table) throw new Error('Không thấy bảng sản phẩm trong mẫu in của CRM.');
+    const head = [...table.rows].find((r) => /SẢN PHẨM/i.test(r.innerText));
+    const hs = [...head.cells].map((c) => one(c.innerText).toUpperCase());
+    const col = (re) => hs.findIndex((h) => re.test(h));
+    const iSp = col(/SẢN PHẨM|TÊN HÀNG/);
+    const iDv = col(/^(ĐVT|ĐƠN VỊ)/);
+    const iSl = col(/SỐ\s*LƯỢNG|^SL$/);
+    const iDg = col(/ĐƠN GIÁ/);
+    const iTt = col(/THÀNH TIỀN/);
+    const num = (x) => Number(String(x || '').replace(/[^\d]/g, '')) || 0;
+    const clean = (x) => one(x).replace(/\s*(đ|VNĐ|VND)$/i, '');
+    const rows = [...table.rows]
+      .filter((r) => r !== head && /^\d+$/.test(one(r.cells[0]?.innerText)) && r.cells.length >= hs.length - 1)
+      .map((r) => {
+        const cell = (i) => (i >= 0 ? r.cells[i] : null);
+        const unit = one(cell(iDv)?.innerText);
+        return {
+          name: nf(cell(iSp)?.innerText || '').split('\n').map(one).filter(Boolean),
+          unit: /^[a-z]/.test(unit) ? cpUnit(unit) : unit,
+          qty: clean(cell(iSl)?.innerText),
+          price: clean(cell(iDg)?.innerText),
+          amount: num(cell(iTt)?.innerText),
+        };
+      });
+    if (!rows.length) throw new Error('Mẫu in của CRM không có dòng sản phẩm nào.');
+    const sub = rows.reduce((t, r) => t + r.amount, 0);
+    // tổng sau thuế = số lớn nhất ở các dòng "Tổng…" / "…thanh toán" của CRM
+    let grand = 0;
+    for (const l of lines) if (/^(TỔNG|Tổng)|thanh toán/i.test(l) && !/bằng chữ/i.test(l) && /\d/.test(l)) grand = Math.max(grand, num((l.match(/[\d.,]{3,}/g) || []).pop()));
+    const vatPct = (all.match(/(?:VAT|GTGT|Thuế)[^\n\d%]{0,30}\(?\s*(\d{1,2})\s*%/i) || [])[1] || '';
+    const staff = (q && staffOf(q, renderCtx.comments?.[q.id])) || '';
+    return { date, code, until, cust, addr, rows, sub, grand: grand > sub ? grand : sub, vatPct, staff };
+  }
+  function haHtml(d) {
+    const f = (n) => `${Math.round(n).toLocaleString('vi-VN')} đ`;
+    const body = d.rows
+      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map(esc).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
+      .join('');
+    const tot =
+      d.grand > d.sub + 1
+        ? `<tr class="t"><td colspan="5" class="r">Cộng tiền hàng</td><td class="r">${f(d.sub)}</td></tr><tr class="t"><td colspan="5" class="r">Thuế GTGT${d.vatPct ? ` (${d.vatPct}%)` : ''}</td><td class="r">${f(d.grand - d.sub)}</td></tr><tr class="t"><td colspan="5" class="r">Tổng tiền thanh toán</td><td class="r">${f(d.grand)}</td></tr>`
+        : `<tr class="t"><td colspan="5" class="r">Tổng tiền thanh toán</td><td class="r">${f(d.sub)}</td></tr>`;
+    const title = `${(d.code || 'BG').split('/')[0]}_${d.cust}`.replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 120);
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+@page{size:A4 portrait;margin:12mm 13mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.top{display:flex;align-items:flex-start;gap:14px}
+.top img{height:50px;flex:none;margin-top:2px}
+.co{flex:1;text-align:center}
+.co b{display:block;font-size:14px}
+.co i{font-size:13px}
+.meta{flex:none;display:grid;grid-template-columns:auto auto;column-gap:34px;font-size:13.5px}
+.meta b{font-weight:700}.meta span{text-align:right}
+.ct{margin-top:14px}
+h1{text-align:center;font-size:22px;margin:4px 0 6px;letter-spacing:.3px}
+table{width:100%;border-collapse:collapse;margin:10px 0 14px}
+th,td{border:1.5px solid #222;padding:4px 6px;vertical-align:middle}
+th{font-weight:700;text-align:center}
+th.l{text-align:left}th.r2{text-align:right}
+.c{text-align:center}.r{text-align:right}
+tr.t td{font-weight:700}
+.note u{font-weight:700}
+.note div{margin:1px 0}
+.sg{display:flex;justify-content:space-between;margin-top:14px;padding:0 60px;page-break-inside:avoid}
+.sg>div{text-align:center}
+.sg .gap{height:110px}
+</style></head><body>
+<div class="top"><img src="${HA_LOGO}" alt="HA"><div class="co"><b>${esc(HA_CO.name)}</b><i>${esc(HA_CO.addr)}</i></div>
+<div class="meta"><b>Ngày báo giá</b><span>${esc(d.date)}</span><b>Số báo giá</b><span>${esc(d.code)}</span><b>Hiệu lực đến</b><span>${esc(d.until)}</span></div></div>
+<div class="ct"><div><b>Điện thoại:</b> ${esc(HA_CO.phone)}</div><div><b>Email:</b> ${esc(HA_CO.email)}</div><div><b>Website:</b> ${esc(HA_CO.web)}</div></div>
+<h1>BẢNG BÁO GIÁ</h1>
+<div><b>Đơn vị: ${esc(d.cust)}</b></div>
+${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
+<table><colgroup><col style="width:8%"><col style="width:37%"><col style="width:11%"><col style="width:14%"><col style="width:13%"><col style="width:17%"></colgroup>
+<thead><tr><th>STT</th><th class="l">Sản phẩm</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th class="r2">Thành tiền</th></tr></thead>
+<tbody>${body}${tot}</tbody></table>
+<div class="note"><u>Ghi chú:</u>
+<div>1. Báo giá đã bao gồm chi phí vận chuyển</div>
+<div>2. Báo giá <b>có hiệu lực từ ngày cho đến khi có báo giá mới nhất</b></div>
+<div>3. Phương thức thanh toán là <b>chuyển khoản</b></div>
+<div>Tên chủ tài khoản : ${esc(HA_CO.name)}</div>
+<div>• Số tài khoản VND : ${esc(HA_CO.acc)}</div>
+<div>• Ngân hàng: ${esc(HA_CO.bank)}</div>
+<div>4. Thời gian hoàn thành đơn đặt hàng này là <b>3-4 ngày kể từ ngày đặt hàng</b></div></div>
+<div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>${esc(d.staff)}</b></div>
+<div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: ${esc(HA_CO.bossTitle)}</div><b>${esc(HA_CO.boss)}</b></div></div>
+</body></html>`;
+  }
+  const HA_LABEL = '🖨 In HA';
+  async function haRun(btn) {
+    const show = (t) => (btn.textContent = t);
+    btn.disabled = true;
+    try {
+      const doc = await captureQuoteDoc(show);
+      show('🧾 Đang dựng mẫu Hải Âu…');
+      csPrint(haHtml(haParse(doc)));
+      show(HA_LABEL);
+    } catch (err) {
+      show(`⚠️ ${err.message}`);
+      setTimeout(() => show(HA_LABEL), 6000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  function haMount() {
+    if (!currentQuoteId() || document.querySelector('.dg-ha-top')) return;
+    const pdf = document.querySelector('.dg-cp-top') || document.querySelector('.dg-pdf-top');
+    if (!pdf) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = pdf.className.replace(/dg-(cp|pdf)-top/, 'dg-ha-top');
+    b.textContent = HA_LABEL;
+    b.title = 'In báo giá này theo mẫu CÔNG TY TNHH SẢN XUẤT HẢI ÂU (logo, thông tin công ty, ghi chú, tài khoản Hải Âu) – nội dung lấy từ báo giá đang mở';
+    b.setAttribute('style', 'margin-left:8px;background:linear-gradient(90deg,#38bdf8,#0284c7);border-color:#0284c7;color:#fff;font-weight:700');
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!b.disabled) haRun(b);
+    });
+    pdf.after(b);
+  }
+  if (IS_TOP) setInterval(haMount, 1500);
   // ---------- 🧩 Ghép mốc SL: nhiều báo giá cùng sản phẩm, khác số lượng → 1 bảng báo giá in chung ----------
   // Lấy mẫu in của báo giá đang mở (giữ nguyên định dạng, che SĐT, chữ ký, khung duyệt), chỉ thay cột Số lượng / Đơn giá /
   // Thành tiền và phần tổng: mỗi ô xếp các mốc số lượng (nhỏ → lớn) của các báo giá được chọn.
