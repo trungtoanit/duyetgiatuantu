@@ -14462,8 +14462,9 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
         <div style="background:linear-gradient(90deg,#38bdf8,#0284c7);color:#fff;font-weight:800;padding:10px 14px;font-size:15px">🖨 In báo giá Hải Âu</div>
         <div style="padding:14px;display:grid;gap:10px;font-size:13px;color:#334155">
           <label><b>Số báo giá</b>${v.crmCode && v.crmCode !== v.code ? ` <span style="color:#94a3b8">(CRM: ${esc(v.crmCode)})</span>` : ''}<input data-h="code" style="${inp}" value="${esc(v.code)}"></label>
+          <label><b>Đơn vị</b>${v.crmCust && v.crmCust !== v.cust ? ` <span style="color:#94a3b8">(CRM: ${esc(v.crmCust)})</span>` : ''}<input data-h="cust" style="${inp}" value="${esc(v.cust)}" placeholder="Tên đơn vị / khách hàng"></label>
           <label><b>Nhân viên kinh doanh</b> <span style="color:#94a3b8">(in dưới Người biên soạn, để trống = không in)</span><input data-h="staff" style="${inp}" value="${esc(v.staff)}" placeholder="Họ tên NVKD"></label>
-          <div style="color:#64748b;font-size:12px">Lưu lên cloud cho báo giá này – lần in sau, máy khác đều dùng lại.</div>
+          <div style="color:#64748b;font-size:12px">Số báo giá, Đơn vị, NVKD được lưu lên cloud cho báo giá này – lần in sau, máy khác đều dùng lại.</div>
           <div style="display:flex;justify-content:flex-end;gap:8px"><button data-h="no" style="padding:7px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer">Huỷ</button><button data-h="ok" style="padding:7px 16px;border-radius:8px;border:0;background:#0284c7;color:#fff;font-weight:700;cursor:pointer">🖨 Lưu &amp; In</button></div>
         </div></div>`;
       const q = (k) => ov.querySelector(`[data-h="${k}"]`);
@@ -14471,7 +14472,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
         ov.remove();
         res(r);
       };
-      const ok = () => done({ code: q('code').value.trim() || v.crmCode || '', staff: q('staff').value.trim() });
+      const ok = () => done({ code: q('code').value.trim() || v.crmCode || '', staff: q('staff').value.trim(), cust: q('cust').value.trim() || v.crmCust || '' });
       q('ok').onclick = ok;
       q('no').onclick = () => done(null);
       ov.addEventListener('click', (e) => e.target === ov && done(null));
@@ -14496,11 +14497,12 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
       const qid = currentQuoteId();
       const saved = (await kvGet('haPrint').catch(() => ({}))) || {};
       const cur = saved[qid] || {};
-      const ok = await haAsk({ code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code });
+      const ok = await haAsk({ code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust });
       if (!ok) return show(HA_LABEL);
       d.code = ok.code;
       d.staff = ok.staff;
-      kvMerge('haPrint', { [qid]: { code: ok.code, staff: ok.staff, by: meName, at: Date.now() }, ...(ok.staff ? { _staff: ok.staff } : {}) }).catch(() => {});
+      d.cust = ok.cust;
+      kvMerge('haPrint', { [qid]: { code: ok.code, staff: ok.staff, cust: ok.cust, by: meName, at: Date.now() }, ...(ok.staff ? { _staff: ok.staff } : {}) }).catch(() => {});
       show('🧾 Đang dựng mẫu Hải Âu…');
       csPrint(haHtml(d));
       show(HA_LABEL);
