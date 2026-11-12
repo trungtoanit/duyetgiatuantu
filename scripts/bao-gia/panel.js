@@ -3336,6 +3336,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
 
+  // Cảnh báo sản phẩm khó sản xuất: Dài / Cao < 0.7 (vd. 250D x 250R x 480C)
+  const HARD_RATIO = 0.7;
+  function injectHardWarn() {
+    if (!document.getElementById('dg-hard-css')) {
+      const st = document.createElement('style');
+      st.id = 'dg-hard-css';
+      st.textContent = 'td[data-dg-hard]::after{content:attr(data-dg-hard);display:block;width:max-content;max-width:100%;margin-top:4px;padding:2px 8px;border-radius:6px;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-weight:700;font-size:12px;white-space:normal}';
+      document.head.append(st);
+    }
+    for (const tr of document.querySelectorAll('.ant-table-tbody > tr:not(.ant-table-measure-row)')) {
+      let hit = null;
+      for (const td of tr.cells) {
+        const m = /(\d+(?:[.,]\d+)?)\s*D\s*x\s*(\d+(?:[.,]\d+)?)\s*R\s*x\s*(\d+(?:[.,]\d+)?)\s*C\b/i.exec(td.textContent || '');
+        if (m) { hit = { td, d: parseFloat(m[1].replace(',', '.')), c: parseFloat(m[3].replace(',', '.')) }; break; }
+      }
+      for (const td of tr.cells) if (td !== hit?.td && td.hasAttribute('data-dg-hard')) td.removeAttribute('data-dg-hard');
+      if (!hit) continue;
+      const r = hit.c > 0 ? hit.d / hit.c : 99;
+      const label = r < HARD_RATIO ? `😡 Sản phẩm khó sản xuất: Dài/Cao = ${hit.d}/${hit.c} = ${r.toFixed(2)} (< ${HARD_RATIO})` : null;
+      if (label) { if (hit.td.dataset.dgHard !== label) hit.td.dataset.dgHard = label; }
+      else if (hit.td.hasAttribute('data-dg-hard')) hit.td.removeAttribute('data-dg-hard');
+    }
+  }
+  if (IS_TOP) setInterval(() => { try { injectHardWarn(); } catch {} }, 2000);
+
   // ---------- 🔄 Load lại giá giấy mới (dòng có ⚠️ giấy cũ ở cột "Kết cấu giấy") ----------
   // Mỗi dòng có ⚠️: bấm số lượng → hộp "Tính giá carton" → "Đồng bộ giá carton mới" → Lưu → dòng kế.
   function productTable() {
