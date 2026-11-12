@@ -5283,6 +5283,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       .filter((o) => o?.at >= vn0 && o.at < vn1 && !o.cancel)
       .map((o) => ({ ...o, q: o.bg ? byCode[o.bg] : null }));
     k = { n: list.length, sum: list.reduce((t, x) => t + (x.total || 0), 0), dsum: 0, dn: 0 };
+    // Doanh số ngày theo CRM (API saleByDate – ô "Doanh số" trên Dashboard) khác Σ Tổng tiền các đơn đọc được
+    // → đọc lại Danh sách đơn ngay (tối đa 3 phút / lần để không đọc liên tục khi 2 số lệch nhau vì lý do khác)
+    const dYmd = new Date(vn0 + 7 * 3600e3).toISOString().slice(0, 10);
+    const crmDay = crmSaleSum(dYmd, dYmd);
+    if (crmDay != null && Math.abs(crmDay - k.sum) > Math.max(1e5, Math.abs(crmDay) * 0.005) && !dayOrdersBusy && Date.now() - (state.dayResyncAt || 0) > 3 * 60e3) {
+      state.dayResyncAt = Date.now();
+      refreshDayOrders(true)
+        .then(() => crmKpiTiles(null, {}))
+        .catch(() => {});
+    }
     // Chênh lệch theo DOANH THU THỰC của đơn: tỷ lệ chênh lệch của báo giá × tổng tiền đơn
     // (1 báo giá lên nhiều đơn / đơn lấy 1 phần → không cộng trùng cả báo giá)
     // Chênh lệch của 1 đơn được CHỐT SỐ lần đầu tính được (kv 'orderDiff' theo mã DH, đồng bộ) → tổng ngày / tháng
@@ -5370,7 +5380,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const html =
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
-      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}`) +
+      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}${crmDay != null ? `\nDoanh số theo CRM (Dashboard): ${money(crmDay)}${Math.abs(crmDay - (k.sum || 0)) > Math.max(1e5, Math.abs(crmDay) * 0.005) ? ' – đang lệch, extension tự đọc lại Danh sách đơn' : ' – khớp'}` : ''}`) +
       // Tổng chênh lệch ngày + còn thiếu so với mục tiêu ngày (4,5 tỷ chênh lệch/tháng ÷ số ngày công của tháng, trừ Chủ nhật)
       (() => {
         const y = mvn.getUTCFullYear();
