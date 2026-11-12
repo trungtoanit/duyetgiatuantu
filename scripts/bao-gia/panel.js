@@ -3336,7 +3336,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
 
-  // Cảnh báo sản phẩm khó sản xuất: Dài / Cao < 0.7 (vd. 250D x 250R x 480C)
+  // Cảnh báo sản phẩm khó sản xuất: Dài / Cao < 0.7 (vd. 250D x 250R x 480C), hoặc 5 lớp mà Rộng ≤ 80mm
   const HARD_RATIO = 0.7;
   function injectHardWarn() {
     if (!document.getElementById('dg-hard-css')) {
@@ -3349,12 +3349,16 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       let hit = null;
       for (const td of tr.cells) {
         const m = /(\d+(?:[.,]\d+)?)\s*D\s*x\s*(\d+(?:[.,]\d+)?)\s*R\s*x\s*(\d+(?:[.,]\d+)?)\s*C\b/i.exec(td.textContent || '');
-        if (m) { hit = { td, d: parseFloat(m[1].replace(',', '.')), c: parseFloat(m[3].replace(',', '.')) }; break; }
+        if (m) { const n = (v) => parseFloat(v.replace(',', '.')); hit = { td, d: n(m[1]), r: n(m[2]), c: n(m[3]) }; break; }
       }
       for (const td of tr.cells) if (td !== hit?.td && td.hasAttribute('data-dg-hard')) td.removeAttribute('data-dg-hard');
       if (!hit) continue;
       const r = hit.c > 0 ? hit.d / hit.c : 99;
-      const label = r < HARD_RATIO ? `😡 Sản phẩm khó sản xuất: Dài/Cao = ${hit.d}/${hit.c} = ${r.toFixed(2)} (< ${HARD_RATIO})` : null;
+      const why = [];
+      if (r < HARD_RATIO) why.push(`Dài/Cao = ${hit.d}/${hit.c} = ${r.toFixed(2)} (< ${HARD_RATIO})`);
+      const ply5 = /\b5\s*lớp|\b5\s*L\b/i.test(hit.td.textContent || '') || /\b5\s*lớp|\b5\s*L\b/i.test(tr.textContent || '');
+      if (ply5 && hit.r <= 80) why.push(`5 lớp mà Rộng = ${hit.r}mm (≤ 80mm)`);
+      const label = why.length ? `😡 Sản phẩm khó sản xuất: ${why.join(' · ')}` : null;
       if (label) { if (hit.td.dataset.dgHard !== label) hit.td.dataset.dgHard = label; }
       else if (hit.td.hasAttribute('data-dg-hard')) hit.td.removeAttribute('data-dg-hard');
     }
