@@ -14409,10 +14409,13 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;l
 h1{text-align:center;font-size:22px;margin:4px 0 6px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;margin:10px 0 14px}
 th,td{border:1.5px solid #222;padding:4px 6px;vertical-align:middle}
-th{font-weight:700;text-align:center}
+th{font-weight:700;text-align:center;background:#1e9be9;color:#fff}
 th.l{text-align:left}th.r2{text-align:right}
 .c{text-align:center}.r{text-align:right}
-tr.t td{font-weight:700}
+tbody tr:nth-child(odd):not(.t) td{background:#e3f2fd}
+tbody tr:nth-child(even):not(.t) td{background:#fff}
+tr.t td{font-weight:700;background:#f1f5f9}
+tr.t:last-child td{background:#cfe8fb}
 .note u{font-weight:700}
 .note div{margin:1px 0}
 .sg{display:flex;justify-content:space-between;margin-top:14px;padding:0 60px;page-break-inside:avoid}
