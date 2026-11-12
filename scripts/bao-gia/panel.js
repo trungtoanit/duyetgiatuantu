@@ -14395,7 +14395,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         : `<tr class="t"><td colspan="5" class="r">Tổng tiền thanh toán</td><td class="r">${f(d.sub)}</td></tr>`;
     const title = `${(d.code || 'BG').split('/')[0]}_${d.cust}`.replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 120);
     return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
-@page{size:A4 portrait;margin:12mm 13mm}
+@page{size:A4 portrait;margin:9mm 12mm}
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .top{display:flex;align-items:flex-start;gap:14px}
@@ -14405,9 +14405,9 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;l
 .co i{font-size:13px}
 .meta{flex:none;display:grid;grid-template-columns:auto auto;column-gap:34px;font-size:13.5px}
 .meta b{font-weight:700}.meta span{text-align:right}
-.ct{margin-top:14px}
+.ct{margin-top:8px;line-height:1.45}
 h1{text-align:center;font-size:22px;margin:4px 0 6px;letter-spacing:.3px}
-table{width:100%;border-collapse:collapse;margin:10px 0 14px}
+table{width:100%;border-collapse:collapse;margin:8px 0 10px}
 th,td{border:1.5px solid #222;padding:4px 6px;vertical-align:middle}
 th{font-weight:700;text-align:center;background:#1e9be9;color:#fff}
 th.l{text-align:left}th.r2{text-align:right}
@@ -14417,10 +14417,11 @@ tbody tr:nth-child(even):not(.t) td{background:#fff}
 tr.t td{font-weight:700;background:#f1f5f9}
 tr.t:last-child td{background:#cfe8fb}
 .note u{font-weight:700}
-.note div{margin:1px 0}
-.sg{display:flex;justify-content:space-between;margin-top:14px;padding:0 60px;page-break-inside:avoid}
+.note div{margin:0}
+.note{line-height:1.45}
+.sg{display:flex;justify-content:space-between;margin-top:8px;padding:0 60px;page-break-inside:avoid;line-height:1.4}
 .sg>div{text-align:center}
-.sg .gap{height:110px}
+.sg .gap{height:72px}
 </style></head><body>
 <div class="top"><img src="${HA_LOGO}" alt="HA"><div class="co"><b>${esc(HA_CO.name)}</b><i>${esc(HA_CO.addr)}</i></div>
 <div class="meta"><b>Ngày báo giá</b><span>${esc(d.date)}</span><b>Số báo giá</b><span>${esc(d.code)}</span><b>Hiệu lực đến</b><span>${esc(d.until)}</span></div></div>
