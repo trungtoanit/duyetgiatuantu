@@ -8111,7 +8111,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const detail = content?.querySelector('.ant-comment-content-detail');
     const author = content?.querySelector('.ant-comment-content-author-name')?.innerText.trim() || '';
     const text = (detail?.innerText || '').trim();
-    const cImgs = [...(detail?.querySelectorAll('img') || [])].map((i) => i.currentSrc || i.src).filter((u) => u && !/^data:image\/svg/.test(u));
+    // Ảnh có sẵn trong các bình luận trên trang (ảnh của bình luận này xếp trước), bỏ ảnh đại diện và khung của trợ lý
+    const imgOk = (i) => {
+      const u = i.currentSrc || i.src;
+      return u && !/^data:image\/svg/.test(u) && !i.closest('.ant-comment-avatar, .ant-avatar, .dg-sum, .dg-ask-out, #dg-ask') && (i.naturalWidth || 100) >= 40;
+    };
+    const imgsOf = (c) => [...(c?.querySelectorAll(':scope > .ant-comment-inner > .ant-comment-content img') || [])].filter(imgOk).map((i) => ({ u: i.currentSrc || i.src, who: c.querySelector(':scope > .ant-comment-inner .ant-comment-content-author-name')?.innerText.trim() || '' }));
+    const cImgs = imgsOf(one).map((x) => x.u);
+    const pool = [...new Map([...imgsOf(one), ...[...document.querySelectorAll('.ant-comment')].filter((c) => c !== one && !c.closest('#dg-root, #dg-ask')).flatMap(imgsOf)].map((x) => [x.u, x])).values()];
     const code = document.title.match(/#(BG\d+)/)?.[1] || '';
     const imgs = []; // { url (dataURL) }
     const hist = []; // hội thoại OpenAI
@@ -8127,10 +8134,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         <div data-log style="display:flex;flex-direction:column;gap:8px"></div>
         <div data-recent style="display:flex;flex-wrap:wrap;gap:4px"></div>
         <textarea data-q rows="3" placeholder="Nhập câu hỏi / yêu cầu cho AI… (Ctrl+V dán ảnh, kéo thả ảnh vào đây · Ctrl+Enter để gửi)" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font:inherit;resize:vertical"></textarea>
+        ${pool.length ? `<div style="font-size:11.5px;color:#475569"><b>🖼 Ảnh có sẵn trong bình luận</b> (${pool.length}) – bấm ảnh để thêm / bỏ${cImgs.length ? ` · viền xanh: ảnh của bình luận này` : ''}</div><div data-pool style="display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px">${pool.map((x, i) => `<img data-p="${i}" src="${esc(x.u)}" title="${esc(x.who ? `Ảnh của ${x.who}` : 'Ảnh trong bình luận')}" style="flex:none;width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${cImgs.includes(x.u) ? '#22c55e' : '#e2e8f0'};opacity:.8">`).join('')}</div>` : ''}
         <div data-thumbs style="display:flex;flex-wrap:wrap;gap:6px"></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <label style="cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 12px;font-weight:700">📎 Chọn ảnh<input type="file" accept="image/*" multiple data-file hidden></label>
-          ${cImgs.length ? `<button type="button" data-cimg style="cursor:pointer;border:1px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:999px;padding:3px 12px;font:inherit;font-weight:700">🖼 Thêm ${cImgs.length} ảnh của bình luận</button>` : ''}
+          ${pool.length ? `<button type="button" data-cimg style="cursor:pointer;border:1px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:999px;padding:3px 12px;font:inherit;font-weight:700">🖼 Thêm tất cả ${pool.length} ảnh gợi ý</button>` : ''}
           <span style="flex:1"></span>
           <button type="button" data-send style="cursor:pointer;border:0;background:linear-gradient(90deg,#0f766e,#4f46e5);color:#fff;border-radius:999px;padding:6px 18px;font:inherit;font-weight:800">🚀 Gửi</button></div>
       </div></div>`;
@@ -8153,7 +8161,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       await aiCfgEdit().catch((err) => alert(err.message));
       paintProv();
     };
-    const recent = akRecent();
+    // gợi ý nhanh: câu hỏi gần đây trước, rồi các câu mẫu
+    const AK_PRESET = ['Đọc ảnh: liệt kê kích thước (D x R x C), số màu in, chất liệu / loại giấy, số lượng', 'Tóm tắt khách đang yêu cầu gì, còn thiếu thông tin gì để báo giá', 'Tính tổng các khoản tiền', 'Soạn câu trả lời ngắn gọn, lịch sự gửi khách', 'Mẫu trong ảnh là loại thùng / hộp gì, gợi ý kết cấu giấy phù hợp', 'Kiểm tra file in: lỗi chính tả, thông tin sai, chỗ cần lưu ý'];
+    const recent = [...new Set([...akRecent(), ...AK_PRESET])].slice(0, 12);
     $('[data-recent]').innerHTML = recent.map((p, i) => `<span data-r="${i}" title="${esc(p)}" style="cursor:pointer;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;font-size:11.5px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p)}</span>`).join('');
     $('[data-recent]').onclick = (e) => {
       const r = e.target.closest('[data-r]');
@@ -8162,10 +8172,40 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const paintThumbs = () => {
       $('[data-thumbs]').innerHTML = imgs.map((m, i) => `<div style="position:relative"><img src="${m.url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"><span data-rm="${i}" title="Bỏ ảnh" style="position:absolute;top:-6px;right:-6px;cursor:pointer;background:#ef4444;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-size:11px">✕</span></div>`).join('');
     };
+    const paintPool = () =>
+      wrap.querySelectorAll('[data-p]').forEach((el) => {
+        const on = imgs.some((m) => m.src === pool[Number(el.dataset.p)].u);
+        el.style.opacity = on ? '1' : '.8';
+        el.style.outline = on ? '3px solid #4f46e5' : '';
+      });
     $('[data-thumbs]').onclick = (e) => {
       const r = e.target.closest('[data-rm]');
-      if (r) imgs.splice(Number(r.dataset.rm), 1), paintThumbs();
+      if (r) imgs.splice(Number(r.dataset.rm), 1), paintThumbs(), paintPool();
     };
+    const addPool = async (i) => {
+      const u = pool[i].u;
+      if (imgs.some((m) => m.src === u)) return false;
+      imgs.push({ url: await akToData(u), src: u });
+      return true;
+    };
+    $('[data-pool]')?.addEventListener('click', async (e) => {
+      const el = e.target.closest('[data-p]');
+      if (!el) return;
+      const i = Number(el.dataset.p);
+      const at = imgs.findIndex((m) => m.src === pool[i].u);
+      if (at >= 0) imgs.splice(at, 1);
+      else {
+        el.style.opacity = '.4';
+        try {
+          await addPool(i);
+        } catch {
+          el.title = 'Không tải được ảnh này – lưu về rồi kéo thả vào hộp';
+          el.style.border = '2px solid #ef4444';
+        }
+      }
+      paintThumbs();
+      paintPool();
+    });
     const addBlobs = async (list) => {
       for (const f of list) {
         if (!/^image\//.test(f.type || '')) continue;
@@ -8189,15 +8229,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const b = e.currentTarget;
       b.textContent = '⏳ Đang lấy ảnh…';
       let ok = 0;
-      for (const u of cImgs) {
+      for (let i = 0; i < pool.length; i++) {
         try {
-          imgs.push({ url: await akToData(u) });
+          await addPool(i);
           ok++;
         } catch {}
       }
       paintThumbs();
-      b.textContent = ok === cImgs.length ? `✓ Đã thêm ${ok} ảnh` : `⚠️ Thêm được ${ok}/${cImgs.length} ảnh`;
-      b.disabled = true;
+      paintPool();
+      b.textContent = ok === pool.length ? `✓ Đã thêm ${ok} ảnh` : `⚠️ Thêm được ${ok}/${pool.length} ảnh`;
     });
     const log = $('[data-log]');
     const bubble = (who, html, bg) => {
@@ -8220,6 +8260,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       bubble('Bạn', `${esc(q || '(chỉ gửi ảnh)')}${shots.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${shots.map((m) => `<img src="${m.url}" style="width:48px;height:48px;object-fit:cover;border-radius:4px">`).join('')}</div>` : ''}`, '#eef2ff');
       qa.value = '';
       paintThumbs();
+      paintPool();
       btn.disabled = true;
       btn.textContent = '⏳ Đang hỏi…';
       const ans = bubble('AI', '<i style="color:#94a3b8">đang trả lời…</i>', '#f0fdfa');
