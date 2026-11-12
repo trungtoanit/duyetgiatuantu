@@ -14446,18 +14446,62 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
 <div>• Số tài khoản VND : ${esc(HA_CO.acc)}</div>
 <div>• Ngân hàng: ${esc(HA_CO.bank)}</div>
 <div>4. Thời gian hoàn thành đơn đặt hàng này là <b>3-4 ngày kể từ ngày đặt hàng</b></div></div>
-<div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>&nbsp;</b></div>
+<div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>${d.staff ? esc(d.staff) : '&nbsp;'}</b></div>
 <div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap ap"><div class="apx"><div class="apt">Người duyệt giá <i>(Approver)</i></div><div class="apb"><svg viewBox="0 0 100 80" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="ap1">Đã duyệt giá bởi <i>(Approved by)</i></div><div class="ap2">${esc(HA_CO.name)}</div><div class="ap3">${esc(HA_CO.boss)} · Ngày: ${esc(new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }))}</div></div></div></div><div>Chức vụ: ${esc(HA_CO.bossTitle)}</div><b>${esc(HA_CO.boss)}</b></div></div>
 </body></html>`;
   }
   const HA_LABEL = '🖨 In HA';
+  // Hộp sửa Số báo giá + tên NVKD trước khi in (giá trị lần trước của báo giá này lấy từ cloud)
+  function haAsk(v) {
+    return new Promise((res) => {
+      const ov = document.createElement('div');
+      ov.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.45);display:grid;place-items:center;font-family:Arial,Helvetica,sans-serif');
+      const inp = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-top:4px';
+      ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:420px;max-width:calc(100vw - 32px);box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">
+        <div style="background:linear-gradient(90deg,#38bdf8,#0284c7);color:#fff;font-weight:800;padding:10px 14px;font-size:15px">🖨 In báo giá Hải Âu</div>
+        <div style="padding:14px;display:grid;gap:10px;font-size:13px;color:#334155">
+          <label><b>Số báo giá</b>${v.crmCode && v.crmCode !== v.code ? ` <span style="color:#94a3b8">(CRM: ${esc(v.crmCode)})</span>` : ''}<input data-h="code" style="${inp}" value="${esc(v.code)}"></label>
+          <label><b>Nhân viên kinh doanh</b> <span style="color:#94a3b8">(in dưới Người biên soạn, để trống = không in)</span><input data-h="staff" style="${inp}" value="${esc(v.staff)}" placeholder="Họ tên NVKD"></label>
+          <div style="color:#64748b;font-size:12px">Lưu lên cloud cho báo giá này – lần in sau, máy khác đều dùng lại.</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><button data-h="no" style="padding:7px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer">Huỷ</button><button data-h="ok" style="padding:7px 16px;border-radius:8px;border:0;background:#0284c7;color:#fff;font-weight:700;cursor:pointer">🖨 Lưu &amp; In</button></div>
+        </div></div>`;
+      const q = (k) => ov.querySelector(`[data-h="${k}"]`);
+      const done = (r) => {
+        ov.remove();
+        res(r);
+      };
+      const ok = () => done({ code: q('code').value.trim() || v.crmCode || '', staff: q('staff').value.trim() });
+      q('ok').onclick = ok;
+      q('no').onclick = () => done(null);
+      ov.addEventListener('click', (e) => e.target === ov && done(null));
+      ov.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') ok();
+        if (e.key === 'Escape') done(null);
+      });
+      document.body.append(ov);
+      q('code').focus();
+      q('code').select();
+    });
+  }
   async function haRun(btn) {
     const show = (t) => (btn.textContent = t);
     btn.disabled = true;
     try {
       const doc = await captureQuoteDoc(show);
+      const d = haParse(doc);
+      // Số báo giá / tên NVKD in trên mẫu HA: sửa được, lưu cloud (kv 'haPrint': id báo giá → {code, staff})
+      show('✏️ Kiểm tra số báo giá / NVKD…');
+      const qid = currentQuoteId();
+      const saved = (await kvGet('haPrint').catch(() => ({}))) || {};
+      const cur = saved[qid] || {};
+      const ok = await haAsk({ code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code });
+      if (!ok) return show(HA_LABEL);
+      d.code = ok.code;
+      d.staff = ok.staff;
+      kvMerge('haPrint', { [qid]: { code: ok.code, staff: ok.staff, by: meName, at: Date.now() }, ...(ok.staff ? { _staff: ok.staff } : {}) }).catch(() => {});
       show('🧾 Đang dựng mẫu Hải Âu…');
-      csPrint(haHtml(haParse(doc)));
+      csPrint(haHtml(d));
       show(HA_LABEL);
     } catch (err) {
       show(`⚠️ ${err.message}`);
