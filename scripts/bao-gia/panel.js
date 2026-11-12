@@ -8114,7 +8114,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // Ảnh có sẵn trong các bình luận trên trang (ảnh của bình luận này xếp trước), bỏ ảnh đại diện và khung của trợ lý
     const imgOk = (i) => {
       const u = i.currentSrc || i.src;
-      return u && !/^data:image\/svg/.test(u) && !i.closest('.ant-comment-avatar, .ant-avatar, .dg-sum, .dg-ask-out, #dg-ask') && (i.naturalWidth || 100) >= 40;
+      if (!u || /^data:image\/svg|\.svg(\?|$)|\/(static|assets|icons?)\//i.test(u) || i.closest('.ant-comment-avatar, .ant-avatar, .dg-sum, .dg-ask-out, #dg-ask')) return false;
+      // biểu tượng nhỏ trong dòng thông báo (vd. túi tiền "… lên đơn hàng với giá trị …") không phải ảnh khách gửi
+      const r = i.getBoundingClientRect();
+      if ((r.width && r.width < 60) || (i.naturalWidth && i.naturalWidth < 60)) return false;
+      const c = i.closest('.ant-comment');
+      const t = c?.querySelector(':scope > .ant-comment-inner .ant-comment-content-detail')?.innerText || '';
+      return !/đã tạo báo giá\s*#?BG\d+|lên đơn hàng với giá trị/i.test(t);
     };
     const imgsOf = (c) => [...(c?.querySelectorAll(':scope > .ant-comment-inner > .ant-comment-content img') || [])].filter(imgOk).map((i) => ({ u: i.currentSrc || i.src, who: c.querySelector(':scope > .ant-comment-inner .ant-comment-content-author-name')?.innerText.trim() || '' }));
     const cImgs = imgsOf(one).map((x) => x.u);
