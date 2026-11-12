@@ -8076,10 +8076,35 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       return [];
     }
   };
+  // Câu hỏi gần đây đồng bộ lên cloud (kv 'askPrompts': mã → {p, at, by}) → máy nào cũng thấy cùng danh sách gợi ý
+  const AK_KV = 'askPrompts';
+  const akKey = (p) => {
+    let h = 0;
+    for (const c of p) h = (h * 31 + c.codePointAt(0)) | 0;
+    return `q${(h >>> 0).toString(36)}${p.length.toString(36)}`;
+  };
+  let akCloud = null; // [câu hỏi] mới nhất trước
+  async function akCloudLoad() {
+    const o = (await kvGet(AK_KV).catch(() => null)) || {};
+    const rows = Object.entries(o).filter(([, x]) => x?.p).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+    const patch = {};
+    // đẩy lịch sử cũ chỉ lưu trên máy này lên cloud (1 lần)
+    const have = new Set(rows.map(([, x]) => x.p));
+    akRecent().forEach((p, i) => {
+      if (p && !have.has(p)) patch[akKey(p)] = { p, at: Date.now() - (i + 1) * 1000, by: meName };
+    });
+    // giữ tối đa 40 câu, bỏ câu cũ nhất
+    rows.slice(40).forEach(([k]) => (patch[k] = null));
+    if (Object.keys(patch).length) kvMerge(AK_KV, patch).catch(() => {});
+    akCloud = [...Object.values(patch).filter(Boolean).map((x) => x.p), ...rows.slice(0, 40).map(([, x]) => x.p)];
+    return akCloud;
+  }
   const akRemember = (p) => {
     try {
       localStorage.setItem(AK_PROMPTS, JSON.stringify([p, ...akRecent().filter((x) => x !== p)].slice(0, 8)));
     } catch {}
+    akCloud = [p, ...(akCloud || []).filter((x) => x !== p)];
+    kvMerge(AK_KV, { [akKey(p)]: { p, at: Date.now(), by: meName } }).catch(() => {});
   };
   // ảnh → JPEG dataURL, cạnh dài tối đa 1600px (đỡ nặng khi gửi)
   async function akToData(src) {
@@ -8255,8 +8280,14 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     };
     // gợi ý nhanh: câu hỏi gần đây trước, rồi các câu mẫu
     const AK_PRESET = ['Đọc ảnh: liệt kê kích thước (D x R x C), số màu in, chất liệu / loại giấy, số lượng', 'Tóm tắt khách đang yêu cầu gì, còn thiếu thông tin gì để báo giá', 'Tính tổng các khoản tiền', 'Soạn câu trả lời ngắn gọn, lịch sự gửi khách', 'Mẫu trong ảnh là loại thùng / hộp gì, gợi ý kết cấu giấy phù hợp', 'Kiểm tra file in: lỗi chính tả, thông tin sai, chỗ cần lưu ý'];
-    const recent = [...new Set([...akRecent(), ...AK_PRESET])].slice(0, 12);
-    $('[data-recent]').innerHTML = recent.map((p, i) => `<span data-r="${i}" title="${esc(p)}" style="cursor:pointer;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;font-size:11.5px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p)}</span>`).join('');
+    let recent = [];
+    const paintRecent = () => {
+      recent = [...new Set([...(akCloud || []), ...akRecent(), ...AK_PRESET])].slice(0, 12);
+      const el = $('[data-recent]');
+      if (el) el.innerHTML = recent.map((p, i) => `<span data-r="${i}" title="${esc(p)}" style="cursor:pointer;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;font-size:11.5px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p)}</span>`).join('');
+    };
+    paintRecent();
+    akCloudLoad().then(paintRecent).catch(() => {});
     $('[data-recent]').onclick = (e) => {
       const r = e.target.closest('[data-r]');
       if (r) (qa.value = recent[Number(r.dataset.r)]), qa.focus();
