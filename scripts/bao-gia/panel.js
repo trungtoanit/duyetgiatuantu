@@ -8190,7 +8190,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const wrap = document.createElement('div');
     wrap.id = 'dg-ask';
     wrap.setAttribute('style', 'position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.45);display:grid;place-items:center;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif');
-    wrap.innerHTML = `<style>${AK_CSS}</style><div data-box style="width:min(760px,94vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+    wrap.innerHTML = `<style>${AK_CSS}#dg-ask [data-body]>*{flex-shrink:0}#dg-ask [data-q]{min-height:72px}</style><div data-box style="width:min(760px,94vw);max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
       <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:linear-gradient(90deg,#0f766e,#4f46e5);color:#fff">
         <b style="font-size:15px">🤖 Hỏi AI${code ? ` · ${esc(code)}` : ''}</b><span data-prov style="font-size:11px;opacity:.85"></span>
         <span style="flex:1"></span><span data-cfg title="Cài OpenAI key / model" style="cursor:pointer">⚙️</span><span data-x title="Đóng (Esc)" style="cursor:pointer;font-size:18px;margin-left:8px">✕</span></div>
@@ -8222,7 +8222,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // không cho CRM bắt cú bấm trong hộp (vd. bấm ảnh mở xem ảnh lớn)
     for (const ev of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup']) wrap.addEventListener(ev, (e) => e.stopPropagation());
     $('[data-x]').onclick = close;
-    const paintProv = () => aiCfgGet().then((c) => ($('[data-prov]').textContent = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude (chưa có OpenAI key – không gửi được ảnh)'));
+    const paintProv = () =>
+      Promise.all([aiCfgGet(), call({ type: 'version.get' }).catch(() => ({}))]).then(([c, v]) => ($('[data-prov]').textContent = `${c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude (chưa có OpenAI key – không gửi được ảnh)'}${v?.version ? ` · bản ${v.version}` : ''}`));
     paintProv();
     $('[data-cfg]').onclick = async () => {
       await aiCfgEdit().catch((err) => alert(err.message));
