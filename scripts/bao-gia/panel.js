@@ -8177,7 +8177,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const r = e.target.closest('[data-r]');
       if (r) (qa.value = recent[Number(r.dataset.r)]), qa.focus();
     };
+    const paintSend = () => {
+      const b = $('[data-send]');
+      if (b && !b.disabled) b.textContent = imgs.length ? `🚀 Gửi kèm ${imgs.length} ảnh` : '🚀 Gửi';
+    };
     const paintThumbs = () => {
+      paintSend();
       $('[data-thumbs]').innerHTML = imgs.map((m, i) => `<div style="position:relative"><div style="width:72px;height:72px;background:url('${m.url}') center/cover no-repeat;border-radius:6px;border:1px solid #e2e8f0"></div><span data-rm="${i}" title="Bỏ ảnh" style="position:absolute;top:-6px;right:-6px;cursor:pointer;background:#ef4444;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-size:11px">✕</span></div>`).join('');
     };
     const paintPool = () =>
@@ -8194,7 +8199,15 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const addPool = async (i) => {
       const u = pool[i].u;
       if (imgs.some((m) => m.src === u)) return false;
-      imgs.push({ url: await akToData(u), src: u });
+      // tải được (cùng máy chủ / cho phép) → gửi ảnh thu nhỏ; máy chủ ảnh chặn tải → gửi đường dẫn ảnh, OpenAI tự tải
+      let url;
+      try {
+        url = await akToData(u);
+      } catch (err) {
+        if (!/^https?:/i.test(u)) throw err;
+        url = u;
+      }
+      imgs.push({ url, src: u, link: url === u });
       return true;
     };
     $('[data-pool]')?.addEventListener('click', async (e) => {
@@ -8266,7 +8279,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const prompt = `${useCtx ? `Bình luận${author ? ` của ${author}` : ''}${code ? ` (báo giá ${code})` : ''}:\n<<<\n${text}\n>>>\n\n` : ''}${q || 'Đọc các ảnh này và cho biết nội dung chính.'}`;
       const shots = imgs.splice(0);
       if (q) akRemember(q);
-      bubble('Bạn', `${esc(q || '(chỉ gửi ảnh)')}${shots.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${shots.map((m) => `<div style="width:48px;height:48px;background:url('${m.url}') center/cover no-repeat;border-radius:4px"></div>`).join('')}</div>` : ''}`, '#eef2ff');
+      bubble(`Bạn${shots.length ? ` · kèm ${shots.length} ảnh` : ''}`, `${esc(q || '(chỉ gửi ảnh)')}${shots.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${shots.map((m) => `<div style="width:48px;height:48px;background:url('${m.url}') center/cover no-repeat;border-radius:4px"></div>`).join('')}</div>` : ''}`, '#eef2ff');
       qa.value = '';
       paintThumbs();
       paintPool();
@@ -8279,7 +8292,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         let out;
         if (cfg.openaiKey) {
           if (!hist.length) hist.push({ role: 'system', content: sys });
-          hist.push({ role: 'user', content: shots.length ? [{ type: 'text', text: prompt }, ...shots.map((m) => ({ type: 'image_url', image_url: { url: m.url } }))] : prompt });
+          hist.push({ role: 'user', content: shots.length ? [{ type: 'text', text: prompt }, ...shots.map((m) => ({ type: 'image_url', image_url: { url: m.url, detail: 'high' } }))] : prompt });
           out = await oaiChat(hist, 4000, `Hỏi AI: ${(q || 'ảnh').slice(0, 50)}`);
           hist.push({ role: 'assistant', content: out });
         } else {
@@ -8308,6 +8321,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       } finally {
         btn.disabled = false;
         btn.textContent = '🚀 Gửi';
+        paintSend();
         qa.focus();
       }
     };
