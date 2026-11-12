@@ -14557,6 +14557,8 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
     phone: '0822 025 745',
     email: 'baobidaiduongcom@gmail.com',
     web: 'https://baobidaiduong.com/',
+    boss: 'Nguyễn Trí Thức',
+    bossTitle: 'Giám Đốc',
   };
   const DD_NOTES = [
     'Kích thước trong báo giá là theo quy cách Dài x Rộng x Cao, đơn vị tính là milimet, kích thước thùng là kích thước phủ bì.',
@@ -14648,7 +14650,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
 <div class="sum"><div>${sum}</div></div>
 <div class="note"><u>Ghi chú:</u><ol>${DD_NOTES.map((x) => `<li>${x}</li>`).join('')}</ol></div>
 <div class="sg"><div><b>Người biên soạn</b><div>(Ký và ghi rõ họ tên)</div><div class="gap"></div><div>Chức vụ: Nhân viên kinh doanh</div><b>${d.staff ? esc(d.staff) : '&nbsp;'}</b></div>
-<div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap ap"><div class="apx"><div class="apt">Người duyệt giá <i>(Approver)</i></div><div class="apb"><svg viewBox="0 0 100 80" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="ap1">Đã duyệt giá bởi <i>(Approved by)</i></div><div class="ap2">${esc(DD_CO.name)}</div><div class="ap3">${d.boss ? `${esc(d.boss)} · ` : ''}Ngày: ${esc(today)}</div></div></div></div><div>&nbsp;</div><b>${d.boss ? esc(d.boss) : '&nbsp;'}</b></div></div>
+<div><b>Người đại diện</b><div>(Ký và ghi rõ họ tên)</div><div class="gap ap"><div class="apx"><div class="apt">Người duyệt giá <i>(Approver)</i></div><div class="apb"><svg viewBox="0 0 100 80" aria-hidden="true"><path d="M8 44 L36 70 L92 10" fill="none" stroke="#3fae2a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="ap1">Đã duyệt giá bởi <i>(Approved by)</i></div><div class="ap2">${esc(DD_CO.name)}</div><div class="ap3">${d.boss ? `${esc(d.boss)} · ` : ''}Ngày: ${esc(today)}</div></div></div></div><div>${d.boss ? `Chức vụ: ${esc(DD_CO.bossTitle)}` : '&nbsp;'}</div><b>${d.boss ? esc(d.boss) : '&nbsp;'}</b></div></div>
 </body></html>`;
   }
   const DD_LABEL = '🖨 In ĐD';
@@ -14664,7 +14666,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
       const saved = (await kvGet('ddPrint').catch(() => ({}))) || {};
       const cur = saved[qid] || {};
       const ok = await haAsk(
-        { code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust, boss: cur.boss ?? saved._boss ?? '' },
+        { code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust, boss: cur.boss || saved._boss || DD_CO.boss },
         { title: '🖨 In báo giá Đại Dương', grad: 'linear-gradient(90deg,#42a5f5,#0d47a1)', btn: '#0d47a1' },
       );
       if (!ok) return show(DD_LABEL);
