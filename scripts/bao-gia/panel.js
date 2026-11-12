@@ -14387,7 +14387,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   function haHtml(d) {
     const f = (n) => `${Math.round(n).toLocaleString('vi-VN')} đ`;
     const body = d.rows
-      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map((x, j) => (j ? esc(x) : `<b>${esc(x)}</b>`)).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
+      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map((x, j) => (j ? `<i class="spec">${esc(x)}</i>` : `<b>${esc(x)}</b>`)).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
       .join('');
     const tot =
       d.grand > d.sub + 1
@@ -14412,6 +14412,7 @@ th,td{border:1.5px solid #222;padding:4px 6px;vertical-align:middle}
 th{font-weight:700;text-align:center;background:#1e9be9;color:#fff}
 th.l{text-align:left}th.r2{text-align:right}
 .c{text-align:center}.r{text-align:right}
+.spec{color:#dc2626}
 tbody tr:nth-child(odd):not(.t) td{background:#e3f2fd}
 tbody tr:nth-child(even):not(.t) td{background:#fff}
 tr.t td{font-weight:700;background:#f1f5f9}
