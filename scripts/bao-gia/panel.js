@@ -1931,7 +1931,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="pdlg-q">Bán bao nhiêu %?</div>
       <div class="pdlg-v"><b>${pct0}%</b></div>
       <input type="range" min="5" max="50" step="1" value="${pct0}">
-      <div class="pdlg-chips">${[20, 22, 23, 25, 27, 28, 30, 32, 35].map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
+      <div class="pdlg-chips pdlg-chips-1">${Array.from({ length: 31 }, (_, k) => 20 + k).map((v) => `<button class="act" data-v="${v}">${v}%</button>`).join('')}</div>
       <div class="pdlg-warn" data-v="20" title="Bấm để chọn 20%" style="display:none;cursor:pointer;margin:8px 0;padding:8px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-weight:800">⚠️ Đang bán chậm, hãy set 20%</div>
       <div class="pdlg-sum"></div>
       <div class="pdlg-rows"></div>
@@ -2065,11 +2065,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     };
     const sync = () => {
       box.querySelector('.pdlg-v b').textContent = `${range.value}%`;
+      box.querySelectorAll('.pdlg-chips-1 [data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === range.value));
       syncGo();
       renderSum();
       renderRows();
     };
     slowWarn();
+    box.querySelectorAll('.pdlg-chips-1 [data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === range.value));
     renderSum();
     renderRows();
     // Tính lại khi kéo: nghe nhiều sự kiện + dò giá trị định kỳ (bộ gõ / trang có thể chặn sự kiện "input")
@@ -10532,6 +10534,9 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .pdlg input[type=range] { width: 100%; accent-color: #16a34a; }
     .pdlg-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .pdlg-chips .act, .pdlg-btns .act { height: auto; padding: 4px 12px; }
+    .pdlg-chips-1 { gap: 4px; }
+    .pdlg-chips-1 .act { padding: 3px 0; width: 46px; font-size: 12px; text-align: center; }
+    .pdlg-chips-1 .act.on { background: #16a34a; border-color: #16a34a; color: #fff; font-weight: 800; }
     .pdlg-note { font-size: 12px; }
     .ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .ps-t { border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 8px; display: grid; gap: 1px; background: #f8fafc; }
