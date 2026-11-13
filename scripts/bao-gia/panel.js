@@ -3340,7 +3340,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => injectPriceNudges(), 2000);
 
-  // Cảnh báo sản phẩm khó sản xuất: Dài / Cao < 0.7 (vd. 250D x 250R x 480C), hoặc 5 lớp mà Rộng ≤ 90mm
+  // Cảnh báo sản phẩm khó sản xuất: Dài / Cao < 0.7 (vd. 250D x 250R x 480C), hoặc 5 lớp mà Rộng ≤ 90mm, hoặc Cao ≤ 40mm
   const HARD_RATIO = 0.7;
   function injectHardWarn() {
     if (!document.getElementById('dg-hard-css')) {
@@ -3362,6 +3362,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (r < HARD_RATIO) why.push(`Dài/Cao = ${hit.d}/${hit.c} = ${r.toFixed(2)} (< ${HARD_RATIO})`);
       const ply5 = /\b5\s*lớp|\b5\s*L\b/i.test(hit.td.textContent || '') || /\b5\s*lớp|\b5\s*L\b/i.test(tr.textContent || '');
       if (ply5 && hit.r <= 90) why.push(`5 lớp mà Rộng = ${hit.r}mm (≤ 90mm)`);
+      if (hit.c > 0 && hit.c <= 40) why.push(`Cao = ${hit.c}mm (≤ 40mm)`);
       const label = why.length ? `😡 Sản phẩm khó sản xuất: ${why.join(' · ')}` : null;
       if (label) { if (hit.td.dataset.dgHard !== label) hit.td.dataset.dgHard = label; }
       else if (hit.td.hasAttribute('data-dg-hard')) hit.td.removeAttribute('data-dg-hard');
