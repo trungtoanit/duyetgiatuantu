@@ -4388,6 +4388,95 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     th.append(b);
   }
   if (IS_TOP) setInterval(bqMount, 1500);
+  // ---------- 🔁 Đổi ID giấy hàng loạt (cột "Kết cấu giấy"): mỗi dòng bấm ID giấy → hộp "Chọn giấy tấm"
+  // → tab "Danh sách giấy tấm" → nhập ID vào ô "Tìm ID" → chọn đúng dòng giấy có ID đó → bấm "Chọn". Không bấm "Cập nhật" của báo giá.
+  const pidModal = () => visModalsTop().find((m) => /Chọn giấy tấm/.test(m.querySelector('.ant-modal-title')?.textContent || '') && m.querySelector('.ant-modal')?.offsetParent);
+  const pidOf = (cell) => ((cell?.innerText || '').match(/(\d+)\s*\|/) || [])[1] || '';
+  const pidLink = (cell) => cell && ([...cell.querySelectorAll('a')].find((a) => /^\d+$/.test(a.textContent.trim()))
+    || [...cell.querySelectorAll('*')].find((e) => !e.children.length && /^\d+$/.test(e.textContent.trim())));
+  const pidSetInput = (inp, v) => {
+    inp.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, v);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  async function pidRun(btn, id) {
+    const pt = productTable();
+    if (!pt) throw new Error('Không thấy bảng sản phẩm.');
+    const rows = () => [...pt.t.querySelectorAll('tbody tr.ant-table-row')].filter((tr) => pidLink(paperCell(tr, pt.iKc)));
+    const n = rows().length;
+    if (!n) throw new Error('Không thấy ID giấy nào ở cột Kết cấu giấy.');
+    let changed = 0;
+    for (let i = 0; i < n; i++) {
+      const cell = paperCell(rows()[i], pt.iKc);
+      if (pidOf(cell) === id) continue;
+      btn.dataset.label = `⏳ Dòng ${i + 1}/${n}…`;
+      if (pidModal()) throw new Error('Đang có hộp Chọn giấy tấm mở – đóng hộp đó rồi thử lại.');
+      pidLink(cell).click();
+      const m = await waitFor(pidModal, 8000, 150);
+      if (!m) throw new Error(`Dòng ${i + 1}: bấm ID giấy không mở được hộp Chọn giấy tấm.`);
+      await sleep(400);
+      const tab = [...m.querySelectorAll('.ant-tabs-tab')].find((x) => x.innerText.trim() === 'Danh sách giấy tấm');
+      if (!tab) throw new Error(`Dòng ${i + 1}: không thấy tab Danh sách giấy tấm.`);
+      if (!tab.classList.contains('ant-tabs-tab-active')) (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+      const inpOf = () => [...m.querySelectorAll('input')].find((x) => /Tìm theo ID/i.test(x.placeholder || '') && x.offsetParent && !x.closest('.ant-tabs-tabpane-hidden'));
+      const inp = await waitFor(inpOf, 6000, 150);
+      if (!inp) throw new Error(`Dòng ${i + 1}: không thấy ô Tìm ID ở tab Danh sách giấy tấm.`);
+      pidSetInput(inp, id);
+      const re = new RegExp(`(^|\\s)${id}\\s*\\|`);
+      const rowOf = () => [...m.querySelectorAll('tbody tr')].find((tr) => tr.offsetParent && !tr.closest('.ant-tabs-tabpane-hidden') && re.test(tr.innerText || '') && tr.querySelector('input[type="radio"], input[type="checkbox"], .ant-radio, .ant-checkbox'));
+      const row = await waitFor(rowOf, 12000, 250);
+      if (!row) throw new Error(`Dòng ${i + 1}: không tìm thấy giấy tấm ID ${id} – hộp để nguyên để anh xem.`);
+      await sleep(300);
+      const r2 = rowOf() || row;
+      (r2.querySelector('input[type="radio"], input[type="checkbox"]') || r2.querySelector('.ant-radio, .ant-checkbox')).click();
+      await sleep(400);
+      const ok = [...m.querySelectorAll('.ant-modal-footer button, button')].find((b) => b.innerText.trim() === 'Chọn' && b.offsetParent);
+      if (!ok) throw new Error(`Dòng ${i + 1}: không thấy nút Chọn.`);
+      if (ok.disabled) throw new Error(`Dòng ${i + 1}: nút Chọn chưa bấm được (chưa chọn được giấy ${id}).`);
+      ok.click();
+      const closed = await waitFor(() => !pidModal(), 10000, 200);
+      if (!closed) throw new Error(`Dòng ${i + 1}: CRM chưa đóng hộp sau khi bấm Chọn – xem thông báo trong hộp.`);
+      await sleep(900); // CRM tính lại giá theo giấy mới
+      changed++;
+    }
+    return { n, changed };
+  }
+  function pidMount() {
+    if (!currentQuoteId()) return;
+    const pt = productTable();
+    const th = pt && [...pt.t.querySelectorAll('thead th')].find((x) => /^Kết cấu giấy/.test(x.innerText.trim()));
+    if (!th || th.querySelector('.dg-pid')) return;
+    const b = document.createElement('span');
+    b.className = 'dg-pid'; // không dùng class dg-bq: bqMount nhận cột Số lượng theo class đó
+    if (!document.getElementById('dg-pid-css')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-pid-css">.dg-pid::after{content:attr(data-label)}</style>');
+    const LABEL = '🔁 Đổi ID hàng loạt';
+    b.dataset.label = LABEL;
+    b.title = 'Đổi giấy tấm cho mọi dòng: lần lượt bấm ID giấy từng dòng → tab Danh sách giấy tấm → nhập ID mới → chọn giấy đó → Chọn';
+    b.setAttribute('style', 'display:inline-block;margin-left:6px;cursor:pointer;color:#fff;background:linear-gradient(90deg,#0ea5e9,#2563eb);border-radius:999px;padding:0 8px;font-weight:700;font-size:11px;white-space:nowrap;vertical-align:middle');
+    b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.dataset.busy) return;
+      const v = prompt('ID giấy tấm mới cho TẤT CẢ các dòng sản phẩm (vd. 2014):', '');
+      if (v == null) return;
+      const id = String(v).replace(/[^\d]/g, '');
+      if (!id) return alert('ID không hợp lệ.');
+      b.dataset.busy = '1';
+      try {
+        const r = await pidRun(b, id);
+        b.dataset.label = r.changed ? `✅ Đã đổi ${r.changed}/${r.n} dòng sang ID ${id} – kiểm tra giá rồi bấm Cập nhật` : `✅ Các dòng đã là ID ${id}`;
+      } catch (err) {
+        b.dataset.label = `⚠️ ${err.message}`;
+      }
+      setTimeout(() => {
+        b.dataset.label = LABEL;
+        delete b.dataset.busy;
+      }, 10000);
+    });
+    th.append(b);
+  }
+  if (IS_TOP) setInterval(pidMount, 1500);
 
   // ---------- Trang chi tiết báo giá: trang trí lại nhóm nút "Tình trạng báo giá" ----------
   const ST_LOOK = {
