@@ -435,6 +435,7 @@
       }
       if (old.hasOrder && old.orderCode) Object.assign(next, { hasOrder: true, orderCode: old.orderCode });
       await kvMerge('quotes', { [data.id]: { ...old, ...next } });
+      if (renderCtx.quotes) renderCtx.quotes[data.id] = { ...old, ...next }; // băng 🔥 Gợi ý chốt đơn đọc bản trong bộ nhớ → cập nhật luôn
       if (next.quoteStatus !== old.quoteStatus && CLOSED.has(next.quoteStatus)) gapPopupNow(); // vừa thất bại / thành công → bỏ khỏi popup ngay
     } else if (kind === 'margin') {
       const all = await kvGet('margins');
@@ -7765,6 +7766,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   if (IS_TOP) setInterval(() => teamRemindPopup().catch(() => {}), 20000);
   // ---------- Băng vàng đầu trang CRM ("1. CÔNG TY … (xxđ) 2. …") → thay bằng danh sách 🔥 Gợi ý chốt đơn ----------
   // Ẩn nội dung gốc của CRM và chèn danh sách deal ưu tiên (bấm để mở báo giá). NVKD chỉ thấy deal của mình.
+  const PAGE_ST_CODE = { 'Thất bại': 'REJECT', 'Thành công': 'SUCCESS', 'Duyệt lên đơn': 'APPROVE' }; // nút tình trạng đang chọn trên trang → mã CRM (đều thuộc CLOSED)
   let topHotHtml = '';
   let topHotScroll = 0;
   async function topHotBanner() {
@@ -7790,9 +7792,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const pinned = Object.entries(pin || {}).filter(([, v]) => v && !v.off).map(([id]) => Number(id));
     const pinSet = new Set(pinned);
     const all = [...aiItems.map((x) => ({ ...x, pinned: pinSet.has(x.id) })), ...pinned.filter((id) => !aiIds.has(id)).map((id) => ({ id, pinned: true }))];
+    // Trang báo giá đang mở có tình trạng đã chốt (vd. ✓ Thất bại) mà kho còn trạng thái cũ → sửa kho, bỏ khỏi băng ngay
+    const curId = currentQuoteId();
+    const pageSt = curId && PAGE_ST_CODE[document.querySelector('[data-dg-st][data-on="1"]')?.getAttribute('data-dg-st') || ''];
+    if (pageSt && quotes[curId] && quotes[curId].quoteStatus !== pageSt) {
+      quotes[curId] = { ...quotes[curId], quoteStatus: pageSt };
+      kvMerge('quotes', { [curId]: quotes[curId] }).catch(() => {});
+    }
     const items = all
       .map((x) => ({ x, q: quotes[x.id] }))
-      .filter(({ x, q }) => q && (x.pinned || !done[x.id]) && !CLOSED.has(q.quoteStatus) && !q.hasOrder && !hasOrderFull(q, renderCtx.comments?.[x.id]) && !cancelInfo(renderCtx.comments?.[x.id]))
+      .filter(({ x, q }) => q && (x.pinned || !done[x.id]) && !CLOSED.has(q.quoteStatus) && !(String(x.id) === String(curId) && pageSt) && !q.hasOrder && !hasOrderFull(q, renderCtx.comments?.[x.id]) && !cancelInfo(renderCtx.comments?.[x.id]))
       .filter(({ q }) => MY_ADMIN || norm(staffOf(q, renderCtx.comments?.[q.id])) === norm(meName));
     if (!items.length) return; // chưa có dữ liệu → giữ nguyên băng của CRM
     // Gọn, đẹp: mỗi deal 1 thẻ nhỏ (số · mã BG · tên khách rút gọn · số tiền), cuộn khi nhiều
