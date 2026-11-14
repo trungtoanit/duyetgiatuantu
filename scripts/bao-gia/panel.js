@@ -14506,10 +14506,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const lines = nf(doc.body.innerText).split('\n').map(one).filter(Boolean);
     const ti = lines.findIndex((l) => /^BẢNG BÁO GIÁ$/i.test(l));
     const after = ti >= 0 ? lines.slice(ti + 1) : lines;
+    // Nhãn trống ("Địa chỉ:") thì giá trị có thể nằm dòng dưới – nhưng KHÔNG lấy dòng dưới nếu đó là nhãn khác
+    // (mẫu in Đại Dương: "Địa chỉ:" trống, dòng dưới là "SDT: 09…" → trước đây in số điện thoại thành địa chỉ)
+    const isLabel = (t) => /:\s*$/.test(t) || /^[\p{L}][\p{L}\s./]{0,24}:/u.test(t);
     const val = (re, arr = lines) => {
       for (let i = 0; i < arr.length; i++) {
         const m = arr[i].match(re);
-        if (m) return (m[1] || '').trim() || (arr[i + 1] && !/:\s*$/.test(arr[i + 1]) ? arr[i + 1] : '');
+        if (m) return (m[1] || '').trim() || (arr[i + 1] && !isLabel(arr[i + 1]) ? arr[i + 1] : '');
       }
       return '';
     };
