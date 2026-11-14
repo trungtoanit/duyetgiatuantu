@@ -4548,6 +4548,34 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       b.style.setProperty('--c', col);
       b.dataset.on = on ? '1' : '0';
     }
+    // Báo giá Thất bại: chỉ để lại nút "Thất bại" (đánh dấu đang chọn), ẩn các nút khác; bấm "✎ đổi" để hiện lại tạm thời.
+    // Nhận Thất bại theo nút đang chọn trên trang, hoặc theo kho (REJECT) khi trang không có nút nào đang chọn.
+    const btns = [...box.querySelectorAll('[data-dg-st]')];
+    const fail = btns.find((b) => b.getAttribute('data-dg-st') === 'Thất bại');
+    const anyOn = btns.some((b) => b.dataset.on === '1');
+    const qid = currentQuoteId();
+    const rej = fail && (fail.dataset.on === '1' || (!anyOn && renderCtx.quotes?.[qid]?.quoteStatus === 'REJECT'));
+    const show = !rej || box.dataset.dgStAll === String(qid);
+    if (rej) fail.dataset.on = '1';
+    for (const b of btns) if (b !== fail) b.style.display = show ? '' : 'none';
+    let ed = box.querySelector('.dg-st-edit');
+    if (rej && !show) {
+      if (!ed) {
+        ed = document.createElement('span');
+        ed.className = 'dg-st-edit';
+        ed.textContent = '✎ đổi';
+        ed.title = 'Hiện lại các tình trạng khác để đổi';
+        ed.setAttribute('style', 'align-self:center;font-size:11px;color:#64748b;cursor:pointer;text-decoration:underline');
+        ed.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          box.dataset.dgStAll = String(currentQuoteId());
+          ed.remove();
+          styleQuoteStatus();
+        });
+        box.append(ed);
+      }
+    } else ed?.remove();
   }
   // Trang chi tiết báo giá: chuẩn hoá giao diện (ô nhập, nút, nhãn, khoảng cách, bo góc) cho hài hoà
   function detailPageCss() {
