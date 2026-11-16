@@ -14804,6 +14804,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
 </body></html>`;
   }
   const DD_LABEL = '🖨 In ĐD';
+  const upVi = (t) => String(t || '').toLocaleUpperCase('vi-VN');
   // Tên NVKD của báo giá đang mở: tiêu đề trang "BG35802/2(Hứa Mai Phương Duy)", thiếu thì lấy từ dữ liệu báo giá đã thu
   async function ddQuoteStaff(qid) {
     for (const e of document.querySelectorAll('h1, h2, h3, h4, h5, div, span, b, strong')) {
@@ -14832,10 +14833,11 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
       const crmStaff = await ddQuoteStaff(qid);
       const staff0 = cur.staffEdited ? cur.staff : crmStaff || cur.staff || '';
       const ok = await haAsk(
-        { code: cur.code || d.code, staff: staff0, crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust, boss: cur.boss || saved._boss || DD_CO.boss },
+        { code: cur.code || d.code, staff: staff0, crmCode: d.code, cust: upVi(cur.cust || d.cust), crmCust: upVi(d.cust), boss: cur.boss || saved._boss || DD_CO.boss },
         { title: '🖨 In báo giá Đại Dương', grad: 'linear-gradient(90deg,#42a5f5,#0d47a1)', btn: '#0d47a1' },
       );
       if (!ok) return show(DD_LABEL);
+      ok.cust = upVi(ok.cust); // tên đơn vị trên mẫu ĐD luôn in hoa toàn bộ
       Object.assign(d, { code: ok.code, staff: ok.staff, cust: ok.cust, boss: ok.boss });
       kvMerge('ddPrint', { [qid]: { code: ok.code, staff: ok.staff, staffEdited: !!crmStaff && ok.staff !== crmStaff, cust: ok.cust, boss: ok.boss, by: meName, at: Date.now() }, ...(ok.boss ? { _boss: ok.boss } : {}) }).catch(() => {});
       show('🧾 Đang dựng mẫu Đại Dương…');
