@@ -14804,6 +14804,18 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
 </body></html>`;
   }
   const DD_LABEL = '🖨 In ĐD';
+  // Tên NVKD của báo giá đang mở: tiêu đề trang "BG35802/2(Hứa Mai Phương Duy)", thiếu thì lấy từ dữ liệu báo giá đã thu
+  async function ddQuoteStaff(qid) {
+    for (const e of document.querySelectorAll('h1, h2, h3, h4, h5, div, span, b, strong')) {
+      if (e.children.length > 3) continue;
+      const t = (e.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t.length > 100) continue;
+      const m = t.match(/^#?BG\d+(?:\/\d+)?\s*\(([^()]{2,60})\)$/);
+      if (m) return m[1].trim();
+    }
+    const q = renderCtx.quotes?.[qid] || (await kvGet('quotes').catch(() => ({})))?.[qid];
+    return staffOf(q, null);
+  }
   async function ddRun(btn) {
     const show = (t) => (btn.textContent = t);
     btn.disabled = true;
@@ -14815,13 +14827,17 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
       const qid = currentQuoteId();
       const saved = (await kvGet('ddPrint').catch(() => ({}))) || {};
       const cur = saved[qid] || {};
+      // NVKD mặc định = người phụ trách của chính báo giá này (tiêu đề "BG…/n(Tên)" hoặc dữ liệu báo giá),
+      // chỉ giữ tên đã lưu khi người dùng tự sửa khác đi cho báo giá này
+      const crmStaff = await ddQuoteStaff(qid);
+      const staff0 = cur.staffEdited ? cur.staff : crmStaff || cur.staff || '';
       const ok = await haAsk(
-        { code: cur.code || d.code, staff: cur.staff ?? saved._staff ?? '', crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust, boss: cur.boss || saved._boss || DD_CO.boss },
+        { code: cur.code || d.code, staff: staff0, crmCode: d.code, cust: cur.cust || d.cust, crmCust: d.cust, boss: cur.boss || saved._boss || DD_CO.boss },
         { title: '🖨 In báo giá Đại Dương', grad: 'linear-gradient(90deg,#42a5f5,#0d47a1)', btn: '#0d47a1' },
       );
       if (!ok) return show(DD_LABEL);
       Object.assign(d, { code: ok.code, staff: ok.staff, cust: ok.cust, boss: ok.boss });
-      kvMerge('ddPrint', { [qid]: { code: ok.code, staff: ok.staff, cust: ok.cust, boss: ok.boss, by: meName, at: Date.now() }, ...(ok.staff ? { _staff: ok.staff } : {}), ...(ok.boss ? { _boss: ok.boss } : {}) }).catch(() => {});
+      kvMerge('ddPrint', { [qid]: { code: ok.code, staff: ok.staff, staffEdited: !!crmStaff && ok.staff !== crmStaff, cust: ok.cust, boss: ok.boss, by: meName, at: Date.now() }, ...(ok.boss ? { _boss: ok.boss } : {}) }).catch(() => {});
       show('🧾 Đang dựng mẫu Đại Dương…');
       csPrint(ddHtml(d));
       show(DD_LABEL);
