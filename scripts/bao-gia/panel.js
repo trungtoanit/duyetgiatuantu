@@ -14562,10 +14562,11 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }
     const rows = grid
       .filter(({ r, g }) => r !== head && /^\d+$/.test(one(g[0]?.innerText)) && g.length >= hs.length - 1)
-      .map(({ g }) => {
+      .map(({ r, g }) => {
         const cell = (i) => (i >= 0 ? g[i] : null);
         const unit = one(cell(iDv)?.innerText);
         return {
+          shared: !!cell(iSp) && cell(iSp).parentElement !== r, // ô Sản phẩm mượn của dòng trên (rowspan)
           name: nf(cell(iSp)?.innerText || '').split('\n').map(one).filter(Boolean),
           unit: /^[a-z]/.test(unit) ? cpUnit(unit) : unit,
           qty: lines2(cell(iSl)?.innerText),
@@ -14574,6 +14575,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         };
       });
     if (!rows.length) throw new Error('Mẫu in của CRM không có dòng sản phẩm nào.');
+    // Dòng mượn ô Sản phẩm của dòng trên: quy cách trong mẫu in là của dòng trên (CRM gộp theo tên) →
+    // lấy quy cách thật từ bảng sản phẩm trên trang (cột "Diễn giải"), dòng thứ k cùng tên ↔ dòng thứ k cùng tên trên trang
+    if (rows.some((r) => r.shared)) {
+      const pt = [...document.querySelectorAll('.ant-table')].find((x) => /Diễn giải/.test(x.querySelector('thead')?.innerText || ''));
+      const ths = pt ? [...pt.querySelectorAll('thead th')].map((th) => one(th.innerText)) : [];
+      const iD = ths.findIndex((h) => /^Diễn giải/.test(h));
+      const page = iD < 0 ? [] : [...pt.querySelectorAll('tbody tr.ant-table-row')].map((tr) => nf(tr.cells[iD]?.innerText || '').split('\n').map(one).filter((x) => x && !/^Preview$/i.test(x)));
+      const seen = {};
+      for (const r of rows) {
+        const k = (seen[r.name[0]] = (seen[r.name[0]] ?? -1) + 1);
+        if (!r.shared) continue;
+        const pg = page.filter((x) => x[0] === r.name[0])[k];
+        if (!pg) continue;
+        const paren = /^\(.*\)$/.test(r.name[1] || '');
+        r.name = [pg[0], ...pg.slice(1).map((x) => (paren && !/^\(.*\)$/.test(x) ? `(${x})` : x))];
+      }
+    }
+    // Các sản phẩm cùng tên (cùng kích thước): đánh dấu phần quy cách khác nhau để in đậm
+    const parts = (r) => r.name.slice(1).flatMap((x) => x.replace(/^\((.*)\)$/, '$1').split(/,\s*/)).map(one).filter(Boolean);
+    for (const r of rows) {
+      const same = rows.filter((o) => o !== r && o.name[0] === r.name[0]);
+      if (!same.length) continue;
+      r.diff = parts(r).filter((x) => same.some((o) => !parts(o).includes(x)));
+    }
     const sub = rows.reduce((t, r) => t + r.amount, 0);
     // tổng sau thuế = số lớn nhất ở các dòng "Tổng…" / "…thanh toán" của CRM
     let grand = 0;
@@ -14582,10 +14607,17 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const staff = (q && staffOf(q, renderCtx.comments?.[q.id])) || '';
     return { date, code, until, cust, addr, rows, sub, grand: grand > sub ? grand : sub, vatPct, staff };
   }
+  // Dòng quy cách: in đậm các phần khác với sản phẩm cùng tên (r.diff)
+  const specHtml = (x, diff) => {
+    if (!diff?.length) return esc(x);
+    const m = String(x).match(/^\((.*)\)$/);
+    const body = (m ? m[1] : x).split(/,\s*/).map((p) => (diff.includes(p.trim()) ? `<b style="font-weight:800">${esc(p)}</b>` : esc(p))).join(', ');
+    return m ? `(${body})` : body;
+  };
   function haHtml(d) {
     const f = (n) => `${Math.round(n).toLocaleString('vi-VN')} đ`;
     const body = d.rows
-      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map((x, j) => (j ? `<i class="spec">${esc(x)}</i>` : `<b>${esc(x)}</b>`)).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
+      .map((r, i) => `<tr><td class="c">${i + 1}</td><td>${r.name.map((x, j) => (j ? `<i class="spec">${specHtml(x, r.diff)}</i>` : `<b>${esc(x)}</b>`)).join('<br>')}</td><td class="c">${esc(r.unit)}</td><td class="c">${esc(r.qty)}</td><td class="c">${esc(r.price)}</td><td class="r">${f(r.amount)}</td></tr>`)
       .join('');
     const tot =
       d.grand > d.sub + 1
@@ -14761,7 +14793,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
     const body = d.rows
       .map((r, i) => {
         // Sản phẩm hiển thị như mẫu HA: dòng đầu (tên + quy cách của CRM) in đậm, các dòng sau (chi tiết) nghiêng đỏ
-        return `<tr><td class="n">${i + 1}</td><td class="p">${r.name.map((x, j) => (j ? `<i class="s">${esc(x)}</i>` : `<b>${esc(x)}</b>`)).join('')}</td><td class="c">${esc(r.unit)}</td><td class="r">${ddMl(r.qty)}</td><td class="r">${ddMl(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
+        return `<tr><td class="n">${i + 1}</td><td class="p">${r.name.map((x, j) => (j ? `<i class="s">${specHtml(x, r.diff)}</i>` : `<b>${esc(x)}</b>`)).join('')}</td><td class="c">${esc(r.unit)}</td><td class="r">${ddMl(r.qty)}</td><td class="r">${ddMl(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
       })
       .join('');
     const vat = d.grand > d.sub + 1;
@@ -14788,7 +14820,7 @@ table.it{width:100%;border-collapse:collapse;margin:6px 0 0}
 .it td{border-bottom:1px solid #d6e2f0;padding:4px 6px;vertical-align:middle;line-height:1.4}
 .it .n{text-align:center;color:#6b7280}
 .it .p b{color:#111827}
-.it .p b{display:block}.it .p .s{display:block;color:#dc2626}
+.it .p>b{display:block}.it .p .s{display:block;color:#dc2626}
 .c{text-align:center}.r{text-align:right;white-space:nowrap}.b{font-weight:700}
 .sum{display:flex;justify-content:flex-end;margin:6px 0 8px}
 .sum>div{min-width:300px;border:1px solid #90caf9;border-radius:6px;overflow:hidden}
