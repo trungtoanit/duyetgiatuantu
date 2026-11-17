@@ -14542,6 +14542,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const iTt = col(/THÀNH TIỀN/);
     const num = (x) => Number(String(x || '').replace(/[^\d]/g, '')) || 0;
     const clean = (x) => one(x).replace(/\s*(đ|VNĐ|VND)$/i, '');
+    // Ô nhiều dòng (vd. SL "360" + "(60 cây)", đơn giá "2.500" + "75.000đ/cây"): giữ xuống dòng bằng "\n"
+    const lines2 = (x) => nf(x || '').split('\n').map((t) => clean(t).replace(/\(\s+/g, '(').replace(/\s+\)/g, ')')).filter(Boolean).join('\n');
     const rows = [...table.rows]
       .filter((r) => r !== head && /^\d+$/.test(one(r.cells[0]?.innerText)) && r.cells.length >= hs.length - 1)
       .map((r) => {
@@ -14550,8 +14552,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         return {
           name: nf(cell(iSp)?.innerText || '').split('\n').map(one).filter(Boolean),
           unit: /^[a-z]/.test(unit) ? cpUnit(unit) : unit,
-          qty: clean(cell(iSl)?.innerText),
-          price: clean(cell(iDg)?.innerText),
+          qty: lines2(cell(iSl)?.innerText),
+          price: lines2(cell(iDg)?.innerText),
           amount: num(cell(iTt)?.innerText),
         };
       });
@@ -14736,12 +14738,14 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
     'Màu sắc khi in sẽ giống với màu trên hình 70-80% do màu trên màn hình kỹ thuật số và ngoài thực tế khác nhau.',
     'Khách cần quấn PE thùng carton, thu thêm 2% chi phí.',
   ];
+  // Ô nhiều dòng trên mẫu ĐD: dòng đầu bình thường, các dòng sau xuống hàng, chữ nhỏ màu xám
+  const ddMl = (t) => String(t || '').split('\n').map((x, j) => (j ? `<br><span style="font-size:.86em;color:#64748b">${esc(x)}</span>` : esc(x))).join('');
   function ddHtml(d) {
     const f = (n) => Math.round(n).toLocaleString('vi-VN');
     const body = d.rows
       .map((r, i) => {
         // Sản phẩm hiển thị như mẫu HA: dòng đầu (tên + quy cách của CRM) in đậm, các dòng sau (chi tiết) nghiêng đỏ
-        return `<tr><td class="n">${i + 1}</td><td class="p">${r.name.map((x, j) => (j ? `<i class="s">${esc(x)}</i>` : `<b>${esc(x)}</b>`)).join('')}</td><td class="c">${esc(r.unit)}</td><td class="r">${esc(r.qty)}</td><td class="r">${esc(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
+        return `<tr><td class="n">${i + 1}</td><td class="p">${r.name.map((x, j) => (j ? `<i class="s">${esc(x)}</i>` : `<b>${esc(x)}</b>`)).join('')}</td><td class="c">${esc(r.unit)}</td><td class="r">${ddMl(r.qty)}</td><td class="r">${ddMl(r.price)}</td><td class="r b">${f(r.amount)}</td></tr>`;
       })
       .join('');
     const vat = d.grand > d.sub + 1;
