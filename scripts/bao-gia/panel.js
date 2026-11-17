@@ -14544,10 +14544,26 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const clean = (x) => one(x).replace(/\s*(đ|VNĐ|VND)$/i, '');
     // Ô nhiều dòng (vd. SL "360" + "(60 cây)", đơn giá "2.500" + "75.000đ/cây"): giữ xuống dòng bằng "\n"
     const lines2 = (x) => nf(x || '').split('\n').map((t) => clean(t).replace(/\(\s+/g, '(').replace(/\s+\)/g, ')')).filter(Boolean).join('\n');
-    const rows = [...table.rows]
-      .filter((r) => r !== head && /^\d+$/.test(one(r.cells[0]?.innerText)) && r.cells.length >= hs.length - 1)
-      .map((r) => {
-        const cell = (i) => (i >= 0 ? r.cells[i] : null);
+    // CRM gộp các dòng trùng tên sản phẩm bằng rowspan (STT + Sản phẩm chỉ có ở dòng đầu) → trải lưới
+    // để dòng sau vẫn có đủ ô, in thành dòng riêng (vd. BG27402: 2 dòng Hộp Duty khác giá 18.500 / 17.000)
+    const grid = [];
+    const carry = [];
+    for (const r of table.rows) {
+      const g = [];
+      for (const c of r.cells) {
+        while (carry[g.length]?.left > 0) { g.push(carry[g.length].cell); carry[g.length - 1].left--; }
+        for (let s = 0; s < (c.colSpan || 1); s++) {
+          if ((c.rowSpan || 1) > 1) carry[g.length] = { cell: c, left: c.rowSpan - 1 };
+          g.push(c);
+        }
+      }
+      while (carry[g.length]?.left > 0) { g.push(carry[g.length].cell); carry[g.length - 1].left--; }
+      grid.push({ r, g });
+    }
+    const rows = grid
+      .filter(({ r, g }) => r !== head && /^\d+$/.test(one(g[0]?.innerText)) && g.length >= hs.length - 1)
+      .map(({ g }) => {
+        const cell = (i) => (i >= 0 ? g[i] : null);
         const unit = one(cell(iDv)?.innerText);
         return {
           name: nf(cell(iSp)?.innerText || '').split('\n').map(one).filter(Boolean),
