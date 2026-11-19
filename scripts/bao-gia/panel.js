@@ -18902,10 +18902,19 @@ Không markdown, không giải thích ngoài JSON.`;
       const aiBy = Object.fromEntries((ai?.items || []).map((x) => [x.id, x]));
       return dealList(n, quotes, comments).map((q) => ({ q, d: decideQuote(q, comments[q.id] || { threads: [] }, orders, hotBy, aiBy) }));
     };
+    // Bình luận mới nhất của từng NVKD → ai bình luận gần nhất đứng đầu (văn phòng + ma trận)
+    const lastBy = {};
+    const walkLb = (t) => {
+      const n = norm(t.staff?.name);
+      if (n && t.createdAt > (lastBy[n] || 0)) lastBy[n] = t.createdAt;
+      (t.children || []).forEach(walkLb);
+    };
+    for (const c of Object.values(comments)) (c?.threads || []).forEach(walkLb);
+    const byRecent = [...staffs].sort((a, b) => (lastBy[norm(b)] || 0) - (lastBy[norm(a)] || 0));
     // Tổng quan (quản trị): ma trận NVKD × quyết định
     const matrix = admin
       ? (() => {
-          const rows = staffs.map((n) => {
+          const rows = byRecent.map((n) => {
             const list = decOf(n);
             const by = {};
             for (const { q, d } of list) (by[d.k] ||= []).push(q);
@@ -18920,19 +18929,12 @@ Không markdown, không giải thích ngoài JSON.`;
     // 🏢 Văn phòng: mỗi NVKD 1 bàn làm việc; bình luận gần nhất trong 1 giờ → Online, còn lại Offline
     const office = admin
       ? (() => {
-          const lastBy = {};
-          const walk = (t) => {
-            const n = norm(t.staff?.name);
-            if (n && t.createdAt > (lastBy[n] || 0)) lastBy[n] = t.createdAt;
-            (t.children || []).forEach(walk);
-          };
-          for (const c of Object.values(comments)) (c?.threads || []).forEach(walk);
-          const desks = staffs
+          const desks = byRecent
             .map((n) => {
               const at = lastBy[norm(n)] || 0;
               return { n, at, on: !!at && hoursSince(at) <= 1 };
             })
-            .sort((a, b) => b.on - a.on || b.at - a.at);
+            .sort((a, b) => b.at - a.at);
           const onN = desks.filter((d) => d.on).length;
           return `<div class="of"><div class="of-h">🏢 Văn phòng kinh doanh <span class="of-cnt-on">🟢 ${onN} online</span><span class="muted">/ ${desks.length} người · online = có bình luận trong 1 giờ qua</span></div>
             <div class="of-floor">${desks
