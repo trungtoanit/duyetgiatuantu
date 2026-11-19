@@ -3405,15 +3405,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (k === 'price') return `${X} ơi, báo giá này còn thiếu giá, ${xh} cần giá gì báo liền để gửi khách chốt đơn nhé.`;
     return `${X} ơi, khách phản hồi sao rồi? Chốt được đơn chưa để lên kế hoạch làm hàng?`;
   }
+  // Khách đã lên đơn trong 7 ngày gần nhất → không hiện báo giá của khách đó (popup + dải nhân viên)
+  const ofsRecentOrder = (q) => (renderCtx.orders?.[q?.customer?.id]?.orders || []).some((o) => o?.at && hoursSince(tsOf(o.at)) <= 7 * 24);
   function ofsPopup(n, anchor) {
     document.getElementById('dg-ofs-pop')?.remove();
     const { quotes, comments } = renderCtx;
     const orders = renderCtx.orders || {};
     const hotBy = Object.fromEntries((renderCtx.aiHot?.items || []).map((x) => [x.id, x]));
-    // Khách đã lên đơn trong 7 ngày gần nhất → không hiện báo giá của khách đó nữa
-    const recentOrder = (q) => (orders[q.customer?.id]?.orders || []).some((o) => o?.at && hoursSince(tsOf(o.at)) <= 7 * 24);
     const list = dealList(n, quotes, comments)
-      .filter((q) => !recentOrder(q))
+      .filter((q) => !ofsRecentOrder(q))
       .map((q) => ({ q, d: decideQuote(q, comments[q.id] || { threads: [] }, orders, hotBy, {}) }))
       .sort((a, b) => b.d.rank - a.d.rank);
     const by = {};
@@ -3483,6 +3483,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     for (const q of Object.values(quotes)) {
       const st = q?.staff?.name;
       if (!st || isExcluded(st) || !q.quoteStatus || CLOSED.has(q.quoteStatus) || hasOrderFull(q, comments[q.id]) || !q.createdAt || hoursSince(q.createdAt) > 90 * 24) continue;
+      if (ofsRecentOrder(q)) continue; // giống popup: 0 báo giá cần xử lý → ẩn NVKD khỏi dải
       counts[st] = (counts[st] || 0) + 1;
     }
     const lastBy = staffLastComment(comments);
