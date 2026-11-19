@@ -112,8 +112,21 @@ const CRM_URLS = ['https://sale.tuantu.com.vn/*', 'https://quanly.baobidaiduong.
 $('optOn').onchange = async (e) => {
   const on = e.target.checked;
   $('optOn').disabled = true;
-  render(await chrome.runtime.sendMessage({ type: 'setEnabled', on }));
+  // Ghi trạng thái + gỡ script ngay từ popup (không phụ thuộc bản chạy nền)
+  await chrome.storage.local.set({ extOff: !on });
+  if (!on) await chrome.userScripts?.unregister().catch(() => {});
+  const res = await chrome.runtime.sendMessage({ type: 'setEnabled', on });
+  // Extension cài dạng thư mục: popup mới đọc từ ổ đĩa ngay nhưng phần chạy nền còn bản cũ (chưa biết công tắc)
+  // → tải lại tab rồi tự khởi động lại extension để bản nền mới nhận trạng thái
+  const oldBg = !('extOff' in (res || {}));
   const tabs = await chrome.tabs.query({ url: CRM_URLS }).catch(() => []);
+  if (oldBg) {
+    $('extHint').textContent = 'Đang khởi động lại extension…';
+    await chrome.storage.local.set({ pendingTabReload: true });
+    chrome.runtime.reload(); // bản nền mới chạy lên: đọc extOff, gỡ / đăng ký script; popup tự đóng
+    return;
+  }
+  render(res);
   await Promise.all(tabs.map((t) => chrome.tabs.reload(t.id).catch(() => {})));
   $('extHint').textContent = `${on ? 'Đã bật' : 'Đã tắt'}${tabs.length ? ` · đã tải lại ${tabs.length} tab` : ''}`;
   $('optOn').disabled = false;

@@ -172,6 +172,13 @@ async function scheduleAlarm() {
 chrome.runtime.onInstalled.addListener(async () => {
   await scheduleAlarm();
   await sync(true);
+  // popup vừa bật / tắt extension rồi khởi động lại (bản nền cũ): tải lại các tab CRM / Zalo để có hiệu lực
+  const { pendingTabReload } = await chrome.storage.local.get('pendingTabReload');
+  if (pendingTabReload) {
+    await chrome.storage.local.remove('pendingTabReload');
+    const tabs = await chrome.tabs.query({ url: ['https://sale.tuantu.com.vn/*', 'https://quanly.baobidaiduong.com/*', 'https://chat.zalo.me/*'] }).catch(() => []);
+    for (const t of tabs) chrome.tabs.reload(t.id).catch(() => {});
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
