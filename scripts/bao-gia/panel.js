@@ -15407,7 +15407,7 @@ Quy tắc:
   async function vdWrite(list) {
     const top = list[0];
     const last = list[list.length - 1];
-    const sys = 'Bạn là giám đốc kinh doanh công ty bao bì carton Tuấn Tú, viết lời ngắn để gửi nhóm Zalo đội kinh doanh. Tiếng Việt, xưng "anh" (sếp), gọi nhân viên theo tên. Trả về đúng JSON {"khen":"…","che":"…"}.';
+    const sys = `Bạn là giám đốc kinh doanh công ty bao bì carton ${SITE.name}, viết lời ngắn để gửi nhóm Zalo đội kinh doanh. Tiếng Việt, xưng "anh" (sếp), gọi nhân viên theo tên. Trả về đúng JSON {"khen":"…","che":"…"}.`;
     const user = `Bảng doanh số (cao → thấp):\n${list.map((x, i) => `${i + 1}. ${x.name}: ${x.amt}`).join('\n')}\n\n- "khen": 2-3 câu tuyên dương thật hào hứng ${top.name} đứng #1 (${top.amt}), nêu con số, khích lệ cả đội học theo.\n- "che": 2-3 câu nhắc thẳng ${last.name} đứng cuối (${last.amt}): nói rõ là chưa đạt, khoảng cách với người #1, yêu cầu cụ thể phải làm gì tuần này. Nghiêm khắc nhưng không xúc phạm, không mỉa mai cá nhân.`;
     try {
       const cfg = await aiCfgGet();
@@ -15469,7 +15469,7 @@ Quy tắc:
     const base = `box-sizing:border-box;width:${W}px;padding:0 0 26px;background:radial-gradient(ellipse at 50% 0%,#4c1d95 0%,#1e1b4b 45%,#0b1023 100%);font:14px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#e2e8f0;`;
     box.setAttribute('style', `position:fixed;left:-20000px;top:0;${base}`);
     box.innerHTML = `<div style="text-align:center;padding:22px 20px 6px">
-  <div style="display:inline-block;padding:3px 14px;border-radius:99px;border:1px solid #a78bfa;color:#c4b5fd;font-size:12px;font-weight:800;letter-spacing:3px">SEASON ${today.getMonth() + 1}/${today.getFullYear()} · TUẤN TÚ</div>
+  <div style="display:inline-block;padding:3px 14px;border-radius:99px;border:1px solid #a78bfa;color:#c4b5fd;font-size:12px;font-weight:800;letter-spacing:3px">SEASON ${today.getMonth() + 1}/${today.getFullYear()} · ${String(SITE.name).toLocaleUpperCase('vi-VN')}</div>
   <div style="margin-top:8px;font-size:34px;font-weight:900;letter-spacing:1px;color:#fde047;text-shadow:0 0 18px rgba(250,204,21,.7),0 3px 0 #b45309">🏆 THÀNH TÍCH HIỆN TẠI</div>
   <div style="font-size:12px;color:#a5b4fc">BẢNG XẾP HẠNG DOANH SỐ · cập nhật ${today.toLocaleDateString('vi-VN')}</div></div>
 <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;padding:14px 30px 0">${pod(1)}${pod(0)}${pod(2)}</div>
