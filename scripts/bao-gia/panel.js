@@ -15423,27 +15423,59 @@ Quy tắc:
     };
   }
   async function vdPng(list, msg) {
-    const imgs = await Promise.all(list.map((x) => (x.img ? Promise.race([rawCall({ type: 'http.dataUrl', url: x.img }).catch(() => ''), sleep(6000).then(() => '')]) : '')));
+    // Ảnh kiểu bảng xếp hạng game: nền tối, bục vinh quang vàng / bạc / đồng, thanh "EXP" theo doanh số so với #1, người cuối khung đỏ
+    const imgs = await Promise.all(list.map((x) => (x.img ? Promise.race([rawCall({ type: 'http.dataUrl', url: x.img }).then((u) => (/^data:image\/(png|jpe?g|webp|gif)/i.test(u || '') && u.length > 400 ? u : '')).catch(() => ''), sleep(6000).then(() => '')]) : '')));
     const ini = (n) => esc(n.split(' ').slice(-1)[0].slice(0, 1).toUpperCase());
-    const av = (i, sz, bd) => (imgs[i] ? `<img src="${imgs[i]}" style="width:${sz}px;height:${sz}px;border-radius:50%;object-fit:cover;border:${bd}">` : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:${bd};background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${sz / 2.4}px;color:#475569">${ini(list[i].name)}</div>`);
-    const top = list[0];
+    const av = (i, sz, ring, glow) => {
+      const st = `width:${sz}px;height:${sz}px;border-radius:50%;border:${Math.max(3, Math.round(sz / 22))}px solid ${ring};box-shadow:0 0 ${glow}px ${ring};box-sizing:border-box;flex:none`;
+      return imgs[i] ? `<img src="${imgs[i]}" style="${st};object-fit:cover;background:#1e293b">` : `<div style="${st};background:linear-gradient(135deg,#334155,#1e293b);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:${Math.round(sz / 2.4)}px;color:#e2e8f0">${ini(list[i].name)}</div>`;
+    };
     const n = list.length;
-    const today = new Date().toLocaleDateString('vi-VN');
+    const topV = list[0].val || 1;
+    const pct = (x) => Math.max(4, Math.min(100, Math.round((x.val / topV) * 100)));
+    const today = new Date();
     const W = 760;
-    const rows = list.slice(1, n - 1).map((x, k) => `<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:10px;background:${k % 2 ? '#fff' : '#f8fafc'}"><b style="width:26px;font-size:18px;color:#64748b">${k + 2}</b>${av(k + 1, 40, '2px solid #cbd5e1')}<span style="flex:1;font-size:16px;font-weight:600">${esc(x.name)}</span><b style="font-size:16px;color:#0f766e">${esc(x.amt)}</b></div>`).join('');
+    const MED = [
+      { c: '#fbbf24', g: 'linear-gradient(180deg,#fde68a,#f59e0b 55%,#b45309)', h: 150, sz: 118, t: '#78350f' },
+      { c: '#cbd5e1', g: 'linear-gradient(180deg,#f1f5f9,#94a3b8 55%,#475569)', h: 108, sz: 92, t: '#1e293b' },
+      { c: '#fb923c', g: 'linear-gradient(180deg,#fed7aa,#ea580c 55%,#9a3412)', h: 80, sz: 92, t: '#431407' },
+    ];
+    const pod = (i) => {
+      if (i >= n || i === n - 1 && n > 3) return '<div style="width:200px"></div>';
+      const m = MED[i];
+      const x = list[i];
+      return `<div style="width:${i ? 200 : 230}px;display:flex;flex-direction:column;align-items:center">
+  ${i === 0 ? '<div style="font-size:40px;line-height:1;margin-bottom:-6px">👑</div>' : ''}
+  ${av(i, m.sz, m.c, i ? 14 : 28)}
+  <div style="margin-top:8px;font-size:${i ? 17 : 21}px;font-weight:900;color:#fff;text-align:center;line-height:1.2">${esc(x.name)}</div>
+  <div style="margin:2px 0 8px;font-size:${i ? 18 : 24}px;font-weight:900;color:${m.c};text-shadow:0 0 12px ${m.c}">${esc(x.amt)}</div>
+  <div style="width:100%;height:${m.h}px;border-radius:12px 12px 0 0;background:${m.g};box-shadow:inset 0 2px 0 rgba(255,255,255,.6),0 0 24px ${m.c}55;display:flex;align-items:flex-start;justify-content:center;padding-top:10px;box-sizing:border-box">
+    <span style="font-size:${i ? 44 : 60}px;font-weight:900;color:${m.t};text-shadow:0 2px 0 rgba(255,255,255,.45)">${i + 1}</span></div></div>`;
+    };
+    const bar = (x, col) => `<div style="height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:5px"><div style="width:${pct(x)}%;height:100%;border-radius:99px;background:${col};box-shadow:0 0 8px ${col}"></div></div>`;
+    const mid = list.slice(3, n - 1).map((x, k) => `<div style="display:flex;align-items:center;gap:14px;padding:10px 16px;margin-bottom:8px;border-radius:14px;background:linear-gradient(90deg,rgba(99,102,241,.22),rgba(30,41,59,.6));border:1px solid rgba(129,140,248,.35)">
+  <div style="width:40px;height:40px;flex:none;border-radius:10px;background:#312e81;border:2px solid #818cf8;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#c7d2fe">${k + 4}</div>
+  ${av(k + 3, 48, '#818cf8', 6)}
+  <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:17px;color:#fff">${esc(x.name)}</b><b style="font-size:17px;color:#4ade80;text-shadow:0 0 8px #22c55e">${esc(x.amt)}</b></div>${bar(x, 'linear-gradient(90deg,#22d3ee,#4ade80)')}</div></div>`).join('');
+    const L = list[n - 1];
+    const last = n > 3 ? `<div style="margin-top:6px;padding:14px 16px;border-radius:16px;background:linear-gradient(90deg,rgba(220,38,38,.35),rgba(69,10,10,.6));border:2px solid #ef4444;box-shadow:0 0 22px rgba(239,68,68,.45)">
+  <div style="display:flex;align-items:center;gap:14px">
+    <div style="width:40px;height:40px;flex:none;border-radius:10px;background:#7f1d1d;border:2px solid #f87171;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fecaca">${n}</div>
+    <div style="filter:grayscale(.7)">${av(n - 1, 56, '#ef4444', 12)}</div>
+    <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:900;letter-spacing:2px;color:#fca5a5">⚠️ CUỐI BẢNG · NGUY CƠ RỚT HẠNG</div>
+      <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:18px;color:#fff">${esc(L.name)}</b><b style="font-size:18px;color:#f87171">${esc(L.amt)}</b></div>${bar(L, 'linear-gradient(90deg,#ef4444,#f97316)')}</div></div>
+  ${msg.che ? `<div style="margin-top:10px;font-size:14px;line-height:1.5;color:#fee2e2">${esc(msg.che)}</div>` : ''}</div>` : '';
     const box = document.createElement('div');
-    const base = `box-sizing:border-box;width:${W}px;background:#fff;font:14px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;`;
+    const base = `box-sizing:border-box;width:${W}px;padding:0 0 26px;background:radial-gradient(ellipse at 50% 0%,#4c1d95 0%,#1e1b4b 45%,#0b1023 100%);font:14px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#e2e8f0;`;
     box.setAttribute('style', `position:fixed;left:-20000px;top:0;${base}`);
-    box.innerHTML = `<div style="background:linear-gradient(135deg,#b91c1c,#e3141b 55%,#f59e0b);color:#fff;padding:18px 24px;text-align:center"><div style="font-size:26px;font-weight:900;letter-spacing:.5px">🏆 THÀNH TÍCH HIỆN TẠI</div><div style="opacity:.9;font-size:13px">Tuấn Tú · cập nhật ${today}</div></div>
-<div style="margin:18px 22px 10px;padding:18px;border-radius:16px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:2px solid #f59e0b;display:flex;gap:18px;align-items:center">
-  <div style="position:relative;flex:none">${av(0, 110, '5px solid #f59e0b')}<div style="position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:34px">👑</div></div>
-  <div style="flex:1"><div style="font-size:13px;font-weight:800;color:#b45309;letter-spacing:1px">QUÁN QUÂN #1</div><div style="font-size:26px;font-weight:900;color:#92400e">${esc(top.name)}</div><div style="font-size:30px;font-weight:900;color:#16a34a">${esc(top.amt)}</div>
-  <div style="margin-top:6px;font-size:15px;color:#78350f">🎉 ${esc(msg.khen)}</div></div></div>
-<div style="margin:0 22px">${rows}</div>
-${n > 1 ? `<div style="margin:12px 22px 20px;padding:14px 16px;border-radius:14px;background:#fef2f2;border:2px dashed #dc2626;display:flex;gap:14px;align-items:center">
-  <div style="flex:none;filter:grayscale(.6)">${av(n - 1, 64, '3px solid #dc2626')}</div>
-  <div style="flex:1"><div style="font-size:12px;font-weight:800;color:#dc2626;letter-spacing:1px">⚠️ CUỐI BẢNG #${n} – CẦN BỨT PHÁ NGAY</div><div style="font-size:18px;font-weight:800">${esc(list[n - 1].name)} · <span style="color:#dc2626">${esc(list[n - 1].amt)}</span></div>
-  <div style="margin-top:4px;font-size:14px;color:#7f1d1d">${esc(msg.che)}</div></div></div>` : ''}`;
+    box.innerHTML = `<div style="text-align:center;padding:22px 20px 6px">
+  <div style="display:inline-block;padding:3px 14px;border-radius:99px;border:1px solid #a78bfa;color:#c4b5fd;font-size:12px;font-weight:800;letter-spacing:3px">SEASON ${today.getMonth() + 1}/${today.getFullYear()} · TUẤN TÚ</div>
+  <div style="margin-top:8px;font-size:34px;font-weight:900;letter-spacing:1px;color:#fde047;text-shadow:0 0 18px rgba(250,204,21,.7),0 3px 0 #b45309">🏆 THÀNH TÍCH HIỆN TẠI</div>
+  <div style="font-size:12px;color:#a5b4fc">BẢNG XẾP HẠNG DOANH SỐ · cập nhật ${today.toLocaleDateString('vi-VN')}</div></div>
+<div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;padding:14px 30px 0">${pod(1)}${pod(0)}${pod(2)}</div>
+<div style="margin:0 30px;height:6px;border-radius:0 0 6px 6px;background:linear-gradient(90deg,#6d28d9,#db2777)"></div>
+${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14px;background:linear-gradient(90deg,rgba(250,204,21,.18),rgba(245,158,11,.08));border:1px solid #facc15"><div style="font-size:12px;font-weight:900;letter-spacing:2px;color:#fde047">🎉 MVP · ${esc(list[0].name).toUpperCase()}</div><div style="margin-top:4px;font-size:14px;line-height:1.5;color:#fef9c3">${esc(msg.khen)}</div></div>` : ''}
+<div style="margin:16px 30px 0">${mid}${last}</div>`;
     document.body.append(box);
     const h = Math.ceil(box.scrollHeight);
     box.setAttribute('style', `${base}height:${h}px`);
@@ -15457,7 +15489,7 @@ ${n > 1 ? `<div style="margin:12px 22px 20px;padding:14px 16px;border-radius:14p
     c.height = h * 2;
     const x = c.getContext('2d');
     x.scale(2, 2);
-    x.fillStyle = '#fff';
+    x.fillStyle = '#0b1023';
     x.fillRect(0, 0, W, h);
     x.drawImage(img, 0, 0);
     return new Promise((res) => c.toBlob(res, 'image/png'));
