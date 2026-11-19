@@ -15348,6 +15348,211 @@ Quy tắc:
     if (tg.textContent !== want) tg.textContent = want;
   }
   if (IS_TOP) setInterval(pmMount, 700);
+  // ---------- 📸 Vinh danh Top Sale (trang /dashboard, khung "Top 5 Sale") ----------
+  // Đọc tên + doanh số + ảnh đại diện từ khung → AI viết lời tuyên dương người #1 và lời nhắc thẳng người cuối bảng
+  // → vẽ ảnh "Bảng vinh danh" (sửa được 2 lời, vẽ lại) → chép ảnh / tải ảnh để gửi nhóm.
+  const VD_AMT = /^([\d.,]+)\s*(tỷ|triệu|tr|k)$/i;
+  const vdVal = (t) => {
+    const m = t.trim().match(VD_AMT);
+    if (!m) return 0;
+    const n = Number(m[1].replace(/,/g, '.').replace(/\.(?=.*\.)/g, ''));
+    return n * ({ 'tỷ': 1e9, 'triệu': 1e6, tr: 1e6, k: 1e3 }[m[2].toLowerCase()] || 1);
+  };
+  function vdCard() {
+    const lbl = [...document.querySelectorAll('div, span, h1, h2, h3, h4, p')].find((e) => !e.children.length && /^Top\s*\d+\s*Sale$/i.test(e.textContent.trim()) && !e.closest('#dg-root, .dg-vd'));
+    if (!lbl) return null;
+    let c = lbl.parentElement;
+    while (c && c !== document.body && vdAmts(c).length < 4) c = c.parentElement;
+    if (!c || c === document.body) return null;
+    // khung chứa cả bục 1-2-3 lẫn danh sách: leo tiếp khi khung cha có thêm số tiền (tối đa 10, không lấn sang ô doanh số đầu trang)
+    for (let k = 0; k < 4 && c.parentElement && c.parentElement !== document.body; k++) {
+      const n0 = vdAmts(c).length;
+      const n1 = vdAmts(c.parentElement).length;
+      if (n1 > n0 && n1 <= 10) c = c.parentElement;
+      else if (n1 > n0) break;
+      else if (k === 0) c = c.parentElement; // khung bọc ngoài không thêm số → thử thêm 1 cấp
+      else break;
+    }
+    return c;
+  }
+  // phần tử nhỏ nhất có chữ là số tiền ("1.42 tỷ" – số và đơn vị có thể nằm ở 2 thẻ con)
+  const vdTxt = (e) => (e.textContent || '').replace(/\s+/g, ' ').trim();
+  const vdAmts = (x) => [...x.querySelectorAll('*')].filter((e) => VD_AMT.test(vdTxt(e)) && ![...e.children].some((ch) => VD_AMT.test(vdTxt(ch))) && !e.closest('.dg-vd'));
+  function vdRead(card) {
+    const leaves = vdAmts(card);
+    const byName = new Map();
+    for (const a of leaves) {
+      // khối nhỏ nhất quanh số tiền có chữ tên (1 số tiền duy nhất)
+      let box = a.parentElement;
+      const nameIn = (b) => [...b.querySelectorAll('*')].filter((e) => !e.children.length && e !== a && !a.contains(e)).map((e) => e.textContent.trim()).filter((t) => t && !VD_AMT.test(t) && !/^\d+$/.test(t) && /\p{L}{2}/u.test(t) && !/^Top\s*\d/i.test(t));
+      while (box && box !== card && !nameIn(box).length) box = box.parentElement;
+      if (!box || box === card) continue;
+      const name = nameIn(box)[0].replace(/\s+/g, ' ');
+      const imgIn = (b) => [...b.querySelectorAll('img')].find((i) => (i.currentSrc || i.src) && !/crown|vuong|king/i.test(i.src) && !(i.naturalWidth && i.naturalWidth < 24));
+      let img = imgIn(box);
+      // ảnh đại diện nằm ở khối bên cạnh: lấy ở khối cha nếu khối cha chỉ có đúng 1 số tiền
+      for (let p = box.parentElement, k = 0; !img && p && p !== card && k < 3 && vdAmts(p).length === 1; p = p.parentElement, k++) img = imgIn(p);
+      const v = { name, amt: vdTxt(a), val: vdVal(vdTxt(a)), img: img ? img.currentSrc || img.src : '' };
+      // bục 1-2-3 (tên ngắn "Văn Thịnh") và danh sách #4… là người khác nhau; 2 người có thể cùng số tiền → chỉ gộp khi trùng tên
+      if (!byName.has(v.name)) byName.set(v.name, v);
+    }
+    return [...byName.values()].sort((x, y) => y.val - x.val);
+  }
+  async function vdWrite(list) {
+    const top = list[0];
+    const last = list[list.length - 1];
+    const sys = 'Bạn là giám đốc kinh doanh công ty bao bì carton Tuấn Tú, viết lời ngắn để gửi nhóm Zalo đội kinh doanh. Tiếng Việt, xưng "anh" (sếp), gọi nhân viên theo tên. Trả về đúng JSON {"khen":"…","che":"…"}.';
+    const user = `Bảng doanh số (cao → thấp):\n${list.map((x, i) => `${i + 1}. ${x.name}: ${x.amt}`).join('\n')}\n\n- "khen": 2-3 câu tuyên dương thật hào hứng ${top.name} đứng #1 (${top.amt}), nêu con số, khích lệ cả đội học theo.\n- "che": 2-3 câu nhắc thẳng ${last.name} đứng cuối (${last.amt}): nói rõ là chưa đạt, khoảng cách với người #1, yêu cầu cụ thể phải làm gì tuần này. Nghiêm khắc nhưng không xúc phạm, không mỉa mai cá nhân.`;
+    try {
+      const cfg = await aiCfgGet();
+      const raw = cfg?.openaiKey
+        ? await oaiChat([{ role: 'system', content: sys }, { role: 'user', content: user }], 800, 'Vinh danh Top Sale')
+        : await call({ type: 'claude', system: sys, prompt: user, maxTokens: 800 });
+      const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+      if (j.khen && j.che) return j;
+    } catch {}
+    return {
+      khen: `Chúc mừng ${top.name} dẫn đầu đội với ${top.amt}! Một kết quả rất đáng nể – cả đội nhìn vào ${top.name} mà bứt tốc nhé.`,
+      che: `${last.name} đang đứng cuối bảng với ${last.amt}, cách người dẫn đầu quá xa. Tuần này em phải bám lại toàn bộ báo giá đang mở và chốt cho được đơn – anh sẽ theo dõi sát.`,
+    };
+  }
+  async function vdPng(list, msg) {
+    const imgs = await Promise.all(list.map((x) => (x.img ? Promise.race([rawCall({ type: 'http.dataUrl', url: x.img }).catch(() => ''), sleep(6000).then(() => '')]) : '')));
+    const ini = (n) => esc(n.split(' ').slice(-1)[0].slice(0, 1).toUpperCase());
+    const av = (i, sz, bd) => (imgs[i] ? `<img src="${imgs[i]}" style="width:${sz}px;height:${sz}px;border-radius:50%;object-fit:cover;border:${bd}">` : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:${bd};background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${sz / 2.4}px;color:#475569">${ini(list[i].name)}</div>`);
+    const top = list[0];
+    const n = list.length;
+    const today = new Date().toLocaleDateString('vi-VN');
+    const W = 760;
+    const rows = list.slice(1, n - 1).map((x, k) => `<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:10px;background:${k % 2 ? '#fff' : '#f8fafc'}"><b style="width:26px;font-size:18px;color:#64748b">${k + 2}</b>${av(k + 1, 40, '2px solid #cbd5e1')}<span style="flex:1;font-size:16px;font-weight:600">${esc(x.name)}</span><b style="font-size:16px;color:#0f766e">${esc(x.amt)}</b></div>`).join('');
+    const box = document.createElement('div');
+    const base = `box-sizing:border-box;width:${W}px;background:#fff;font:14px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;`;
+    box.setAttribute('style', `position:fixed;left:-20000px;top:0;${base}`);
+    box.innerHTML = `<div style="background:linear-gradient(135deg,#b91c1c,#e3141b 55%,#f59e0b);color:#fff;padding:18px 24px;text-align:center"><div style="font-size:26px;font-weight:900;letter-spacing:.5px">🏆 BẢNG VINH DANH DOANH SỐ</div><div style="opacity:.9;font-size:13px">Tuấn Tú · cập nhật ${today}</div></div>
+<div style="margin:18px 22px 10px;padding:18px;border-radius:16px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:2px solid #f59e0b;display:flex;gap:18px;align-items:center">
+  <div style="position:relative;flex:none">${av(0, 110, '5px solid #f59e0b')}<div style="position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:34px">👑</div></div>
+  <div style="flex:1"><div style="font-size:13px;font-weight:800;color:#b45309;letter-spacing:1px">QUÁN QUÂN #1</div><div style="font-size:26px;font-weight:900;color:#92400e">${esc(top.name)}</div><div style="font-size:30px;font-weight:900;color:#16a34a">${esc(top.amt)}</div>
+  <div style="margin-top:6px;font-size:15px;color:#78350f">🎉 ${esc(msg.khen)}</div></div></div>
+<div style="margin:0 22px">${rows}</div>
+${n > 1 ? `<div style="margin:12px 22px 20px;padding:14px 16px;border-radius:14px;background:#fef2f2;border:2px dashed #dc2626;display:flex;gap:14px;align-items:center">
+  <div style="flex:none;filter:grayscale(.6)">${av(n - 1, 64, '3px solid #dc2626')}</div>
+  <div style="flex:1"><div style="font-size:12px;font-weight:800;color:#dc2626;letter-spacing:1px">⚠️ CUỐI BẢNG #${n} – CẦN BỨT PHÁ NGAY</div><div style="font-size:18px;font-weight:800">${esc(list[n - 1].name)} · <span style="color:#dc2626">${esc(list[n - 1].amt)}</span></div>
+  <div style="margin-top:4px;font-size:14px;color:#7f1d1d">${esc(msg.che)}</div></div></div>` : ''}`;
+    document.body.append(box);
+    const h = Math.ceil(box.scrollHeight);
+    box.setAttribute('style', `${base}height:${h}px`);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(box)}</foreignObject></svg>`;
+    box.remove();
+    const img = new Image();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = W * 2;
+    c.height = h * 2;
+    const x = c.getContext('2d');
+    x.scale(2, 2);
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, W, h);
+    x.drawImage(img, 0, 0);
+    return new Promise((res) => c.toBlob(res, 'image/png'));
+  }
+  async function vdOpen(btn) {
+    const card = vdCard();
+    const list = card ? vdRead(card) : [];
+    if (list.length < 2) return alert('Chưa đọc được bảng Top Sale (cần ít nhất 2 người) – chờ dashboard tải xong rồi thử lại.');
+    btn.textContent = '⏳ AI đang viết…';
+    const msg = await vdWrite(list);
+    btn.textContent = '📸 Vinh danh';
+    document.getElementById('dg-vd')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'dg-vd';
+    ov.className = 'dg-vd';
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;font:14px -apple-system,"Segoe UI",Roboto,Arial,sans-serif');
+    const ta = 'width:100%;box-sizing:border-box;min-height:62px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;font:inherit;resize:vertical';
+    const bt = 'cursor:pointer;border:0;border-radius:8px;padding:7px 14px;font:inherit;font-weight:700';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;width:min(1180px,96vw);max-height:94vh;overflow:auto;padding:16px;display:flex;gap:16px;flex-wrap:wrap">
+  <div style="flex:1 1 360px;display:flex;flex-direction:column;gap:8px">
+    <b style="font-size:16px">📸 Vinh danh Top Sale</b>
+    <label>🎉 Tuyên dương #1 – ${esc(list[0].name)}<textarea data-k style="${ta}">${esc(msg.khen)}</textarea></label>
+    <label>⚠️ Nhắc người cuối – ${esc(list[list.length - 1].name)}<textarea data-c style="${ta}">${esc(msg.che)}</textarea></label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button data-redraw style="${bt};background:#e2e8f0">🖌 Vẽ lại ảnh</button>
+      <button data-ai style="${bt};background:#ede9fe;color:#6d28d9">✨ AI viết lại</button>
+      <button data-copy style="${bt};background:linear-gradient(90deg,#2563eb,#7c3aed);color:#fff">📋 Chép ảnh</button>
+      <button data-dl style="${bt};background:#dcfce7;color:#15803d">⬇️ Tải ảnh</button>
+      <button data-x style="${bt};background:#fff;border:1px solid #cbd5e1">Đóng</button>
+    </div>
+    <div data-st style="font-size:12px;color:#64748b"></div>
+  </div>
+  <div data-pv style="flex:1 1 520px;min-height:200px;display:flex;align-items:flex-start;justify-content:center;color:#94a3b8">⏳ Đang vẽ ảnh…</div></div>`;
+    document.body.append(ov);
+    const $ = (s) => ov.querySelector(s);
+    const st = (t) => ($('[data-st]').textContent = t);
+    let png = null;
+    const draw = async () => {
+      st('⏳ Đang vẽ ảnh…');
+      try {
+        png = await vdPng(list, { khen: $('[data-k]').value.trim(), che: $('[data-c]').value.trim() });
+        $('[data-pv]').innerHTML = `<img src="${URL.createObjectURL(png)}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:8px">`;
+        st('');
+      } catch (e) {
+        st(`⚠️ Không vẽ được ảnh: ${e.message}`);
+      }
+    };
+    $('[data-x]').onclick = () => ov.remove();
+    ov.addEventListener('click', (e) => e.target === ov && ov.remove());
+    $('[data-redraw]').onclick = draw;
+    $('[data-ai]').onclick = async () => {
+      st('⏳ AI đang viết lại…');
+      const m = await vdWrite(list);
+      $('[data-k]').value = m.khen;
+      $('[data-c]').value = m.che;
+      draw();
+    };
+    $('[data-copy]').onclick = async () => {
+      if (!png) return;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+        st('✓ Đã chép ảnh – Ctrl+V để dán vào Zalo');
+      } catch (e) {
+        st(`⚠️ Không chép được: ${e.message}`);
+      }
+    };
+    $('[data-dl]').onclick = () => {
+      if (!png) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(png);
+      a.download = `vinh-danh-top-sale-${new Date().toISOString().slice(0, 10)}.png`;
+      a.click();
+    };
+    draw();
+  }
+  function vdMount() {
+    if (location.pathname !== '/dashboard') return;
+    const card = vdCard();
+    if (!card || card.querySelector('.dg-vd')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'dg-vd';
+    b.textContent = '📸 Vinh danh';
+    b.title = 'Chụp bảng Top Sale thành ảnh: tuyên dương người #1, nhắc người cuối bảng (AI viết, sửa được) → chép / tải ảnh';
+    b.setAttribute('style', 'position:absolute;top:8px;right:8px;z-index:5;cursor:pointer;border:0;border-radius:999px;padding:4px 12px;font-weight:700;font-size:12px;color:#fff;background:linear-gradient(90deg,#f59e0b,#e3141b)');
+    b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.disabled) return;
+      b.disabled = true;
+      try {
+        await vdOpen(b);
+      } finally {
+        b.disabled = false;
+        b.textContent = '📸 Vinh danh';
+      }
+    });
+    if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    card.append(b);
+  }
+  if (IS_TOP) setInterval(vdMount, 2000);
   // ---------- 🤝 Bàn giao khách cho Liên (Tuấn Tú) ----------
   // Trang cơ hội / báo giá: nút cạnh tên NVKD ở tiêu đề "(Đoàn Thị Hương)" → bấm tên (CRM mở hộp "Bàn giao khách hàng")
   // → chọn nhân viên NV0440 → bấm "Bàn giao". Hỏi xác nhận trước khi làm.
