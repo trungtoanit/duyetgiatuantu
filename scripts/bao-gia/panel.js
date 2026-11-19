@@ -3435,8 +3435,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="op-btns"><button data-op="all">⚖️ Xem tất cả quyết định của ${esc(shortName(n))}</button></div>`;
     document.body.append(pop);
     const r = anchor.getBoundingClientRect();
-    pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
-    pop.style.top = `${r.bottom + 8}px`;
+    // Gắn vào trang (toạ độ tài liệu) ngay dưới tên NVKD: lăn chuột thì popup đứng yên cùng trang, không trôi trên danh sách
+    pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) + scrollX}px`;
+    pop.style.top = `${r.bottom + 8 + scrollY}px`;
     const close = () => {
       pop.remove();
       document.removeEventListener('mousedown', outside, true);
@@ -3498,7 +3499,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 @keyframes dgOfsP{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}100%{box-shadow:0 0 0 8px rgba(34,197,94,0)}}
 #dg-ofs .ofs-n{display:flex;flex-direction:column}#dg-ofs .ofs-n b{font-size:12.5px;color:#0f172a}#dg-ofs .ofs-n i{font-style:normal;font-size:10.5px;color:#64748b;white-space:nowrap}#dg-ofs .ofs-p.on .ofs-n i{color:#15803d;font-weight:700}
 @media (prefers-reduced-motion:reduce){#dg-ofs .ofs-p.on .ofs-d{animation:none}}
-#dg-ofs-pop{position:fixed;z-index:2147483000;width:min(460px,94vw);max-height:75vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(15,23,42,.28);border:1px solid #e2e8f0;padding:12px 14px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;animation:dgOpIn .15s ease-out}
+#dg-ofs-pop{position:absolute;z-index:2147483000;width:min(460px,94vw);background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(15,23,42,.28);border:1px solid #e2e8f0;padding:12px 14px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;animation:dgOpIn .15s ease-out}
 @keyframes dgOpIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 #dg-ofs-pop .op-h{display:flex;align-items:center;gap:10px}#dg-ofs-pop .op-h .ava{width:36px;height:36px;border-radius:50%;object-fit:cover}#dg-ofs-pop .op-h>div{flex:1}#dg-ofs-pop .op-sub{font-size:11.5px;color:#64748b}
 #dg-ofs-pop .op-x{border:0;background:none;font-size:20px;cursor:pointer;color:#94a3b8}
