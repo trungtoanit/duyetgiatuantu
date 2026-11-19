@@ -15351,6 +15351,7 @@ Quy tắc:
   // ---------- 📸 Vinh danh Top Sale (trang /dashboard, khung "Top 5 Sale") ----------
   // Đọc tên + doanh số + ảnh đại diện từ khung → AI viết lời tuyên dương người #1 và lời nhắc thẳng người cuối bảng
   // → vẽ ảnh "Bảng vinh danh" (sửa được 2 lời, vẽ lại) → chép ảnh / tải ảnh để gửi nhóm.
+  const VD_TITLE = 'Thành tích hiện tại';
   const VD_AMT = /^([\d.,]+)\s*(tỷ|triệu|tr|k)$/i;
   const vdVal = (t) => {
     const m = t.trim().match(VD_AMT);
@@ -15359,8 +15360,13 @@ Quy tắc:
     return n * ({ 'tỷ': 1e9, 'triệu': 1e6, tr: 1e6, k: 1e3 }[m[2].toLowerCase()] || 1);
   };
   function vdCard() {
-    const lbl = [...document.querySelectorAll('div, span, h1, h2, h3, h4, p')].find((e) => !e.children.length && /^Top\s*\d+\s*Sale$/i.test(e.textContent.trim()) && !e.closest('#dg-root, .dg-vd'));
+    const lbl = document.querySelector('[data-dg-vdt]') || [...document.querySelectorAll('div, span, h1, h2, h3, h4, p')].find((e) => !e.children.length && /^Top\s*\d+\s*Sale$/i.test(e.textContent.trim()) && !e.closest('#dg-root, .dg-vd'));
     if (!lbl) return null;
+    // đổi tiêu đề khung "Top 5 Sale" → "Thành tích hiện tại" (đánh dấu để vẫn tìm lại được)
+    if (lbl.textContent.trim() !== VD_TITLE) {
+      lbl.setAttribute('data-dg-vdt', '1');
+      lbl.textContent = VD_TITLE;
+    }
     let c = lbl.parentElement;
     while (c && c !== document.body && vdAmts(c).length < 4) c = c.parentElement;
     if (!c || c === document.body) return null;
@@ -15428,7 +15434,7 @@ Quy tắc:
     const box = document.createElement('div');
     const base = `box-sizing:border-box;width:${W}px;background:#fff;font:14px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;`;
     box.setAttribute('style', `position:fixed;left:-20000px;top:0;${base}`);
-    box.innerHTML = `<div style="background:linear-gradient(135deg,#b91c1c,#e3141b 55%,#f59e0b);color:#fff;padding:18px 24px;text-align:center"><div style="font-size:26px;font-weight:900;letter-spacing:.5px">🏆 BẢNG VINH DANH DOANH SỐ</div><div style="opacity:.9;font-size:13px">Tuấn Tú · cập nhật ${today}</div></div>
+    box.innerHTML = `<div style="background:linear-gradient(135deg,#b91c1c,#e3141b 55%,#f59e0b);color:#fff;padding:18px 24px;text-align:center"><div style="font-size:26px;font-weight:900;letter-spacing:.5px">🏆 THÀNH TÍCH HIỆN TẠI</div><div style="opacity:.9;font-size:13px">Tuấn Tú · cập nhật ${today}</div></div>
 <div style="margin:18px 22px 10px;padding:18px;border-radius:16px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:2px solid #f59e0b;display:flex;gap:18px;align-items:center">
   <div style="position:relative;flex:none">${av(0, 110, '5px solid #f59e0b')}<div style="position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:34px">👑</div></div>
   <div style="flex:1"><div style="font-size:13px;font-weight:800;color:#b45309;letter-spacing:1px">QUÁN QUÂN #1</div><div style="font-size:26px;font-weight:900;color:#92400e">${esc(top.name)}</div><div style="font-size:30px;font-weight:900;color:#16a34a">${esc(top.amt)}</div>
