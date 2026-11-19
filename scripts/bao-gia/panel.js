@@ -980,7 +980,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const ov = qid && ofsAskFor(qid);
     const qc = ov ? { ...(quickCtx[qid] || {}), text: ov } : qid && quickCtx[qid];
     if (!qc?.text) return;
-    if (ov && (!renderCtx.quotes?.[qid]?.code || !document.querySelector('.ant-comment'))) return; // câu từ popup có ngay khi mở trang → chờ dữ liệu + luồng bình luận tải xong
+    if (ov && (!renderCtx.quotes?.[qid]?.code || (!document.querySelector('.ant-comment') && performance.now() < 20e3))) return; // câu từ popup có ngay khi mở trang → chờ dữ liệu + luồng bình luận tải xong
     const key = `${qid}|${qc.text}`;
     if (autoFilled[qid] === key || autoFilled[`${qid}:tried`]) return; // mỗi lần mở báo giá chỉ điền 1 lần
     // Người dùng đang gõ trong bất kỳ ô bình luận / trả lời nào → không đụng vào
