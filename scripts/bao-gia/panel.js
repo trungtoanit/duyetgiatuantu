@@ -10348,6 +10348,29 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .dl-say { font-size: 12.5px; color: #1e3a8a; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 6px; padding: 6px 10px; }
     .dl-risk { font-size: 12px; color: #9a3412; }
     .dl-none { font-size: 12px; }
+    .dc-mx { margin: 10px 12px; overflow-x: auto; } .dc-mx table { border-collapse: collapse; font-size: 12px; width: 100%; }
+    .dc-mx th { background: #e3141b; color: #fff; padding: 4px 6px; font-weight: 700; text-align: center; } .dc-mx th small { font-weight: 500; font-size: 10.5px; }
+    .dc-mx td { border-bottom: 1px solid #e5e7eb; padding: 3px 6px; } .dc-mx tr.on td { background: #fef9c3; }
+    .dc-mx td.dc-m { text-align: center; font-weight: 800; } .dc-mx td.tot { color: #334155; }
+    .dc-st { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer; font-weight: 700; padding: 0; }
+    .dc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px; }
+    .dc-chip { cursor: pointer; border: 1px solid #e2e8f0; background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 700; display: inline-flex; gap: 6px; align-items: center; }
+    .dc-chip span { font-weight: 500; color: #64748b; } .dc-chip.on { outline: 2px solid #0f172a; }
+    .dc-list { margin: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .dc-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; border: 1px solid #e5e7eb; border-left-width: 5px; border-radius: 10px; padding: 8px 10px; background: #fff; }
+    .dc-dec { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 22px; gap: 2px; } .dc-dec b { font-size: 12.5px; }
+    .dc-top { display: flex; align-items: center; gap: 6px; min-width: 0; } .dc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dc-st2 { font-size: 11px; color: #64748b; white-space: nowrap; } .dc-amt { font-weight: 800; white-space: nowrap; }
+    .dc-why { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; } .dc-why i { font-style: normal; font-size: 11.5px; background: #f1f5f9; border-radius: 6px; padding: 1px 6px; }
+    .dc-todo { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; } .dc-todo em { font-style: normal; display: inline-block; width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 50%; background: #0f172a; color: #fff; font-size: 10px; margin-right: 6px; }
+    .dc-row.close, .dc-chip.close, .dc-m.close { border-color: #16a34a; } .dc-row.close .dc-dec b, .dc-m.close { color: #15803d; } .dc-row.close { background: #f0fdf4; }
+    .dc-row.nego, .dc-chip.nego { border-color: #f59e0b; } .dc-row.nego .dc-dec b, .dc-m.nego { color: #b45309; } .dc-row.nego { background: #fffbeb; }
+    .dc-row.price, .dc-chip.price { border-color: #8b5cf6; } .dc-row.price .dc-dec b, .dc-m.price { color: #6d28d9; }
+    .dc-row.boss, .dc-chip.boss { border-color: #6366f1; } .dc-row.boss .dc-dec b, .dc-m.boss { color: #4338ca; }
+    .dc-row.sample, .dc-chip.sample { border-color: #0ea5e9; } .dc-row.sample .dc-dec b, .dc-m.sample { color: #0369a1; }
+    .dc-row.push, .dc-chip.push { border-color: #f97316; } .dc-row.push .dc-dec b, .dc-m.push { color: #c2410c; }
+    .dc-row.wait, .dc-chip.wait { border-color: #94a3b8; } .dc-row.wait .dc-dec b, .dc-m.wait { color: #475569; }
+    .dc-row.stop, .dc-chip.stop { border-color: #dc2626; } .dc-row.stop .dc-dec b, .dc-m.stop { color: #b91c1c; } .dc-row.stop { background: #fef2f2; }
     .dl .ct-head { gap: 12px; flex-wrap: wrap; } .dl .ct-head .rp-start.cta { flex: none; }
     .dl-hot { margin: 12px; padding: 12px 14px; border-radius: 16px; border: 2px solid #fb923c; background: linear-gradient(135deg, #fff7ed, #ffedd5);
       box-shadow: 0 6px 20px rgba(249,115,22,.18); animation: dghotglow 2.4s ease-in-out infinite; }
@@ -16844,10 +16867,10 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   };
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
   // perms = { enforced: bool, users: { <tên chuẩn hoá>: { name, enabled, role: 'admin'|'sale', tabs: [...] } } }
-  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['qa', '💬 Bộ câu hỏi'], ['set', '⚙️ Cài đặt']];
+  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['dec', '⚖️ Quyết định'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['qa', '💬 Bộ câu hỏi'], ['set', '⚙️ Cài đặt']];
   // Ngoài các tab: quyền xem thẻ báo giá bên phải (lợi nhuận, câu hỏi gợi ý, đánh giá NVKD, bàn giao)
   const PERM_ITEMS = [...TABS, ['side', '📌 Thẻ báo giá (bên phải)']];
-  const SALE_TABS = ['hot', 'deal', 'week']; // mặc định cho NVKD khi mới cấp quyền
+  const SALE_TABS = ['hot', 'deal', 'dec', 'week']; // mặc định cho NVKD khi mới cấp quyền
   let PERMS = {};
   let MY_ACCESS = true;
   let MY_ADMIN = false; // quản trị (cập nhật mỗi lần vẽ bảng)
@@ -17971,7 +17994,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
         if (TASK_ON) allowed.push('task'); // 📋 Công việc: ai có extension cũng cần để nhận và cập nhật việc
         const tkAll = TASK_ON ? await kvGet('tasks') : {};
         const tkN = TASK_ON ? tkMyCount(tkAll) : 0;
-        let tab = ['cust', 'week', 'hot', 'deal', 'set', 'debt', 'qa', 'gap', 'task'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        let tab = ['cust', 'week', 'hot', 'deal', 'dec', 'set', 'debt', 'qa', 'gap', 'task'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
@@ -17982,6 +18005,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
           <button class="bigtab${tab === 'quotes' ? ' on' : ''}" data-act="tab" data-tab="quotes">🎯 Báo giá <b>${merged.length}</b></button>
           <button class="bigtab hot${tab === 'hot' ? ' on' : ''}${hotN ? ' has' : ''}" data-act="tab" data-tab="hot">🔥 Gợi ý chốt đơn <b>${hotN}</b></button>
           <button class="bigtab${tab === 'deal' ? ' on' : ''}" data-act="tab" data-tab="deal">🧠 Phân tích deal</button>
+          <button class="bigtab${tab === 'dec' ? ' on' : ''}" data-act="tab" data-tab="dec">⚖️ Quyết định</button>
           <button class="bigtab${tab === 'cust' ? ' on' : ''}" data-act="tab" data-tab="cust">👥 Khách hàng <b>${cust.rows.filter((r) => !isHiddenCust(r, renderCtx.custHidden)).length}</b></button>
           <button class="bigtab${tab === 'week' ? ' on' : ''}" data-act="tab" data-tab="week">📅 Báo cáo tuần</button>
           <button class="bigtab${tab === 'debt' ? ' on' : ''}" data-act="tab" data-tab="debt">💰 Công nợ</button>
@@ -18004,6 +18028,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
         }
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'gap') return bar + (await gapTab());
+        if (tab === 'dec') return bar + decTab(quotes, await kvGet('me'), hotData, hotDone, await kvGet('dealAi'));
         if (tab === 'deal') return bar + dealTab(quotes, await kvGet('me'), await kvGet('dealAi'), hotData, hotDone);
         if (tab === 'week') {
           renderCtx.reports = await kvGet('reports');
@@ -18733,6 +18758,169 @@ Không markdown, không giải thích ngoài JSON.`;
     } finally {
       setBusy(key, false);
     }
+  }
+
+  // ⚖️ Quyết định: mỗi báo giá đang mở của từng NVKD → 1 quyết định rõ ràng (luật cố định, không tốn AI)
+  // Dữ liệu: báo giá + bình luận (các nhãn: sếp cho lấy đơn, hứa lên đơn, khách cho giá, giá cao, chưa cọc, công nợ, mẫu, hợp đồng…)
+  // + lịch sử lên đơn của khách + % còn lại (biên) + kết quả AI Gợi ý chốt đơn / Phân tích deal nếu có.
+  const DEC = {
+    close: { ic: '✅', t: 'Chốt đơn ngay', cls: 'close' },
+    nego: { ic: '💸', t: 'Đàm phán giá', cls: 'nego' },
+    price: { ic: '🧾', t: 'Hoàn thiện giá', cls: 'price' },
+    boss: { ic: '🤝', t: 'Đi cùng sếp', cls: 'boss' },
+    sample: { ic: '✂️', t: 'Theo mẫu', cls: 'sample' },
+    push: { ic: '📞', t: 'Hối khách', cls: 'push' },
+    wait: { ic: '👀', t: 'Theo dõi', cls: 'wait' },
+    stop: { ic: '🛑', t: 'Đóng – Thất bại', cls: 'stop' },
+  };
+  const DEC_ORDER = ['close', 'nego', 'price', 'boss', 'sample', 'push', 'wait', 'stop'];
+  function decideQuote(q, c, orders, hotBy = {}, aiBy = {}) {
+    const why = [];
+    const todo = [];
+    const last = lastComment(c);
+    const h = last ? hoursSince(last.createdAt) : q.createdAt ? hoursSince(q.createdAt) : 0;
+    const days = Math.floor(h / 24);
+    const os = orderSummary(orders?.[q.customer?.id]);
+    const oldCust = !!os?.count;
+    const bigOld = (os?.total || 0) > 50e6;
+    const amt = Number(q.amount) || 0;
+    const cancel = cancelInfo(c);
+    const boss = bossOkInfo(q, c);
+    const prom = promiseInfo(q, c);
+    const tgt = targetPriceInfo(c);
+    let obj = null;
+    try { obj = priceObjection(q, c); } catch {}
+    const dep = noDepositInfo(c);
+    const cred = creditInfo(c);
+    const smp = sampleInfo(c);
+    const ctr = contractInfo(c);
+    const np = noPrice(q);
+    let mg = null;
+    try { mg = marginOf(q); } catch {}
+    const hot = hotBy[q.id];
+    const ai = aiBy[q.id];
+    // Nhãn (lý do)
+    if (boss) why.push('✅ Sếp cho lấy đơn');
+    if (prom) why.push('🤝 Hứa lên đơn');
+    if (tgt) why.push(`💲 Khách cho giá${tgt.price ? ` ${tgt.price}` : ''}`);
+    if (obj) why.push('💸 Chê giá cao');
+    if (dep) why.push('🚫 Chưa cọc');
+    if (cred) why.push(`🧾 Xin công nợ${cred.days ? ` ${cred.days} ngày` : ''}`);
+    if (smp) why.push('✂️ Mẫu');
+    if (ctr) why.push('📝 Hợp đồng');
+    if (np) why.push('⚠️ Chưa cho giá');
+    if (q.noSheet) why.push('😡 Chưa có giá giấy tấm');
+    if (q.isReprint) why.push('🔁 Tái bản');
+    why.push(os ? (os.count ? `👥 Khách quen ${os.count} đơn · ${moneyShortG(os.total)}` : '🆕 Khách chưa lên đơn') : '❔ Chưa có lịch sử mua');
+    if (mg != null) why.push(`📈 Còn ${mg}%`);
+    if (hot?.pct != null) why.push(`🔥 AI: ${hot.pct}% chốt`);
+    if (ai?.health != null) why.push(`❤ Sức khoẻ ${ai.health}%`);
+    why.push(last ? `💬 BL cuối ${days} ngày trước` : '📭 Chưa có bình luận');
+    let k;
+    if (cancel) {
+      k = 'stop';
+      todo.push('Khách đã huỷ đơn → bấm ❌ Thất bại cho báo giá này', 'Hỏi lý do huỷ (giá / chất lượng / tiến độ) để rút kinh nghiệm');
+    } else if (boss || prom || (hot?.pct >= 70)) {
+      k = 'close';
+      todo.push('Gọi khách xác nhận số lượng, mẫu in và ngày giao');
+      if (dep) todo.push(oldCust ? 'Khách quen chưa cọc → xin sếp duyệt cho lên đơn' : 'Khách mới chưa cọc → thu cọc trước khi lên đơn');
+      if (cred) todo.push(`Khách xin công nợ${cred.days ? ` ${cred.days} ngày` : ''} → sếp duyệt trước khi lên đơn`);
+      if (ctr) todo.push('Hoàn tất hợp đồng');
+      todo.push('Chuyển "Chờ lên đơn" → "Duyệt lên đơn" trong hôm nay');
+    } else if (np || q.noSheet || q.quoteStatus === 'PENDING_PRICE' || q.quoteStatus === 'DRAFF') {
+      k = 'price';
+      if (np || q.quoteStatus === 'PENDING_PRICE') todo.push('Báo giá chưa có giá → xin sếp cho giá ngay');
+      if (q.noSheet) todo.push('Cập nhật giá giấy tấm (dòng 0đ/m2) để tính đúng giá');
+      if (q.quoteStatus === 'DRAFF') todo.push('Hoàn thiện bản thảo rồi gửi khách');
+      todo.push('Gửi báo giá cho khách trong hôm nay');
+    } else if ((obj || tgt) && days <= 30) {
+      k = 'nego';
+      if (tgt?.price) todo.push(`Khách cho giá ${tgt.price} → báo sếp xem có làm được không`);
+      else if (obj && !obj.known) todo.push('Hỏi khách giá mong muốn / giá bên kia đang lấy');
+      if (mg != null) todo.push(mg >= 30 ? `Còn ${mg}% → có thể giảm nhẹ để chốt (Set giá)` : `Chỉ còn ${mg}% → giữ giá, đề xuất đổi kết cấu giấy / tăng số lượng`);
+      else todo.push('Xem lại chiết giá trước khi giảm');
+      if (bigOld) todo.push('Khách quen lớn → ưu tiên giữ khách, xin sếp giá tốt');
+    } else if (amt >= 100e6 && !bigOld && days <= 30) {
+      k = 'boss';
+      todo.push('Deal lớn → hẹn gặp khách, rủ sếp đi cùng để chốt giá và công nợ');
+    } else if (smp && days <= 30) {
+      k = 'sample';
+      todo.push('Hỏi kết quả mẫu: khách duyệt chưa, cần sửa gì');
+      todo.push('Mẫu đạt → xin số lượng và ngày lên đơn');
+    } else if (days > 30) {
+      k = 'stop';
+      todo.push(`Im lặng ${days} ngày → bấm ❌ Thất bại`, 'Chào lại khách, hỏi dự án / sản phẩm khác');
+    } else if (h >= 72) {
+      k = 'push';
+      todo.push(`${days} ngày chưa có tin → gọi hỏi khách đã xem báo giá chưa`, 'Ghi kết quả cuộc gọi vào bình luận');
+    } else {
+      k = 'wait';
+      todo.push('Mới trao đổi → chờ khách phản hồi, nhắc lại sau 3 ngày');
+    }
+    if (ai?.steps?.[0] && !todo.includes(ai.steps[0])) todo.push(`🧠 ${ai.steps[0]}`);
+    // Điểm ưu tiên: quyết định + tiền + nhãn tốt
+    const rank = (8 - DEC_ORDER.indexOf(k)) * 1e12 + amt;
+    return { k, why, todo, rank };
+  }
+
+  function decTab(quotes, me, hotData, hotDone, dealAi) {
+    const admin = isAdminUser(me);
+    const comments = renderCtx.comments || {};
+    const orders = renderCtx.orders || {};
+    const counts = {};
+    for (const q of Object.values(quotes)) {
+      const st = q?.staff?.name;
+      if (!st || isExcluded(st) || !q.quoteStatus || CLOSED.has(q.quoteStatus) || hasOrderFull(q, comments[q.id]) || !q.createdAt || hoursSince(q.createdAt) > 90 * 24) continue;
+      counts[st] = (counts[st] || 0) + 1;
+    }
+    const staffs = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+    let staff = admin ? lsGet('dgDecStaff') || staffs[0] : meName;
+    if (admin && staff !== '*' && !counts[staff]) staff = staffs[0];
+    if (!staff) return '<div class="muted" style="margin:16px">Chưa có báo giá đang mở nào.</div>';
+    const hotBy = Object.fromEntries((hotData?.items || []).filter((x) => !hotDone[x.id]).map((x) => [x.id, x]));
+    const decOf = (n) => {
+      const ai = (dealAi || {})[norm(n)];
+      const aiBy = Object.fromEntries((ai?.items || []).map((x) => [x.id, x]));
+      return dealList(n, quotes, comments).map((q) => ({ q, d: decideQuote(q, comments[q.id] || { threads: [] }, orders, hotBy, aiBy) }));
+    };
+    // Tổng quan (quản trị): ma trận NVKD × quyết định
+    const matrix = admin
+      ? (() => {
+          const rows = staffs.map((n) => {
+            const list = decOf(n);
+            const by = {};
+            for (const { q, d } of list) (by[d.k] ||= []).push(q);
+            return `<tr class="${n === staff ? 'on' : ''}"><td><button class="dc-st" data-act="dec-staff" data-staff="${esc(n)}">${avatarHtml(n, 18)}${esc(shortName(n))}</button></td>${DEC_ORDER.map((k) => {
+              const a = by[k] || [];
+              return `<td class="dc-m ${a.length ? DEC[k].cls : ''}" title="${a.length ? esc(`${DEC[k].t}: ${a.length} BG · ${money(a.reduce((s, q) => s + (Number(q.amount) || 0), 0))}`) : ''}">${a.length || ''}</td>`;
+            }).join('')}<td class="dc-m tot">${list.length}</td></tr>`;
+          });
+          return `<div class="dc-mx"><table><thead><tr><th>NVKD</th>${DEC_ORDER.map((k) => `<th title="${DEC[k].t}">${DEC[k].ic}<br><small>${DEC[k].t}</small></th>`).join('')}<th>Σ</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+        })()
+      : '';
+    const list = decOf(staff).sort((a, b) => b.d.rank - a.d.rank);
+    const f = state.decF && DEC[state.decF] ? state.decF : null;
+    const by = {};
+    for (const x of list) (by[x.d.k] ||= []).push(x);
+    const chips = DEC_ORDER.filter((k) => by[k]).map((k) => {
+      const a = by[k];
+      return `<button class="dc-chip ${DEC[k].cls}${f === k ? ' on' : ''}" data-act="dec-f" data-k="${k}">${DEC[k].ic} ${DEC[k].t} <b>${a.length}</b><span>${moneyShortG(a.reduce((s, x) => s + (Number(x.q.amount) || 0), 0))}</span></button>`;
+    }).join('');
+    const shown = f ? list.filter((x) => x.d.k === f) : list;
+    const rows = shown.map(({ q, d }) => {
+      const D = DEC[d.k];
+      return `<div class="dc-row ${D.cls}"><div class="dc-dec">${D.ic}<b>${D.t}</b></div>
+        <div class="dc-main"><div class="dc-top"><a class="dl-code" href="/bao-gia/update/${q.id}" data-nav data-code="${esc(q.code)}">${esc(q.code)}</a>${custTag(q)}
+          <span class="dc-name" title="${esc(q.name || '')}">${esc(q.name || '')}</span><span class="dc-st2">${esc(statusLabel(q.quoteStatus))}</span><span class="dc-amt">${noPrice(q) ? '⚠️ 0đ' : q.amount ? money(q.amount) : ''}</span></div>
+          <div class="dc-why">${d.why.map((w) => `<i>${esc(w)}</i>`).join('')}</div>
+          <div class="dc-todo">${d.todo.map((t, i) => `<span><em>${i + 1}</em>${esc(t)}</span>`).join('')}</div></div></div>`;
+    }).join('');
+    return `<div class="ctab wk dc">
+      <div class="ct-head"><span class="ct-who">${avatarHtml(staff, 36)}<span><div class="ct-title">⚖️ Quyết định · ${esc(staff)}</div>
+        <div class="ct-sub">${list.length} báo giá đang mở (90 ngày) · ${moneyShortG(list.reduce((a, x) => a + (Number(x.q.amount) || 0), 0))} · tính từ báo giá, bình luận (nhãn), lịch sử lên đơn của khách, % còn lại và kết quả AI</div></span></span></div>
+      ${matrix}
+      <div class="dc-chips"><button class="dc-chip all${f ? '' : ' on'}" data-act="dec-f" data-k="">Tất cả <b>${list.length}</b></button>${chips}</div>
+      <div class="dc-list">${rows || '<div class="muted">Không có báo giá.</div>'}</div></div>`;
   }
 
   function dealTab(quotes, me, dealAi, hotData = null, hotDone = {}) {
@@ -19632,6 +19820,14 @@ Viết tiếng Việt, ngắn gọn. Không markdown, không giải thích ngoà
       } finally {
         setBusy('syncAll', false);
       }
+    }
+    else if (act === 'dec-staff') {
+      lsSet('dgDecStaff', b.dataset.staff);
+      render();
+    }
+    else if (act === 'dec-f') {
+      state.decF = b.dataset.k || null;
+      render();
     }
     else if (act === 'deal-staff') {
       lsSet('dgDealStaff', b.dataset.staff);
