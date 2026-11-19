@@ -3382,6 +3382,75 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     for (const c of Object.values(comments || {})) (c?.threads || []).forEach(walk);
     return lastBy;
   }
+  // Bấm 1 NVKD trên dải 🏢 → popup: việc cần làm với người đó + câu hỏi về 1 khách cần chốt đơn để làm hàng
+  const OFS_PICK = ['close', 'nego', 'boss', 'sample', 'push', 'wait', 'price'];
+  function ofsAsk(k, xh, cust, q) {
+    const X = xh.charAt(0).toUpperCase() + xh.slice(1);
+    const bg = `${q.code}${q.name ? ` – ${q.name.replace(/\s+/g, ' ').trim().slice(0, 60)}` : ''}`;
+    if (k === 'close') return `${X} ơi, khách ${cust} (${bg}) ok rồi, ${xh} chốt giúp số lượng + ngày giao để lên đơn làm hàng luôn nhé.`;
+    if (k === 'nego') return `${X} ơi, khách ${cust} (${bg}) đang vướng giá phải không? Khách muốn giá bao nhiêu, ${xh} báo lại để chốt đơn làm hàng nha.`;
+    if (k === 'boss') return `${X} ơi, deal ${cust} (${bg}) lớn, ${xh} hẹn khách tuần này mình đi gặp chốt luôn để làm hàng nhé.`;
+    if (k === 'sample') return `${X} ơi, mẫu của khách ${cust} (${bg}) khách duyệt chưa? Đạt thì chốt số lượng để làm hàng luôn nha.`;
+    if (k === 'price') return `${X} ơi, báo giá ${cust} (${bg}) còn thiếu giá, ${xh} cần giá gì báo liền để gửi khách chốt đơn nhé.`;
+    return `${X} ơi, khách ${cust} (${bg}) phản hồi sao rồi? Chốt được đơn chưa để lên kế hoạch làm hàng?`;
+  }
+  function ofsPopup(n, anchor) {
+    document.getElementById('dg-ofs-pop')?.remove();
+    const { quotes, comments } = renderCtx;
+    const orders = renderCtx.orders || {};
+    const hotBy = Object.fromEntries((renderCtx.aiHot?.items || []).map((x) => [x.id, x]));
+    const list = dealList(n, quotes, comments)
+      .map((q) => ({ q, d: decideQuote(q, comments[q.id] || { threads: [] }, orders, hotBy, {}) }))
+      .sort((a, b) => b.d.rank - a.d.rank);
+    const by = {};
+    for (const x of list) (by[x.d.k] ||= []).push(x);
+    const cands = OFS_PICK.flatMap((k) => by[k] || []).slice(0, 3);
+    const xh = addressFor(n, comments, quotes);
+    const top = cands[0];
+    const cust = (q) => shortCompany(q.customer?.name || '') || q.customer?.code || 'khách';
+    const ask = top ? ofsAsk(top.d.k, xh, cust(top.q), top.q) : '';
+    const sum = DEC_ORDER.filter((k) => by[k]).map((k) => `<span class="${DEC[k].cls}">${DEC[k].ic} ${DEC[k].t} <b>${by[k].length}</b></span>`).join('');
+    const pop = document.createElement('div');
+    pop.id = 'dg-ofs-pop';
+    pop.innerHTML = `<div class="op-h">${avatarHtml(n, 36)}<div><b>${esc(n)}</b><div class="op-sub">${list.length} báo giá đang mở · ${moneyShortG(list.reduce((a, x) => a + (Number(x.q.amount) || 0), 0))}</div></div><button class="op-x" data-op="x">×</button></div>
+      <div class="op-sum">${sum}</div>
+      ${top ? `<div class="op-t">❓ Hỏi ${esc(xh)} về khách cần chốt đơn để làm hàng</div>
+        <div class="op-ask" data-op-ask>${esc(ask)}</div>
+        <div class="op-btns"><button data-op="copy">📋 Chép câu hỏi</button><a href="/bao-gia/update/${top.q.id}" data-op="open">↗ Mở ${esc(top.q.code)} để bình luận</a></div>
+        <div class="op-t">👉 Cần làm với ${esc(shortName(n))}</div>
+        ${cands.map(({ q, d }, i) => `<div class="op-q${i ? '' : ' first'}"><div class="op-qt"><span class="op-dec ${DEC[d.k].cls}">${DEC[d.k].ic} ${DEC[d.k].t}</span><a href="/bao-gia/update/${q.id}">${esc(q.code)}</a><b>${esc(cust(q))}</b><span class="op-amt">${q.amount ? money(q.amount) : ''}</span></div>
+          <div class="op-qn">${esc((q.name || '').slice(0, 90))}</div>
+          <div class="op-qd">${d.todo.slice(0, 2).map((t) => `• ${esc(t)}`).join('<br>')}</div></div>`).join('')}`
+        : '<div class="op-t">Không có báo giá đang mở cần xử lý.</div>'}
+      <div class="op-btns"><button data-op="all">⚖️ Xem tất cả quyết định của ${esc(shortName(n))}</button></div>`;
+    document.body.append(pop);
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
+    pop.style.top = `${r.bottom + 8}px`;
+    const close = () => {
+      pop.remove();
+      document.removeEventListener('mousedown', outside, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const outside = (e) => { if (!pop.contains(e.target) && !e.target.closest('#dg-ofs')) close(); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    setTimeout(() => document.addEventListener('mousedown', outside, true));
+    document.addEventListener('keydown', onKey, true);
+    pop.addEventListener('click', async (e) => {
+      const op = e.target.closest('[data-op]')?.dataset.op;
+      if (op === 'x') close();
+      if (op === 'copy') {
+        try { await navigator.clipboard.writeText(ask); e.target.textContent = '✅ Đã chép'; } catch { e.target.textContent = '⚠️ Không chép được'; }
+      }
+      if (op === 'all') {
+        close();
+        lsSet('dgTab', 'dec');
+        lsSet('dgDecStaff', n);
+        setPanelOpen(true);
+        render();
+      }
+    });
+  }
   let ofStripAt = 0;
   function injectOfficeStrip() {
     if (!MY_ADMIN || location.pathname.replace(/\/+$/, '') !== '/bao-gia') return;
@@ -3416,7 +3485,20 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 #dg-ofs .ofs-p.on{border-color:#86efac;background:#f0fdf4}#dg-ofs .ofs-p.on .ofs-d{background:#22c55e;animation:dgOfsP 1.6s ease-out infinite}
 @keyframes dgOfsP{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}100%{box-shadow:0 0 0 8px rgba(34,197,94,0)}}
 #dg-ofs .ofs-n{display:flex;flex-direction:column}#dg-ofs .ofs-n b{font-size:12.5px;color:#0f172a}#dg-ofs .ofs-n i{font-style:normal;font-size:10.5px;color:#64748b;white-space:nowrap}#dg-ofs .ofs-p.on .ofs-n i{color:#15803d;font-weight:700}
-@media (prefers-reduced-motion:reduce){#dg-ofs .ofs-p.on .ofs-d{animation:none}}`;
+@media (prefers-reduced-motion:reduce){#dg-ofs .ofs-p.on .ofs-d{animation:none}}
+#dg-ofs-pop{position:fixed;z-index:2147483000;width:min(460px,94vw);max-height:75vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(15,23,42,.28);border:1px solid #e2e8f0;padding:12px 14px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;animation:dgOpIn .15s ease-out}
+@keyframes dgOpIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+#dg-ofs-pop .op-h{display:flex;align-items:center;gap:10px}#dg-ofs-pop .op-h .ava{width:36px;height:36px;border-radius:50%;object-fit:cover}#dg-ofs-pop .op-h>div{flex:1}#dg-ofs-pop .op-sub{font-size:11.5px;color:#64748b}
+#dg-ofs-pop .op-x{border:0;background:none;font-size:20px;cursor:pointer;color:#94a3b8}
+#dg-ofs-pop .op-sum{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}#dg-ofs-pop .op-sum span{font-size:11px;background:#f1f5f9;border-radius:999px;padding:1px 8px}
+#dg-ofs-pop .op-t{font-weight:800;margin:10px 0 4px;color:#334155}
+#dg-ofs-pop .op-ask{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 10px;color:#1e3a8a;font-weight:600}
+#dg-ofs-pop .op-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}#dg-ofs-pop .op-btns>*{cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 10px;font:inherit;font-size:12px;font-weight:700;color:#0f172a;text-decoration:none}
+#dg-ofs-pop .op-btns [data-op=copy]{background:#2563eb;border-color:#2563eb;color:#fff}
+#dg-ofs-pop .op-q{border:1px solid #e5e7eb;border-radius:10px;padding:6px 8px;margin-top:6px}#dg-ofs-pop .op-q.first{border-color:#16a34a;background:#f0fdf4}
+#dg-ofs-pop .op-qt{display:flex;align-items:center;gap:6px;flex-wrap:wrap}#dg-ofs-pop .op-qt a{font-weight:800;color:#2563eb}#dg-ofs-pop .op-amt{margin-left:auto;font-weight:800}
+#dg-ofs-pop .op-dec{font-size:11px;font-weight:800;border-radius:6px;padding:0 6px;background:#f1f5f9}#dg-ofs-pop .op-dec.close{color:#15803d;background:#dcfce7}#dg-ofs-pop .op-dec.nego{color:#b45309;background:#fef3c7}#dg-ofs-pop .op-dec.stop{color:#b91c1c;background:#fee2e2}#dg-ofs-pop .op-dec.push{color:#c2410c;background:#ffedd5}
+#dg-ofs-pop .op-qn{font-size:12px;color:#475569}#dg-ofs-pop .op-qd{font-size:12px;margin-top:2px}`;
       document.head.append(st);
     }
     const onN = list.filter((x) => x.at && hoursSince(x.at) <= 1).length;
@@ -3430,12 +3512,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       box = document.createElement('div');
       box.id = 'dg-ofs';
       box.addEventListener('click', (e) => {
-        const n = e.target.closest('[data-ofs]')?.dataset.ofs;
-        if (!n) return;
-        lsSet('dgTab', 'dec');
-        lsSet('dgDecStaff', n);
-        setPanelOpen(true);
-        render();
+        const el = e.target.closest('[data-ofs]');
+        if (!el) return;
+        if (document.getElementById('dg-ofs-pop')?.dataset.n === el.dataset.ofs) return document.getElementById('dg-ofs-pop').remove();
+        ofsPopup(el.dataset.ofs, el);
+        const pp = document.getElementById('dg-ofs-pop');
+        if (pp) pp.dataset.n = el.dataset.ofs;
       });
       head.classList.add('dg-ofs-on');
       head.append(box);
