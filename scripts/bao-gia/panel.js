@@ -3560,9 +3560,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       box?.remove(); // ai cũng hết câu hỏi → ẩn cả dải
       return;
     }
-    if (!document.getElementById('dg-ofs-css2')) {
+    if (!document.getElementById('dg-ofs-css3')) {
       const st = document.createElement('style');
-      st.id = 'dg-ofs-css2';
+      st.id = 'dg-ofs-css3';
       st.textContent = `.container-header .header-title.dg-ofs-on{display:flex;align-items:center;gap:16px;flex-wrap:wrap}.container-header .header-title.dg-ofs-on>h4{margin:0!important;flex:none;width:auto}
 #dg-ofs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 10px;border-radius:14px;background:repeating-linear-gradient(90deg,#f5ecdf 0 30px,#efe3d1 30px 32px);border:1px solid #e7d7bf;font:12px/1.2 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
 #dg-ofs .ofs-h{font-weight:800;color:#57391b;margin-right:2px;white-space:nowrap}#dg-ofs .ofs-h b{color:#15803d}
@@ -3574,6 +3574,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 #dg-ofs .ofs-p.on{border-color:#86efac;background:#f0fdf4}#dg-ofs .ofs-p.on .ofs-d{background:#22c55e;animation:dgOfsP 1.6s ease-out infinite}
 @keyframes dgOfsP{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}100%{box-shadow:0 0 0 8px rgba(34,197,94,0)}}
 #dg-ofs .ofs-n{display:flex;flex-direction:column}#dg-ofs .ofs-n b{font-size:12.5px;color:#0f172a}#dg-ofs .ofs-n i{font-style:normal;font-size:10.5px;color:#64748b;white-space:nowrap}#dg-ofs .ofs-p.on .ofs-n i{color:#15803d;font-weight:700}
+#dg-ofs .ofs-p.act{border-color:#93c5fd;background:#eff6ff}#dg-ofs .ofs-p.act .ava{filter:none;opacity:1}#dg-ofs .ofs-p.act .ofs-n i{color:#1d4ed8;font-weight:700}
 #dg-ofs .ofs-p.last{border-color:#fdba74;background:#fff7ed}
 #dg-ofs .ofs-ask{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#f97316;color:#fff;font-weight:900;font-size:13px;box-shadow:0 0 0 0 rgba(249,115,22,.6);animation:dgOfsAsk 1.2s ease-in-out infinite,dgOfsRing 1.6s ease-out infinite}
 @keyframes dgOfsAsk{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-3px) rotate(-12deg)}50%{transform:translateY(0) rotate(0)}75%{transform:translateY(-2px) rotate(12deg)}}
@@ -3598,8 +3599,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const html = `<span class="ofs-h">🏢 <b>${onN}</b>/${list.length} online</span>${list
       .map(({ n, at, sortAt }, i, arr) => {
         const on = !!at && hoursSince(at) <= 1;
+        const act = !on && !!sortAt && hoursSince(sortAt) <= 1; // vừa có bình luận (của bất kỳ ai) trong báo giá của NVKD → hiện sáng, KHÔNG phải online
         const lastOne = arr.length > 1 && i === arr.length - 1; // lâu chưa tương tác nhất → ❓ nhắc bấm vào hỏi
-        return `<span class="ofs-p ${on ? 'on' : 'off'}${lastOne ? ' last' : ''}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${sortAt > at ? `↔ ${ago(sortAt)}` : at ? ago(at) : 'chưa BL'}</i></span>${lastOne ? '<span class="ofs-ask" title="Lâu chưa tương tác nhất – bấm để hỏi về báo giá cần chốt">?</span>' : ''}</span>`;
+        return `<span class="ofs-p ${on ? 'on' : 'off'}${act ? ' act' : ''}${lastOne ? ' last' : ''}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${sortAt > at ? `↔ ${ago(sortAt)}` : at ? ago(at) : 'chưa BL'}</i></span>${lastOne ? '<span class="ofs-ask" title="Lâu chưa tương tác nhất – bấm để hỏi về báo giá cần chốt">?</span>' : ''}</span>`;
       })
       .join('')}`;
     if (!box) {
