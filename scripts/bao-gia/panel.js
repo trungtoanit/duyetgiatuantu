@@ -3456,7 +3456,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const by = {};
     for (const x of list) (by[x.d.k] ||= []).push(x);
     const mk = ofsAskedMap();
-    const cands = OFS_PICK.flatMap((k) => by[k] || []).filter(({ q }) => !ofsAsked(q, comments[q.id], mk)).slice(0, 3); // báo giá vừa hỏi → gợi ý báo giá khác
+    const cands = OFS_PICK.flatMap((k) => by[k] || []).filter(({ q }) => !ofsAsked(q, comments[q.id], mk)).slice(0, 8); // báo giá vừa hỏi → gợi ý báo giá khác
     const xh = addressFor(n, comments, quotes);
     const top = cands[0];
     const cust = (q) => shortCompany(q.customer?.name || '') || q.customer?.code || 'khách';
