@@ -8682,7 +8682,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
     if (ta) return ta;
     const before = new Set(document.querySelectorAll('textarea'));
-    const reply = [...(actions?.querySelectorAll('*') || [])].reverse().find((e) => !e.closest('.dg-printq-reply, .dg-setprice, .dg-askai') && e.childElementCount <= 1 && e.textContent.trim() === 'Trả lời');
+    const reply = [...(actions?.querySelectorAll('*') || [])].reverse().find((e) => !e.closest('.dg-printq-reply, .dg-setprice, .dg-askai, .dg-sgai') && e.childElementCount <= 1 && e.textContent.trim() === 'Trả lời');
     if (!reply) throw new Error('Không thấy nút Trả lời');
     reply.click();
     ta = await waitFor(() => cm.querySelector('textarea') || [...document.querySelectorAll('textarea')].find((t) => !before.has(t) && t.offsetParent), 4000, 100);
@@ -8703,6 +8703,33 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         akOpen(one);
       });
       actions.append(li);
+      // ✨ Gợi ý AI ngay cạnh Hỏi AI: mở ô Trả lời của bình luận này rồi xin AI 3 câu trả lời gợi ý
+      if (currentQuoteId()) {
+        const li2 = document.createElement('li');
+        li2.innerHTML = '<span class="dg-sgai" title="Gợi ý AI: mở ô Trả lời bình luận này và gợi ý 3 câu trả lời – bấm câu để điền" style="cursor:pointer;color:#fff;background:linear-gradient(90deg,#8b5cf6,#6366f1);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px;margin-left:8px">✨ Gợi ý AI</span>';
+        li2.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const pill = li2.firstElementChild;
+          pill.textContent = '⏳ Đang mở…';
+          try {
+            const ta = await akReplyBox(one);
+            const detail = one.querySelector(':scope > .ant-comment-inner > .ant-comment-content > .ant-comment-content-detail');
+            const who = one.querySelector(':scope > .ant-comment-inner .ant-comment-content-author-name')?.innerText.trim();
+            sgMount();
+            const row = await waitFor(() => ta.__dgSgRow || (sgMount(), null), 3000, 150);
+            if (!row) throw new Error('Không gắn được ô gợi ý');
+            if (detail) ta.__dgReplyTo = `${who ? `${who}: ` : ''}${(detail.innerText || '').trim()}`.slice(0, 800);
+            ta.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            pill.textContent = '✨ Gợi ý AI';
+            await sgAsk(ta, row);
+          } catch (err) {
+            pill.textContent = `⚠️ ${err.message}`;
+            setTimeout(() => (pill.textContent = '✨ Gợi ý AI'), 4000);
+          }
+        });
+        actions.append(li2);
+      }
     }
     // cạnh tiêu đề "Bình luận" (sau Set giá): hỏi AI không kèm bình luận
     const head = document.querySelector('.dg-setprice-head') || document.querySelector('.dg-printq');
@@ -8944,7 +8971,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     let ta = cm.querySelector(':scope .ant-comment-nested textarea, :scope > .ant-comment-inner textarea');
     if (!ta) {
       const before = new Set(document.querySelectorAll('textarea'));
-      const reply = [...(actions?.querySelectorAll('*') || [])].reverse().find((e) => !e.closest('.dg-printq-reply, .dg-setprice') && e.childElementCount <= 1 && e.textContent.trim() === 'Trả lời');
+      const reply = [...(actions?.querySelectorAll('*') || [])].reverse().find((e) => !e.closest('.dg-printq-reply, .dg-setprice, .dg-askai, .dg-sgai') && e.childElementCount <= 1 && e.textContent.trim() === 'Trả lời');
       if (!reply) throw new Error('Không thấy nút "Trả lời" của bình luận này.');
       reply.click();
       ta = await waitFor(() => cm.querySelector('textarea') || [...document.querySelectorAll('textarea')].find((t) => !before.has(t) && t.offsetParent), 4000, 100);
@@ -15072,7 +15099,7 @@ Quy tắc:
       if (t === 'Trả lời') {
         let p = ta.parentElement;
         for (let i = 0; i < 8 && p; i++, p = p.parentElement) {
-          const txt = (p.innerText || '').replace(/Trả lời|🤖 Hỏi AI|✨ Gợi ý AI|✨ Gợi ý khác/g, '').trim();
+          const txt = (p.innerText || '').replace(/Trả lời|🤖 Hỏi AI|✨ Gợi ý AI|✨ Gợi ý khác|⏳ Đang mở…/g, '').trim();
           if (txt.length > 15 && /trước|\d{2}\/\d{2}/.test(txt)) {
             ta.__dgReplyTo = txt.slice(0, 800);
             break;
@@ -15089,6 +15116,7 @@ Quy tắc:
         sgAsk(ta, row);
       });
       (b.closest('.ant-form-item') || b.parentElement || b).after(row);
+      ta.__dgSgRow = row;
       // bấm gửi → ghi nhận (capture: trước khi CRM xoá ô)
       b.addEventListener('click', () => sgRecord(ta), true);
       ta.addEventListener('keydown', (e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && sgRecord(ta), true);
