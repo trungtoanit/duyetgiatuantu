@@ -3409,7 +3409,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const { quotes, comments } = renderCtx;
     const orders = renderCtx.orders || {};
     const hotBy = Object.fromEntries((renderCtx.aiHot?.items || []).map((x) => [x.id, x]));
+    // Khách đã lên đơn trong 7 ngày gần nhất → không hiện báo giá của khách đó nữa
+    const recentOrder = (q) => (orders[q.customer?.id]?.orders || []).some((o) => o?.at && hoursSince(tsOf(o.at)) <= 7 * 24);
     const list = dealList(n, quotes, comments)
+      .filter((q) => !recentOrder(q))
       .map((q) => ({ q, d: decideQuote(q, comments[q.id] || { threads: [] }, orders, hotBy, {}) }))
       .sort((a, b) => b.d.rank - a.d.rank);
     const by = {};
