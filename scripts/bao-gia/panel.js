@@ -3419,7 +3419,31 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (last && norm(last.staff?.name) === norm(meName) && hoursSince(last.createdAt) <= 72) return true;
     return !!mk[q.id] && Date.now() - mk[q.id] < 2 * 3600e3 && !(last && norm(last.staff?.name) !== norm(meName) && last.createdAt * 1000 > mk[q.id]);
   };
-  const ofsRecentOrder = (q) => (renderCtx.orders?.[q?.customer?.id]?.orders || []).some((o) => o?.at && hoursSince(tsOf(o.at)) <= 7 * 24);
+  // Lần lên đơn gần nhất của từng khách theo dòng hệ thống "… lên đơn hàng với giá trị …" trong bình luận (mọi báo giá cùng khách) – có ngay, không chờ đọc lịch sử đơn hàng
+  const ofsOrderIdx = { c: null, map: new Map() };
+  const custOrderNoteAt = (cid) => {
+    if (ofsOrderIdx.c !== renderCtx.comments) {
+      ofsOrderIdx.c = renderCtx.comments;
+      ofsOrderIdx.map = new Map();
+      for (const c2 of Object.values(renderCtx.comments || {})) {
+        const id2 = c2.customerId || renderCtx.quotes?.[c2.id]?.customer?.id;
+        if (!id2) continue;
+        const walk = (t) => {
+          if (t.createdAt && /lên đơn hàng|mã đơn hàng misa/i.test(t.text || '') && t.createdAt > (ofsOrderIdx.map.get(id2) || 0)) ofsOrderIdx.map.set(id2, t.createdAt);
+          (t.children || []).forEach(walk);
+        };
+        (c2.threads || []).forEach(walk);
+      }
+    }
+    return ofsOrderIdx.map.get(cid) || 0;
+  };
+  const ofsRecentOrder = (q) => {
+    const cid = q?.customer?.id;
+    if (!cid) return false;
+    const note = custOrderNoteAt(cid);
+    if (note && hoursSince(note) <= 7 * 24) return true;
+    return (renderCtx.orders?.[cid]?.orders || []).some((o) => o?.at && hoursSince(tsOf(o.at)) <= 7 * 24);
+  };
   function ofsPopup(n, anchor) {
     document.getElementById('dg-ofs-pop')?.remove();
     const { quotes, comments } = renderCtx;
