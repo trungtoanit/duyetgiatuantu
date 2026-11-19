@@ -14124,12 +14124,22 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       <div class="sub">Mã khách ${esc(cid)} · ${codes(groups)} mã sản phẩm bán trong 365 ngày gần nhất, từ ${nOrders} đơn (không tính đơn đã huỷ), gộp còn ${groups.length} dòng · In lúc ${esc(new Date().toLocaleString('vi-VN'))}. Đơn giá trong 365 ngày gần nhất: mới nhất ở trên, số lượng và ngày là của đơn gần nhất có giá đó; ô vàng là mã có nhiều đơn giá. Cột Chưa đặt: số ngày từ đơn có giá gần nhất; ô đỏ là từ ${CS_IDLE} ngày trở lên (${idleCount} dòng). Cùng loại, cùng số lớp, cùng size và cùng đơn giá chỉ hiện 1 dòng với mã mới nhất.</div>
       ${sections}</body></html>`;
   }
-  function csPrint(html) {
+  // title: tên file PDF khi "Lưu thành PDF" – Chrome lấy theo tiêu đề trang chính, nên đổi tạm document.title rồi trả lại
+  function csPrint(html, title = '') {
     const f = document.createElement('iframe');
     f.setAttribute('aria-hidden', 'true');
     f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0';
     f.onload = () => {
-      f.contentWindow.addEventListener('afterprint', () => f.remove());
+      const old = document.title;
+      const restore = () => title && document.title === title && (document.title = old);
+      f.contentWindow.addEventListener('afterprint', () => {
+        restore();
+        f.remove();
+      });
+      if (title) {
+        document.title = title;
+        setTimeout(restore, 120000);
+      }
       f.contentWindow.focus();
       f.contentWindow.print();
     };
@@ -14893,7 +14903,7 @@ ${d.addr ? `<div><b>Địa chỉ:</b> ${esc(d.addr)}</div>` : ''}
       Object.assign(d, { code: ok.code, staff: ok.staff, cust: ok.cust, boss: ok.boss });
       kvMerge('ddPrint', { [qid]: { code: ok.code, staff: ok.staff, staffEdited: !!crmStaff && ok.staff !== crmStaff, cust: ok.cust, boss: ok.boss, by: meName, at: Date.now() }, ...(ok.boss ? { _boss: ok.boss } : {}) }).catch(() => {});
       show('🧾 Đang dựng mẫu Đại Dương…');
-      csPrint(ddHtml(d));
+      csPrint(ddHtml(d), `#${(d.code || 'BG').split('/')[0].replace(/^#/, '')} - ${d.cust}`.replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 150));
       show(DD_LABEL);
     } catch (err) {
       show(`⚠️ ${err.message}`);
