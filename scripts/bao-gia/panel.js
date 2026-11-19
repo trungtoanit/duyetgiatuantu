@@ -3386,7 +3386,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   const OFS_PICK = ['close', 'nego', 'boss', 'sample', 'push', 'wait', 'price'];
   function ofsAsk(k, xh, cust, q) {
     const X = xh.charAt(0).toUpperCase() + xh.slice(1);
-    const bg = `${q.code}${q.name ? ` – ${q.name.replace(/\s+/g, ' ').trim().slice(0, 60)}` : ''}`;
+    let nm = String(q.name || '').split(/=>|==>/)[0].replace(/\s+/g, ' ').trim();
+    if (nm.length > 60) nm = `${nm.slice(0, 60).replace(/\s+\S*$/, '')}…`;
+    const bg = `${q.code}${nm ? ` – ${nm}` : ''}`;
     if (k === 'close') return `${X} ơi, khách ${cust} (${bg}) ok rồi, ${xh} chốt giúp số lượng + ngày giao để lên đơn làm hàng luôn nhé.`;
     if (k === 'nego') return `${X} ơi, khách ${cust} (${bg}) đang vướng giá phải không? Khách muốn giá bao nhiêu, ${xh} báo lại để chốt đơn làm hàng nha.`;
     if (k === 'boss') return `${X} ơi, deal ${cust} (${bg}) lớn, ${xh} hẹn khách tuần này mình đi gặp chốt luôn để làm hàng nhé.`;
