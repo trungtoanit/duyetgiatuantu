@@ -3545,7 +3545,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     try {
       touch = JSON.parse(localStorage.getItem('dgOfsTouch') || '{}') || {};
     } catch {}
+    // Còn câu hỏi: có ít nhất 1 báo giá popup sẽ gợi ý (đúng loại quyết định, chưa hỏi gần đây) – hết câu hỏi thì ẩn NVKD khỏi dải
+    const mkAsk = ofsAskedMap();
+    const hotBy = Object.fromEntries((renderCtx.aiHot?.items || []).map((x) => [x.id, x]));
+    const askN = (n) =>
+      dealList(n, quotes, comments)
+        .filter((q) => !ofsRecentOrder(q) && !ofsAsked(q, comments[q.id], mkAsk))
+        .filter((q) => OFS_PICK.includes(decideQuote(q, comments[q.id] || { threads: [] }, renderCtx.orders || {}, hotBy, {}).k)).length;
     const list = Object.keys(counts)
+      .filter((n) => askN(n) > 0)
       .map((n) => ({ n, at: lastBy[norm(n)] || 0, sortAt: Math.max(lastBy[norm(n)] || 0, inter[norm(n)] || 0, Math.floor((touch[norm(n)] || 0) / 1000)) }))
       .sort((a, b) => b.sortAt - a.sortAt);
     if (!list.length) return;
