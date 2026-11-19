@@ -3556,7 +3556,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .filter((n) => askN(n) > 0)
       .map((n) => ({ n, at: lastBy[norm(n)] || 0, sortAt: Math.max(lastBy[norm(n)] || 0, inter[norm(n)] || 0, Math.floor((touch[norm(n)] || 0) / 1000)) }))
       .sort((a, b) => b.sortAt - a.sortAt);
-    if (!list.length) return;
+    if (!list.length) {
+      box?.remove(); // ai cũng hết câu hỏi → ẩn cả dải
+      return;
+    }
     if (!document.getElementById('dg-ofs-css2')) {
       const st = document.createElement('style');
       st.id = 'dg-ofs-css2';
