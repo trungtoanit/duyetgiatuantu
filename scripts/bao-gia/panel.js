@@ -961,6 +961,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return p?.querySelector('textarea:not(#privateNote)') || null;
   }
 
+  // Mở báo giá từ popup NVKD (dải 🏢) → câu hỏi của popup thay cho câu gợi ý thường (giữ 30 phút)
+  const ofsAskFor = (qid) => {
+    try {
+      const v = JSON.parse(localStorage.getItem('dgOfsAsk') || 'null');
+      return v && String(v.id) === String(qid) && Date.now() - v.at < 30 * 60e3 ? v.text : null;
+    } catch {
+      return null;
+    }
+  };
   // Câu hỏi gợi ý trên thẻ bên phải → điền sẵn vào ô bình luận của CRM (chỉ khi ô đang trống; xoá đi thì không điền lại)
   const autoFilled = {};
   let autoBusy = false;
@@ -968,7 +977,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   async function autofillComment() {
     if (!IS_TOP || autoBusy) return;
     const qid = currentQuoteId();
-    const qc = qid && quickCtx[qid];
+    const ov = qid && ofsAskFor(qid);
+    const qc = ov ? { ...(quickCtx[qid] || {}), text: ov } : qid && quickCtx[qid];
     if (!qc?.text) return;
     const key = `${qid}|${qc.text}`;
     if (autoFilled[qid] === key || autoFilled[`${qid}:tried`]) return; // mỗi lần mở báo giá chỉ điền 1 lần
@@ -3416,9 +3426,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       <div class="op-sum">${sum}</div>
       ${top ? `<div class="op-t">❓ Hỏi ${esc(xh)} trong ${esc(top.q.code)} · ${esc(cust(top.q))}</div>
         <div class="op-ask" data-op-ask>${esc(ask)}</div>
-        <div class="op-btns"><button data-op="copy">📋 Chép câu hỏi</button><a href="/bao-gia/update/${top.q.id}" data-op="open">↗ Mở ${esc(top.q.code)} để bình luận</a></div>
+        <div class="op-btns"><button data-op="copy">📋 Chép câu hỏi</button><a href="/bao-gia/update/${top.q.id}" data-op="open" data-ask-id="${top.q.id}" data-ask="${esc(ask)}">↗ Mở ${esc(top.q.code)} để bình luận</a></div>
         <div class="op-t">👉 Cần làm với ${esc(shortName(n))}</div>
-        ${cands.map(({ q, d }, i) => `<div class="op-q${i ? '' : ' first'}"><div class="op-qt"><span class="op-dec ${DEC[d.k].cls}">${DEC[d.k].ic} ${DEC[d.k].t}</span><a href="/bao-gia/update/${q.id}">${esc(q.code)}</a><b>${esc(cust(q))}</b><span class="op-amt">${q.amount ? money(q.amount) : ''}</span></div>
+        ${cands.map(({ q, d }, i) => `<div class="op-q${i ? '' : ' first'}"><div class="op-qt"><span class="op-dec ${DEC[d.k].cls}">${DEC[d.k].ic} ${DEC[d.k].t}</span><a href="/bao-gia/update/${q.id}" data-ask-id="${q.id}" data-ask="${esc(ofsAsk(d.k, xh))}">${esc(q.code)}</a><b>${esc(cust(q))}</b><span class="op-amt">${q.amount ? money(q.amount) : ''}</span></div>
           <div class="op-qn">${esc((q.name || '').slice(0, 90))}</div>
           <div class="op-qd">${d.todo.slice(0, 2).map((t) => `• ${esc(t)}`).join('<br>')}</div></div>`).join('')}`
         : '<div class="op-t">Không có báo giá đang mở cần xử lý.</div>'}
@@ -3437,6 +3447,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     setTimeout(() => document.addEventListener('mousedown', outside, true));
     document.addEventListener('keydown', onKey, true);
     pop.addEventListener('click', async (e) => {
+      const la = e.target.closest('a[data-ask]');
+      if (la) try { localStorage.setItem('dgOfsAsk', JSON.stringify({ id: la.dataset.askId, text: la.dataset.ask, at: Date.now() })); } catch {}
       const op = e.target.closest('[data-op]')?.dataset.op;
       if (op === 'x') close();
       if (op === 'copy') {
@@ -12336,7 +12348,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const lr = applyLearned(qq.text, p, q);
     const learned = lr?.auto ? lr.text : null;
     const hint = lr && !lr.auto && lr.text !== qq.text ? lr.text : null; // chỉ gợi ý, anh bấm mới dùng
-    const text = draft?.base === qq.text ? draft.text : learned || qq.text; // giữ bản đã sửa nếu câu gốc chưa đổi
+    const text = ofsAskFor(id) || (draft?.base === qq.text ? draft.text : learned || qq.text); // giữ bản đã sửa nếu câu gốc chưa đổi; mở từ popup NVKD → dùng câu của popup
     quickCtx[id] = { base: qq.text, text, p, why: qq.why, learned: !!learned };
     const sent = renderCtx.quickSent[id];
     const key = `quick:${id}`;
