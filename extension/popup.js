@@ -21,9 +21,11 @@ function render(data) {
   $('lastCheck').title = status.lastCheck ? new Date(status.lastCheck).toLocaleString('vi-VN') : '';
   $('error').textContent = status.error ? `Lỗi: ${status.error}` : '';
 
-  const bad = !userScriptsAvailable || !!status.error;
+  const off = !!data.extOff;
+  const bad = off || !userScriptsAvailable || !!status.error;
   $('pill').classList.toggle('err', bad);
-  $('pillText').textContent = !userScriptsAvailable ? 'Chưa bật' : status.error ? 'Có lỗi' : 'Đang chạy';
+  $('pillText').textContent = off ? 'Đã tắt' : !userScriptsAvailable ? 'Chưa bật' : status.error ? 'Có lỗi' : 'Đang chạy';
+  if (document.activeElement !== $('optOn')) $('optOn').checked = !off;
 
   const usd = (n) => `$${(n || 0).toFixed(2)}`;
   if (data.spend) {
@@ -103,6 +105,18 @@ $('sync').onclick = async () => {
   }
   $('sync').disabled = false;
   $('sync').textContent = '⟳ Cập nhật ngay';
+};
+
+// Tab CRM / Zalo đang mở: tải lại để bật / tắt có hiệu lực ngay
+const CRM_URLS = ['https://sale.tuantu.com.vn/*', 'https://quanly.baobidaiduong.com/*', 'https://chat.zalo.me/*'];
+$('optOn').onchange = async (e) => {
+  const on = e.target.checked;
+  $('optOn').disabled = true;
+  render(await chrome.runtime.sendMessage({ type: 'setEnabled', on }));
+  const tabs = await chrome.tabs.query({ url: CRM_URLS }).catch(() => []);
+  await Promise.all(tabs.map((t) => chrome.tabs.reload(t.id).catch(() => {})));
+  $('extHint').textContent = `${on ? 'Đã bật' : 'Đã tắt'}${tabs.length ? ` · đã tải lại ${tabs.length} tab` : ''}`;
+  $('optOn').disabled = false;
 };
 
 $('reload').onclick = async () => {

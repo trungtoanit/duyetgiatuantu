@@ -93,8 +93,15 @@ async function downloadBundle(cfg, sha) {
   return { version: manifest.version || '', sync: manifest.sync || [], scripts };
 }
 
+// Công tắc tổng trong popup: tắt = gỡ hết script khỏi CRM / Zalo (vẫn kiểm tra bản mới, bật lại là chạy ngay)
+const isOff = async () => !!(await chrome.storage.local.get('extOff')).extOff;
+
 async function register(bundle) {
   if (!userScriptsAvailable()) throw new Error('USER_SCRIPTS_DISABLED');
+  if (await isOff()) {
+    await chrome.userScripts.unregister().catch(() => {});
+    return;
+  }
   // Cho script ở world USER_SCRIPT gọi chrome.runtime.sendMessage về background.
   await chrome.userScripts.configureWorld({ messaging: true });
   await chrome.userScripts.unregister();
@@ -128,7 +135,7 @@ async function doSync(force) {
     if (!force && sha === currentSha && bundle) {
       // Cùng phiên bản: chỉ đăng ký lại nếu script bị mất (không đăng ký lại mỗi lần kiểm tra 10 giây)
       const reg = await chrome.userScripts.getScripts().catch(() => []);
-      if (!reg.length) await register(bundle);
+      if (!reg.length && !(await isOff())) await register(bundle);
       await setStatus({ lastCheck: Date.now(), error: null });
       return;
     }
@@ -637,6 +644,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   (async () => {
     if (msg.type === 'syncNow') await sync(true);
+    if (msg.type === 'setEnabled') {
+      await chrome.storage.local.set({ extOff: !msg.on });
+      const { bundle } = await chrome.storage.local.get('bundle');
+      if (!msg.on) await chrome.userScripts.unregister().catch(() => {});
+      else if (bundle) await register(bundle).catch(() => {});
+      else await sync(true);
+    }
     if (msg.type === 'setBalance') await setBalance(msg.amount);
     if (msg.type === 'shareTeam') {
       // Cài đặt dùng chung cho cả nhóm (lưu trên Supabase): mọi trường trừ thông tin kết nối Supabase
@@ -659,6 +673,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       scripts: (local.bundle?.scripts || []).map(({ code, ...s }) => s),
       status: local.status || {},
       userScriptsAvailable: userScriptsAvailable(),
+      extOff: await isOff(),
       spend: await getSpend(),
       syncStatus: (await chrome.storage.local.get('syncStatus')).syncStatus || {},
       syncEnabled: !!(await remoteCfg()),
