@@ -18827,11 +18827,10 @@ Không markdown, không giải thích ngoài JSON.`;
       if (cred) todo.push(`Khách xin công nợ${cred.days ? ` ${cred.days} ngày` : ''} → sếp duyệt trước khi lên đơn`);
       if (ctr) todo.push('Hoàn tất hợp đồng');
       todo.push('Chuyển "Chờ lên đơn" → "Duyệt lên đơn" trong hôm nay');
-    } else if (np || q.noSheet || q.quoteStatus === 'PENDING_PRICE' || q.quoteStatus === 'DRAFF') {
+    } else if (np || q.noSheet || q.quoteStatus === 'PENDING_PRICE') {
       k = 'price';
       if (np || q.quoteStatus === 'PENDING_PRICE') todo.push('Báo giá chưa có giá → xin sếp cho giá ngay');
       if (q.noSheet) todo.push('Cập nhật giá giấy tấm (dòng 0đ/m2) để tính đúng giá');
-      if (q.quoteStatus === 'DRAFF') todo.push('Hoàn thiện bản thảo rồi gửi khách');
       todo.push('Gửi báo giá cho khách trong hôm nay');
     } else if ((obj || tgt) && days <= 30) {
       k = 'nego';
