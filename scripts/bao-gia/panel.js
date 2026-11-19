@@ -3371,6 +3371,82 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   if (IS_TOP) setInterval(() => { try { injectHardWarn(); } catch {} }, 2000);
 
+  // 🏢 Dải nhân viên cạnh tiêu đề "Báo giá" (trang danh sách, quản trị): ai bình luận mới nhất đứng đầu; trong 1 giờ = Online
+  function staffLastComment(comments) {
+    const lastBy = {};
+    const walk = (t) => {
+      const n = norm(t.staff?.name);
+      if (n && t.createdAt > (lastBy[n] || 0)) lastBy[n] = t.createdAt;
+      (t.children || []).forEach(walk);
+    };
+    for (const c of Object.values(comments || {})) (c?.threads || []).forEach(walk);
+    return lastBy;
+  }
+  let ofStripAt = 0;
+  function injectOfficeStrip() {
+    if (!MY_ADMIN || location.pathname.replace(/\/+$/, '') !== '/bao-gia') return;
+    const head = document.querySelector('.container-header .header-title');
+    const h4 = head?.querySelector('h4.title-h2');
+    if (!head || !h4 || !/^\s*Báo giá\s*$/.test(h4.textContent || '')) return;
+    let box = head.querySelector(':scope > #dg-ofs');
+    if (box && Date.now() - ofStripAt < 15e3) return;
+    const { quotes, comments } = renderCtx;
+    if (!quotes || !Object.keys(quotes).length) return;
+    ofStripAt = Date.now();
+    const counts = {};
+    for (const q of Object.values(quotes)) {
+      const st = q?.staff?.name;
+      if (!st || isExcluded(st) || !q.quoteStatus || CLOSED.has(q.quoteStatus) || hasOrderFull(q, comments[q.id]) || !q.createdAt || hoursSince(q.createdAt) > 90 * 24) continue;
+      counts[st] = (counts[st] || 0) + 1;
+    }
+    const lastBy = staffLastComment(comments);
+    const list = Object.keys(counts).map((n) => ({ n, at: lastBy[norm(n)] || 0 })).sort((a, b) => b.at - a.at);
+    if (!list.length) return;
+    if (!document.getElementById('dg-ofs-css')) {
+      const st = document.createElement('style');
+      st.id = 'dg-ofs-css';
+      st.textContent = `.container-header .header-title.dg-ofs-on{display:flex;align-items:center;gap:16px;flex-wrap:wrap}.container-header .header-title.dg-ofs-on>h4{margin:0!important;flex:none;width:auto}
+#dg-ofs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 10px;border-radius:14px;background:repeating-linear-gradient(90deg,#f5ecdf 0 30px,#efe3d1 30px 32px);border:1px solid #e7d7bf;font:12px/1.2 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+#dg-ofs .ofs-h{font-weight:800;color:#57391b;margin-right:2px;white-space:nowrap}#dg-ofs .ofs-h b{color:#15803d}
+#dg-ofs .ofs-p{display:flex;align-items:center;gap:6px;cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:2px 10px 2px 2px;transition:transform .15s}
+#dg-ofs .ofs-p:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.12)}
+#dg-ofs .ofs-a{position:relative;display:inline-flex}#dg-ofs .ofs-a .ava{width:28px;height:28px;border-radius:50%;object-fit:cover;display:inline-flex;align-items:center;justify-content:center;background:#e2e8f0;font-weight:800}
+#dg-ofs .ofs-p.off .ava{filter:grayscale(1);opacity:.6}
+#dg-ofs .ofs-d{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;border:2px solid #fff;background:#94a3b8}
+#dg-ofs .ofs-p.on{border-color:#86efac;background:#f0fdf4}#dg-ofs .ofs-p.on .ofs-d{background:#22c55e;animation:dgOfsP 1.6s ease-out infinite}
+@keyframes dgOfsP{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}100%{box-shadow:0 0 0 8px rgba(34,197,94,0)}}
+#dg-ofs .ofs-n{display:flex;flex-direction:column}#dg-ofs .ofs-n b{font-size:12.5px;color:#0f172a}#dg-ofs .ofs-n i{font-style:normal;font-size:10.5px;color:#64748b;white-space:nowrap}#dg-ofs .ofs-p.on .ofs-n i{color:#15803d;font-weight:700}
+@media (prefers-reduced-motion:reduce){#dg-ofs .ofs-p.on .ofs-d{animation:none}}`;
+      document.head.append(st);
+    }
+    const onN = list.filter((x) => x.at && hoursSince(x.at) <= 1).length;
+    const html = `<span class="ofs-h">🏢 <b>${onN}</b>/${list.length} online</span>${list
+      .map(({ n, at }) => {
+        const on = !!at && hoursSince(at) <= 1;
+        return `<span class="ofs-p ${on ? 'on' : 'off'}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${at ? ago(at) : 'chưa BL'}</i></span></span>`;
+      })
+      .join('')}`;
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'dg-ofs';
+      box.addEventListener('click', (e) => {
+        const n = e.target.closest('[data-ofs]')?.dataset.ofs;
+        if (!n) return;
+        lsSet('dgTab', 'dec');
+        lsSet('dgDecStaff', n);
+        setPanelOpen(true);
+        render();
+      });
+      head.classList.add('dg-ofs-on');
+      head.append(box);
+    }
+    if (box.dataset.sig !== html) {
+      box.dataset.sig = html;
+      box.innerHTML = html;
+    }
+  }
+  if (IS_TOP) setInterval(() => { try { injectOfficeStrip(); } catch {} }, 3000);
+
   // ---------- 🔄 Load lại giá giấy mới (dòng có ⚠️ giấy cũ ở cột "Kết cấu giấy") ----------
   // Mỗi dòng có ⚠️: bấm số lượng → hộp "Tính giá carton" → "Đồng bộ giá carton mới" → Lưu → dòng kế.
   function productTable() {
