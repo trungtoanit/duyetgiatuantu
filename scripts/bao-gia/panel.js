@@ -3406,6 +3406,19 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     return `${X} ơi, khách phản hồi sao rồi? Chốt được đơn chưa để lên kế hoạch làm hàng?`;
   }
   // Khách đã lên đơn trong 7 ngày gần nhất → không hiện báo giá của khách đó (popup + dải nhân viên)
+  // Đã hỏi rồi: bình luận cuối của báo giá là của quản lý (trong 3 ngày) – đang chờ NVKD trả lời; hoặc vừa mở từ popup (2 giờ, khi dữ liệu bình luận chưa kịp cập nhật)
+  const ofsAskedMap = () => {
+    try {
+      return JSON.parse(localStorage.getItem('dgOfsAsked') || '{}') || {};
+    } catch {
+      return {};
+    }
+  };
+  const ofsAsked = (q, c, mk = ofsAskedMap()) => {
+    const last = lastComment(c);
+    if (last && norm(last.staff?.name) === norm(meName) && hoursSince(last.createdAt) <= 72) return true;
+    return !!mk[q.id] && Date.now() - mk[q.id] < 2 * 3600e3 && !(last && norm(last.staff?.name) !== norm(meName) && last.createdAt * 1000 > mk[q.id]);
+  };
   const ofsRecentOrder = (q) => (renderCtx.orders?.[q?.customer?.id]?.orders || []).some((o) => o?.at && hoursSince(tsOf(o.at)) <= 7 * 24);
   function ofsPopup(n, anchor) {
     document.getElementById('dg-ofs-pop')?.remove();
@@ -3418,7 +3431,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       .sort((a, b) => b.d.rank - a.d.rank);
     const by = {};
     for (const x of list) (by[x.d.k] ||= []).push(x);
-    const cands = OFS_PICK.flatMap((k) => by[k] || []).slice(0, 3);
+    const mk = ofsAskedMap();
+    const cands = OFS_PICK.flatMap((k) => by[k] || []).filter(({ q }) => !ofsAsked(q, comments[q.id], mk)).slice(0, 3); // báo giá vừa hỏi → gợi ý báo giá khác
     const xh = addressFor(n, comments, quotes);
     const top = cands[0];
     const cust = (q) => shortCompany(q.customer?.name || '') || q.customer?.code || 'khách';
@@ -3435,7 +3449,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         ${cands.map(({ q, d }, i) => `<div class="op-q${i ? '' : ' first'}"><div class="op-qt"><span class="op-dec ${DEC[d.k].cls}">${DEC[d.k].ic} ${DEC[d.k].t}</span><a href="/bao-gia/update/${q.id}" data-ask-id="${q.id}" data-ask="${esc(ofsAsk(d.k, xh))}">${esc(q.code)}</a><b>${esc(cust(q))}</b><span class="op-amt">${q.amount ? money(q.amount) : ''}</span></div>
           <div class="op-qn">${esc((q.name || '').slice(0, 90))}</div>
           <div class="op-qd">${d.todo.slice(0, 2).map((t) => `• ${esc(t)}`).join('<br>')}</div></div>`).join('')}`
-        : '<div class="op-t">Không có báo giá đang mở cần xử lý.</div>'}
+        : `<div class="op-t">${list.length ? `✅ Đã hỏi hết các báo giá cần chốt – chờ ${esc(shortName(n))} trả lời.` : 'Không có báo giá đang mở cần xử lý.'}</div>`}
       <div class="op-btns"><button data-op="all">⚖️ Xem tất cả quyết định của ${esc(shortName(n))}</button></div>`;
     document.body.append(pop);
     const r = anchor.getBoundingClientRect();
@@ -3453,7 +3467,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     document.addEventListener('keydown', onKey, true);
     pop.addEventListener('click', async (e) => {
       const la = e.target.closest('a[data-ask]');
-      if (la) try { localStorage.setItem('dgOfsAsk', JSON.stringify({ id: la.dataset.askId, text: la.dataset.ask, at: Date.now() })); } catch {}
+      if (la)
+        try {
+          localStorage.setItem('dgOfsAsk', JSON.stringify({ id: la.dataset.askId, text: la.dataset.ask, at: Date.now() }));
+          const m = ofsAskedMap();
+          for (const k of Object.keys(m)) if (Date.now() - m[k] > 2 * 3600e3) delete m[k];
+          m[la.dataset.askId] = Date.now();
+          localStorage.setItem('dgOfsAsked', JSON.stringify(m));
+          localStorage.setItem('dgOfsTouch', JSON.stringify({ ...JSON.parse(localStorage.getItem('dgOfsTouch') || '{}'), [norm(n)]: Date.now() }));
+        } catch {}
       const op = e.target.closest('[data-op]')?.dataset.op;
       if (op === 'x') close();
       if (op === 'copy') {
@@ -3487,7 +3509,21 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       counts[st] = (counts[st] || 0) + 1;
     }
     const lastBy = staffLastComment(comments);
-    const list = Object.keys(counts).map((n) => ({ n, at: lastBy[norm(n)] || 0 })).sort((a, b) => b.at - a.at);
+    // Tương tác gần nhất với NVKD: bình luận mới nhất (của bất kỳ ai, kể cả quản lý) trong các báo giá của người đó, hoặc vừa mở báo giá từ popup
+    const inter = {};
+    for (const [id, c] of Object.entries(comments || {})) {
+      const q = quotes[id];
+      const st = norm(q?.staff?.name);
+      const last = st && lastComment(c);
+      if (last && last.createdAt > (inter[st] || 0)) inter[st] = last.createdAt;
+    }
+    let touch = {};
+    try {
+      touch = JSON.parse(localStorage.getItem('dgOfsTouch') || '{}') || {};
+    } catch {}
+    const list = Object.keys(counts)
+      .map((n) => ({ n, at: lastBy[norm(n)] || 0, sortAt: Math.max(lastBy[norm(n)] || 0, inter[norm(n)] || 0, Math.floor((touch[norm(n)] || 0) / 1000)) }))
+      .sort((a, b) => b.sortAt - a.sortAt);
     if (!list.length) return;
     if (!document.getElementById('dg-ofs-css')) {
       const st = document.createElement('style');
@@ -3521,9 +3557,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const onN = list.filter((x) => x.at && hoursSince(x.at) <= 1).length;
     const html = `<span class="ofs-h">🏢 <b>${onN}</b>/${list.length} online</span>${list
-      .map(({ n, at }) => {
+      .map(({ n, at, sortAt }) => {
         const on = !!at && hoursSince(at) <= 1;
-        return `<span class="ofs-p ${on ? 'on' : 'off'}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${at ? ago(at) : 'chưa BL'}</i></span></span>`;
+        return `<span class="ofs-p ${on ? 'on' : 'off'}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${sortAt > at ? `↔ ${ago(sortAt)}` : at ? ago(at) : 'chưa BL'}</i></span></span>`;
       })
       .join('')}`;
     if (!box) {
