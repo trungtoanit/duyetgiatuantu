@@ -15089,7 +15089,10 @@ Quy tắc:
         const tas = [...box.querySelectorAll('textarea:not(#privateNote)')];
         if (!tas.length) continue;
         // khối chỉ gồm ô nhập + nút gửi (không lẫn danh sách bình luận) – tránh gắn nhầm vào link "Trả lời" dưới mỗi bình luận
-        if (tas.length !== 1 || (box.innerText || '').length > 200) break;
+        // (không tính chữ của các bình luận con đã có – ô Trả lời nằm chung khối .ant-comment-nested với các trả lời cũ)
+        const subs = [...box.querySelectorAll('.ant-comment')].filter((c) => !c.parentElement.closest('.ant-comment') || !box.contains(c.parentElement.closest('.ant-comment')));
+        const own = (box.innerText || '').length - subs.reduce((n, c) => n + (c.innerText || '').length, 0);
+        if (tas.length !== 1 || own > 200) break;
         if (tas[0].compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ta = tas[0];
         break;
       }
