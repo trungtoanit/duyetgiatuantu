@@ -3384,17 +3384,15 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Bấm 1 NVKD trên dải 🏢 → popup: việc cần làm với người đó + câu hỏi về 1 khách cần chốt đơn để làm hàng
   const OFS_PICK = ['close', 'nego', 'boss', 'sample', 'push', 'wait', 'price'];
-  function ofsAsk(k, xh, cust, q) {
+  function ofsAsk(k, xh) {
+    // Bình luận nằm ngay trong báo giá đó → không nhắc lại tên khách / mã báo giá
     const X = xh.charAt(0).toUpperCase() + xh.slice(1);
-    let nm = String(q.name || '').split(/=>|==>/)[0].replace(/\s+/g, ' ').trim();
-    if (nm.length > 60) nm = `${nm.slice(0, 60).replace(/\s+\S*$/, '')}…`;
-    const bg = `${q.code}${nm ? ` – ${nm}` : ''}`;
-    if (k === 'close') return `${X} ơi, khách ${cust} (${bg}) ok rồi, ${xh} chốt giúp số lượng + ngày giao để lên đơn làm hàng luôn nhé.`;
-    if (k === 'nego') return `${X} ơi, khách ${cust} (${bg}) đang vướng giá phải không? Khách muốn giá bao nhiêu, ${xh} báo lại để chốt đơn làm hàng nha.`;
-    if (k === 'boss') return `${X} ơi, deal ${cust} (${bg}) lớn, ${xh} hẹn khách tuần này mình đi gặp chốt luôn để làm hàng nhé.`;
-    if (k === 'sample') return `${X} ơi, mẫu của khách ${cust} (${bg}) khách duyệt chưa? Đạt thì chốt số lượng để làm hàng luôn nha.`;
-    if (k === 'price') return `${X} ơi, báo giá ${cust} (${bg}) còn thiếu giá, ${xh} cần giá gì báo liền để gửi khách chốt đơn nhé.`;
-    return `${X} ơi, khách ${cust} (${bg}) phản hồi sao rồi? Chốt được đơn chưa để lên kế hoạch làm hàng?`;
+    if (k === 'close') return `${X} ơi, khách ok rồi, ${xh} chốt giúp số lượng + ngày giao để lên đơn làm hàng luôn nhé.`;
+    if (k === 'nego') return `${X} ơi, khách đang vướng giá phải không? Khách muốn giá bao nhiêu, ${xh} báo lại để chốt đơn làm hàng nha.`;
+    if (k === 'boss') return `${X} ơi, deal này lớn, ${xh} hẹn khách tuần này mình đi gặp chốt luôn để làm hàng nhé.`;
+    if (k === 'sample') return `${X} ơi, mẫu khách duyệt chưa? Đạt thì chốt số lượng để làm hàng luôn nha.`;
+    if (k === 'price') return `${X} ơi, báo giá này còn thiếu giá, ${xh} cần giá gì báo liền để gửi khách chốt đơn nhé.`;
+    return `${X} ơi, khách phản hồi sao rồi? Chốt được đơn chưa để lên kế hoạch làm hàng?`;
   }
   function ofsPopup(n, anchor) {
     document.getElementById('dg-ofs-pop')?.remove();
@@ -3410,13 +3408,13 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const xh = addressFor(n, comments, quotes);
     const top = cands[0];
     const cust = (q) => shortCompany(q.customer?.name || '') || q.customer?.code || 'khách';
-    const ask = top ? ofsAsk(top.d.k, xh, cust(top.q), top.q) : '';
+    const ask = top ? ofsAsk(top.d.k, xh) : '';
     const sum = DEC_ORDER.filter((k) => by[k]).map((k) => `<span class="${DEC[k].cls}">${DEC[k].ic} ${DEC[k].t} <b>${by[k].length}</b></span>`).join('');
     const pop = document.createElement('div');
     pop.id = 'dg-ofs-pop';
     pop.innerHTML = `<div class="op-h">${avatarHtml(n, 36)}<div><b>${esc(n)}</b><div class="op-sub">${list.length} báo giá đang mở · ${moneyShortG(list.reduce((a, x) => a + (Number(x.q.amount) || 0), 0))}</div></div><button class="op-x" data-op="x">×</button></div>
       <div class="op-sum">${sum}</div>
-      ${top ? `<div class="op-t">❓ Hỏi ${esc(xh)} về khách cần chốt đơn để làm hàng</div>
+      ${top ? `<div class="op-t">❓ Hỏi ${esc(xh)} trong ${esc(top.q.code)} · ${esc(cust(top.q))}</div>
         <div class="op-ask" data-op-ask>${esc(ask)}</div>
         <div class="op-btns"><button data-op="copy">📋 Chép câu hỏi</button><a href="/bao-gia/update/${top.q.id}" data-op="open">↗ Mở ${esc(top.q.code)} để bình luận</a></div>
         <div class="op-t">👉 Cần làm với ${esc(shortName(n))}</div>
