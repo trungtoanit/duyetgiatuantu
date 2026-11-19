@@ -10348,6 +10348,26 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     .dl-say { font-size: 12.5px; color: #1e3a8a; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 6px; padding: 6px 10px; }
     .dl-risk { font-size: 12px; color: #9a3412; }
     .dl-none { font-size: 12px; }
+    .of { margin: 10px 12px; border-radius: 16px; padding: 10px 12px 14px; background: repeating-linear-gradient(90deg, #f5ecdf 0 46px, #efe3d1 46px 48px); border: 1px solid #e7d7bf; }
+    .of-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 800; color: #57391b; margin-bottom: 8px; } .of-cnt-on { background: #dcfce7; color: #15803d; border-radius: 999px; padding: 1px 10px; font-size: 12px; }
+    .of-floor { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .of-desk { position: relative; cursor: pointer; border: 0; background: rgba(255,255,255,.55); border-radius: 14px; padding: 8px 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 3px; font: inherit; transition: transform .15s; }
+    .of-desk:hover { transform: translateY(-2px); } .of-desk.sel { outline: 3px solid #6366f1; }
+    .of-mon { width: 64px; height: 40px; border-radius: 6px; background: #1e293b; padding: 4px; position: relative; } .of-mon::after { content: ''; position: absolute; left: 26px; bottom: -8px; width: 12px; height: 8px; background: #475569; }
+    .of-scr { width: 100%; height: 100%; border-radius: 3px; background: #334155; display: flex; flex-direction: column; gap: 3px; padding: 4px; box-sizing: border-box; }
+    .of-desk.on .of-scr { background: #e0f2fe; box-shadow: 0 0 12px rgba(56,189,248,.8); }
+    .of-scr i { display: block; height: 3px; border-radius: 2px; background: #38bdf8; animation: ofType 1.4s steps(6) infinite; transform-origin: left; } .of-scr i:nth-child(2) { animation-delay: .4s; width: 80%; } .of-scr i:nth-child(3) { animation-delay: .8s; width: 60%; }
+    @keyframes ofType { 0% { transform: scaleX(.1); } 100% { transform: scaleX(1); } }
+    .of-table { width: 120px; height: 10px; border-radius: 4px; background: linear-gradient(#a16207, #854d0e); margin-top: 6px; }
+    .of-who { position: relative; margin-top: 2px; } .of-who .ava { border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    .of-desk.off .of-who .ava { filter: grayscale(1); opacity: .6; }
+    .of-dot { position: absolute; right: 2px; bottom: 2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; background: #94a3b8; }
+    .of-desk.on .of-dot { background: #22c55e; animation: ofPulse 1.6s ease-out infinite; }
+    @keyframes ofPulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.7); } 100% { box-shadow: 0 0 0 10px rgba(34,197,94,0); } }
+    .of-zz { position: absolute; right: -14px; top: -6px; font-size: 14px; animation: ofZz 2.4s ease-in-out infinite; } @keyframes ofZz { 0%, 100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-6px); opacity: 1; } }
+    .of-name { font-weight: 800; font-size: 13px; color: #0f172a; } .of-st { font-size: 11px; color: #64748b; white-space: nowrap; } .of-desk.on .of-st { color: #15803d; font-weight: 700; }
+    .of-k { display: flex; gap: 6px; font-size: 11.5px; font-weight: 800; } .of-k .close { color: #15803d; } .of-k .push { color: #c2410c; } .of-k .stop { color: #b91c1c; }
+    @media (prefers-reduced-motion: reduce) { .of-scr i, .of-desk.on .of-dot, .of-zz { animation: none; } }
     .dc-mx { margin: 10px 12px; overflow-x: auto; } .dc-mx table { border-collapse: collapse; font-size: 12px; width: 100%; }
     .dc-mx th { background: #e3141b; color: #fff; padding: 4px 6px; font-weight: 700; text-align: center; } .dc-mx th small { font-weight: 500; font-size: 10.5px; }
     .dc-mx td { border-bottom: 1px solid #e5e7eb; padding: 3px 6px; } .dc-mx tr.on td { background: #fef9c3; }
@@ -18897,6 +18917,39 @@ Không markdown, không giải thích ngoài JSON.`;
           return `<div class="dc-mx"><table><thead><tr><th>NVKD</th>${DEC_ORDER.map((k) => `<th title="${DEC[k].t}">${DEC[k].ic}<br><small>${DEC[k].t}</small></th>`).join('')}<th>Σ</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
         })()
       : '';
+    // 🏢 Văn phòng: mỗi NVKD 1 bàn làm việc; bình luận gần nhất trong 1 giờ → Online, còn lại Offline
+    const office = admin
+      ? (() => {
+          const lastBy = {};
+          const walk = (t) => {
+            const n = norm(t.staff?.name);
+            if (n && t.createdAt > (lastBy[n] || 0)) lastBy[n] = t.createdAt;
+            (t.children || []).forEach(walk);
+          };
+          for (const c of Object.values(comments)) (c?.threads || []).forEach(walk);
+          const desks = staffs
+            .map((n) => {
+              const at = lastBy[norm(n)] || 0;
+              return { n, at, on: !!at && hoursSince(at) <= 1 };
+            })
+            .sort((a, b) => b.on - a.on || b.at - a.at);
+          const onN = desks.filter((d) => d.on).length;
+          return `<div class="of"><div class="of-h">🏢 Văn phòng kinh doanh <span class="of-cnt-on">🟢 ${onN} online</span><span class="muted">/ ${desks.length} người · online = có bình luận trong 1 giờ qua</span></div>
+            <div class="of-floor">${desks
+              .map(({ n, at, on }) => {
+                const by = {};
+                for (const { d } of decOf(n)) by[d.k] = (by[d.k] || 0) + 1;
+                return `<button class="of-desk ${on ? 'on' : 'off'}${n === staff ? ' sel' : ''}" data-act="dec-staff" data-staff="${esc(n)}" title="${esc(n)}${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}">
+                  <div class="of-mon"><div class="of-scr">${on ? '<i></i><i></i><i></i>' : ''}</div></div>
+                  <div class="of-table"></div>
+                  <div class="of-who">${avatarHtml(n, 44)}<span class="of-dot"></span>${on ? '' : '<span class="of-zz">💤</span>'}</div>
+                  <div class="of-name">${esc(shortName(n))}</div>
+                  <div class="of-st">${on ? `🟢 Online · 💬 ${ago(at)}` : `⚪ Offline${at ? ` · ${ago(at)}` : ''}`}</div>
+                  <div class="of-k">${['close', 'push', 'stop'].map((k) => (by[k] ? `<span class="${DEC[k].cls}">${DEC[k].ic}${by[k]}</span>` : '')).join('')}</div></button>`;
+              })
+              .join('')}</div></div>`;
+        })()
+      : '';
     const list = decOf(staff).sort((a, b) => b.d.rank - a.d.rank);
     const f = state.decF && DEC[state.decF] ? state.decF : null;
     const by = {};
@@ -18917,6 +18970,7 @@ Không markdown, không giải thích ngoài JSON.`;
     return `<div class="ctab wk dc">
       <div class="ct-head"><span class="ct-who">${avatarHtml(staff, 36)}<span><div class="ct-title">⚖️ Quyết định · ${esc(staff)}</div>
         <div class="ct-sub">${list.length} báo giá đang mở (90 ngày) · ${moneyShortG(list.reduce((a, x) => a + (Number(x.q.amount) || 0), 0))} · tính từ báo giá, bình luận (nhãn), lịch sử lên đơn của khách, % còn lại và kết quả AI</div></span></span></div>
+      ${office}
       ${matrix}
       <div class="dc-chips"><button class="dc-chip all${f ? '' : ' on'}" data-act="dec-f" data-k="">Tất cả <b>${list.length}</b></button>${chips}</div>
       <div class="dc-list">${rows || '<div class="muted">Không có báo giá.</div>'}</div></div>`;
