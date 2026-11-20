@@ -16021,7 +16021,11 @@ Quy tắc:
       }
     }
     // chỉ 10 dòng đơn gần nhất chưa xử lý (mới lên đơn trước)
-    return out.sort((a, b) => (b.l.at || 0) - (a.l.at || 0) || String(b.l.order).localeCompare(String(a.l.order))).slice(0, 10);
+    out.sort((a, b) => (b.l.at || 0) - (a.l.at || 0) || String(b.l.order).localeCompare(String(a.l.order)));
+    // 10 ĐƠN mới nhất (1 đơn nhiều dòng giấy → giữ đủ các dòng của đơn đó)
+    const keep = new Set();
+    for (const x of out) if (keep.size < 10) keep.add(x.l.order);
+    return out.filter((x) => keep.has(x.l.order));
   }
   // 🧾 Tiền chênh CHÍNH XÁC của 1 dòng đơn: mở báo giá trong khung ẩn (chỉ đọc – mọi lệnh ghi bị chặn), Lên PO → Giấy tấm,
   // chọn NCC của giấy đang dùng, thay "Giá cuối" của dòng = giá cũ rồi = giá rẻ nhất, đọc "Tổng thanh toán" 2 lần → chênh lệch.
@@ -16238,7 +16242,7 @@ Quy tắc:
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> đơn gần nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
-<div class="ga-li">${list.slice(0, 12).map(({ l, me, min, diff, money, po }) => `<div class="ga-r"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}${list.length > 12 ? `<div class="ga-r p">… và ${list.length - 12} dòng nữa</div>` : ''}</div>
+<div class="ga-li">${list.map(({ l, me, min, diff, money, po }) => `<div class="ga-r"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}</div>
 <div style="font-size:10.5px;color:#94a3b8;margin-top:4px">🧾 = tiền chênh tính trên PO giấy tấm (thay Giá cuối cũ → rẻ nhất, so Tổng thanh toán) · ≈ = ước tính, đang tính PO</div>
 <div class="ga-btns"><button class="go" data-ga="go">📄 Xử lý ở tab Giấy tấm</button><button data-ga="min">Để sau 30 phút</button></div>
 </div></div>`;
