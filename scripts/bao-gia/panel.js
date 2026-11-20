@@ -15870,7 +15870,7 @@ Quy tắc:
   // ---------- Tab 📄 Giấy tấm: kho giấy tấm + nhóm do extension tự quản lý (cloud) ----------
   const GT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#475569'];
   const GT_COLOR_VI = { NAU: 'Nâu', TRANG: 'Trắng', VANG: 'Vàng', XAM: 'Xám' };
-  const gtUi = { view: lsGet('dgGtView') || '', oSort: lsGet('dgGtOSort') || 'new', g: 'all', q: '', layer: '', provs: new Set(), sel: new Set(), sort: 'id', page: 0, msg: '' };
+  const gtUi = { view: lsGet('dgGtView') || '', oSort: lsGet('dgGtOSort') || 'new', hideDone: !!lsGet('dgGtHideDone'), g: 'all', q: '', layer: '', provs: new Set(), sel: new Set(), sort: 'id', page: 0, msg: '' };
   const GT_PREFS = 'gtPrefs'; // lựa chọn lọc của từng người trên cloud: { [tên chuẩn hoá]: { provs: [mã NCC…], at } }
   let gtPrefsLoaded = false;
   const gtSavePrefs = () => kvMerge(GT_PREFS, { [norm(meName)]: { provs: [...gtUi.provs], hideSmall: !!gtUi.hideSmall, at: Date.now() } }).catch(() => {});
@@ -15908,6 +15908,7 @@ Quy tắc:
         }
       }
       gtUi.zsent = zsent;
+      gtUi.done = (await kvGet(GT_DONE).catch(() => ({}))) || {};
       if (!gtPrefsLoaded) {
         gtPrefsLoaded = true;
         const pf = (await kvGet(GT_PREFS))[norm(meName)];
@@ -15980,6 +15981,9 @@ Quy tắc:
   const GT_ZGROUP = 'Điều hướng giấy tấm Flexo';
   const GT_ZSENT = 'gtZaloSent';
   const gtZKey = (order, pid) => `${order}|${pid}`;
+  // ✔ Đánh dấu đã xử lý từng dòng đơn (menu ⋯ cuối dòng) – kv gtDone: "<mã đơn>|<dòng>" → { k, at, by } (null = bỏ đánh dấu)
+  const GT_DONE = 'gtDone';
+  const GT_DONE_K = { swap: '🔁 Đã đổi sang giấy rẻ nhất', match: '💲 NCC đã trả về bằng giá', keep: '👌 Giữ nguyên (đã duyệt)', other: '✔ Đã xử lý' };
   const vnd = (n) => Number(n || 0).toLocaleString('vi-VN');
   function gtZaloMsg(r, ls) {
     const prov = r.min.prov?.name || r.min.prov?.code || '';
@@ -16282,6 +16286,10 @@ Quy tắc:
     const orows = rows.flatMap((r) => r.ol.map((l) => { const m2 = r.oM2.get(l.order) || 0; return { r, l, m2, money: r.diff > 0 && m2 ? Math.round(r.diff * m2) : 0 }; }))
       .sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money : 0) || (b.l.at || 0) - (a.l.at || 0) || String(b.l.order).localeCompare(String(a.l.order)));
     const zs = gtUi.zsent || {};
+    const dn = gtUi.done || {};
+    const dKey = (l) => `${l.order}|${l.did ?? ''}`;
+    const nDone = orows.filter(({ l }) => dn[dKey(l)]).length;
+    if (gtUi.hideDone) for (let i = orows.length - 1; i >= 0; i--) if (dn[dKey(orows[i].l)]) orows.splice(i, 1);
     const nBad = rows.filter((r) => r.diff > 0).length;
     const nSolo = rows.filter(gtSolo).length;
     const nOk = rows.filter((r) => !gtSolo(r) && (r.diff === 0 || (r.diff != null && r.diff <= 0))).length;
@@ -16312,23 +16320,33 @@ Quy tắc:
     };
     const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
     return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ${SITE.key === 'daiduong' ? 'trạng thái Mới' : 'ở tab Mới'} dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b>${nSolo ? ` · <b style="color:#d97706">${nSolo} chỉ 1 giấy cùng nhóm</b>` : ''} · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
-  <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
-<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-<thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px;white-space:nowrap">Lên đơn</th><th style="padding:6px;text-align:right;white-space:nowrap">Giá trị đơn</th><th style="padding:6px">Đơn hàng</th><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th style="padding-left:8px">So với nhóm</th></tr></thead>
+  <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}<label style="margin-left:10px;cursor:pointer;font-size:12px;font-weight:700;color:#15803d"><input type="checkbox" data-gt="ohidedone" ${gtUi.hideDone ? 'checked' : ''} style="vertical-align:-2px"> Ẩn đã xử lý (${nDone})</label></div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
+<style>.dg-gtmi:hover{background:#f1f5f9!important}
+tr.dg-gt-unread>td{font-weight:700;color:#0f172a}tr.dg-gt-unread>td:first-child{box-shadow:inset 3px 0 0 #2563eb}
+tr.dg-gt-read>td,tr.dg-gt-read>td *:not(.dg-gt-badge):not([data-gt-omenu]):not([data-gt-omenu] *){font-weight:400!important;color:#6b7280!important}
+tr.dg-gt-read>td span[style*="background"]:not(.dg-gt-badge){filter:grayscale(1);opacity:.6}tr.dg-gt-read:hover{background:#e8eef9!important}</style><div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding-bottom:${gtUi.oMenu ? 150 : 0}px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+<thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px;white-space:nowrap">Lên đơn</th><th style="padding:6px;text-align:right;white-space:nowrap">Giá trị đơn</th><th style="padding:6px">Đơn hàng</th><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th style="padding-left:8px">So với nhóm</th><th style="width:34px"></th></tr></thead>
 <tbody>${orows.map(({ r, l, money, m2 }, i) => {
     const d = l.at ? new Date(l.at > 1e11 ? l.at : l.at * 1000) : null;
     const v = r.me ? zs[gtZKey(l.order, r.me.id)] : null;
     const sentOk = v && v.state !== 'error';
     const canSend = r.me && ((r.diff > 0 && r.min) || gtSolo(r));
     const zalo = canSend ? `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${sentOk ? `<span style="font-size:11px;color:${v.state === 'sent' ? '#16a34a' : '#d97706'};font-weight:700">${v.state === 'sent' ? '✅ Đã gửi yêu cầu' : '⏳ Đang gửi'} · ${new Date(v.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${v.by ? ` · ${esc(v.by)}` : ''}</span><button data-gt="zsend" data-id="${r.me.id}" data-order="${esc(l.order)}" data-again="1" style="cursor:pointer;border:1px solid #93c5fd;border-radius:6px;padding:1px 8px;font:inherit;font-size:11.5px;font-weight:700;color:#1d4ed8;background:#fff">↻ Gửi lại</button>` : `<button data-gt="zsend" data-id="${r.me.id}" data-order="${esc(l.order)}" title="Gửi đơn ${esc(l.order)} vào nhóm Zalo “${esc(GT_ZGROUP)}”" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo</button>${v?.state === 'error' ? `<span style="font-size:11px;color:#dc2626" title="${esc(v.error || '')}">⚠️ Lần trước lỗi: ${esc((v.error || '').slice(0, 50))}</span>` : ''}`}</div>` : '';
-    return `<tr style="border-top:1px solid #f1f5f9;background:${r.diff > 0 ? '#fef2f2' : gtSolo(r) ? '#fffbeb' : i % 2 ? '#fcfcfd' : '#fff'}">
+    const dk = dKey(l);
+    const dd = dn[dk];
+    const dBadge = dd ? `<div style="margin-bottom:3px"><span class="dg-gt-badge" style="display:inline-block;padding:1px 8px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-size:11.5px;font-weight:800">${esc(GT_DONE_K[dd.k] || GT_DONE_K.other)} · ${new Date(dd.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${dd.by ? ` · ${esc(dd.by)}` : ''}</span></div>` : '';
+    const mi = 'cursor:pointer;padding:5px 10px;border-radius:7px;font-size:12.5px;font-weight:600;white-space:nowrap';
+    const menu = gtUi.oMenu === dk ? `<div data-gt-omenu style="position:absolute;right:4px;top:30px;z-index:50;min-width:230px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 10px 26px rgba(15,23,42,.22);padding:4px;text-align:left"><div style="padding:3px 10px;font-size:11px;color:#64748b;font-weight:700">Đánh dấu ${esc(l.order)} đã xử lý:</div>${Object.entries(GT_DONE_K).map(([k2, t]) => `<div data-gt="odone" data-k="${esc(dk)}" data-v="${k2}" class="dg-gtmi" style="${mi};${dd?.k === k2 ? 'background:#dcfce7;color:#166534' : ''}">${t}${dd?.k === k2 ? ' ✓' : ''}</div>`).join('')}${dd ? `<div style="border-top:1px solid #e2e8f0;margin:3px 0"></div><div data-gt="odone" data-k="${esc(dk)}" data-v="" class="dg-gtmi" style="${mi};color:#b91c1c">↩ Bỏ đánh dấu (chưa xử lý)</div>` : ''}</div>` : '';
+    // như Gmail: chưa xử lý = chữ đậm, nền trắng / màu cảnh báo; đã xử lý = chữ thường, nhạt, nền xám
+    return `<tr class="${dd ? 'dg-gt-read' : 'dg-gt-unread'}" style="border-top:1px solid #e5e7eb;background:${dd ? '#f2f6fc' : r.diff > 0 ? '#fef2f2' : gtSolo(r) ? '#fffbeb' : '#fff'}">
   <td style="padding:6px;white-space:nowrap;font-size:12px;color:#334155">${d ? `<b>${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b><div style="color:#64748b">${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div><div style="font-size:11px;color:#d97706;font-weight:700">${gtAgo(d.getTime())}</div>` : ''}</td>
   <td style="padding:6px;text-align:right;white-space:nowrap;font-weight:800">${l.oTotal ? `${vnd(l.oTotal)}<div style="font-weight:500;font-size:11px;color:#64748b">đ</div>` : '<span style="color:#cbd5e1">–</span>'}</td>
   <td style="padding:6px;font-size:12px"><b style="color:#1d4ed8">${esc(l.order)}</b>${l.quote ? ` · <span style="color:#64748b">${esc(l.quote)}</span>` : ''}${l.cust || l.ccode ? `<div style="font-weight:600">${l.ccode ? `<span title="Mã khách hàng" style="display:inline-block;margin-right:5px;padding:0 6px;border-radius:5px;background:#ecfeff;border:1px solid #67e8f9;color:#0e7490;font-size:11px;font-weight:800">${esc(l.ccode)}</span>` : ''}${esc(l.cust || '')}</div>` : ''}<div style="color:#475569">${l.tp ? `${esc(l.tp)} · ` : ''}${esc((l.prod || '').slice(0, 70))}${l.qty ? ` · SL <b>${vnd(l.qty)}</b>` : ''}</div></td>
   <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
-  <td style="padding-left:8px">${st({ ...r, money, m2, _ok: `${l.order}|${l.did}` })}${zalo}</td></tr>`;
+  <td style="padding-left:8px">${dBadge}${st({ ...r, money, m2, _ok: `${l.order}|${l.did}` })}${zalo}</td>
+  <td style="position:relative;vertical-align:top;padding:6px 6px 0 0;text-align:right"><button data-gt="omenu" data-k="${esc(dk)}" title="Thao tác: đánh dấu đã xử lý" style="cursor:pointer;border:1px solid ${dd ? '#86efac' : '#cbd5e1'};background:${dd ? '#dcfce7' : '#fff'};border-radius:7px;width:28px;height:24px;font:inherit;font-weight:900;color:${dd ? '#15803d' : '#475569'}">${dd ? '✔' : '⋯'}</button>${menu}</td></tr>`;
   }).join('')}</tbody></table></div>`;
   }
   // 🖨 Xuất PDF: mỗi nhóm định lượng (111, 211, 22122…) × sóng 1 dòng – giấy rẻ nhất (theo NCC đang lọc), NCC, ngày cập nhật giá
@@ -16664,8 +16682,10 @@ ${(() => {
     }
     if (!b) {
       if (gtUi.pdfOpen) { gtUi.pdfOpen = false; gtFill(); } // bấm ra ngoài → đóng menu PDF
+      if (gtUi.oMenu && !e.target.closest('[data-gt-omenu]')) { gtUi.oMenu = null; gtFill(); } // bấm ra ngoài → đóng menu ⋯ của dòng
       return;
     }
+    if (gtUi.oMenu && b.dataset.gt !== 'omenu' && b.dataset.gt !== 'odone') gtUi.oMenu = null;
     const k = b.dataset.gt;
     if (gtUi.pdfOpen && !['pdfmenu', 'pdf', 'pdfn', 'pdf6m', 'use6m'].includes(k)) gtUi.pdfOpen = false;
     const groups = await kvGet(GT_GROUPS);
@@ -16737,6 +16757,18 @@ ${(() => {
         document.addEventListener('mousedown', off, true);
       }, 0);
       return;
+    } else if (k === 'omenu') {
+      gtUi.oMenu = gtUi.oMenu === b.dataset.k ? null : b.dataset.k;
+    } else if (k === 'odone') {
+      const dk = b.dataset.k;
+      const v = b.dataset.v ? { k: b.dataset.v, at: Date.now(), by: meName || '' } : null;
+      gtUi.oMenu = null;
+      gtUi.done = { ...(gtUi.done || {}), [dk]: v };
+      await kvMerge(GT_DONE, { [dk]: v });
+      gtUi.msg = v ? `✓ ${dk.split('|')[0]}: ${GT_DONE_K[v.k]}.` : `↩ ${dk.split('|')[0]}: bỏ đánh dấu đã xử lý.`;
+    } else if (k === 'ohidedone') {
+      gtUi.hideDone = b.checked;
+      lsSet('dgGtHideDone', b.checked ? '1' : '');
     } else if (k === 'osort') {
       gtUi.oSort = b.dataset.k;
       lsSet('dgGtOSort', gtUi.oSort);

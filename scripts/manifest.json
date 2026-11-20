@@ -1,5 +1,5 @@
 {
-  "version": "1.2.679",
+  "version": "1.2.680",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -136,6 +136,8 @@
     "gtPrefs",
     "orderPapers",
     "gtZaloSent",
-    "gtPaperUse"
+    "gtPaperUse",
+    "gtDone",
+    "dd.gtDone"
   ]
 }
