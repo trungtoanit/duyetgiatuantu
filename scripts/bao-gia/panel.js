@@ -15927,7 +15927,7 @@ Quy tắc:
       if (!m) return '';
       if (m[1].toUpperCase() === 'T') { out += '8'; continue; }
       const n = Number(m[2]);
-      const d = n === 90 || n === 95 ? '1' : n === 120 || n === 125 ? '2' : n === 140 || n === 145 || n === 150 ? '5' : n === 160 || n === 165 ? '6' : n === 170 || n === 175 ? '7' : '';
+      const d = n === 90 || n === 95 ? '1' : n === 120 || n === 125 ? '2' : n === 140 || n === 145 || n === 150 ? '5' : n === 160 || n === 165 ? '6' : n === 170 || n === 175 || n === 180 || n === 185 ? '7' : '';
       if (!d) return '';
       out += d;
     }
@@ -16407,7 +16407,7 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
     </div>` : ''}
     <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th title="Nhóm = mã lớp tính từ kết cấu giấy (90/95→1, 120/125→2, 140/145/150→5, 160/165→6, 170/175→7, Trắng→8) + nhóm thêm tay">Nhóm</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
+      <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th title="Nhóm = mã lớp tính từ kết cấu giấy (90/95→1, 120/125→2, 140/145/150→5, 160/165→6, 170/175/180/185→7, Trắng→8) + nhóm thêm tay">Nhóm</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
       <tbody>${shown.map((x, i) => `${inOne && (i === 0 || gtWave(shown[i - 1].name) !== gtWave(x.name)) ? `<tr><td colspan="12" style="padding:5px 8px;background:#f1f5f9;font-size:11.5px;font-weight:800;color:#334155;border-top:1px solid #e2e8f0">Sóng ${esc(gtWave(x.name) || '?')} <span style="font-weight:500;color:#64748b">· ${rows.filter((y) => gtWave(y.name) === gtWave(x.name)).length} giấy${(() => { const ps = rows.filter((y) => gtWave(y.name) === gtWave(x.name) && y.price >= 500).map((y) => y.price); return ps.length ? ` · rẻ nhất ${Math.min(...ps).toLocaleString('vi-VN')}` : ''; })()}</span></td></tr>` : ''}<tr${MY_ADMIN ? ` draggable="true" data-row="${x.id}"` : ''} style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
         ${MY_ADMIN ? `<td style="padding:5px 6px"><input type="checkbox" data-gt="sel" data-id="${x.id}" ${gtUi.sel.has(x.id) ? 'checked' : ''}></td>` : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
