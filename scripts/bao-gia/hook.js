@@ -595,20 +595,26 @@
     // Tab "Mới" của Danh sách đơn: giấy tấm (kết cấu giấy) từng dòng đơn → tab 📄 Giấy tấm phân tích có dùng giấy rẻ nhất nhóm không
     if (/\/misaOrder\?/.test(url) && /[?&]internalStatus=NEW\b/.test(url) && Array.isArray(d.misaOrders)) {
       const lines = [];
-      for (const o of d.misaOrders)
+      for (const o of d.misaOrders) {
+        // giá trị đơn: tổng thanh toán của đơn nếu có, không thì cộng thành tiền các dòng
+        const oSum = (o.misaOrderDetails || []).reduce((t, x) => t + (Number(x.totalPrice) || (Number(x.price) || 0) * (Number(x.quantity) || 0)), 0);
+        const oTotal = Number(o.totalPayment ?? o.totalAmountWithVat ?? o.totalWithVat ?? o.totalAfterVat ?? o.totalAmount ?? o.totalPrice) || oSum;
         for (const x of o.misaOrderDetails || []) {
           const op = x.opportunityProduct || {};
           if (!op.cartonStructCode) continue;
           const c = o.customer || o.opportunity?.customer || {};
           lines.push({
-            did: x.id, oid: o.id, order: o.code, at: o.createdAt || o.orderedAt, // giờ lên đơn (như cột ID của Danh sách đơn) quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
+            // at = giờ lên đơn (như cột ID của Danh sách đơn)
+            did: x.id, oid: o.id, order: o.code, at: o.createdAt || o.orderedAt, quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
             cust: c.shortName || c.code || c.name || c.fullName || c.companyName || c.customerName || c.misaCustomer?.name || o.customerName || o.misaCustomer?.name || o.misaCustomerName || '', prod: x.description || op.name || '', qty: x.quantity || 0,
             tp: x.productionCode || op.product?.code || '',
+            oTotal, lTotal: Number(x.totalPrice) || 0,
             paper: op.cartonStructCode, cp: Number(op.cartonPrice) || 0, layer: op.layer,
             // m² giấy của dòng = dài tấm × khổ tấm (mm) × số lượng – để tính tiền chênh khi giấy chưa rẻ nhất
             m2: op.daiTam && op.khoTam ? Math.round(((Number(op.daiTam) * Number(op.khoTam)) / 1e6) * (Number(x.quantity) || Number(op.quantity) || 0) * 100) / 100 : undefined,
           });
         }
+      }
       if (lines.length) emit('orderPapers', lines);
     }
     // Trang Đơn hàng Misa (/misa-order/list): đơn của mọi khách → gom theo khách, kèm tên khách và NVKD phụ trách
