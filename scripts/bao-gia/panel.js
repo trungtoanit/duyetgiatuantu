@@ -16343,7 +16343,16 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
         ${MY_ADMIN ? `<td style="padding:5px 6px"><input type="checkbox" data-gt="sel" data-id="${x.id}" ${gtUi.sel.has(x.id) ? 'checked' : ''}></td>` : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
         <td>${x.layer || ''}</td><td>${esc(GT_COLOR_VI[x.color] || x.color)}</td><td>${x.xeo || ''}</td>
-        <td style="text-align:right;font-weight:700">${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
+        <td style="text-align:right;font-weight:700;white-space:nowrap">${(() => {
+          // Trong 1 nhóm: so với giấy rẻ nhất cùng sóng → ✅ rẻ nhất, ❗ vàng đắt hơn (rê chuột xem đắt hơn bao nhiêu)
+          if (!inOne || !(x.price >= 500)) return '';
+          const ps = rows.filter((y) => gtWave(y.name) === gtWave(x.name) && y.price >= 500).map((y) => y.price);
+          if (ps.length < 2) return '';
+          const mn = Math.min(...ps);
+          return x.price <= mn
+            ? '<span title="Rẻ nhất trong nhóm + sóng này" style="margin-right:4px">✅</span>'
+            : `<span title="Đắt hơn giấy rẻ nhất cùng sóng ${(x.price - mn).toLocaleString('vi-VN')} đ/m² (rẻ nhất ${mn.toLocaleString('vi-VN')})" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-right:4px;border-radius:50%;background:#facc15;color:#713f12;font-size:11px;font-weight:900;vertical-align:1px">!</span>`;
+        })()}${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
         <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) && !inG.has(x.id) ? `<span title="Chưa có nhóm ${codeOf.get(x.id)} – tạo nhóm tên này (hoặc ⚡ Map nhanh) để giấy tự vào nhóm" style="display:inline-block;margin:1px 3px 1px 0;padding:0 6px;border-radius:99px;font-size:11px;font-weight:700;color:#64748b;border:1px dashed #94a3b8">${codeOf.get(x.id)}</span>` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : `${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) && !inG.has(x.id) ? `<span style="font-size:11px;font-weight:700;color:#64748b">${codeOf.get(x.id)}</span> ` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}`}</td>
         <td style="text-align:right">${x.totalUses ? `${x.uses}/${x.totalUses}` : ''}</td>
         <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
