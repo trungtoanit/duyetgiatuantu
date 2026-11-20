@@ -15870,6 +15870,11 @@ Quy tắc:
     });
     const sorters = { id: (a, b) => b.id - a.id, price: (a, b) => a.price - b.price, uses: (a, b) => b.totalUses - a.totalUses, name: (a, b) => a.name.localeCompare(b.name) };
     rows.sort(sorters[gtUi.sort] || sorters.id);
+    // Đang xem 1 nhóm: xếp theo sóng giấy trước (B, C, E, BC, BE…), trong cùng sóng giữ cách sắp đang chọn
+    const inOne = gtUi.g !== 'all' && gtUi.g !== 'none';
+    const WAVE_ORD = ['B', 'C', 'E', 'BC', 'BE', 'CE', 'BCE'];
+    const wRank = (x) => { const w = gtWave(x.name).toUpperCase(); const i = WAVE_ORD.indexOf(w); return i < 0 ? 50 + (w ? w.charCodeAt(0) : 99) : i; };
+    if (inOne) rows.sort((a, b) => wRank(a) - wRank(b) || (sorters[gtUi.sort] || sorters.id)(a, b));
     const PER = 100;
     const pages = Math.max(1, Math.ceil(rows.length / PER));
     gtUi.page = Math.min(gtUi.page, pages - 1);
@@ -15931,7 +15936,7 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
     <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th title="Nhóm = mã lớp tính từ kết cấu giấy (90/95→1, 120/125→2, 140/145/150→5, Trắng→8) + nhóm thêm tay">Nhóm</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
-      <tbody>${shown.map((x, i) => `<tr${MY_ADMIN ? ` draggable="true" data-row="${x.id}"` : ''} style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
+      <tbody>${shown.map((x, i) => `${inOne && (i === 0 || gtWave(shown[i - 1].name) !== gtWave(x.name)) ? `<tr><td colspan="12" style="padding:5px 8px;background:#f1f5f9;font-size:11.5px;font-weight:800;color:#334155;border-top:1px solid #e2e8f0">Sóng ${esc(gtWave(x.name) || '?')} <span style="font-weight:500;color:#64748b">· ${rows.filter((y) => gtWave(y.name) === gtWave(x.name)).length} giấy${(() => { const ps = rows.filter((y) => gtWave(y.name) === gtWave(x.name) && y.price >= 500).map((y) => y.price); return ps.length ? ` · rẻ nhất ${Math.min(...ps).toLocaleString('vi-VN')}` : ''; })()}</span></td></tr>` : ''}<tr${MY_ADMIN ? ` draggable="true" data-row="${x.id}"` : ''} style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
         ${MY_ADMIN ? `<td style="padding:5px 6px"><input type="checkbox" data-gt="sel" data-id="${x.id}" ${gtUi.sel.has(x.id) ? 'checked' : ''}></td>` : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
         <td>${x.layer || ''}</td><td>${esc(GT_COLOR_VI[x.color] || x.color)}</td><td>${x.xeo || ''}</td>
