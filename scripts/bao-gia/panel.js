@@ -15911,6 +15911,7 @@ Quy tắc:
       gtUi.zsent = zsent;
       gtUi.done = (await kvGet(GT_DONE).catch(() => ({}))) || {};
       gtUi.poDiff = (await kvGet(GT_PODIFF).catch(() => ({}))) || {};
+      gtUi.qIds = await gtQuoteIds();
       if (!gtPrefsLoaded) {
         gtPrefsLoaded = true;
         const pf = (await kvGet(GT_PREFS))[norm(meName)];
@@ -16026,6 +16027,16 @@ Quy tắc:
   // chọn NCC của giấy đang dùng, thay "Giá cuối" của dòng = giá cũ rồi = giá rẻ nhất, đọc "Tổng thanh toán" 2 lần → chênh lệch.
   // Không bấm Lưu / Tạo PO. Kết quả: kv gtPoDiff "<mã đơn>|<dòng>" → { old, new, diff, p1, p2, at }
   const GT_PODIFF = 'gtPoDiff';
+  // Mã báo giá (BG27639) → id trên CRM để mở /bao-gia/update/<id>
+  async function gtQuoteIds() {
+    const qs = (await kvGet('quotes').catch(() => ({}))) || {};
+    return Object.fromEntries(Object.values(qs).filter((x) => x?.code && x.id).map((x) => [x.code, x.id]));
+  }
+  const gtQuoteLink = (code, ids, st = '') => {
+    if (!code) return '';
+    const id = ids?.[code];
+    return id ? `<a href="/bao-gia/update/${id}" target="_blank" rel="noopener" title="Mở báo giá ${esc(code)}" onclick="event.stopPropagation()" style="color:#2563eb;text-decoration:underline;font-weight:700;${st}">${esc(code)} ↗</a>` : `<span style="color:#64748b">${esc(code)}</span>`;
+  };
   const gtPoOk = (pd, me, min) => pd && !pd.err && pd.p1 === me.price && pd.p2 === min.price;
   async function gtPoDiffOne({ l, me, min }) {
     const quotes = await kvGet('quotes');
@@ -16159,6 +16170,7 @@ Quy tắc:
       const ok = userPerm(meObj).tabs.includes('gt');
       const list = ok ? await gtAngryList() : [];
       const pds = ok ? (await kvGet(GT_PODIFF).catch(() => ({}))) || {} : {};
+      const qIds = ok ? await gtQuoteIds() : {};
       for (const x of list) {
         const pd = pds[`${x.l.order}|${x.l.did ?? ''}`];
         x.po = gtPoOk(pd, x.me, x.min) ? pd : null;
@@ -16226,7 +16238,7 @@ Quy tắc:
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> đơn gần nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
-<div class="ga-li">${list.slice(0, 12).map(({ l, me, min, diff, money, po }) => `<div class="ga-r"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b> · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}${list.length > 12 ? `<div class="ga-r p">… và ${list.length - 12} dòng nữa</div>` : ''}</div>
+<div class="ga-li">${list.slice(0, 12).map(({ l, me, min, diff, money, po }) => `<div class="ga-r"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}${list.length > 12 ? `<div class="ga-r p">… và ${list.length - 12} dòng nữa</div>` : ''}</div>
 <div style="font-size:10.5px;color:#94a3b8;margin-top:4px">🧾 = tiền chênh tính trên PO giấy tấm (thay Giá cuối cũ → rẻ nhất, so Tổng thanh toán) · ≈ = ước tính, đang tính PO</div>
 <div class="ga-btns"><button class="go" data-ga="go">📄 Xử lý ở tab Giấy tấm</button><button data-ga="min">Để sau 30 phút</button></div>
 </div></div>`;
@@ -16602,7 +16614,7 @@ tr.dg-gt-read>td span[style*="background"]:not(.dg-gt-badge){filter:grayscale(1)
     return `<tr class="${dd ? 'dg-gt-read' : 'dg-gt-unread'}" style="border-top:1px solid #e5e7eb;background:${dd ? '#f2f6fc' : r.diff > 0 ? '#fef2f2' : gtSolo(r) ? '#fffbeb' : '#fff'}">
   <td style="padding:6px;white-space:nowrap;font-size:12px;color:#334155">${d ? `<b>${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b><div style="color:#64748b">${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div><div style="font-size:11px;color:#d97706;font-weight:700">${gtAgo(d.getTime())}</div>` : ''}</td>
   <td style="padding:6px;text-align:right;white-space:nowrap;font-weight:800">${l.oTotal ? `${vnd(l.oTotal)}<div style="font-weight:500;font-size:11px;color:#64748b">đ</div>` : '<span style="color:#cbd5e1">–</span>'}</td>
-  <td style="padding:6px;font-size:12px"><b style="color:#1d4ed8">${esc(l.order)}</b>${l.quote ? ` · <span style="color:#64748b">${esc(l.quote)}</span>` : ''}${l.cust || l.ccode ? `<div style="font-weight:600">${l.ccode ? `<span title="Mã khách hàng" style="display:inline-block;margin-right:5px;padding:0 6px;border-radius:5px;background:#ecfeff;border:1px solid #67e8f9;color:#0e7490;font-size:11px;font-weight:800">${esc(l.ccode)}</span>` : ''}${esc(l.cust || '')}</div>` : ''}<div style="color:#475569">${l.tp ? `${esc(l.tp)} · ` : ''}${esc((l.prod || '').slice(0, 70))}${l.qty ? ` · SL <b>${vnd(l.qty)}</b>` : ''}</div></td>
+  <td style="padding:6px;font-size:12px"><b style="color:#1d4ed8">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, gtUi.qIds)}` : ''}${l.cust || l.ccode ? `<div style="font-weight:600">${l.ccode ? `<span title="Mã khách hàng" style="display:inline-block;margin-right:5px;padding:0 6px;border-radius:5px;background:#ecfeff;border:1px solid #67e8f9;color:#0e7490;font-size:11px;font-weight:800">${esc(l.ccode)}</span>` : ''}${esc(l.cust || '')}</div>` : ''}<div style="color:#475569">${l.tp ? `${esc(l.tp)} · ` : ''}${esc((l.prod || '').slice(0, 70))}${l.qty ? ` · SL <b>${vnd(l.qty)}</b>` : ''}</div></td>
   <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
