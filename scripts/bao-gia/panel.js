@@ -16210,6 +16210,88 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
   <g fill="#e2e8f0"><rect x="88" y="103" width="6" height="5" rx="1"/><rect x="96" y="103" width="6" height="5" rx="1"/><rect x="104" y="103" width="6" height="5" rx="1" fill="#f87171"/><rect x="88" y="111" width="6" height="5" rx="1"/><rect x="96" y="111" width="6" height="5" rx="1"/><rect x="104" y="111" width="6" height="5" rx="1"/><rect x="88" y="119" width="22" height="4" rx="1"/></g></g>
 </svg>`;
   // Chọn ảnh → cắt vuông phần mặt (giữa ngang, phần trên ảnh chân dung) → 180px JPEG → lưu kv (đồng bộ)
+  // 🎨 AI vẽ lại từ ảnh thật (OpenAI gpt-image-1, key ở ⚙️ của extension): chân dung minh hoạ giống người thật, mặt đang giận
+  // → thu nhỏ 256px JPEG → lưu kv gtAngryImg (đồng bộ cloud, không vào repo). Ảnh gốc chỉ gửi tới OpenAI để vẽ.
+  const GT_AI_PROMPT = 'Redraw this exact woman as a semi-realistic digital painting portrait (realistic face proportions, keep her real facial features, ' +
+    'shoulder-length brown bob hair with side bangs, thin rimless glasses, white collared shirt with a small red cube logo). ' +
+    'Head and shoulders, centered, facing the viewer. Expression: clearly ANGRY – furrowed eyebrows, frowning mouth, flushed red cheeks, ' +
+    'small cartoon steam puffs above her head, holding a calculator. Plain soft light background, no text.';
+  let gtAiBusy = false;
+  function gtAngryAiPick() {
+    if (gtAiBusy) return;
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      const btn = document.querySelector('#dg-gt-angry [data-ga="ai"]');
+      const say = (t) => btn && (btn.textContent = t);
+      gtAiBusy = true;
+      try {
+        const cfg = await aiCfgGet();
+        if (!cfg.openaiKey) throw new Error('Chưa có OpenAI key – cài ở ⚙️ (hộp 🤖 Hỏi AI).');
+        say('⏳ Đang chuẩn bị ảnh…');
+        const img = await new Promise((ok, bad) => {
+          const im = new Image();
+          im.onload = () => ok(im);
+          im.onerror = () => bad(new Error('Không đọc được ảnh'));
+          im.src = URL.createObjectURL(f);
+        });
+        // ảnh vuông 1024: phần trên ảnh chân dung (mặt + vai), nền trắng
+        const W = img.naturalWidth;
+        const H = img.naturalHeight;
+        const side = Math.min(W, H > W * 1.1 ? Math.round(H * 0.62) : H);
+        const sx = Math.max(0, Math.round((W - side) / 2));
+        const sy = H > W * 1.1 ? Math.round(H * 0.03) : Math.round((H - side) / 2);
+        const c = document.createElement('canvas');
+        c.width = c.height = 1024;
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff';
+        g.fillRect(0, 0, 1024, 1024);
+        g.drawImage(img, sx, sy, side, side, 0, 0, 1024, 1024);
+        URL.revokeObjectURL(img.src);
+        const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+        const fd = new FormData();
+        fd.append('model', 'gpt-image-1');
+        fd.append('image', blob, 'ketoan.png');
+        fd.append('prompt', GT_AI_PROMPT);
+        fd.append('size', '1024x1024');
+        fd.append('quality', 'medium');
+        fd.append('n', '1');
+        say('🎨 AI đang vẽ… (30–60 giây)');
+        const t0 = Date.now();
+        const res = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { authorization: `Bearer ${cfg.openaiKey}` }, body: fd });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
+        try { aiLogAdd({ at: t0, prov: 'OpenAI', model: 'gpt-image-1', what: 'Vẽ ảnh kế toán', ms: Date.now() - t0, page: location.pathname }); } catch {}
+        const b64 = j.data?.[0]?.b64_json;
+        if (!b64) throw new Error('OpenAI không trả ảnh');
+        const out = await new Promise((ok, bad) => {
+          const im = new Image();
+          im.onload = () => ok(im);
+          im.onerror = () => bad(new Error('Ảnh AI lỗi'));
+          im.src = `data:image/png;base64,${b64}`;
+        });
+        const c2 = document.createElement('canvas');
+        c2.width = c2.height = 256;
+        c2.getContext('2d').drawImage(out, 0, 0, 256, 256);
+        const src = c2.toDataURL('image/jpeg', 0.86);
+        await kvMerge('gtAngryImg', { img: { src, at: Date.now(), by: meName || '', ai: true } });
+        gtAngryImg = src;
+        const box = document.getElementById('dg-gt-angry');
+        if (box) box.dataset.h = '';
+        gtQ.at = 0;
+        injectGtAngry();
+      } catch (e) {
+        alert(`🎨 AI vẽ lỗi: ${e.message || e}`);
+        say('🎨 AI vẽ');
+      } finally {
+        gtAiBusy = false;
+      }
+    };
+    inp.click();
+  }
   function gtAngryPhotoPick() {
     const inp = document.createElement('input');
     inp.type = 'file';
@@ -16299,6 +16381,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
           if (k === 'min') { lsSet('dgGtAngryMin', String(Date.now())); box.classList.add('min'); }
           else if (k === 'max') { lsSet('dgGtAngryMin', ''); box.classList.remove('min'); }
           else if (k === 'photo') gtAngryPhotoPick();
+          else if (k === 'ai') gtAngryAiPick();
           else if (k === 'go') {
             lsSet('dgTab', 'gt');
             lsSet('dgGtView', 'orders');
@@ -16319,7 +16402,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
       const SAY = ['Ai cho chọn giấy đắt hơn vậy hả?!', 'Tiền công ty chứ đâu phải lá mít!', 'Giấy rẻ hơn nằm sờ sờ kia kìa!', 'Đổi NCC hoặc bắt trả về bằng giá ngay!'];
       const say = SAY[Math.floor(Date.now() / 60e3) % SAY.length];
       const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
-<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${gtAngryFig(92)}${MY_ADMIN ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button></div>` : ''}</div><div class="ga-body">
+<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${gtAngryFig(92)}${MY_ADMIN ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button><button data-ga="ai" title="Chọn ảnh thật → AI (OpenAI) vẽ lại chân dung giống người thật, mặt đang giận. Ảnh được gửi tới OpenAI để vẽ." style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:6px;font-size:11px;padding:1px 6px;color:#6d28d9;margin-top:3px">${gtAiBusy ? '🎨 AI đang vẽ…' : '🎨 AI vẽ'}</button></div>` : ''}</div><div class="ga-body">
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> /10 đơn mới nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
