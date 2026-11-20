@@ -15934,19 +15934,21 @@ Quy tắc:
   }
   function gtCode(name) {
     const body = String(name || '').replace(/^[^_]*_/, '').replace(/-[A-Z]+$/i, '');
-    const parts = body.split('/');
+    // ngăn lớp bằng "/" hoặc "+" (CL_N.145+2X.120+X.145+N.120-BC); "2X.120" = 2 lớp X120 liền nhau
+    const parts = body.split(/[\/+]/);
     if (parts.length < 2) return '';
     let out = '';
     for (const p of parts) {
       if (p.trim() === '*') continue; // lớp "*" = không có lớp đó → CL_*/X140/X90/X140/N140-BC là giấy 4 lớp (5155)
       // chữ đầu (N / X / T…) có thể không ghi: CL_N145/95/120-C → 145, 95, 120 → 512
-      const m = p.trim().match(/^([A-Z]?)[\s.]*(\d+)/i);
+      const m = p.trim().match(/^(?:(\d)\s*(?=[A-Z]))?([A-Z]?)[\s.]*(\d+)/i);
       if (!m) return '';
-      if (m[1].toUpperCase() === 'T') { out += '8'; continue; }
-      const n = Number(m[2]);
+      const k = Number(m[1] || 1); // số lớp lặp: "2X95" = X95 + X95
+      if (m[2].toUpperCase() === 'T') { out += '8'.repeat(k); continue; }
+      const n = Number(m[3]);
       const d = n === 90 || n === 95 || n === 100 ? '1' : n === 120 || n === 125 ? '2' : n === 140 || n === 145 || n === 150 ? '5' : n === 160 || n === 165 ? '6' : n === 170 || n === 175 || n === 180 || n === 185 ? '7' : n === 230 || n === 235 ? '9' : '';
       if (!d) return '';
-      out += d;
+      out += d.repeat(k);
     }
     return out.length >= 2 ? out : '';
   }
