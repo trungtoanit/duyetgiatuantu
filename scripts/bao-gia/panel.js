@@ -3567,9 +3567,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       box?.remove(); // ai cũng hết câu hỏi → ẩn cả dải
       return;
     }
-    if (!document.getElementById('dg-ofs-css4')) {
+    if (!document.getElementById('dg-ofs-css5')) {
       const st = document.createElement('style');
-      st.id = 'dg-ofs-css4';
+      st.id = 'dg-ofs-css5';
       st.textContent = `.container-header .header-title.dg-ofs-on{display:flex;align-items:center;gap:16px;flex-wrap:wrap}.container-header .header-title.dg-ofs-on>h4{margin:0!important;flex:none;width:auto}
 #dg-ofs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 10px;border-radius:14px;background:repeating-linear-gradient(90deg,#f5ecdf 0 30px,#efe3d1 30px 32px);border:1px solid #e7d7bf;font:12px/1.2 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
 #dg-ofs .ofs-h{font-weight:800;color:#57391b;margin-right:2px;white-space:nowrap}#dg-ofs .ofs-h b{color:#15803d}
@@ -3587,6 +3587,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
 #dg-ofs .ofs-ask{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#f97316;color:#fff;font-weight:900;font-size:13px;box-shadow:0 0 0 0 rgba(249,115,22,.6);animation:dgOfsAsk 1.2s ease-in-out infinite,dgOfsRing 1.6s ease-out infinite}
 @keyframes dgOfsAsk{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-3px) rotate(-12deg)}50%{transform:translateY(0) rotate(0)}75%{transform:translateY(-2px) rotate(12deg)}}
 @keyframes dgOfsRing{0%{box-shadow:0 0 0 0 rgba(249,115,22,.6)}100%{box-shadow:0 0 0 8px rgba(249,115,22,0)}}
+#dg-ofs .ofs-ask.shake{background:#dc2626;animation:dgOfsShake .5s ease-in-out infinite,dgOfsRing2 1s ease-out infinite}
+@keyframes dgOfsShake{0%,100%{transform:translateX(0) rotate(0) scale(1.1)}15%{transform:translateX(-3px) rotate(-18deg) scale(1.2)}30%{transform:translateX(3px) rotate(18deg) scale(1.2)}45%{transform:translateX(-3px) rotate(-14deg) scale(1.15)}60%{transform:translateX(3px) rotate(14deg) scale(1.15)}75%{transform:translateX(-1px) rotate(-6deg)}}
+@keyframes dgOfsRing2{0%{box-shadow:0 0 0 0 rgba(220,38,38,.7)}100%{box-shadow:0 0 0 10px rgba(220,38,38,0)}}
 @media (prefers-reduced-motion:reduce){#dg-ofs .ofs-p.on .ofs-d,#dg-ofs .ofs-ask{animation:none}}
 #dg-ofs-pop{position:absolute;z-index:2147483000;width:min(460px,94vw);background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(15,23,42,.28);border:1px solid #e2e8f0;padding:12px 14px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;animation:dgOpIn .15s ease-out}
 @keyframes dgOpIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
@@ -3611,7 +3614,12 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         const on = !!at && hoursSince(at) <= 1;
         const act = !on && !!sortAt && hoursSince(sortAt) <= 1; // vừa có bình luận (của bất kỳ ai) trong báo giá của NVKD → hiện sáng, KHÔNG phải online
         const lastOne = arr.length > 1 && i === arr.length - 1; // lâu chưa tương tác nhất → ❓ nhắc bấm vào hỏi
-        return `<span class="ofs-p ${on ? 'on' : 'off'}${act ? ' act' : ''}${lastOne ? ' last' : ''}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${sortAt > at ? `↔ ${ago(sortAt)}` : at ? ago(at) : 'chưa BL'}</i><em title="Có thể mang về">💰 ${moneyShortG(pot[n])}</em></span>${lastOne ? '<span class="ofs-ask" title="Lâu chưa tương tác nhất – bấm để hỏi về báo giá cần chốt">?</span>' : ''}</span>`;
+        // quá 20 phút chưa tương tác + đang giờ làm (7:30–11:30, 12:30–17:00, trừ Chủ nhật) → ❓ rung lắc mạnh
+        const nowD = new Date();
+        const hm = nowD.getHours() * 60 + nowD.getMinutes();
+        const workNow = nowD.getDay() !== 0 && ((hm >= 450 && hm < 690) || (hm >= 750 && hm < 1020));
+        const shake = lastOne && workNow && (!sortAt || Date.now() / 1000 - sortAt > 20 * 60);
+        return `<span class="ofs-p ${on ? 'on' : 'off'}${act ? ' act' : ''}${lastOne ? ' last' : ''}" data-ofs="${esc(n)}" title="${esc(n)} · ${counts[n]} báo giá đang mở${at ? ` · bình luận cuối ${fmtTime(at)}` : ''}\nBấm để xem ⚖️ Quyết định của người này"><span class="ofs-a">${avatarHtml(n, 28)}<span class="ofs-d"></span></span><span class="ofs-n"><b>${esc(shortName(n))}</b><i>${on ? '🟢 ' : ''}${sortAt > at ? `↔ ${ago(sortAt)}` : at ? ago(at) : 'chưa BL'}</i><em title="Có thể mang về">💰 ${moneyShortG(pot[n])}</em></span>${lastOne ? `<span class="ofs-ask${shake ? ' shake' : ''}" title="Lâu chưa tương tác nhất${shake ? ' (quá 20 phút)' : ''} – bấm để hỏi về báo giá cần chốt">?</span>` : ''}</span>`;
       })
       .join('')}`;
     if (!box) {
