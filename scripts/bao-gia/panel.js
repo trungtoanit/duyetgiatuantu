@@ -16162,17 +16162,27 @@ Quy tắc:
     setTimeout(() => gtPoRun(), 20e3);
     setInterval(() => gtPoRun(), 2 * 60e3);
   }
+  // Hình kế toán (vẽ theo ảnh chị kế toán Tuấn Tú): tóc bob nâu ngang vai, kính gọng mảnh, áo sơ mi trắng logo Tuấn Tú, chân váy đen – đang giận
   const GT_ANGRY_SVG = `<svg viewBox="0 0 120 130" width="92" height="100" aria-hidden="true">
-  <g class="ga-steam"><path d="M22 30c-6-6 4-10-2-17" /><path d="M98 30c6-6-4-10 2-17" /><path d="M60 8c-5-5 4-8-1-14" /></g>
-  <path d="M18 128c2-26 18-36 42-36s40 10 42 36z" fill="#1e3a8a"/><path d="M50 92l10 16 10-16z" fill="#fff"/><path d="M57 96h6l2 22-5 6-5-6z" fill="#dc2626"/>
-  <circle cx="60" cy="58" r="34" fill="#ef4444"/><circle cx="60" cy="58" r="34" fill="url(#gaFace)"/>
-  <defs><radialGradient id="gaFace" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#fca5a5"/><stop offset="1" stop-color="#dc2626" stop-opacity=".2"/></radialGradient></defs>
-  <path d="M28 44c4-22 60-24 64 0-8-10-56-10-64 0z" fill="#3f2a1d"/>
-  <path class="ga-brow" d="M34 45l18 7M86 45l-18 7" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/>
-  <g fill="none" stroke="#111827" stroke-width="3"><circle cx="45" cy="59" r="9" fill="#fff"/><circle cx="75" cy="59" r="9" fill="#fff"/><path d="M54 59h12"/></g>
-  <circle cx="47" cy="61" r="3.5" fill="#111827"/><circle cx="73" cy="61" r="3.5" fill="#111827"/>
-  <path d="M46 80c8-8 20-8 28 0" stroke="#111827" stroke-width="4" fill="none" stroke-linecap="round"/>
-  <g class="ga-calc"><rect x="84" y="86" width="30" height="40" rx="4" fill="#334155"/><rect x="88" y="90" width="22" height="9" rx="1.5" fill="#a7f3d0"/><text x="108" y="97.5" font-size="7" text-anchor="end" font-family="monospace" fill="#b91c1c" font-weight="900">-₫₫₫</text>
+  <defs><radialGradient id="gaFace" cx=".5" cy=".62" r=".5"><stop offset="0" stop-color="#ef4444" stop-opacity=".55"/><stop offset="1" stop-color="#ef4444" stop-opacity="0"/></radialGradient>
+  <linearGradient id="gaFaceHair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b3f22"/><stop offset="1" stop-color="#9a6234"/></linearGradient></defs>
+  <g class="ga-steam"><path d="M24 26c-6-6 4-10-2-17" /><path d="M96 26c6-6-4-10 2-17" /><path d="M60 6c-5-5 4-8-1-12" /></g>
+  <path d="M30 60c-4-30 12-46 30-46s34 16 30 46l3 22c-8 4-15 3-20 0H47c-5 3-12 4-20 0z" fill="url(#gaFaceHair)"/>
+  <path d="M28 130c0-20 6-31 16-35l16-4 16 4c10 4 16 15 16 35z" fill="#fff" stroke="#e2e8f0"/>
+  <path d="M30 130c1-4 2-8 4-11h52c2 3 3 7 4 11z" fill="#111827"/>
+  <path d="M52 91l8 10 8-10" fill="none" stroke="#cbd5e1" stroke-width="2"/><path d="M60 101v16" stroke="#e2e8f0" stroke-width="1.5"/>
+  <g transform="translate(66 104)"><path d="M0 2l4-2 4 2v5l-4 2-4-2z" fill="#dc2626"/><path d="M0 2l4 2 4-2M4 4v5" stroke="#fff" stroke-width=".8" fill="none"/></g>
+  <rect x="53" y="80" width="14" height="13" rx="5" fill="#f2c6a6"/>
+  <ellipse cx="60" cy="56" rx="24" ry="28" fill="#f6d3b8"/><ellipse cx="60" cy="56" rx="24" ry="28" fill="url(#gaFace)"/>
+  <ellipse cx="44" cy="68" rx="5" ry="3" fill="#f87171" opacity=".6"/><ellipse cx="76" cy="68" rx="5" ry="3" fill="#f87171" opacity=".6"/>
+  <path d="M35 50c0-22 14-30 27-30 15 0 24 10 23 30-6-12-16-17-29-16-6 2-14 8-21 16z" fill="#7b4a28"/>
+  <path d="M36 52c-1 10 0 22-2 30l-5-4c0-10 1-20 7-26zM84 52c1 10 0 22 2 30l5-4c0-10-1-20-7-26z" fill="#7b4a28"/>
+  <path class="ga-brow" d="M40 47l12 5M80 47l-12 5" stroke="#4a2a14" stroke-width="3.5" stroke-linecap="round"/>
+  <g fill="#fff" fill-opacity=".35" stroke="#a8a29e" stroke-width="1.8"><rect x="38" y="53" width="18" height="12" rx="5"/><rect x="64" y="53" width="18" height="12" rx="5"/></g><path d="M56 58h8" stroke="#a8a29e" stroke-width="1.8"/>
+  <circle cx="48" cy="60" r="2.6" fill="#1f2937"/><circle cx="72" cy="60" r="2.6" fill="#1f2937"/>
+  <path d="M58 64l-1 6h3" fill="none" stroke="#d6a07e" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M51 77c5-5 13-5 18 0" stroke="#9f1239" stroke-width="3" fill="#b91c1c" stroke-linecap="round"/>
+  <g class="ga-calc"><path d="M86 112c-6-4-10-8-12-13" stroke="#f6d3b8" stroke-width="6" stroke-linecap="round" fill="none"/><rect x="84" y="86" width="30" height="40" rx="4" fill="#334155"/><rect x="88" y="90" width="22" height="9" rx="1.5" fill="#a7f3d0"/><text x="108" y="97.5" font-size="7" text-anchor="end" font-family="monospace" fill="#b91c1c" font-weight="900">-₫₫₫</text>
   <g fill="#e2e8f0"><rect x="88" y="103" width="6" height="5" rx="1"/><rect x="96" y="103" width="6" height="5" rx="1"/><rect x="104" y="103" width="6" height="5" rx="1" fill="#f87171"/><rect x="88" y="111" width="6" height="5" rx="1"/><rect x="96" y="111" width="6" height="5" rx="1"/><rect x="104" y="111" width="6" height="5" rx="1"/><rect x="88" y="119" width="22" height="4" rx="1"/></g></g>
 </svg>`;
   let gtAngryBusy = false;
