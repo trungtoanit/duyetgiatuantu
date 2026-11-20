@@ -15748,7 +15748,7 @@ Quy tắc:
   const gtUi = { g: 'all', q: '', layer: '', provs: new Set(), sel: new Set(), sort: 'id', page: 0, msg: '' };
   const GT_PREFS = 'gtPrefs'; // lựa chọn lọc của từng người trên cloud: { [tên chuẩn hoá]: { provs: [mã NCC…], at } }
   let gtPrefsLoaded = false;
-  const gtSavePrefs = () => kvMerge(GT_PREFS, { [norm(meName)]: { provs: [...gtUi.provs], at: Date.now() } }).catch(() => {});
+  const gtSavePrefs = () => kvMerge(GT_PREFS, { [norm(meName)]: { provs: [...gtUi.provs], hideSmall: !!gtUi.hideSmall, at: Date.now() } }).catch(() => {});
   const gtHost = () => root?.querySelector('#dg-gt');
   const gtTab = () => '<div id="dg-gt" style="position:relative;padding:10px 12px"><div style="color:#94a3b8">⏳ Đang tải giấy tấm…</div></div>';
   let gtFillBusy = false;
@@ -15764,6 +15764,7 @@ Quy tắc:
         gtPrefsLoaded = true;
         const pf = (await kvGet(GT_PREFS))[norm(meName)];
         if (Array.isArray(pf?.provs)) gtUi.provs = new Set(pf.provs);
+        gtUi.hideSmall = !!pf?.hideSmall;
       }
       gtDraw(host, items, groups, scan);
     } finally {
@@ -15897,7 +15898,8 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
     <div style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:1px;margin:2px 4px 6px">NHÓM (EXTENSION)</div>
     ${gBtn('all', '📚 Tất cả', all.length)}${gBtn('none', '❔ Chưa có nhóm', all.filter((x) => !inG.has(x.id)).length)}
     <div style="border-top:1px dashed #e2e8f0;margin:6px 0"></div>
-    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10.5px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:8px 4px 3px">${sl} <span style="font-weight:600">· ${list.length}</span></div>${list.map((g) => gBtn(g.id, esc(g.name), gCount(g), g.color, sk)).join('')}` : ''; }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:4px">Chưa có nhóm nào</div>'}
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 4px 0;font-size:11.5px;color:#475569;cursor:pointer"><input type="checkbox" data-gt="hidesmall" ${gtUi.hideSmall ? 'checked' : ''}>Ẩn nhóm chỉ có 1 loại giấy${gtUi.hideSmall ? ` <span style="color:#94a3b8">(ẩn ${gs.filter((g) => gCount(g) <= 1 && g.id !== gtUi.g).length})</span>` : ''}</label>
+    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk && (!gtUi.hideSmall || gCount(g) > 1 || g.id === gtUi.g)); return list.length ? `<div style="font-size:10.5px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:8px 4px 3px">${sl} <span style="font-weight:600">· ${list.length}</span></div>${list.map((g) => gBtn(g.id, esc(g.name), gCount(g), g.color, sk)).join('')}` : ''; }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:4px">Chưa có nhóm nào</div>'}
     ${MY_ADMIN && gs.length > 1 ? '<div style="font-size:10.5px;color:#94a3b8;margin:4px">↕ Kéo thả nhóm để đổi vị trí · kéo dòng giấy thả vào nhóm để thêm</div>' : ''}
     ${MY_ADMIN ? `<div style="display:flex;gap:4px;margin-top:8px"><input data-gt-in="newg" placeholder="Tên nhóm mới…" ${inp.replace('style="', 'style="flex:1;min-width:0;')}>${bt('newg', '＋')}</div>` : ''}
     ${curG && MY_ADMIN ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;flex-direction:column;gap:6px">
@@ -16104,7 +16106,10 @@ ${(() => {
       const ids = [...host.querySelectorAll('[data-gt="sel"]')].map((x) => Number(x.dataset.id));
       for (const id of ids) b.checked ? gtUi.sel.add(id) : gtUi.sel.delete(id);
     } else if (k === 'clr') gtUi.sel.clear();
-    else if (k === 'prov' || k === 'provall') {
+    else if (k === 'hidesmall') {
+      gtUi.hideSmall = b.checked;
+      gtSavePrefs();
+    } else if (k === 'prov' || k === 'provall') {
       if (k === 'provall') gtUi.provs.clear();
       else if (gtUi.provs.has(b.dataset.c)) gtUi.provs.delete(b.dataset.c);
       else gtUi.provs.add(b.dataset.c);
