@@ -15760,6 +15760,22 @@ Quy tắc:
     try {
       const [items, groups, scan, orders, zsent] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY), kvGet('orderPapers'), kvGet(GT_ZSENT)]);
       gtUi.orders = orders;
+      // Dấu "đang gửi" còn treo (F5 giữa lúc chờ): đối chiếu việc trong hàng đợi Zalo → đã gửi / lỗi
+      const pend = Object.entries(zsent || {}).filter(([, v]) => v?.state === 'queue');
+      if (pend.length) {
+        const jobs = await kvGet('zaloJobs').catch(() => ({}));
+        const fix = {};
+        for (const [k, v] of pend) {
+          const j = jobs[v.job];
+          if (j?.status === 'sent') fix[k] = { ...v, state: 'sent', at: j.doneAt || v.at };
+          else if (j?.status === 'error') fix[k] = { ...v, state: 'error', error: j.error || 'Lỗi gửi Zalo' };
+          else if (!j || Date.now() - v.at > 6 * 60e3) fix[k] = { ...v, state: 'error', error: 'Tab Zalo không nhận việc' };
+        }
+        if (Object.keys(fix).length) {
+          await kvMerge(GT_ZSENT, fix);
+          Object.assign(zsent, fix);
+        }
+      }
       gtUi.zsent = zsent;
       if (!gtPrefsLoaded) {
         gtPrefsLoaded = true;
@@ -15823,7 +15839,7 @@ Quy tắc:
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-gt`;
-    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: m.text, html: m.html, status: 'pending', at: Date.now() };
+    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: m.text, html: m.html, status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     const mark = (state, error) => kvMerge(GT_ZSENT, Object.fromEntries(ls.map((l) => [gtZKey(l.order, r.me.id), { at: Date.now(), by: meName || '', state, job: jobId, cheap: r.min.id, diff: r.diff, ...(error ? { error } : {}) }])));
     await mark('queue');
@@ -15896,8 +15912,10 @@ Quy tắc:
     const done = r.ol.filter((l) => zs[gtZKey(l.order, r.me.id)] && zs[gtZKey(l.order, r.me.id)].state !== 'error'); // lỗi gửi → coi như chưa gửi
     const todo = r.ol.length - done.length;
     const last = done.map((l) => zs[gtZKey(l.order, r.me.id)]).sort((a, b) => b.at - a.at)[0];
+    const errs = r.ol.map((l) => zs[gtZKey(l.order, r.me.id)]).filter((v) => v?.state === 'error').sort((a, b) => b.at - a.at);
+    const errInfo = errs.length ? `<span style="font-size:11px;color:#dc2626" title="${esc(errs[0].error || '')}">⚠️ Lần gửi trước lỗi: ${esc((errs[0].error || '').slice(0, 60))}</span>` : '';
     const sentInfo = done.length ? `<span style="font-size:11px;color:${last.state === 'sent' ? '#16a34a' : '#d97706'};font-weight:700">${last.state === 'sent' ? '✅ Đã gửi yêu cầu' : '⏳ Đang gửi'}${done.length < r.ol.length ? ` ${done.length}/${r.ol.length} đơn` : ''} · ${new Date(last.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${last.by ? ` · ${esc(last.by)}` : ''}</span>` : '';
-    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}</div>`;
+    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}${errInfo}</div>`;
   })() : ''}</td>
   <td style="font-size:11.5px">${r.ol.slice(0, 4).map((l) => `<div>${l.at ? `<span style="color:#64748b">${new Date((l.at > 1e11 ? l.at : l.at * 1000)).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span> ` : ''}${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
@@ -16019,6 +16037,10 @@ ${(() => {
 })()}`;
     if (!host.dataset.wired) {
       host.dataset.wired = '1';
+      host.addEventListener('click', (e) => {
+        // 📨 Gửi Zalo: mở / đưa tab Zalo Web lên ngay lúc bấm (trình duyệt chặn mở tab sau khi chờ) để tab đó nhận việc gửi
+        if (e.target.closest?.('[data-gt="zsend"]')) tkOpenZalo();
+      });
       host.addEventListener('click', (e) => gtClick(e).catch((err) => { gtUi.msg = `⚠️ ${err.message}`; gtFill(); }));
       host.addEventListener('input', (e) => {
         const k = e.target.dataset?.gtIn;
