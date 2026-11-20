@@ -16012,13 +16012,15 @@ Quy tắc:
       const code = gtCode(paper);
       if (!me || !code || me.price == null) continue;
       const w = gtWave(paper);
-      const min = fresh.filter((x) => gtCode(x.name) === code && gtWave(x.name) === w).reduce((a, b) => (!a || b.price < a.price ? b : a), null);
+      const peers = fresh.filter((x) => gtCode(x.name) === code && gtWave(x.name) === w);
+      const min = peers.reduce((a, b) => (!a || b.price < a.price ? b : a), null);
       const diff = min ? me.price - min.price : 0;
       if (!(diff > 0)) continue;
+      const same = { n: u.orders.size, m2: [...u.oM2.values()].reduce((a, v) => a + v, 0) };
       for (const l of u.orders.values()) {
         if (done?.[`${l.order}|${l.did ?? ''}`]) continue;
         const m2 = u.oM2.get(l.order) || 0;
-        out.push({ l, me, min, diff, money: m2 ? Math.round(diff * m2) : 0 });
+        out.push({ l, me, min, diff, money: m2 ? Math.round(diff * m2) : 0, m2, peers, code, w, same });
       }
     }
     // chỉ 10 dòng đơn gần nhất chưa xử lý (mới lên đơn trước)
@@ -16347,6 +16349,126 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
     };
     inp.click();
   }
+  // ---------- 📊 Popup "Đánh giá tổng quan" khi bấm 1 dòng của panel kế toán ----------
+  // KPI (tổng PO hiện tại / nếu đổi giấy rẻ nhất / tiết kiệm), điểm hiệu quả giá giấy, biểu đồ giá các giấy cùng nhóm,
+  // kịch bản đổi sang từng giấy rẻ hơn, việc cần làm để tối ưu giá thành + đánh dấu đã xử lý
+  let gtAngryCur = [];
+  async function gtAngryDetail(x) {
+    if (!x) return;
+    document.getElementById('dg-ga-pop')?.remove();
+    const { l, me, min, po } = x;
+    const vn = (n) => Math.round(n || 0).toLocaleString('vi-VN');
+    const qIds = await gtQuoteIds();
+    const zs = (await kvGet(GT_ZSENT).catch(() => ({}))) || {};
+    const zv = zs[gtZKey(l.order, me.id)];
+    // tiền chênh: ưu tiên số tính trên PO; tuyến tính theo chênh giá → quy đổi được cho từng giấy rẻ hơn
+    const perDong = po ? po.diff / (me.price - min.price) : x.m2 ? x.m2 : 0; // đ tiết kiệm cho mỗi 1đ/m² giảm
+    const save = (price) => Math.round(Math.max(0, me.price - price) * perDong);
+    const total = po?.old || 0;
+    const saveMax = po ? po.diff : x.money;
+    const pctPo = total ? (saveMax / total) * 100 : 0;
+    const pctOrder = l.oTotal ? (saveMax / l.oTotal) * 100 : 0;
+    const eff = (min.price / me.price) * 100;
+    const grade = eff >= 99.5 ? ['A', '#16a34a', 'Tối ưu'] : eff >= 97 ? ['B', '#ca8a04', 'Khá – còn tối ưu được'] : eff >= 94 ? ['C', '#ea580c', 'Trung bình – nên đổi'] : ['D', '#dc2626', 'Kém – phải đổi ngay'];
+    const peers = [...(x.peers || [])].sort((a, b) => a.price - b.price);
+    const rank = peers.findIndex((p) => String(p.id) === String(me.id)) + 1 || peers.filter((p) => p.price < me.price).length + 1;
+    const pMax = Math.max(...peers.map((p) => p.price), me.price);
+    const pMin = Math.min(...peers.map((p) => p.price), me.price);
+    const nowS = Date.now() / 1000;
+    const stale = peers.filter((p) => nowS - (p.updatedAt || 0) > 30 * 86400);
+    const provs = new Set(peers.map((p) => p.prov?.code || p.prov?.name));
+    const cheaper = peers.filter((p) => p.price < me.price);
+    // gauge nửa vòng: 90% → 100%
+    const gv = Math.max(0, Math.min(1, (eff - 90) / 10));
+    const ang = Math.PI * (1 - gv);
+    const gx = 60 + 46 * Math.cos(ang);
+    const gy = 58 - 46 * Math.sin(ang);
+    const gauge = `<svg viewBox="0 0 120 70" width="150" height="88"><path d="M14 58a46 46 0 0 1 92 0" fill="none" stroke="#e5e7eb" stroke-width="11" stroke-linecap="round"/><path d="M14 58a46 46 0 0 1 ${(gx - 14).toFixed(1)} ${(gy - 58).toFixed(1)}" fill="none" stroke="${grade[1]}" stroke-width="11" stroke-linecap="round"/><text x="60" y="52" text-anchor="middle" font-size="19" font-weight="900" fill="${grade[1]}">${eff.toFixed(1)}%</text><text x="60" y="66" text-anchor="middle" font-size="8.5" fill="#64748b">hiệu quả giá giấy</text></svg>`;
+    const bars = peers.map((p) => {
+      const mine = String(p.id) === String(me.id);
+      const best = String(p.id) === String(min.id);
+      const w = 30 + ((p.price - pMin) / Math.max(1, pMax - pMin)) * 70;
+      const c = mine ? '#2563eb' : best ? '#16a34a' : p.price < me.price ? '#4ade80' : '#f87171';
+      return `<div class="gp-bar"><span class="gp-bl" title="${esc(p.prov?.name || '')}"><b>${p.id}</b> ${esc(p.prov?.code || '')}${mine ? ' <i>đang dùng</i>' : best ? ' <i style="color:#15803d">rẻ nhất</i>' : ''}</span><span class="gp-bt"><span style="width:${w.toFixed(0)}%;background:${c}"></span></span><b class="gp-bv" style="color:${c}">${vn(p.price)}</b></div>`;
+    }).join('');
+    const scen = cheaper.map((p) => `<tr><td><b style="color:#2563eb">${p.id}</b> | ${esc(p.name)}</td><td title="${esc(p.prov?.name || '')}">${esc(p.prov?.code || '')}</td><td style="text-align:right">${vn(p.price)}</td><td style="text-align:right;color:#15803d">−${vn(me.price - p.price)}đ/m²</td><td style="text-align:right;font-weight:800;color:#15803d">${po || x.m2 ? `${po ? '' : '≈ '}${vn(save(p.price))}đ` : '–'}</td><td style="color:${nowS - (p.updatedAt || 0) > 30 * 86400 ? '#d97706' : '#64748b'}">${p.updatedAt ? new Date(p.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('');
+    const todo = [
+      [true, `🔁 <b>Đổi giấy</b> sang <b style="color:#2563eb">${min.id}</b> | ${esc(min.name)} (${esc(min.prov?.name || min.prov?.code || '')}) – tiết kiệm <b style="color:#15803d">${po ? '' : '≈ '}${vn(saveMax)}đ</b> cho đơn này.`],
+      [true, `💲 Hoặc <b>yêu cầu ${esc(me.prov?.name || me.prov?.code || 'NCC đang dùng')}</b> trả về bằng giá <b>${vn(min.price)}đ/m²</b> (đang ${vn(me.price)}, cao hơn ${vn(me.price - min.price)}đ/m² – ${((me.price / min.price - 1) * 100).toFixed(1)}%).`],
+      [!zv || zv.state === 'error', zv && zv.state !== 'error' ? `✅ Đã gửi nhóm Zalo “${esc(GT_ZGROUP)}” lúc ${new Date(zv.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${zv.by ? ` (${esc(zv.by)})` : ''} – theo dõi phản hồi.` : `📨 <b>Gửi nhóm Zalo</b> “${esc(GT_ZGROUP)}” để mua hàng điều hướng (nút 📨 ở tab Giấy tấm).`],
+      [x.same.n > 1, `📦 Giấy ${me.id} đang dùng cho <b>${x.same.n} đơn</b> ở tab Mới (${vn(x.same.m2)} m²) – đổi 1 lần cho cả nhóm đơn, tiết kiệm ≈ <b>${vn((me.price - min.price) * x.same.m2 * (po && x.m2 ? po.diff / ((me.price - min.price) * x.m2) : 1))}đ</b>.`],
+      [stale.length > 0, `🕒 ${stale.length} giấy cùng nhóm có giá cũ hơn 30 ngày (${stale.map((p) => esc(p.prov?.code || p.id)).join(', ')}) – <b>hỏi NCC cập nhật giá</b> để so đúng.`],
+      [provs.size < 3, `🏭 Nhóm ${esc(x.code)} sóng ${esc(x.w)} mới có ${provs.size} NCC báo giá – <b>hỏi thêm NCC</b> để có giá cạnh tranh hơn.`],
+      [true, `✔ Xử lý xong → <b>đánh dấu đã xử lý</b> bên dưới để kế toán hết giận.`],
+    ].filter((t) => t[0]);
+    const pop = document.createElement('div');
+    pop.id = 'dg-ga-pop';
+    pop.innerHTML = `<div class="gp-card" role="dialog">
+<div class="gp-h"><div><div class="gp-t">📊 Đánh giá tổng quan · <b style="color:#1d4ed8">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds)}` : ''}</div><div class="gp-s">${l.ccode ? `<span class="gp-tag">${esc(l.ccode)}</span>` : ''}${esc(l.cust || '')}${l.tp ? ` · ${esc(l.tp)}` : ''} · ${esc((l.prod || '').slice(0, 70))}${l.qty ? ` · SL ${vn(l.qty)}` : ''}</div></div><button class="gp-x" data-gp="x" title="Đóng (Esc)">✕</button></div>
+<div class="gp-kpis">
+  <div class="gp-k"><span>Tổng PO hiện tại</span><b>${total ? `${vn(total)}đ` : '–'}</b><i>giấy ${me.id} · ${vn(me.price)}đ/m²</i></div>
+  <div class="gp-k"><span>Nếu đổi giấy rẻ nhất</span><b style="color:#15803d">${po ? `${vn(po.new)}đ` : '–'}</b><i>giấy ${min.id} · ${vn(min.price)}đ/m²</i></div>
+  <div class="gp-k save"><span>💰 Tiết kiệm được</span><b>${po ? '' : '≈ '}${vn(saveMax)}đ</b><i>${po ? `🧾 tính trên PO ${esc(po.quote || '')}` : 'ước tính – đang chờ tính trên PO'}</i></div>
+  <div class="gp-k"><span>% trên tiền PO / giá trị đơn</span><b>${total ? `${pctPo.toFixed(1)}%` : '–'} <small>/ ${l.oTotal ? `${pctOrder.toFixed(2)}%` : '–'}</small></b><i>${l.oTotal ? `đơn ${vn(l.oTotal)}đ` : 'chưa có giá trị đơn'}</i></div>
+</div>
+<div class="gp-row">
+  <div class="gp-box gp-g">${gauge}<div class="gp-grade" style="background:${grade[1]}">${grade[0]}</div><div style="font-weight:800;color:${grade[1]}">${grade[2]}</div><div class="gp-mut">Giấy đang dùng xếp <b>${rank}/${peers.length || 1}</b> theo giá trong nhóm ${esc(x.code)} · sóng ${esc(x.w)}</div></div>
+  <div class="gp-box" style="flex:1.6"><div class="gp-bh">Giá các giấy cùng nhóm (đ/m², thấp → cao)</div>${bars || '<div class="gp-mut">Không có dữ liệu</div>'}<div class="gp-mut" style="margin-top:4px">🟦 đang dùng · 🟩 rẻ hơn · 🟥 đắt hơn · NCC đang lọc, giá ≤ ${GT_FRESH_D} ngày</div></div>
+</div>
+${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – tiết kiệm cho đơn này</div><table class="gp-tb"><thead><tr><th>Giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Rẻ hơn</th><th style="text-align:right">Tiết kiệm</th><th>Cập nhật</th></tr></thead><tbody>${scen}</tbody></table></div>` : ''}
+<div class="gp-box"><div class="gp-bh">✅ Cần làm để tối ưu giá thành</div><ol class="gp-todo">${todo.map((t) => `<li>${t[1]}</li>`).join('')}</ol>
+<div class="gp-acts">${Object.entries(GT_DONE_K).map(([k, t]) => `<button data-gp="done" data-v="${k}">${t}</button>`).join('')}<button data-gp="tab" class="tab">📄 Mở tab Giấy tấm</button></div></div>
+</div>`;
+    document.body.append(pop);
+    const close = () => {
+      pop.remove();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => e.key === 'Escape' && close();
+    document.addEventListener('keydown', onKey, true);
+    pop.addEventListener('click', async (e) => {
+      if (e.target === pop) return close();
+      const b = e.target.closest('[data-gp]');
+      if (!b) return;
+      if (b.dataset.gp === 'x') return close();
+      if (b.dataset.gp === 'tab') {
+        close();
+        document.querySelector('#dg-gt-angry [data-ga="go"]')?.click();
+        return;
+      }
+      if (b.dataset.gp === 'done') {
+        b.disabled = true;
+        await kvMerge(GT_DONE, { [`${l.order}|${l.did ?? ''}`]: { k: b.dataset.v, at: Date.now(), by: meName || '' } });
+        close();
+        const box = document.getElementById('dg-gt-angry');
+        if (box) box.dataset.h = '';
+        injectGtAngry();
+        if (lsGet('dgTab') === 'gt') gtFill(true);
+      }
+    });
+    if (!document.getElementById('dg-ga-pop-css')) {
+      const st = document.createElement('style');
+      st.id = 'dg-ga-pop-css';
+      st.textContent = `#dg-ga-pop{position:fixed;inset:0;z-index:2147483100;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a}
+#dg-ga-pop .gp-card{width:min(860px,100%);background:#f8fafc;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);padding:16px;animation:gaIn .2s ease-out}
+#dg-ga-pop .gp-h{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}#dg-ga-pop .gp-h>div{flex:1}#dg-ga-pop .gp-t{font-size:16px;font-weight:900}#dg-ga-pop .gp-s{color:#475569;font-size:12.5px;margin-top:2px}
+#dg-ga-pop .gp-tag{display:inline-block;margin-right:5px;padding:0 6px;border-radius:5px;background:#ecfeff;border:1px solid #67e8f9;color:#0e7490;font-size:11px;font-weight:800}
+#dg-ga-pop .gp-x{border:0;background:#e2e8f0;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;color:#334155}
+#dg-ga-pop .gp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}@media (max-width:700px){#dg-ga-pop .gp-kpis{grid-template-columns:repeat(2,1fr)}#dg-ga-pop .gp-row{flex-direction:column}}
+#dg-ga-pop .gp-k{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:10px}#dg-ga-pop .gp-k span{display:block;font-size:11.5px;color:#64748b;font-weight:700}#dg-ga-pop .gp-k b{display:block;font-size:19px;font-weight:900;margin:2px 0}#dg-ga-pop .gp-k b small{font-size:12px;color:#64748b}#dg-ga-pop .gp-k i{font-style:normal;font-size:11px;color:#94a3b8}
+#dg-ga-pop .gp-k.save{background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-color:#6ee7b7}#dg-ga-pop .gp-k.save b{color:#047857;font-size:22px}
+#dg-ga-pop .gp-row{display:flex;gap:8px;margin-bottom:8px}#dg-ga-pop .gp-box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;margin-bottom:8px;flex:1}#dg-ga-pop .gp-row .gp-box{margin-bottom:0}
+#dg-ga-pop .gp-g{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px}#dg-ga-pop .gp-grade{color:#fff;font-weight:900;font-size:18px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+#dg-ga-pop .gp-mut{font-size:11.5px;color:#64748b}#dg-ga-pop .gp-bh{font-weight:800;margin-bottom:6px;color:#334155}
+#dg-ga-pop .gp-bar{display:flex;align-items:center;gap:8px;margin:4px 0}#dg-ga-pop .gp-bl{width:150px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#dg-ga-pop .gp-bl i{font-style:normal;font-size:10.5px;color:#2563eb;font-weight:700}
+#dg-ga-pop .gp-bt{flex:1;height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden}#dg-ga-pop .gp-bt span{display:block;height:100%;border-radius:6px}#dg-ga-pop .gp-bv{width:58px;text-align:right;font-size:12.5px}
+#dg-ga-pop .gp-tb{width:100%;border-collapse:collapse;font-size:12.5px}#dg-ga-pop .gp-tb th{text-align:left;color:#64748b;font-size:11.5px;padding:3px 6px;border-bottom:1px solid #e2e8f0}#dg-ga-pop .gp-tb td{padding:4px 6px;border-bottom:1px solid #f1f5f9}
+#dg-ga-pop .gp-todo{margin:0;padding-left:20px}#dg-ga-pop .gp-todo li{margin:4px 0}
+#dg-ga-pop .gp-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}#dg-ga-pop .gp-acts button{cursor:pointer;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:8px;padding:5px 10px;font:inherit;font-size:12px;font-weight:800}#dg-ga-pop .gp-acts button:hover{background:#dcfce7}
+#dg-ga-pop .gp-acts .tab{border-color:#dc2626;background:#dc2626;color:#fff;margin-left:auto}`;
+      document.head.append(st);
+    }
+  }
   let gtAngryEdit = false; // đã có ảnh → ẩn nút 📷 / 🎨; admin nhấp đúp vào ảnh để hiện lại
   let gtAngryBusy = false;
   async function injectGtAngry() {
@@ -16386,8 +16508,8 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
 #dg-gt-angry .ga-s b{color:#b91c1c;background:#fee2e2;border-radius:5px;padding:0 5px}
 #dg-gt-angry .ga-say{position:relative;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:5px 8px;font-weight:700;color:#7f1d1d;margin-bottom:6px}
 #dg-gt-angry .ga-li{max-height:190px;overflow:auto;border-top:1px dashed #fecaca}
-#dg-gt-angry .ga-r{padding:4px 0;border-bottom:1px dashed #fecaca;font-size:12px}#dg-gt-angry .ga-r b.o{color:#1d4ed8}#dg-gt-angry .ga-r .m{float:right;font-weight:800;color:#b91c1c}
-#dg-gt-angry .ga-r .p{color:#64748b;font-size:11.5px}
+#dg-gt-angry .ga-r{cursor:pointer;border-radius:6px;transition:background .15s;padding:4px 0;border-bottom:1px dashed #fecaca;font-size:12px}#dg-gt-angry .ga-r b.o{color:#1d4ed8}#dg-gt-angry .ga-r .m{float:right;font-weight:800;color:#b91c1c}
+#dg-gt-angry .ga-r:hover{background:#fef2f2}#dg-gt-angry .ga-r .p{color:#64748b;font-size:11.5px}
 #dg-gt-angry .ga-btns{display:flex;gap:6px;margin-top:8px}#dg-gt-angry .ga-btns button{cursor:pointer;border-radius:8px;padding:4px 10px;font:inherit;font-size:12px;font-weight:800;border:1px solid #cbd5e1;background:#fff;color:#334155}
 #dg-gt-angry .ga-btns .go{background:#dc2626;border-color:#dc2626;color:#fff}
 #dg-gt-angry .ga-x{position:absolute;top:6px;right:10px;border:0;background:none;font-size:18px;cursor:pointer;color:#94a3b8}
@@ -16413,6 +16535,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
           if (k === 'min') { lsSet('dgGtAngryMin', String(Date.now())); box.classList.add('min'); }
           else if (k === 'max') { lsSet('dgGtAngryMin', ''); box.classList.remove('min'); }
           else if (k === 'photo') gtAngryPhotoPick();
+          else if (k === 'row') gtAngryDetail(gtAngryCur[Number(a.dataset.i)]);
           else if (k === 'ai') gtAngryAiPick();
           else if (k === 'go') {
             lsSet('dgTab', 'gt');
@@ -16433,12 +16556,13 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
       const nOrd = new Set(list.map((x) => x.l.order)).size;
       const SAY = ['Ai cho chọn giấy đắt hơn vậy hả?!', 'Tiền công ty chứ đâu phải lá mít!', 'Giấy rẻ hơn nằm sờ sờ kia kìa!', 'Đổi NCC hoặc bắt trả về bằng giá ngay!'];
       const say = SAY[Math.floor(Date.now() / 60e3) % SAY.length];
+      gtAngryCur = list;
       const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
 <div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig"${MY_ADMIN && gtAngryImg ? ' title="Nhấp đúp để đổi ảnh"' : ''}>${gtAngryFig(92)}${MY_ADMIN && (!gtAngryImg || gtAngryEdit) ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button><button data-ga="ai" title="Chọn ảnh thật → AI (OpenAI) vẽ lại chân dung giống người thật, mặt đang giận. Ảnh được gửi tới OpenAI để vẽ." style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:6px;font-size:11px;padding:1px 6px;color:#6d28d9;margin-top:3px">${gtAiBusy ? '🎨 AI đang vẽ…' : '🎨 AI vẽ'}</button></div>` : ''}</div><div class="ga-body">
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> /10 đơn mới nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
-<div class="ga-li">${list.map(({ l, me, min, diff, money, po }) => `<div class="ga-r"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}</div>
+<div class="ga-li">${list.map(({ l, me, min, diff, money, po }, gi) => `<div class="ga-r" data-ga="row" data-i="${gi}" title="Bấm để xem đánh giá tổng quan & việc cần làm"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}</div>
 <div style="font-size:10.5px;color:#94a3b8;margin-top:4px">🧾 = tiền chênh tính trên PO giấy tấm (thay Giá cuối cũ → rẻ nhất, so Tổng thanh toán) · ≈ = ước tính, đang tính PO</div>
 <div class="ga-btns"><button class="go" data-ga="go">📄 Xử lý ở tab Giấy tấm</button><button data-ga="min">Để sau 30 phút</button></div>
 </div></div>`;
