@@ -16301,6 +16301,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
         c2.getContext('2d').drawImage(out, 0, 0, 256, 256);
         const src = c2.toDataURL('image/jpeg', 0.86);
         await kvMerge('gtAngryImg', { img: { src, at: Date.now(), by: meName || '', ai: true } });
+        gtAngryEdit = false;
         gtAngryImg = src;
         const box = document.getElementById('dg-gt-angry');
         if (box) box.dataset.h = '';
@@ -16335,6 +16336,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
         const src = c.toDataURL('image/jpeg', 0.85);
         URL.revokeObjectURL(img.src);
         await kvMerge('gtAngryImg', { img: { src, at: Date.now(), by: meName || '' } });
+        gtAngryEdit = false;
         gtAngryImg = src;
         const box = document.getElementById('dg-gt-angry');
         if (box) box.dataset.h = '';
@@ -16345,6 +16347,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
     };
     inp.click();
   }
+  let gtAngryEdit = false; // đã có ảnh → ẩn nút 📷 / 🎨; admin nhấp đúp vào ảnh để hiện lại
   let gtAngryBusy = false;
   async function injectGtAngry() {
     if (!IS_TOP || gtAngryBusy || !document.body) return;
@@ -16397,6 +16400,12 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
       if (!box) {
         box = document.createElement('div');
         box.id = 'dg-gt-angry';
+        box.addEventListener('dblclick', (e) => {
+          if (!MY_ADMIN || !e.target.closest('.ga-fig')) return;
+          gtAngryEdit = !gtAngryEdit;
+          box.dataset.h = '';
+          injectGtAngry();
+        });
         box.addEventListener('click', (e) => {
           const a = e.target.closest('[data-ga]');
           if (!a) return;
@@ -16425,7 +16434,7 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
       const SAY = ['Ai cho chọn giấy đắt hơn vậy hả?!', 'Tiền công ty chứ đâu phải lá mít!', 'Giấy rẻ hơn nằm sờ sờ kia kìa!', 'Đổi NCC hoặc bắt trả về bằng giá ngay!'];
       const say = SAY[Math.floor(Date.now() / 60e3) % SAY.length];
       const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
-<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${gtAngryFig(92)}${MY_ADMIN ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button><button data-ga="ai" title="Chọn ảnh thật → AI (OpenAI) vẽ lại chân dung giống người thật, mặt đang giận. Ảnh được gửi tới OpenAI để vẽ." style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:6px;font-size:11px;padding:1px 6px;color:#6d28d9;margin-top:3px">${gtAiBusy ? '🎨 AI đang vẽ…' : '🎨 AI vẽ'}</button></div>` : ''}</div><div class="ga-body">
+<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig"${MY_ADMIN && gtAngryImg ? ' title="Nhấp đúp để đổi ảnh"' : ''}>${gtAngryFig(92)}${MY_ADMIN && (!gtAngryImg || gtAngryEdit) ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button><button data-ga="ai" title="Chọn ảnh thật → AI (OpenAI) vẽ lại chân dung giống người thật, mặt đang giận. Ảnh được gửi tới OpenAI để vẽ." style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:6px;font-size:11px;padding:1px 6px;color:#6d28d9;margin-top:3px">${gtAiBusy ? '🎨 AI đang vẽ…' : '🎨 AI vẽ'}</button></div>` : ''}</div><div class="ga-body">
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> /10 đơn mới nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
