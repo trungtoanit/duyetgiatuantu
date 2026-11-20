@@ -396,6 +396,15 @@
       }
       return;
     }
+    if (kind === 'paperUse') {
+      // giữ lúc lên đơn MỚI NHẤT của mỗi giấy (kv gtPaperUse: { tên giấy: ms }, _from = đơn cũ nhất đã đọc)
+      const cur = (await kvGet('gtPaperUse')) || {};
+      const patch = {};
+      for (const [k, t] of Object.entries(data.use || {})) if (!(cur[k] >= t)) patch[k] = t;
+      if (data.oldest && (!cur._from || data.oldest < cur._from)) patch._from = data.oldest;
+      if (Object.keys(patch).length) await kvMerge('gtPaperUse', { ...patch, _at: Date.now() });
+      return;
+    }
     if (kind === 'orderPapers') {
       // giấy tấm của các dòng đơn ở tab Mới (Danh sách đơn) – theo id dòng đơn, kèm lúc thấy gần nhất
       const now = Date.now();
@@ -16144,6 +16153,41 @@ Quy tắc:
   let gtOrdBusy = false;
   // bảng đơn mới đang mở: 1 phút vẽ lại 1 lần để "x phút trước" luôn đúng (không vẽ khi đang gõ / popup mở)
   if (IS_TOP) setInterval(() => { if (gtUi.view === 'orders' && !gtUi.pick && gtHost()) gtFill(true).catch(() => {}); }, 60e3);
+  // ⟳ Đọc Đơn hàng Misa 6 tháng trong khung ẩn (chỉ đọc): trang 1, 2, 3… tới khi đơn cuối trang cũ hơn ~6 tháng.
+  // hook.js thấy mỗi trang → 'paperUse' (giấy → lúc lên đơn gần nhất) → kv gtPaperUse
+  let gtUse6Busy = false;
+  async function gtUse6() {
+    if (gtUse6Busy) return;
+    gtUse6Busy = true;
+    gtFill();
+    try {
+      await tkInFrame('/misa-order/list', async (doc) => {
+        const rows = () => [...(doc()?.querySelectorAll('.ant-table-tbody tr.ant-table-row') || [])].filter(dnShown);
+        const first = () => rows()[0]?.innerText.match(/DH\d{4,}/)?.[0] || '';
+        const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
+        for (let i = 0; i < 60 && !first(); i++) await sleep(500);
+        await sleep(1500);
+        const since = Date.now() - 190 * 86400e3;
+        for (let page = 2; page <= 40; page++) {
+          const dm = (rows().at(-1)?.innerText || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          if (dm && new Date(+dm[3], +dm[2] - 1, +dm[1]).getTime() < since) break;
+          const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
+          if (!li) break;
+          const prev = first();
+          li.click();
+          let moved = false;
+          for (let i = 0; i < 60; i++) {
+            await sleep(300);
+            if (!spinning() && first() && first() !== prev) { moved = true; break; }
+          }
+          if (!moved) break;
+          await sleep(1500); // chờ hook lưu xong
+        }
+      });
+    } finally {
+      gtUse6Busy = false;
+    }
+  }
   async function gtLoadOrders(onStep) {
     if (gtOrdBusy) return false;
     if (!tabLock('dgGtOrdLock', 5 * 60e3)) return false;
@@ -16288,6 +16332,19 @@ Quy tắc:
     if (!src) return;
     const { all, gs, inG } = src;
     const fil = all.filter((x) => x.price >= 500 && (!gtUi.provs.size || gtUi.provs.has(x.prov?.code || '')));
+    // Chỉ định lượng đã lên đơn 6 tháng: nhóm + sóng có ít nhất 1 giấy (mọi NCC) lên đơn trong 6 tháng gần nhất
+    const used6 = new Set();
+    if (gtUi.pdf6m) {
+      const since = Date.now() - 183 * 86400e3;
+      const byName = new Map(all.map((x) => [String(x.name).trim(), x]));
+      const gByName = new Map(gs.map((g) => [String(g.name).trim(), g]));
+      for (const [name, t] of Object.entries(gtUi.paperUse || {})) {
+        if (name.startsWith('_') || !(t >= since)) continue;
+        const x = byName.get(name.trim());
+        const g = (x && (inG.get(x.id) || [])[0]) || gByName.get(gtCode(name));
+        if (g) used6.add(`${g.id}|${gtWave(name).toUpperCase()}`);
+      }
+    }
     const WAVE_ORD = ['B', 'C', 'E', 'BC', 'BE', 'CE', 'BCE'];
     const wr = (w) => { const i = WAVE_ORD.indexOf(w); return i < 0 ? 50 + (w ? w.charCodeAt(0) : 99) : i; };
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
@@ -16296,7 +16353,7 @@ Quy tắc:
     const secs = GT_SECS.map(([sk, sl]) => {
       const rows = [];
       for (const g of gs.filter((g) => gtSec(g.name) === sk)) {
-        const mem = fil.filter((x) => (inG.get(x.id) || []).includes(g));
+        const mem = fil.filter((x) => (inG.get(x.id) || []).includes(g) && (!gtUi.pdf6m || used6.has(`${g.id}|${gtWave(x.name).toUpperCase()}`)));
         const ws = [...new Set(mem.map((x) => gtWave(x.name).toUpperCase()))].sort((a, b) => wr(a) - wr(b));
         ws.forEach((w, i) => {
           const ls = mem.filter((x) => gtWave(x.name).toUpperCase() === w).sort((a, b) => a.price - b.price || (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -16335,7 +16392,7 @@ Quy tắc:
     </style></head><body>
       <div class="hd"><img src="${location.origin}/logo.png" onerror="this.remove()"><div><div class="co">${esc(GT_CO.name)}</div><div class="ad">${esc(GT_CO.addr)}</div></div></div>
       <h1>BẢNG GIÁ GIẤY TẤM RẺ NHẤT THEO NHÓM</h1>
-      <div class="sub">${noNcc ? '' : `NCC: ${esc(nccs)} · `}${stt} nhóm · In lúc ${esc(now.toLocaleString('vi-VN'))}</div>
+      <div class="sub">${noNcc ? '' : `NCC: ${esc(nccs)} · `}${gtUi.pdf6m ? 'chỉ định lượng đã lên đơn 6 tháng gần nhất · ' : ''}${stt} nhóm · In lúc ${esc(now.toLocaleString('vi-VN'))}</div>
       <table><thead><tr><th>STT</th><th>Nhóm</th><th>Sóng</th><th>ID rẻ nhất | Chất liệu giấy</th><th>Giá rẻ nhất (đ/m²)</th>${noNcc ? '' : '<th>NCC</th>'}<th>Cập nhật lần cuối</th></tr></thead><tbody>${body || `<tr><td colspan="${cols}" class="c">Không có giấy nào có giá</td></tr>`}</tbody></table>
       <div class="ft">Mỗi nhóm so theo từng sóng${noNcc ? '' : '; chỉ tính giấy đang hiện và NCC đang lọc'}. Ngày cập nhật màu đỏ: giá cũ hơn ${GT_FRESH_D} ngày.</div>
     </body></html>`;
@@ -16353,7 +16410,8 @@ Quy tắc:
       const g = gByName.get(codeOf.get(x.id));
       if (g && !inG.has(x.id)) inG.set(x.id, [g]);
     }
-    gtUi.pdfSrc = { all, gs, inG }; // 🖨 Xuất PDF bảng giá rẻ nhất theo nhóm
+    gtUi.pdfSrc = { all, gs, inG };
+    if (gtUi.pdf6m == null) gtUi.pdf6m = lsGet('dgGtPdf6m') === '1'; // 🖨 Xuất PDF bảng giá rẻ nhất theo nhóm
     const gCount = (g) => all.filter((x) => (inG.get(x.id) || []).includes(g)).length;
     if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.some((g) => g.id === gtUi.g)) gtUi.g = 'all';
     const q = norm(gtUi.q.trim());
@@ -16391,7 +16449,12 @@ Quy tắc:
   <b style="font-size:16px">📄 Giấy tấm</b>
   <span style="color:#64748b;font-size:12px">Kho extension: <b>${all.filter((x) => x.visible !== false).length}</b> / CRM ${scan._total || '?'} giấy đang hiển thị · đồng bộ đủ lần cuối: ${ago(scan._allAt)}${scan._allBy ? ` (${esc(scan._allBy)})` : ''} · tự đồng bộ mỗi giờ</span>
   <span style="flex:1"></span>
-  <span style="position:relative;display:inline-block">${bt('pdfmenu', `🖨 Xuất PDF giá rẻ nhất ${gtUi.pdfOpen ? '▴' : '▾'}`, 'border-color:#86efac;color:#15803d')}${gtUi.pdfOpen ? `<div style="position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:240px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 10px 24px rgba(15,23,42,.18);padding:4px">${[['pdf', '🖨 Có cột NCC', 'bản nội bộ – có mã NCC'], ['pdfn', '🖨 Không hiện NCC', 'gửi ra ngoài – ẩn NCC']].map(([k, l, d]) => `<div data-gt="${k}" style="cursor:pointer;padding:6px 10px;border-radius:6px;font-size:12.5px;font-weight:700;color:#0f172a" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''">${l}<div style="font-weight:500;font-size:11px;color:#64748b">${d}</div></div>`).join('')}</div>` : ''}</span>${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
+  <span style="position:relative;display:inline-block">${bt('pdfmenu', `🖨 Xuất PDF giá rẻ nhất ${gtUi.pdfOpen ? '▴' : '▾'}`, 'border-color:#86efac;color:#15803d')}${gtUi.pdfOpen ? `<div style="position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:240px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 10px 24px rgba(15,23,42,.18);padding:4px">${[['pdf', '🖨 Có cột NCC', 'bản nội bộ – có mã NCC'], ['pdfn', '🖨 Không hiện NCC', 'gửi ra ngoài – ẩn NCC']].map(([k, l, d]) => `<div data-gt="${k}" style="cursor:pointer;padding:6px 10px;border-radius:6px;font-size:12.5px;font-weight:700;color:#0f172a" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''">${l}<div style="font-weight:500;font-size:11px;color:#64748b">${d}</div></div>`).join('')}
+    <div style="border-top:1px solid #e2e8f0;margin-top:4px;padding:6px 10px 4px">
+      <label data-gt="pdf6m" style="cursor:pointer;display:flex;gap:6px;align-items:center;font-size:12px;font-weight:700"><input type="checkbox" ${gtUi.pdf6m ? 'checked' : ''} style="pointer-events:none">Chỉ định lượng đã lên đơn 6 tháng</label>
+      <div style="font-size:11px;color:#64748b;margin:2px 0 4px 20px">${(() => { const u = gtUi.paperUse || {}; const n = Object.keys(u).filter((k) => !k.startsWith('_')).length; return n ? `${n} giấy đã lên đơn · đơn đọc từ ${new Date(u._from).toLocaleDateString('vi-VN')} · đọc lần cuối ${new Date(u._at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}` : 'Chưa có dữ liệu đơn – bấm ⟳ bên dưới'; })()}</div>
+      <div data-gt="use6m" style="cursor:pointer;margin-left:20px;font-size:11.5px;font-weight:700;color:#1d4ed8">${gtUse6Busy ? '⏳ Đang đọc đơn 6 tháng…' : '⟳ Đọc lại đơn hàng 6 tháng'}</div>
+    </div></div>` : ''}</span>${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
 </div>
 ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#f1f5f9;font-size:12px">${esc(gtUi.msg)}</div>` : ''}
 ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
@@ -16593,7 +16656,7 @@ ${(() => {
       return;
     }
     const k = b.dataset.gt;
-    if (gtUi.pdfOpen && k !== 'pdfmenu' && k !== 'pdf' && k !== 'pdfn') gtUi.pdfOpen = false;
+    if (gtUi.pdfOpen && !['pdfmenu', 'pdf', 'pdfn', 'pdf6m', 'use6m'].includes(k)) gtUi.pdfOpen = false;
     const groups = await kvGet(GT_GROUPS);
     const val = (n) => host.querySelector(`[data-gt-in="${n}"]`)?.value?.trim() || '';
     const save = async (gid, patch) => {
@@ -16634,8 +16697,17 @@ ${(() => {
       gtUi.msg = ok ? '✓ Đã tải lại danh sách đơn mới.' : 'Đang tải ở tab khác – thử lại sau ít phút.';
     } else if (k === 'pdfmenu') {
       gtUi.pdfOpen = !gtUi.pdfOpen;
+      if (gtUi.pdfOpen) gtUi.paperUse = (await kvGet('gtPaperUse')) || {};
+    } else if (k === 'pdf6m') {
+      gtUi.pdf6m = !gtUi.pdf6m;
+      lsSet('dgGtPdf6m', gtUi.pdf6m ? '1' : '');
+    } else if (k === 'use6m') {
+      if (!gtUse6Busy) {
+        gtUse6().then(async () => { gtUi.paperUse = (await kvGet('gtPaperUse')) || {}; gtFill(); }).catch((err) => { gtUi.msg = `⚠️ ${err.message}`; gtFill(); });
+      }
     } else if (k === 'pdf' || k === 'pdfn') {
       gtUi.pdfOpen = false;
+      gtUi.paperUse = (await kvGet('gtPaperUse')) || {};
       gtPdf(k === 'pdfn');
     } else if (k === 'opeer') {
       // popup các giấy cùng nhóm + sóng (giá thấp → cao) cạnh chữ vừa bấm

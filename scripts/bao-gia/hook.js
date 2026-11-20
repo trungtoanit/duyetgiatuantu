@@ -632,6 +632,20 @@
       }
       const list = Object.values(byCust);
       if (list.length) emit('ordersAll', list);
+      // Giấy tấm đã lên đơn: tên kết cấu giấy → lúc lên đơn gần nhất (ms) – để in bảng giá chỉ các nhóm có đơn 6 tháng
+      const use = {};
+      let oldest = 0;
+      for (const o of d.misaOrders) {
+        let t = Number(o.createdAt || o.orderedAt) || Date.parse(o.createdAt || o.orderedAt) || 0;
+        if (t && t < 1e11) t *= 1000;
+        if (!t) continue;
+        if (!oldest || t < oldest) oldest = t;
+        for (const x of o.misaOrderDetails || []) {
+          const code = x.opportunityProduct?.cartonStructCode;
+          if (code && t > (use[code] || 0)) use[code] = t;
+        }
+      }
+      if (Object.keys(use).length) emit('paperUse', { use, oldest });
       return;
     }
     // Bình luận: ERP lưu dưới dạng fileAttach (bình luận gốc + children là trả lời)
