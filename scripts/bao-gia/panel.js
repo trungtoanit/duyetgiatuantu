@@ -15695,50 +15695,51 @@ Quy tắc:
     if (!r.ok || !Array.isArray(arr)) throw new Error(`CRM trả lỗi khi đọc giấy tấm (trang ${page}).`);
     return { list: arr.map(gtSlim), total: Number(j.data.total) || arr.length };
   }
-  async function gtScan(force = false) {
-    if (!IS_TOP || gtBusy || SITE.key !== 'tuantu') return;
+  // Đồng bộ ĐỦ danh sách giấy tấm đang Hiển thị (mọi trang, ~18 trang × 100) – 1 tiếng / lần, 1 tab làm; đọc hết rồi ghi 1 lần.
+  // Giấy đã có trong kho mà lần đồng bộ đủ này không còn thấy → đánh dấu Ẩn (vẫn giữ trong kho).
+  async function gtSyncAll(force = false, onStep) {
+    if (!IS_TOP || gtBusy || SITE.key !== 'tuantu') return null;
     const cur = await kvGet(GT_KEY);
-    if (!force && Date.now() - (cur._at || 0) < 60 * 60e3) return;
-    if (!force && !tabLock('dgGtLock', 5 * 60e3)) return;
+    if (!force && Date.now() - (cur._allAt || 0) < 60 * 60e3) return null;
+    if (!tabLock('dgGtLock', 10 * 60e3) && !force) return null;
     gtBusy = true;
     try {
-      const { list, total } = await gtFetch(1);
-      if (!list.length) return;
-      const first = { ...(cur._first || {}) };
-      for (const x of list) if (!first[x.id]) first[x.id] = Date.now();
-      await kvMerge(GT_KEY, { _list: list, _total: total, _at: Date.now(), _by: meName || '', _first: first });
-      await kvMerge(GT_ITEMS, Object.fromEntries(list.map((x) => [x.id, { ...x, seenAt: Date.now() }])));
-      gtFill(true);
-    } finally {
-      gtBusy = false;
-    }
-  }
-  // Tải toàn bộ danh sách (mọi trang, cả giấy đang Ẩn) vào kho – bấm tay trong tab 📄 Giấy tấm
-  async function gtFetchAll(onStep) {
-    if (gtBusy) throw new Error('Đang quét giấy tấm – đợi xong rồi thử lại.');
-    gtBusy = true;
-    try {
-      let page = 1;
-      let got = 0;
-      for (;;) {
-        const { list, total } = await gtFetch(page, false);
-        if (!list.length) break;
-        got += list.length;
-        await kvMerge(GT_ITEMS, Object.fromEntries(list.map((x) => [x.id, { ...x, seenAt: Date.now() }])));
-        onStep?.(got, total);
-        if (got >= total || page >= 60) break;
-        page++;
-        await sleep(400);
+      const got = [];
+      let total = 0;
+      for (let page = 1; page <= 40; page++) {
+        const r = await gtFetch(page, true);
+        total = r.total;
+        got.push(...r.list);
+        onStep?.(got.length, total);
+        if (!r.list.length || got.length >= total) break;
+        await sleep(350);
       }
-      await kvMerge(GT_KEY, { _allAt: Date.now(), _allBy: meName || '' });
-      return got;
+      if (!got.length) return null;
+      const now = Date.now();
+      const old = await kvGet(GT_ITEMS);
+      const seen = new Set(got.map((x) => x.id));
+      const patch = Object.fromEntries(got.map((x) => [x.id, { ...x, seenAt: now }]));
+      // đủ hết các trang → giấy cũ không còn trong danh sách Hiển thị = đã Ẩn / xoá trên CRM
+      if (got.length >= total) for (const [id, x] of Object.entries(old)) if (x && !seen.has(Number(id)) && x.visible !== false) patch[id] = { ...x, visible: false };
+      await kvMerge(GT_ITEMS, patch);
+      const first = { ...(cur._first || {}) };
+      for (const x of got) if (!first[x.id]) first[x.id] = now;
+      await kvMerge(GT_KEY, { _list: got.slice(0, 100), _total: total, _at: now, _allAt: now, _allN: got.length, _by: meName || '', _allBy: meName || '', _first: first });
+      return got.length;
     } finally {
       gtBusy = false;
+      lsSet('dgGtLock', 'null');
     }
   }
+  const gtScan = async (force = false) => {
+    const n = await gtSyncAll(force);
+    if (n != null) gtFill(true);
+    return n;
+  };
+  const gtFetchAll = (onStep) => gtSyncAll(true, onStep);
   if (IS_TOP) {
     setTimeout(() => gtScan().catch(() => {}), 20e3);
-    setInterval(() => gtScan().catch(() => {}), 5 * 60e3); // 5 phút kiểm tra 1 lần, chỉ quét khi bản trên cloud đã quá 1 tiếng
+    setInterval(() => gtScan().catch(() => {}), 5 * 60e3); // 5 phút kiểm tra 1 lần, chỉ đồng bộ khi bản trên cloud đã quá 1 tiếng
   }
 
   // ---------- Tab 📄 Giấy tấm: kho giấy tấm + nhóm do extension tự quản lý (cloud) ----------
@@ -15846,14 +15847,14 @@ Quy tắc:
   function gtDraw(host, items, groups, scan) {
     const all = Object.values(items || {}).filter((x) => x && x.id);
     const gs = gtLive(groups).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) }));
-    const inG = new Map(); // id giấy → các nhóm
-    for (const g of gs) for (const id of g.ids) inG.set(id, [...(inG.get(id) || []), g]);
-    // Nhóm theo mã lớp là tự động: giấy có mã lớp 22122 thuộc luôn nhóm tên "22122" (không cần thêm tay)
+    // Mỗi giấy đúng 1 nhóm: nhóm gán tay (nếu có) thay cho nhóm tự động theo mã lớp (giấy mã 22122 → nhóm tên "22122")
+    const inG = new Map(); // id giấy → [nhóm]
+    for (const g of gs) for (const id of g.ids) if (!inG.has(id)) inG.set(id, [g]);
     const gByName = new Map(gs.map((g) => [String(g.name).trim(), g]));
     const codeOf = new Map(all.map((x) => [x.id, gtCode(x.name)]));
     for (const x of all) {
       const g = gByName.get(codeOf.get(x.id));
-      if (g && !(inG.get(x.id) || []).includes(g)) inG.set(x.id, [g, ...(inG.get(x.id) || [])]);
+      if (g && !inG.has(x.id)) inG.set(x.id, [g]);
     }
     const gCount = (g) => all.filter((x) => (inG.get(x.id) || []).includes(g)).length;
     if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.some((g) => g.id === gtUi.g)) gtUi.g = 'all';
@@ -15885,9 +15886,9 @@ Quy tắc:
     host.innerHTML = `
 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">
   <b style="font-size:16px">📄 Giấy tấm</b>
-  <span style="color:#64748b;font-size:12px">Kho extension: <b>${all.length}</b> / CRM ${scan._total || '?'} giấy · quét trang 1: ${ago(scan._at)}${scan._by ? ` (${esc(scan._by)})` : ''} · tải toàn bộ: ${ago(scan._allAt)}</span>
+  <span style="color:#64748b;font-size:12px">Kho extension: <b>${all.filter((x) => x.visible !== false).length}</b> / CRM ${scan._total || '?'} giấy đang hiển thị · đồng bộ đủ lần cuối: ${ago(scan._allAt)}${scan._allBy ? ` (${esc(scan._allBy)})` : ''} · tự đồng bộ mỗi giờ</span>
   <span style="flex:1"></span>
-  ${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('scan', '⟳ Quét trang 1')}${MY_ADMIN ? bt('all', '⬇️ Tải toàn bộ từ CRM', 'border-color:#93c5fd;color:#1d4ed8') : ''}
+  ${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
 </div>
 ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#f1f5f9;font-size:12px">${esc(gtUi.msg)}</div>` : ''}
 ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
@@ -15923,7 +15924,7 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
     ${MY_ADMIN ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;padding:6px 8px;border-radius:8px;background:${sel.length ? '#eef2ff' : '#f8fafc'}">
       <span style="font-size:12px">Đã chọn <b>${sel.length}</b></span>
       <select data-gt-in="target" ${inp}><option value="">— chọn nhóm —</option>${gs.map((g) => `<option value="${g.id}"${gtUi.target === g.id ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select>
-      ${bt('add', '➕ Thêm vào nhóm')}${bt('map', `⚡ Map nhanh (${rows.length} giấy đang lọc)`, 'border-color:#fcd34d;background:#fffbeb;color:#b45309')}${curG ? bt('rm', `➖ Bỏ khỏi “${esc(curG.name)}”`, 'color:#dc2626;border-color:#fecaca') : ''}${sel.length ? bt('clr', 'Bỏ chọn') : ''}
+      ${bt('add', '➡️ Chuyển vào nhóm')}${bt('map', `⚡ Tạo nhóm mã lớp còn thiếu (${rows.length} giấy đang lọc)`, 'border-color:#fcd34d;background:#fffbeb;color:#b45309')}${curG ? bt('rm', '↩ Về nhóm theo mã lớp', 'color:#dc2626;border-color:#fecaca') : ''}${sel.length ? bt('clr', 'Bỏ chọn') : ''}
     </div>` : ''}
     <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
@@ -15933,7 +15934,7 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
         <td>${x.layer || ''}</td><td>${esc(GT_COLOR_VI[x.color] || x.color)}</td><td>${x.xeo || ''}</td>
         <td style="text-align:right;font-weight:700">${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
-        <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) ? `<span title="Chưa có nhóm ${codeOf.get(x.id)} – tạo nhóm tên này (hoặc ⚡ Map nhanh) để giấy tự vào nhóm" style="display:inline-block;margin:1px 3px 1px 0;padding:0 6px;border-radius:99px;font-size:11px;font-weight:700;color:#64748b;border:1px dashed #94a3b8">${codeOf.get(x.id)}</span>` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : `${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) ? `<span style="font-size:11px;font-weight:700;color:#64748b">${codeOf.get(x.id)}</span> ` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}`}</td>
+        <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) && !inG.has(x.id) ? `<span title="Chưa có nhóm ${codeOf.get(x.id)} – tạo nhóm tên này (hoặc ⚡ Map nhanh) để giấy tự vào nhóm" style="display:inline-block;margin:1px 3px 1px 0;padding:0 6px;border-radius:99px;font-size:11px;font-weight:700;color:#64748b;border:1px dashed #94a3b8">${codeOf.get(x.id)}</span>` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : `${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) && !inG.has(x.id) ? `<span style="font-size:11px;font-weight:700;color:#64748b">${codeOf.get(x.id)}</span> ` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}`}</td>
         <td style="text-align:right">${x.totalUses ? `${x.uses}/${x.totalUses}` : ''}</td>
         <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
     </table></div>
@@ -15949,7 +15950,7 @@ ${(() => {
   return `<div data-gt-pop style="position:absolute;z-index:50;top:${pk.top}px;left:${pk.left}px;width:250px;max-height:360px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.2);padding:8px">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><b style="flex:1;font-size:12px">${px.id} · chọn nhóm</b><span data-gt="pclose" style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
     <div style="font-size:11px;color:#64748b;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(px.name)}</div>
-    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:6px 2px 2px">${sl}</div>${list.map((g) => { const auto = gByName.get(codeOf.get(px.id)) === g; return `<div ${auto ? 'title="Tự động theo mã lớp của giấy – không bỏ được"' : `data-gt="pt" data-gid="${g.id}"`} style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:${auto ? 'default' : 'pointer'};background:${mine.has(g.id) ? '#eef2ff' : 'transparent'}"><input type="checkbox" ${mine.has(g.id) ? 'checked' : ''} ${auto ? 'disabled' : ''} style="pointer-events:none"><span style="width:9px;height:9px;border-radius:3px;background:${g.color || '#475569'}"></span><span style="flex:1;font-weight:${mine.has(g.id) ? 800 : 500}">${esc(g.name)}${auto ? ' <i style="font-size:10px;color:#64748b;font-weight:500">tự động</i>' : ''}</span></div>`; }).join('')}` : ''; }).join('') || '<div style="font-size:12px;color:#94a3b8">Chưa có nhóm – tạo ở cột bên trái</div>'}
+    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:6px 2px 2px">${sl}</div>${list.map((g) => { const auto = gByName.get(codeOf.get(px.id)) === g; return `<div data-gt="pt" data-gid="${g.id}" title="${auto ? 'Nhóm theo mã lớp của giấy' : 'Chuyển giấy sang nhóm này'}" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;background:${mine.has(g.id) ? '#eef2ff' : 'transparent'}"><input type="radio" ${mine.has(g.id) ? 'checked' : ''} style="pointer-events:none"><span style="width:9px;height:9px;border-radius:3px;background:${g.color || '#475569'}"></span><span style="flex:1;font-weight:${mine.has(g.id) ? 800 : 500}">${esc(g.name)}${auto ? ' <i style="font-size:10px;color:#64748b;font-weight:500">theo mã lớp</i>' : ''}</span></div>`; }).join('')}` : ''; }).join('') || '<div style="font-size:12px;color:#94a3b8">Chưa có nhóm – tạo ở cột bên trái</div>'}
   </div>`;
 })()}`;
     if (!host.dataset.wired) {
@@ -16023,16 +16024,32 @@ ${(() => {
       });
     }
   }
+  // Chuyển các giấy sang 1 nhóm (mỗi giấy 1 nhóm): bỏ khỏi mọi nhóm gán tay khác; nếu nhóm đích chính là nhóm theo mã lớp thì không cần gán tay
+  function gtAssignPatch(groups, items, ids, gid) {
+    const target = groups[gid];
+    const patch = {};
+    const set = new Set(ids.map(Number));
+    for (const [id, g] of Object.entries(groups)) {
+      if (!g || g.deleted || id === gid) continue;
+      const cur = (g.ids || []).map(Number);
+      const next = cur.filter((x) => !set.has(x));
+      if (next.length !== cur.length) patch[id] = { ...g, ids: next, at: Date.now(), by: meName || '' };
+    }
+    if (target && !target.deleted) {
+      const keep = (target.ids || []).map(Number).filter((x) => !set.has(x));
+      const add = [...set].filter((x) => gtCode(items[x]?.name) !== String(target.name).trim()); // cùng mã lớp → tự vào nhóm, không cần gán
+      patch[gid] = { ...target, ids: [...keep, ...add], at: Date.now(), by: meName || '' };
+    }
+    return patch;
+  }
   async function gtDrop(d, target, below) {
     const groups = await kvGet(GT_GROUPS);
     if (d.type === 'row') {
       const g = groups[target];
       if (!g || g.deleted) return;
-      const ids = new Set((g.ids || []).map(Number));
-      d.ids.forEach((id) => ids.add(id));
-      await kvMerge(GT_GROUPS, { [target]: { ...g, ids: [...ids], at: Date.now(), by: meName || '' } });
+      await kvMerge(GT_GROUPS, gtAssignPatch(groups, await kvGet(GT_ITEMS), d.ids, target));
       gtUi.sel.clear();
-      gtUi.msg = `✓ Đã thêm ${d.ids.length} giấy vào “${g.name}”.`;
+      gtUi.msg = `✓ Đã chuyển ${d.ids.length} giấy sang nhóm “${g.name}”.`;
     } else {
       const list = gtLive(groups).map(([id]) => id);
       const from = list.indexOf(d.id);
@@ -16074,10 +16091,8 @@ ${(() => {
       const g = groups[b.dataset.gid];
       const id = gtUi.pick?.id;
       if (!g || g.deleted || !id) return;
-      const ids = new Set((g.ids || []).map(Number));
-      if (ids.has(id)) ids.delete(id);
-      else ids.add(id);
-      await save(b.dataset.gid, { ids: [...ids] });
+      await kvMerge(GT_GROUPS, gtAssignPatch(groups, await kvGet(GT_ITEMS), [id], b.dataset.gid));
+      gtUi.pick = null; // mỗi giấy 1 nhóm → chọn xong đóng popup
     } else if (k === 'g') {
       gtUi.g = b.dataset.id;
       gtUi.page = 0;
@@ -16140,64 +16155,37 @@ ${(() => {
       if (!g) throw new Error('Chọn nhóm cần thêm vào trước.');
       const sel = [...gtUi.sel];
       if (!sel.length) throw new Error('Chưa chọn giấy nào (tích ô ở đầu dòng).');
-      const ids = new Set((g.ids || []).map(Number));
-      for (const id of sel) k === 'add' ? ids.add(id) : ids.delete(id);
-      await save(gid, { ids: [...ids] });
+      await kvMerge(GT_GROUPS, gtAssignPatch(groups, await kvGet(GT_ITEMS), sel, k === 'add' ? gid : null));
       gtUi.sel.clear();
-      gtUi.msg = k === 'add' ? `✓ Đã thêm ${sel.length} giấy vào “${g.name}”.` : `✓ Đã bỏ ${sel.length} giấy khỏi “${g.name}”.`;
+      gtUi.msg = k === 'add' ? `✓ Đã chuyển ${sel.length} giấy sang nhóm “${g.name}”.` : `✓ ${sel.length} giấy về lại nhóm theo mã lớp.`;
     } else if (k === 'view') {
       gtUi.view = gtUi.view === 'orders' ? '' : 'orders';
     } else if (k === 'map') {
+      // ⚡ Map nhanh: mỗi giấy tự vào nhóm theo mã lớp → chỉ cần tạo các nhóm mã lớp còn thiếu (của giấy đang lọc)
       const items = await kvGet(GT_ITEMS);
       const live = gtLive(groups);
-      const byName = new Map(live.map(([id, g]) => [String(g.name).trim(), id]));
-      const plan = new Map(); // mã → [id giấy cần thêm]
+      const have = new Set(live.map(([, g]) => String(g.name).trim()));
+      const need = new Map();
       let skip = 0;
       for (const id of gtUi.rowIds || []) {
         const code = gtCode(items[id]?.name);
         if (!code) { skip++; continue; }
-        const gid = byName.get(code);
-        if (gid && (groups[gid].ids || []).map(Number).includes(id)) continue;
-        plan.set(code, [...(plan.get(code) || []), id]);
+        if (!have.has(code)) need.set(code, (need.get(code) || 0) + 1);
       }
-      const nAdd = [...plan.values()].reduce((t, a) => t + a.length, 0);
-      const nNew = [...plan.keys()].filter((c) => !byName.has(c)).length;
-      if (!nAdd) {
-        gtUi.msg = `Không có gì để map: giấy đang lọc đã nằm đúng nhóm${skip ? ` (${skip} giấy không tính được mã)` : ''}.`;
-      } else if (gtUi.mapArm !== nAdd || Date.now() - (gtUi.mapAt || 0) > 6000) {
-        gtUi.mapArm = nAdd;
-        gtUi.mapAt = Date.now();
-        b.textContent = `⚠️ Bấm lần nữa: thêm ${nAdd} giấy vào ${plan.size} nhóm${nNew ? ` (tạo mới ${nNew}: ${[...plan.keys()].filter((c) => !byName.has(c)).slice(0, 6).join(', ')}${nNew > 6 ? '…' : ''})` : ''}`;
-        b.style.background = '#fef3c7';
-        return;
-      } else {
-        gtUi.mapArm = null;
+      if (!need.size) gtUi.msg = `Các giấy đang lọc đều đã có nhóm theo mã lớp${skip ? ` (${skip} giấy không tính được mã)` : ''}.`;
+      else {
         let pos = live.length;
-        const patch = {};
-        for (const [code, ids] of plan) {
-          let gid = byName.get(code);
-          const g = gid ? groups[gid] : null;
-          if (!gid) gid = `g${Date.now().toString(36)}${code}`;
-          patch[gid] = { ...(g || { name: code, color: GT_COLORS[pos % GT_COLORS.length], note: '', pos: pos++ }), ids: [...new Set([...(g?.ids || []).map(Number), ...ids])], at: Date.now(), by: meName || '' };
-        }
-        await kvMerge(GT_GROUPS, patch);
-        gtUi.msg = `✓ Map nhanh: đã thêm ${nAdd} giấy vào ${plan.size} nhóm${nNew ? `, tạo mới ${nNew} nhóm` : ''}${skip ? ` · ${skip} giấy không tính được mã (lớp lạ / *) – để nguyên` : ''}.`;
+        const codes = [...need.keys()].sort((x, y) => x.length - y.length || x.localeCompare(y));
+        await kvMerge(GT_GROUPS, Object.fromEntries(codes.map((code) => [`g${Date.now().toString(36)}${code}`, { name: code, color: GT_COLORS[pos % GT_COLORS.length], note: '', ids: [], pos: pos++, at: Date.now(), by: meName || '' }])));
+        gtUi.msg = `✓ Đã tạo ${codes.length} nhóm mã lớp: ${codes.slice(0, 12).join(', ')}${codes.length > 12 ? '…' : ''} – giấy tự vào nhóm.${skip ? ` ${skip} giấy không tính được mã (lớp lạ / *).` : ''}`;
       }
     } else if (k === 'scan') {
       b.textContent = '⏳ Đang quét…';
       await gtScan(true);
       gtUi.msg = '✓ Đã quét trang 1 và lưu lên cloud.';
     } else if (k === 'all') {
-      // bấm 2 lần (không dùng hộp thoại trình duyệt)
-      if (Date.now() - (gtUi.allAt || 0) > 5000) {
-        gtUi.allAt = Date.now();
-        b.textContent = '⚠️ Bấm lần nữa: tải ~18 trang (chỉ đọc CRM)';
-        b.style.background = '#dbeafe';
-        return;
-      }
-      gtUi.allAt = 0;
       const got = await gtFetchAll((n, t) => (b.textContent = `⏳ ${n}/${t}…`));
-      gtUi.msg = `✓ Đã tải ${got} giấy tấm vào kho (cloud).`;
+      gtUi.msg = got == null ? 'Đang đồng bộ ở tab khác – thử lại sau ít phút.' : `✓ Đã đồng bộ ${got} giấy tấm (mọi trang) lên cloud.`;
     } else return;
     await gtFill();
   }
