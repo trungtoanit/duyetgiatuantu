@@ -602,7 +602,7 @@
           const c = o.customer || o.opportunity?.customer || {};
           lines.push({
             did: x.id, oid: o.id, order: o.code, at: o.createdAt || o.orderedAt, // giờ lên đơn (như cột ID của Danh sách đơn) quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
-            cust: c.shortName || c.code || c.name || o.customerName || '', prod: x.description || op.name || '', qty: x.quantity || 0,
+            cust: c.shortName || c.code || c.name || c.fullName || c.companyName || c.customerName || c.misaCustomer?.name || o.customerName || o.misaCustomer?.name || o.misaCustomerName || '', prod: x.description || op.name || '', qty: x.quantity || 0,
             tp: x.productionCode || op.product?.code || '',
             paper: op.cartonStructCode, cp: Number(op.cartonPrice) || 0, layer: op.layer,
             // m² giấy của dòng = dài tấm × khổ tấm (mm) × số lượng – để tính tiền chênh khi giấy chưa rẻ nhất
