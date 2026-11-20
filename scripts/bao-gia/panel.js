@@ -16866,10 +16866,13 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     card.append(b);
   }
   if (IS_TOP) setInterval(vdMount, 2000);
-  // ---------- 🤝 Bàn giao khách cho Liên (Tuấn Tú) ----------
+  // ---------- 🤝 Bàn giao khách cho Liên / Phương (Tuấn Tú) ----------
   // Trang cơ hội / báo giá: nút cạnh tên NVKD ở tiêu đề "(Đoàn Thị Hương)" → bấm tên (CRM mở hộp "Bàn giao khách hàng")
   // → chọn nhân viên NV0440 → bấm "Bàn giao". Hỏi xác nhận trước khi làm.
-  const HO_TO = { code: 'NV0440', name: 'Nguyễn Mỹ Liên' };
+  const HO_TOS = [
+    { code: 'NV0440', name: 'Nguyễn Mỹ Liên', short: 'Liên', bg: 'linear-gradient(90deg,#0ea5e9,#6366f1)' },
+    { code: 'NV0447', name: 'Nguyễn Duy Phương', short: 'Phương', bg: 'linear-gradient(90deg,#10b981,#0d9488)' },
+  ];
   const hoVisMs = () => visModalsTop().find((m) => /Bàn giao khách hàng/.test(m.querySelector('.ant-modal-title')?.textContent || ''));
   // Tên NVKD trong tiêu đề: phần tử lá dạng "(Tên)" nằm cạnh "Cập nhật cơ hội" / "#BG…"
   function hoNameEl() {
@@ -16888,7 +16891,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   function hoMouse(el, types = ['mousedown', 'mouseup', 'click']) {
     for (const t of types) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
   }
-  async function hoRun(nameEl) {
+  async function hoRun(nameEl, HO_TO) {
     if (!hoVisMs()) {
       hoMouse(nameEl);
       if (!(await waitFor(hoVisMs, 6000))) throw new Error('không mở được hộp Bàn giao (bấm tên NVKD không có phản hồi)');
@@ -16930,43 +16933,48 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     const nameEl = hoNameEl();
     const old = document.querySelector('[data-dg-ho]');
     if (!nameEl) return old?.remove();
-    const cur = nameEl.textContent.trim().replace(/^\(\s*|\s*\)$/g, '');
-    const isTo = norm(cur) === norm(HO_TO.name);
+    const curName = () => norm(hoNameEl()?.textContent.trim().replace(/^\(\s*|\s*\)$/g, '') || '');
+    const cur = curName();
     if (old && old.previousElementSibling === nameEl) {
-      old.style.display = isTo && !old.disabled ? 'none' : '';
+      for (const b of old.querySelectorAll('button')) b.style.display = norm(b.dataset.name) === cur && !b.disabled ? 'none' : '';
       return;
     }
     old?.remove();
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.setAttribute('data-dg-ho', '1');
-    const LABEL = '🤝 Bàn giao cho Liên';
-    b.textContent = LABEL;
-    b.title = `Bàn giao khách của cơ hội này cho ${HO_TO.name} (${HO_TO.code}) – như bấm tên NVKD → chọn nhân viên → Bàn giao`;
-    b.setAttribute('style', 'margin-left:10px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0ea5e9,#6366f1);border:0;border-radius:999px;padding:3px 12px');
-    if (isTo) b.style.display = 'none';
-    b.addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const el = hoNameEl();
-      const who = el?.textContent.trim().replace(/^\(\s*|\s*\)$/g, '') || '';
-      const cust = (document.querySelector('.ant-select-selection-item[title]')?.getAttribute('title') || '').trim();
-      if (!el) return alert('Không thấy tên NVKD ở tiêu đề – F5 rồi thử lại.');
-      if (!confirm(`Bàn giao khách${cust ? ` "${cust}"` : ''} từ ${who || '?'} cho ${HO_TO.name} (${HO_TO.code})?`)) return;
-      b.disabled = true;
-      b.textContent = '⏳ Đang bàn giao…';
-      try {
-        await hoRun(el);
-        const done = await waitFor(() => norm(hoNameEl()?.textContent.trim().replace(/^\(\s*|\s*\)$/g, '')) === norm(HO_TO.name), 6000);
-        b.textContent = done ? `✅ Đã giao cho Liên` : '✅ Đã bấm Bàn giao – F5 để xem';
-      } catch (err) {
-        b.textContent = `⚠️ ${err.message}`;
-        setTimeout(() => (b.textContent = LABEL), 8000);
-      } finally {
-        b.disabled = false;
-      }
-    });
-    nameEl.after(b);
+    const wrap = document.createElement('span');
+    wrap.setAttribute('data-dg-ho', '1');
+    for (const to of HO_TOS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.name = to.name;
+      const LABEL = `🤝 Bàn giao cho ${to.short}`;
+      b.textContent = LABEL;
+      b.title = `Bàn giao khách của cơ hội này cho ${to.name} (${to.code}) – như bấm tên NVKD → chọn nhân viên → Bàn giao`;
+      b.setAttribute('style', `margin-left:10px;vertical-align:middle;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:${to.bg};border:0;border-radius:999px;padding:3px 12px`);
+      if (norm(to.name) === cur) b.style.display = 'none';
+      b.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const el = hoNameEl();
+        const who = el?.textContent.trim().replace(/^\(\s*|\s*\)$/g, '') || '';
+        const cust = (document.querySelector('.ant-select-selection-item[title]')?.getAttribute('title') || '').trim();
+        if (!el) return alert('Không thấy tên NVKD ở tiêu đề – F5 rồi thử lại.');
+        if (!confirm(`Bàn giao khách${cust ? ` "${cust}"` : ''} từ ${who || '?'} cho ${to.name} (${to.code})?`)) return;
+        b.disabled = true;
+        b.textContent = '⏳ Đang bàn giao…';
+        try {
+          await hoRun(el, to);
+          const done = await waitFor(() => curName() === norm(to.name), 6000);
+          b.textContent = done ? `✅ Đã giao cho ${to.short}` : '✅ Đã bấm Bàn giao – F5 để xem';
+        } catch (err) {
+          b.textContent = `⚠️ ${err.message}`;
+          setTimeout(() => (b.textContent = LABEL), 8000);
+        } finally {
+          b.disabled = false;
+        }
+      });
+      wrap.append(b);
+    }
+    nameEl.after(wrap);
   }
   if (IS_TOP) setInterval(hoMount, 1500);
   // ---------- ❌ Thất bại nhanh (Tuấn Tú – danh sách /bao-gia): nút trên từng dòng ----------
