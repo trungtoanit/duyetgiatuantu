@@ -1,5 +1,5 @@
 {
-  "version": "1.2.617",
+  "version": "1.2.618",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -133,6 +133,7 @@
     "dd.aiSugLearn",
     "gtItems",
     "gtGroups",
-    "gtPrefs"
+    "gtPrefs",
+    "orderPapers"
   ]
 }

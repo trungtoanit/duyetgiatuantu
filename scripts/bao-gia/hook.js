@@ -592,6 +592,22 @@
       emit('orders', { customerId, total: d.total ?? orders.length, orders });
       return;
     }
+    // Tab "Mới" của Danh sách đơn: giấy tấm (kết cấu giấy) từng dòng đơn → tab 📄 Giấy tấm phân tích có dùng giấy rẻ nhất nhóm không
+    if (/\/misaOrder\?/.test(url) && /[?&]internalStatus=NEW\b/.test(url) && Array.isArray(d.misaOrders)) {
+      const lines = [];
+      for (const o of d.misaOrders)
+        for (const x of o.misaOrderDetails || []) {
+          const op = x.opportunityProduct || {};
+          if (!op.cartonStructCode) continue;
+          const c = o.customer || o.opportunity?.customer || {};
+          lines.push({
+            did: x.id, oid: o.id, order: o.code, at: o.orderedAt || o.createdAt, quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
+            cust: c.shortName || c.code || c.name || o.customerName || '', prod: x.description || op.name || '', qty: x.quantity || 0,
+            paper: op.cartonStructCode, cp: Number(op.cartonPrice) || 0, layer: op.layer,
+          });
+        }
+      if (lines.length) emit('orderPapers', lines);
+    }
     // Trang Đơn hàng Misa (/misa-order/list): đơn của mọi khách → gom theo khách, kèm tên khách và NVKD phụ trách
     if (/\/misaOrder\?/.test(url) && Array.isArray(d.misaOrders)) {
       const byCust = {};

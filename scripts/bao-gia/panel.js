@@ -396,6 +396,13 @@
       }
       return;
     }
+    if (kind === 'orderPapers') {
+      // giấy tấm của các dòng đơn ở tab Mới (Danh sách đơn) – theo id dòng đơn, kèm lúc thấy gần nhất
+      const now = Date.now();
+      await kvMerge('orderPapers', Object.fromEntries(data.map((l) => [l.did, { ...l, seenAt: now }])));
+      if (lsGet('dgTab') === 'gt') gtFill(true);
+      return;
+    }
     if (kind === 'staffSigns') {
       // chỉ lưu đường dẫn ảnh (đồng bộ); ảnh dạng data (signImgs) do công cụ tools/sync_signs.py tải về vì máy chủ ảnh chặn CORS
       const cur = await kvGet('staffSigns');
@@ -15750,7 +15757,8 @@ Quy tắc:
     if (keepFocus && root.activeElement?.classList?.contains('gt-edit')) return; // đang gõ – không vẽ lại
     gtFillBusy = true;
     try {
-      const [items, groups, scan] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY)]);
+      const [items, groups, scan, orders] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY), kvGet('orderPapers')]);
+      gtUi.orders = orders;
       if (!gtPrefsLoaded) {
         gtPrefsLoaded = true;
         const pf = (await kvGet(GT_PREFS))[norm(meName)];
@@ -15783,6 +15791,57 @@ Quy tắc:
       out += d;
     }
     return out;
+  }
+  // 📦 Đơn mới dùng giấy: mỗi giấy đang dùng ở các đơn tab Mới → so giá với giấy cùng nhóm (mã lớp) + cùng sóng.
+  // Chỉ so với giấy có giá cập nhật trong 90 ngày (giá cũ – vd. NCC lâu không báo giá – dễ thấp ảo), bỏ giá < 500đ (giá tạm).
+  const GT_FRESH_D = 90;
+  const gtWave = (n) => (String(n || '').match(/-([A-Z]+)$/i) || [])[1] || '';
+  function gtOrdersHtml(all, gs, orders) {
+    const now = Date.now();
+    const lines = Object.values(orders || {}).filter((l) => l && l.paper && now - (l.seenAt || 0) < 3 * 86400e3); // đơn còn ở tab Mới (thấy trong 3 ngày)
+    if (!lines.length) return '<div style="padding:16px;color:#94a3b8">Chưa có dữ liệu đơn mới – mở trang Danh sách đơn (tab Mới), lật qua các trang để extension đọc.</div>';
+    const byName = new Map(all.map((x) => [x.name, x]));
+    const fresh = all.filter((x) => x.price >= 500 && x.visible !== false && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400);
+    const gByName = new Map(gs.map((g) => [String(g.name).trim(), g]));
+    const use = new Map();
+    for (const l of lines) {
+      const u = use.get(l.paper) || { paper: l.paper, orders: new Map(), qty: 0 };
+      u.orders.set(l.order, l);
+      u.qty += Number(l.qty) || 0;
+      use.set(l.paper, u);
+    }
+    const rows = [...use.values()].map((u) => {
+      const me = byName.get(u.paper);
+      const code = gtCode(u.paper);
+      const w = gtWave(u.paper);
+      const peers = code ? fresh.filter((x) => gtCode(x.name) === code && gtWave(x.name) === w) : [];
+      const min = peers.reduce((a, b) => (!a || b.price < a.price ? b : a), null);
+      const myP = me?.price ?? null;
+      const diff = min && myP != null ? myP - min.price : null;
+      return { ...u, me, code, w, g: gByName.get(code), min, myP, diff, peers: peers.length };
+    }).sort((a, b) => (b.diff ?? -1) - (a.diff ?? -1) || b.orders.size - a.orders.size);
+    const nBad = rows.filter((r) => r.diff > 0).length;
+    const nOk = rows.filter((r) => r.diff === 0 || (r.diff != null && r.diff <= 0)).length;
+    const nNo = rows.length - nBad - nOk;
+    const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
+    const st = (r) => {
+      if (!r.code) return '<span style="color:#94a3b8">không tính được mã lớp</span>';
+      if (!r.me) return '<span style="color:#d97706">giấy không còn trong kho (đã đổi tên / ẩn)</span>';
+      if (!r.min) return '<span style="color:#94a3b8">nhóm chưa có giá mới để so</span>';
+      if (r.diff <= 0) return `<b style="color:#16a34a">✅ Rẻ nhất</b> <span style="color:#64748b">(${r.peers} giấy cùng nhóm)</span>`;
+      return `<b style="color:#dc2626">❌ Đắt hơn ${r.diff.toLocaleString('vi-VN')}đ (${Math.round((r.diff / r.min.price) * 100)}%)</b><div style="font-size:11.5px">Rẻ nhất: <b>${r.min.id}</b> | ${esc(r.min.name)} · <b>${r.min.price.toLocaleString('vi-VN')}</b> · cập nhật ${day(r.min.updatedAt)}</div>`;
+    };
+    const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
+    return `${few}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b> · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b> · ${nNo} không so được
+  <div style="color:#64748b;font-size:11.5px">So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+<thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th>So với nhóm</th><th>Đơn (tab Mới)</th></tr></thead>
+<tbody>${rows.map((r, i) => `<tr style="border-top:1px solid #f1f5f9;background:${r.diff > 0 ? '#fef2f2' : i % 2 ? '#fcfcfd' : '#fff'}">
+  <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
+  <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
+  <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
+  <td>${st(r)}</td>
+  <td style="font-size:11.5px">${[...r.orders.values()].slice(0, 4).map((l) => `<div>${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
   function gtDraw(host, items, groups, scan) {
     const all = Object.values(items || {}).filter((x) => x && x.id);
@@ -15828,10 +15887,11 @@ Quy tắc:
   <b style="font-size:16px">📄 Giấy tấm</b>
   <span style="color:#64748b;font-size:12px">Kho extension: <b>${all.length}</b> / CRM ${scan._total || '?'} giấy · quét trang 1: ${ago(scan._at)}${scan._by ? ` (${esc(scan._by)})` : ''} · tải toàn bộ: ${ago(scan._allAt)}</span>
   <span style="flex:1"></span>
-  ${bt('scan', '⟳ Quét trang 1')}${MY_ADMIN ? bt('all', '⬇️ Tải toàn bộ từ CRM', 'border-color:#93c5fd;color:#1d4ed8') : ''}
+  ${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('scan', '⟳ Quét trang 1')}${MY_ADMIN ? bt('all', '⬇️ Tải toàn bộ từ CRM', 'border-color:#93c5fd;color:#1d4ed8') : ''}
 </div>
 ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#f1f5f9;font-size:12px">${esc(gtUi.msg)}</div>` : ''}
-<div style="display:flex;gap:12px;align-items:flex-start">
+${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
+<div style="display:${gtUi.view === 'orders' ? 'none' : 'flex'};gap:12px;align-items:flex-start">
   <div style="width:230px;flex:none;border:1px solid #e2e8f0;border-radius:10px;padding:8px">
     <div style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:1px;margin:2px 4px 6px">NHÓM (EXTENSION)</div>
     ${gBtn('all', '📚 Tất cả', all.length)}${gBtn('none', '❔ Chưa có nhóm', all.filter((x) => !inG.has(x.id)).length)}
@@ -16085,6 +16145,8 @@ ${(() => {
       await save(gid, { ids: [...ids] });
       gtUi.sel.clear();
       gtUi.msg = k === 'add' ? `✓ Đã thêm ${sel.length} giấy vào “${g.name}”.` : `✓ Đã bỏ ${sel.length} giấy khỏi “${g.name}”.`;
+    } else if (k === 'view') {
+      gtUi.view = gtUi.view === 'orders' ? '' : 'orders';
     } else if (k === 'map') {
       const items = await kvGet(GT_ITEMS);
       const live = gtLive(groups);
