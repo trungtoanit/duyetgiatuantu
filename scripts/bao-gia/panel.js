@@ -15766,6 +15766,24 @@ Quy tắc:
   // Phân nhóm theo tên: 3 chữ số = 3 lớp, 5 chữ số = 5 lớp, còn lại = Khác
   const gtSec = (name) => { const d = String(name || '').trim(); return /^\d{3}$/.test(d) ? '3' : /^\d{5}$/.test(d) ? '5' : 'x'; };
   const GT_SECS = [['3', '3 LỚP'], ['5', '5 LỚP'], ['x', 'KHÁC']];
+  // ⚡ Map nhanh: mã nhóm từ kết cấu giấy, mỗi lớp 1 số – 90/95 → 1, 120/125 → 2, 140/145/150 → 5, giấy Trắng (T…) → 8
+  // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp không đổi được (vd. *, 160) → không map
+  function gtCode(name) {
+    const body = String(name || '').replace(/^[^_]*_/, '').replace(/-[A-Z]+$/i, '');
+    const parts = body.split('/');
+    if (parts.length < 2) return '';
+    let out = '';
+    for (const p of parts) {
+      const m = p.trim().match(/^([A-Z])\s*(\d+)/i);
+      if (!m) return '';
+      if (m[1].toUpperCase() === 'T') { out += '8'; continue; }
+      const n = Number(m[2]);
+      const d = n === 90 || n === 95 ? '1' : n === 120 || n === 125 ? '2' : n === 140 || n === 145 || n === 150 ? '5' : '';
+      if (!d) return '';
+      out += d;
+    }
+    return out;
+  }
   function gtDraw(host, items, groups, scan) {
     const all = Object.values(items || {}).filter((x) => x && x.id);
     const gs = gtLive(groups).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) }));
@@ -15787,6 +15805,7 @@ Quy tắc:
     const pages = Math.max(1, Math.ceil(rows.length / PER));
     gtUi.page = Math.min(gtUi.page, pages - 1);
     const shown = rows.slice(gtUi.page * PER, gtUi.page * PER + PER);
+    gtUi.rowIds = rows.map((x) => x.id); // ⚡ Map nhanh dùng danh sách đang lọc
     const provs = [...new Map(all.filter((x) => x.prov?.code).map((x) => [x.prov.code, x.prov.name])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'vi'));
     const layers = [...new Set(all.map((x) => x.layer).filter(Boolean))].sort((a, b) => a - b);
     const ago = (t) => (t ? new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa');
@@ -15836,20 +15855,20 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     ${MY_ADMIN ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;padding:6px 8px;border-radius:8px;background:${sel.length ? '#eef2ff' : '#f8fafc'}">
       <span style="font-size:12px">Đã chọn <b>${sel.length}</b></span>
       <select data-gt-in="target" ${inp}><option value="">— chọn nhóm —</option>${gs.map((g) => `<option value="${g.id}"${gtUi.target === g.id ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select>
-      ${bt('add', '➕ Thêm vào nhóm')}${curG ? bt('rm', `➖ Bỏ khỏi “${esc(curG.name)}”`, 'color:#dc2626;border-color:#fecaca') : ''}${sel.length ? bt('clr', 'Bỏ chọn') : ''}
+      ${bt('add', '➕ Thêm vào nhóm')}${bt('map', `⚡ Map nhanh (${rows.length} giấy đang lọc)`, 'border-color:#fcd34d;background:#fffbeb;color:#b45309')}${curG ? bt('rm', `➖ Bỏ khỏi “${esc(curG.name)}”`, 'color:#dc2626;border-color:#fecaca') : ''}${sel.length ? bt('clr', 'Bỏ chọn') : ''}
     </div>` : ''}
     <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th>Nhóm extension</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
+      <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th title="Mã nhóm tính từ kết cấu giấy: 90/95→1, 120/125→2, 140/145/150→5, Trắng→8">Mã lớp</th><th>Nhóm extension</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
       <tbody>${shown.map((x, i) => `<tr${MY_ADMIN ? ` draggable="true" data-row="${x.id}"` : ''} style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
         ${MY_ADMIN ? `<td style="padding:5px 6px"><input type="checkbox" data-gt="sel" data-id="${x.id}" ${gtUi.sel.has(x.id) ? 'checked' : ''}></td>` : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
         <td>${x.layer || ''}</td><td>${esc(GT_COLOR_VI[x.color] || x.color)}</td><td>${x.xeo || ''}</td>
         <td style="text-align:right;font-weight:700">${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
-        <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>
+        <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td><td style="font-weight:800;color:#b45309">${gtCode(x.name) || '<span style="color:#cbd5e1">–</span>'}</td>
         <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : (inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}</td>
         <td style="text-align:right">${x.totalUses ? `${x.uses}/${x.totalUses}` : ''}</td>
-        <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
+        <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="13" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
     </table></div>
     ${pages > 1 ? `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:6px">${bt('prev', '‹')}<span style="font-size:12px">Trang ${gtUi.page + 1}/${pages}</span>${bt('next', '›')}</div>` : ''}
   </div>
@@ -16059,6 +16078,42 @@ ${(() => {
       await save(gid, { ids: [...ids] });
       gtUi.sel.clear();
       gtUi.msg = k === 'add' ? `✓ Đã thêm ${sel.length} giấy vào “${g.name}”.` : `✓ Đã bỏ ${sel.length} giấy khỏi “${g.name}”.`;
+    } else if (k === 'map') {
+      const items = await kvGet(GT_ITEMS);
+      const live = gtLive(groups);
+      const byName = new Map(live.map(([id, g]) => [String(g.name).trim(), id]));
+      const plan = new Map(); // mã → [id giấy cần thêm]
+      let skip = 0;
+      for (const id of gtUi.rowIds || []) {
+        const code = gtCode(items[id]?.name);
+        if (!code) { skip++; continue; }
+        const gid = byName.get(code);
+        if (gid && (groups[gid].ids || []).map(Number).includes(id)) continue;
+        plan.set(code, [...(plan.get(code) || []), id]);
+      }
+      const nAdd = [...plan.values()].reduce((t, a) => t + a.length, 0);
+      const nNew = [...plan.keys()].filter((c) => !byName.has(c)).length;
+      if (!nAdd) {
+        gtUi.msg = `Không có gì để map: giấy đang lọc đã nằm đúng nhóm${skip ? ` (${skip} giấy không tính được mã)` : ''}.`;
+      } else if (gtUi.mapArm !== nAdd || Date.now() - (gtUi.mapAt || 0) > 6000) {
+        gtUi.mapArm = nAdd;
+        gtUi.mapAt = Date.now();
+        b.textContent = `⚠️ Bấm lần nữa: thêm ${nAdd} giấy vào ${plan.size} nhóm${nNew ? ` (tạo mới ${nNew}: ${[...plan.keys()].filter((c) => !byName.has(c)).slice(0, 6).join(', ')}${nNew > 6 ? '…' : ''})` : ''}`;
+        b.style.background = '#fef3c7';
+        return;
+      } else {
+        gtUi.mapArm = null;
+        let pos = live.length;
+        const patch = {};
+        for (const [code, ids] of plan) {
+          let gid = byName.get(code);
+          const g = gid ? groups[gid] : null;
+          if (!gid) gid = `g${Date.now().toString(36)}${code}`;
+          patch[gid] = { ...(g || { name: code, color: GT_COLORS[pos % GT_COLORS.length], note: '', pos: pos++ }), ids: [...new Set([...(g?.ids || []).map(Number), ...ids])], at: Date.now(), by: meName || '' };
+        }
+        await kvMerge(GT_GROUPS, patch);
+        gtUi.msg = `✓ Map nhanh: đã thêm ${nAdd} giấy vào ${plan.size} nhóm${nNew ? `, tạo mới ${nNew} nhóm` : ''}${skip ? ` · ${skip} giấy không tính được mã (lớp lạ / *) – để nguyên` : ''}.`;
+      }
     } else if (k === 'scan') {
       b.textContent = '⏳ Đang quét…';
       await gtScan(true);
