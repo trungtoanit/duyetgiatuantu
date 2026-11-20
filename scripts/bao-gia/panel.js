@@ -15745,7 +15745,7 @@ Quy tắc:
   // ---------- Tab 📄 Giấy tấm: kho giấy tấm + nhóm do extension tự quản lý (cloud) ----------
   const GT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#475569'];
   const GT_COLOR_VI = { NAU: 'Nâu', TRANG: 'Trắng', VANG: 'Vàng', XAM: 'Xám' };
-  const gtUi = { g: 'all', q: '', layer: '', provs: new Set(), sel: new Set(), sort: 'id', page: 0, msg: '' };
+  const gtUi = { view: lsGet('dgGtView') || '', oSort: lsGet('dgGtOSort') || 'new', g: 'all', q: '', layer: '', provs: new Set(), sel: new Set(), sort: 'id', page: 0, msg: '' };
   const GT_PREFS = 'gtPrefs'; // lựa chọn lọc của từng người trên cloud: { [tên chuẩn hoá]: { provs: [mã NCC…], at } }
   let gtPrefsLoaded = false;
   const gtSavePrefs = () => kvMerge(GT_PREFS, { [norm(meName)]: { provs: [...gtUi.provs], hideSmall: !!gtUi.hideSmall, at: Date.now() } }).catch(() => {});
@@ -16169,7 +16169,10 @@ ${(() => {
       for (const id of ids) b.checked ? gtUi.sel.add(id) : gtUi.sel.delete(id);
     } else if (k === 'clr') gtUi.sel.clear();
     else if (k === 'provmore') gtUi.provOpen = !gtUi.provOpen;
-    else if (k === 'osort') gtUi.oSort = b.dataset.k;
+    else if (k === 'osort') {
+      gtUi.oSort = b.dataset.k;
+      lsSet('dgGtOSort', gtUi.oSort);
+    }
     else if (k === 'zsend') {
       b.disabled = true;
       b.textContent = '⏳ Đang xếp tin…';
@@ -16234,6 +16237,7 @@ ${(() => {
       gtUi.msg = k === 'add' ? `✓ Đã chuyển ${sel.length} giấy sang nhóm “${g.name}”.` : `✓ ${sel.length} giấy về lại nhóm theo mã lớp.`;
     } else if (k === 'view') {
       gtUi.view = gtUi.view === 'orders' ? '' : 'orders';
+      lsSet('dgGtView', gtUi.view); // F5 vẫn giữ màn hình đang xem
     } else if (k === 'map') {
       // ⚡ Map nhanh: mỗi giấy tự vào nhóm theo mã lớp → chỉ cần tạo các nhóm mã lớp còn thiếu (của giấy đang lọc)
       const items = await kvGet(GT_ITEMS);
