@@ -16262,6 +16262,60 @@ Quy tắc:
   <td style="padding-left:8px">${st({ ...r, money, m2, _ok: `${l.order}|${l.did}` })}${zalo}</td></tr>`;
   }).join('')}</tbody></table></div>`;
   }
+  // 🖨 Xuất PDF: mỗi nhóm định lượng (111, 211, 22122…) × sóng 1 dòng – giấy rẻ nhất (theo NCC đang lọc), NCC, ngày cập nhật giá
+  function gtPdf() {
+    const src = gtUi.pdfSrc;
+    if (!src) return;
+    const { all, gs, inG } = src;
+    const fil = all.filter((x) => x.price >= 500 && (!gtUi.provs.size || gtUi.provs.has(x.prov?.code || '')));
+    const WAVE_ORD = ['B', 'C', 'E', 'BC', 'BE', 'CE', 'BCE'];
+    const wr = (w) => { const i = WAVE_ORD.indexOf(w); return i < 0 ? 50 + (w ? w.charCodeAt(0) : 99) : i; };
+    const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
+    const fresh = (t) => t && Date.now() / 1000 - t < GT_FRESH_D * 86400;
+    const secs = GT_SECS.map(([sk, sl]) => {
+      const rows = [];
+      for (const g of gs.filter((g) => gtSec(g.name) === sk)) {
+        const mem = fil.filter((x) => (inG.get(x.id) || []).includes(g));
+        const ws = [...new Set(mem.map((x) => gtWave(x.name).toUpperCase()))].sort((a, b) => wr(a) - wr(b));
+        ws.forEach((w, i) => {
+          const ls = mem.filter((x) => gtWave(x.name).toUpperCase() === w).sort((a, b) => a.price - b.price || (b.updatedAt || 0) - (a.updatedAt || 0));
+          rows.push({ g, w, first: i === 0, span: ws.length, min: ls[0], n: ls.length, next: ls.find((x) => x.price > ls[0].price) });
+        });
+      }
+      return { sl, rows };
+    }).filter((s) => s.rows.length);
+    let stt = 0;
+    const body = secs.map(({ sl, rows }) => `<tr class="sec"><td colspan="8">${sl}</td></tr>${rows.map((r) => `<tr>
+      ${r.first ? `<td rowspan="${r.span}" class="c">${++stt}</td><td rowspan="${r.span}" class="g"><span style="background:${r.g.color || '#475569'}">${esc(r.g.name)}</span></td>` : ''}
+      <td class="c">${esc(r.w || '?')}</td>
+      <td><b>${r.min.id}</b> | ${esc(r.min.name)}</td>
+      <td class="r"><b>${r.min.price.toLocaleString('vi-VN')}</b></td>
+      <td>${esc(r.min.prov?.name || r.min.prov?.code || '')}</td>
+      <td class="c${fresh(r.min.updatedAt) ? '' : ' old'}">${day(r.min.updatedAt)}</td>
+      <td class="c">${r.n}${r.next ? `<div class="sm">kế: ${r.next.price.toLocaleString('vi-VN')} (+${(r.next.price - r.min.price).toLocaleString('vi-VN')})</div>` : ''}</td></tr>`).join('')}`).join('');
+    const nccs = gtUi.provs.size ? [...gtUi.provs].join(', ') : 'mọi NCC';
+    const now = new Date();
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bang gia giay tam re nhat</title><style>
+      @page{size:A4 portrait;margin:10mm}
+      body{font:11.5px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;margin:0}
+      .hd{display:flex;align-items:center;gap:10px;border-bottom:2px solid #0f172a;padding-bottom:6px;margin-bottom:8px}
+      .hd img{height:42px}.co{font-weight:800;font-size:13px}.ad{font-size:10.5px;color:#475569}
+      h1{text-align:center;font-size:17px;margin:6px 0 2px}.sub{text-align:center;color:#475569;font-size:11px;margin-bottom:8px}
+      table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:3px 5px;vertical-align:middle}
+      th{background:#f1f5f9;font-size:11px}.c{text-align:center}.r{text-align:right;white-space:nowrap}
+      tr.sec td{background:#0f172a;color:#fff;font-weight:800;letter-spacing:1px}
+      .g span{display:inline-block;color:#fff;font-weight:800;border-radius:99px;padding:0 8px}
+      td.g{text-align:center}.sm{font-size:9.5px;color:#64748b}.old{color:#b91c1c;font-weight:700}
+      tr{page-break-inside:avoid}.ft{margin-top:6px;font-size:10px;color:#64748b}
+    </style></head><body>
+      <div class="hd"><img src="${location.origin}/logo.png" onerror="this.remove()"><div><div class="co">${esc(GT_CO.name)}</div><div class="ad">${esc(GT_CO.addr)}</div></div></div>
+      <h1>BẢNG GIÁ GIẤY TẤM RẺ NHẤT THEO NHÓM</h1>
+      <div class="sub">NCC: ${esc(nccs)} · ${stt} nhóm · In lúc ${esc(now.toLocaleString('vi-VN'))}</div>
+      <table><thead><tr><th>STT</th><th>Nhóm</th><th>Sóng</th><th>ID rẻ nhất | Chất liệu giấy</th><th>Giá rẻ nhất (đ/m²)</th><th>Nhà cung cấp</th><th>Cập nhật lần cuối</th><th>Số giấy</th></tr></thead><tbody>${body || '<tr><td colspan="8" class="c">Không có giấy nào có giá</td></tr>'}</tbody></table>
+      <div class="ft">Mỗi nhóm so theo từng sóng; chỉ tính giấy đang hiện và NCC đang lọc. Ngày cập nhật màu đỏ: giá cũ hơn ${GT_FRESH_D} ngày. "kế": giá rẻ thứ hai và chênh lệch.</div>
+    </body></html>`;
+    csPrint(html, `Bang gia giay tam re nhat ${now.toLocaleDateString('vi-VN').replace(/\//g, '-')}`);
+  }
   function gtDraw(host, items, groups, scan) {
     const all = Object.values(items || {}).filter((x) => x && x.id && x.visible !== false); // giấy đang Ẩn trên CRM: không hiện
     const gs = gtLive(groups).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) }));
@@ -16274,6 +16328,7 @@ Quy tắc:
       const g = gByName.get(codeOf.get(x.id));
       if (g && !inG.has(x.id)) inG.set(x.id, [g]);
     }
+    gtUi.pdfSrc = { all, gs, inG }; // 🖨 Xuất PDF bảng giá rẻ nhất theo nhóm
     const gCount = (g) => all.filter((x) => (inG.get(x.id) || []).includes(g)).length;
     if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.some((g) => g.id === gtUi.g)) gtUi.g = 'all';
     const q = norm(gtUi.q.trim());
@@ -16311,7 +16366,7 @@ Quy tắc:
   <b style="font-size:16px">📄 Giấy tấm</b>
   <span style="color:#64748b;font-size:12px">Kho extension: <b>${all.filter((x) => x.visible !== false).length}</b> / CRM ${scan._total || '?'} giấy đang hiển thị · đồng bộ đủ lần cuối: ${ago(scan._allAt)}${scan._allBy ? ` (${esc(scan._allBy)})` : ''} · tự đồng bộ mỗi giờ</span>
   <span style="flex:1"></span>
-  ${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
+  ${bt('pdf', '🖨 Xuất PDF giá rẻ nhất theo nhóm', 'border-color:#86efac;color:#15803d')}${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
 </div>
 ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#f1f5f9;font-size:12px">${esc(gtUi.msg)}</div>` : ''}
 ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
@@ -16548,6 +16603,9 @@ ${(() => {
       b.textContent = '⏳ Đang tải danh sách đơn…';
       const ok = await gtLoadOrders((pg) => (b.textContent = `⏳ Đang đọc trang ${pg}…`));
       gtUi.msg = ok ? '✓ Đã tải lại danh sách đơn mới.' : 'Đang tải ở tab khác – thử lại sau ít phút.';
+    } else if (k === 'pdf') {
+      gtPdf();
+      return;
     } else if (k === 'opeer') {
       // popup các giấy cùng nhóm + sóng (giá thấp → cao) cạnh chữ vừa bấm
       const r = gtUi.oPeerRows?.get(b.dataset.k);
