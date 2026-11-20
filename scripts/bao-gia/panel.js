@@ -15742,7 +15742,7 @@ Quy tắc:
   let gtPrefsLoaded = false;
   const gtSavePrefs = () => kvMerge(GT_PREFS, { [norm(meName)]: { provs: [...gtUi.provs], at: Date.now() } }).catch(() => {});
   const gtHost = () => root?.querySelector('#dg-gt');
-  const gtTab = () => '<div id="dg-gt" style="padding:10px 12px"><div style="color:#94a3b8">⏳ Đang tải giấy tấm…</div></div>';
+  const gtTab = () => '<div id="dg-gt" style="position:relative;padding:10px 12px"><div style="color:#94a3b8">⏳ Đang tải giấy tấm…</div></div>';
   let gtFillBusy = false;
   async function gtFill(keepFocus) {
     const host = gtHost();
@@ -15761,9 +15761,14 @@ Quy tắc:
       gtFillBusy = false;
     }
   }
+  // Nhóm còn dùng (xoá = đánh dấu deleted vì cloud không nhận lệnh xoá hẳn), sắp theo vị trí
+  const gtLive = (groups) => Object.entries(groups || {}).filter(([, g]) => g && g.name && !g.deleted).sort((a, b) => (a[1].pos ?? 0) - (b[1].pos ?? 0) || a[1].name.localeCompare(b[1].name, 'vi'));
+  // Phân nhóm theo tên: 3 chữ số = 3 lớp, 5 chữ số = 5 lớp, còn lại = Khác
+  const gtSec = (name) => { const d = String(name || '').trim(); return /^\d{3}$/.test(d) ? '3' : /^\d{5}$/.test(d) ? '5' : 'x'; };
+  const GT_SECS = [['3', '3 LỚP'], ['5', '5 LỚP'], ['x', 'KHÁC']];
   function gtDraw(host, items, groups, scan) {
     const all = Object.values(items || {}).filter((x) => x && x.id);
-    const gs = Object.entries(groups || {}).filter(([, g]) => g && g.name).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) })).sort((a, b) => (a.pos ?? 0) - (b.pos ?? 0) || a.name.localeCompare(b.name, 'vi'));
+    const gs = gtLive(groups).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) }));
     const inG = new Map(); // id giấy → các nhóm
     for (const g of gs) for (const id of g.ids) inG.set(id, [...(inG.get(id) || []), g]);
     if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.some((g) => g.id === gtUi.g)) gtUi.g = 'all';
@@ -15786,7 +15791,7 @@ Quy tắc:
     const layers = [...new Set(all.map((x) => x.layer).filter(Boolean))].sort((a, b) => a - b);
     const ago = (t) => (t ? new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa');
     const chip = (g, small) => `<span style="display:inline-block;margin:1px 3px 1px 0;padding:${small ? '0 6px' : '1px 8px'};border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${g.color || '#475569'}">${esc(g.name)}</span>`;
-    const gBtn = (id, label, n, color) => `<button data-gt="g" data-id="${id}" style="display:flex;align-items:center;gap:6px;width:100%;text-align:left;cursor:pointer;border:0;border-radius:8px;padding:6px 8px;margin-bottom:2px;font:inherit;background:${gtUi.g === id ? '#e0e7ff' : 'transparent'};font-weight:${gtUi.g === id ? 800 : 500}">${color ? `<span style="width:10px;height:10px;border-radius:3px;flex:none;background:${color}"></span>` : ''}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><b style="color:#64748b;font-size:12px">${n}</b></button>`;
+    const gBtn = (id, label, n, color, sec) => `<button data-gt="g" data-id="${id}"${sec && MY_ADMIN ? ` draggable="true" data-sec="${sec}"` : ''}${sec ? ' data-drop="1"' : ''} style="display:flex;align-items:center;gap:6px;width:100%;text-align:left;cursor:pointer;border:0;border-radius:8px;padding:6px 8px;margin-bottom:2px;font:inherit;background:${gtUi.g === id ? '#e0e7ff' : 'transparent'};font-weight:${gtUi.g === id ? 800 : 500}">${color ? `<span style="width:10px;height:10px;border-radius:3px;flex:none;background:${color}"></span>` : ''}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><b style="color:#64748b;font-size:12px">${n}</b></button>`;
     const curG = gs.find((g) => g.id === gtUi.g);
     const sel = [...gtUi.sel].filter((id) => items[id]);
     const inp = 'class="gt-edit" style="border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font:inherit;font-size:13px"';
@@ -15804,7 +15809,8 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     <div style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:1px;margin:2px 4px 6px">NHÓM (EXTENSION)</div>
     ${gBtn('all', '📚 Tất cả', all.length)}${gBtn('none', '❔ Chưa có nhóm', all.filter((x) => !inG.has(x.id)).length)}
     <div style="border-top:1px dashed #e2e8f0;margin:6px 0"></div>
-    ${gs.map((g) => gBtn(g.id, esc(g.name), g.ids.filter((id) => items[id]).length, g.color)).join('') || '<div style="color:#94a3b8;font-size:12px;padding:4px">Chưa có nhóm nào</div>'}
+    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10.5px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:8px 4px 3px">${sl} <span style="font-weight:600">· ${list.length}</span></div>${list.map((g) => gBtn(g.id, esc(g.name), g.ids.filter((id) => items[id]).length, g.color, sk)).join('')}` : ''; }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:4px">Chưa có nhóm nào</div>'}
+    ${MY_ADMIN && gs.length > 1 ? '<div style="font-size:10.5px;color:#94a3b8;margin:4px">↕ Kéo thả nhóm để đổi vị trí · kéo dòng giấy thả vào nhóm để thêm</div>' : ''}
     ${MY_ADMIN ? `<div style="display:flex;gap:4px;margin-top:8px"><input data-gt-in="newg" placeholder="Tên nhóm mới…" ${inp.replace('style="', 'style="flex:1;min-width:0;')}>${bt('newg', '＋')}</div>` : ''}
     ${curG && MY_ADMIN ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;flex-direction:column;gap:6px">
       <div style="font-size:11px;font-weight:800;color:#64748b">SỬA NHÓM ĐANG CHỌN</div>
@@ -15835,19 +15841,31 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th>Nhóm extension</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
-      <tbody>${shown.map((x, i) => `<tr style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
+      <tbody>${shown.map((x, i) => `<tr${MY_ADMIN ? ` draggable="true" data-row="${x.id}"` : ''} style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
         ${MY_ADMIN ? `<td style="padding:5px 6px"><input type="checkbox" data-gt="sel" data-id="${x.id}" ${gtUi.sel.has(x.id) ? 'checked' : ''}></td>` : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
         <td>${x.layer || ''}</td><td>${esc(GT_COLOR_VI[x.color] || x.color)}</td><td>${x.xeo || ''}</td>
         <td style="text-align:right;font-weight:700">${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
         <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>
-        <td>${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}</td>
+        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : (inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}</td>
         <td style="text-align:right">${x.totalUses ? `${x.uses}/${x.totalUses}` : ''}</td>
         <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
     </table></div>
     ${pages > 1 ? `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:6px">${bt('prev', '‹')}<span style="font-size:12px">Trang ${gtUi.page + 1}/${pages}</span>${bt('next', '›')}</div>` : ''}
   </div>
-</div>`;
+</div>
+${(() => {
+  // Popup chọn nhanh nhóm cho 1 giấy (bấm ô "Nhóm extension"): tích / bỏ tích là lưu ngay
+  const pk = gtUi.pick;
+  const px = pk && items[pk.id];
+  if (!px) return '';
+  const mine = new Set((inG.get(px.id) || []).map((g) => g.id));
+  return `<div data-gt-pop style="position:absolute;z-index:50;top:${pk.top}px;left:${pk.left}px;width:250px;max-height:360px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.2);padding:8px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><b style="flex:1;font-size:12px">${px.id} · chọn nhóm</b><span data-gt="pclose" style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(px.name)}</div>
+    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:6px 2px 2px">${sl}</div>${list.map((g) => `<div data-gt="pt" data-gid="${g.id}" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;background:${mine.has(g.id) ? '#eef2ff' : 'transparent'}"><input type="checkbox" ${mine.has(g.id) ? 'checked' : ''} style="pointer-events:none"><span style="width:9px;height:9px;border-radius:3px;background:${g.color || '#475569'}"></span><span style="flex:1;font-weight:${mine.has(g.id) ? 800 : 500}">${esc(g.name)}</span></div>`).join('')}` : ''; }).join('') || '<div style="font-size:12px;color:#94a3b8">Chưa có nhóm – tạo ở cột bên trái</div>'}
+  </div>`;
+})()}`;
     if (!host.dataset.wired) {
       host.dataset.wired = '1';
       host.addEventListener('click', (e) => gtClick(e).catch((err) => { gtUi.msg = `⚠️ ${err.message}`; gtFill(); }));
@@ -15874,15 +15892,82 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
           gtFill();
         } else if (k === 'target') gtUi.target = e.target.value;
       });
+      // Kéo thả: nhóm ↔ nhóm (đổi vị trí trong cùng phần 3 lớp / 5 lớp / khác), dòng giấy → nhóm (thêm vào nhóm)
+      const mark = (el, on) => el && (el.style.boxShadow = on ? 'inset 0 0 0 2px #2563eb' : '');
+      host.addEventListener('dragstart', (e) => {
+        const g = e.target.closest?.('[data-gt="g"][draggable]');
+        const r = e.target.closest?.('tr[data-row]');
+        if (g) gtUi.drag = { type: 'g', id: g.dataset.id, sec: g.dataset.sec };
+        else if (r) {
+          const id = Number(r.dataset.row);
+          gtUi.drag = { type: 'row', ids: gtUi.sel.has(id) ? [...gtUi.sel] : [id] };
+        } else return;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'dg-gt');
+      });
+      host.addEventListener('dragover', (e) => {
+        const t = e.target.closest?.('[data-drop]');
+        const d = gtUi.drag;
+        if (!t || !d) return;
+        if (d.type === 'g' && (t.dataset.sec !== d.sec || t.dataset.id === d.id)) return;
+        e.preventDefault();
+        host.querySelectorAll('[data-drop]').forEach((x) => mark(x, x === t));
+      });
+      host.addEventListener('dragend', () => {
+        gtUi.drag = null;
+        host.querySelectorAll('[data-drop]').forEach((x) => mark(x, false));
+      });
+      host.addEventListener('drop', (e) => {
+        const t = e.target.closest?.('[data-drop]');
+        const d = gtUi.drag;
+        gtUi.drag = null;
+        if (!t || !d) return;
+        e.preventDefault();
+        const below = e.clientY > t.getBoundingClientRect().top + t.offsetHeight / 2;
+        gtDrop(d, t.dataset.id, below).catch((err) => { gtUi.msg = `⚠️ ${err.message}`; gtFill(); });
+      });
+      host.ownerDocument.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && gtUi.pick) {
+          gtUi.pick = null;
+          gtFill();
+        }
+      });
       host.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.target.dataset?.gtIn === 'newg') host.querySelector('[data-gt="newg"]')?.click();
       });
     }
   }
+  async function gtDrop(d, target, below) {
+    const groups = await kvGet(GT_GROUPS);
+    if (d.type === 'row') {
+      const g = groups[target];
+      if (!g || g.deleted) return;
+      const ids = new Set((g.ids || []).map(Number));
+      d.ids.forEach((id) => ids.add(id));
+      await kvMerge(GT_GROUPS, { [target]: { ...g, ids: [...ids], at: Date.now(), by: meName || '' } });
+      gtUi.sel.clear();
+      gtUi.msg = `✓ Đã thêm ${d.ids.length} giấy vào “${g.name}”.`;
+    } else {
+      const list = gtLive(groups).map(([id]) => id);
+      const from = list.indexOf(d.id);
+      if (from < 0 || !list.includes(target)) return;
+      list.splice(from, 1);
+      list.splice(list.indexOf(target) + (below ? 1 : 0), 0, d.id);
+      await kvMerge(GT_GROUPS, Object.fromEntries(list.map((id, pos) => [id, { ...groups[id], pos }])));
+    }
+    await gtFill();
+  }
   async function gtClick(e) {
     const b = e.target.closest('[data-gt]');
-    if (!b) return;
     const host = gtHost();
+    if (!b || (gtUi.pick && !e.target.closest('[data-gt-pop]') && b.dataset.gt !== 'pick')) {
+      // bấm ra ngoài popup chọn nhóm → đóng
+      if (gtUi.pick && !e.target.closest('[data-gt-pop]')) {
+        gtUi.pick = null;
+        if (!b) return gtFill();
+      }
+      if (!b) return;
+    }
     const k = b.dataset.gt;
     const groups = await kvGet(GT_GROUPS);
     const val = (n) => host.querySelector(`[data-gt-in="${n}"]`)?.value?.trim() || '';
@@ -15890,7 +15975,24 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
       await kvMerge(GT_GROUPS, { [gid]: patch === null ? null : { ...(groups[gid] || {}), ...patch, at: Date.now(), by: meName || '' } });
     };
     gtUi.msg = '';
-    if (k === 'g') {
+    if (k === 'pick') {
+      const id = Number(b.dataset.id);
+      if (gtUi.pick?.id === id) gtUi.pick = null;
+      else {
+        const hr = host.getBoundingClientRect();
+        const r = b.getBoundingClientRect();
+        gtUi.pick = { id, top: Math.round(r.bottom - hr.top + 4), left: Math.round(Math.max(0, Math.min(r.left - hr.left, hr.width - 260))) };
+      }
+    } else if (k === 'pclose') gtUi.pick = null;
+    else if (k === 'pt') {
+      const g = groups[b.dataset.gid];
+      const id = gtUi.pick?.id;
+      if (!g || g.deleted || !id) return;
+      const ids = new Set((g.ids || []).map(Number));
+      if (ids.has(id)) ids.delete(id);
+      else ids.add(id);
+      await save(b.dataset.gid, { ids: [...ids] });
+    } else if (k === 'g') {
       gtUi.g = b.dataset.id;
       gtUi.page = 0;
     } else if (k === 'sel') {
@@ -15912,9 +16014,9 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     else if (k === 'newg') {
       const name = val('newg');
       if (!name) return;
-      if (Object.values(groups).some((g) => g?.name && norm(g.name) === norm(name))) throw new Error(`Đã có nhóm “${name}”.`);
+      if (Object.values(groups).some((g) => g?.name && !g.deleted && norm(g.name) === norm(name))) throw new Error(`Đã có nhóm “${name}”.`);
       const gid = `g${Date.now().toString(36)}`;
-      const n = Object.values(groups).filter((g) => g?.name).length;
+      const n = gtLive(groups).length;
       await save(gid, { name, color: GT_COLORS[n % GT_COLORS.length], ids: [], pos: n, note: '' });
       gtUi.target = gid; // giữ nguyên danh sách đang xem để chọn giấy thêm vào nhóm mới
       gtUi.msg = `✓ Đã tạo nhóm “${name}” – tích chọn giấy ở bảng rồi bấm “➕ Thêm vào nhóm”.`;
@@ -15925,7 +16027,7 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
       gtUi.msg = '✓ Đã lưu nhóm.';
     } else if (k === 'gcolor') await save(gtUi.g, { color: b.dataset.c });
     else if (k === 'gup' || k === 'gdown') {
-      const list = Object.entries(groups).filter(([, g]) => g?.name).sort((a, c) => (a[1].pos ?? 0) - (c[1].pos ?? 0) || a[1].name.localeCompare(c[1].name, 'vi'));
+      const list = gtLive(groups);
       const i = list.findIndex(([id]) => id === gtUi.g);
       const j = k === 'gup' ? i - 1 : i + 1;
       if (i < 0 || j < 0 || j >= list.length) return;
@@ -15943,7 +16045,7 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
         return;
       }
       gtUi.delArm = null;
-      await save(gtUi.g, null);
+      await save(gtUi.g, { deleted: true, ids: [] }); // đánh dấu đã xoá (lệnh xoá hẳn không lên được cloud → máy khác kéo về lại)
       gtUi.g = 'all';
       gtUi.msg = `✓ Đã xoá nhóm “${g.name}”.`;
     } else if (k === 'add' || k === 'rm') {
