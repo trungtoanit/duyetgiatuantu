@@ -16219,18 +16219,20 @@ Quy tắc:
     const nNo = rows.length - nBad - nOk - nSolo;
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
     // Bấm "(N giấy cùng nhóm)" → mở bảng các giấy cùng nhóm + sóng (giá thấp → cao): rẻ hơn xanh, đắt hơn đỏ, giấy đang dùng tô xanh dương
-    const peerBtn = (r) => `<span data-gt="opeer" data-k="${esc(r._ok)}" title="Bấm để xem các giấy cùng nhóm – giá cao / thấp" style="cursor:pointer;color:#2563eb;text-decoration:underline dotted;font-size:12px">(${r.peers} giấy cùng nhóm ${gtUi.oPeer === r._ok ? '▴' : '▾'})</span>`;
-    const peerTbl = (r) => {
-      if (gtUi.oPeer !== r._ok || !r.me) return '';
+    gtUi.oPeerRows = new Map();
+    const peerBtn = (r) => (gtUi.oPeerRows.set(r._ok, r), `<span data-gt="opeer" data-k="${esc(r._ok)}" title="Bấm để xem các giấy cùng nhóm – giá cao / thấp" style="cursor:pointer;color:#2563eb;text-decoration:underline dotted;font-size:12px">(${r.peers} giấy cùng nhóm ▾)</span>`);
+    gtUi.oPeerHtml = (r) => {
+      if (!r.me) return '';
       const me = r.myP;
       const ls = [...r.peerList].sort((a, b) => a.price - b.price || a.id - b.id);
-      return `<table style="margin-top:4px;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid #e2e8f0;border-radius:6px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:3px 6px">ID | Chất liệu giấy</th><th style="padding:3px 6px">NCC</th><th style="padding:3px 6px;text-align:right">Đơn giá</th><th style="padding:3px 6px;text-align:right">So với đang dùng</th><th style="padding:3px 6px">Cập nhật</th></tr></thead><tbody>${ls.map((x) => {
+      return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#fff"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:3px 6px">ID | Chất liệu giấy</th><th style="padding:3px 6px">NCC</th><th style="padding:3px 6px;text-align:right">Đơn giá</th><th style="padding:3px 6px;text-align:right">So với đang dùng</th><th style="padding:3px 6px">Cập nhật</th></tr></thead><tbody>${ls.map((x) => {
         const dd = x.price - me;
         const mine = String(x.id) === String(r.me.id);
         const c = mine ? '#1d4ed8' : dd < 0 ? '#15803d' : dd > 0 ? '#dc2626' : '#334155';
         return `<tr style="border-top:1px solid #f1f5f9;${mine ? 'background:#eff6ff' : dd < 0 ? 'background:#f0fdf4' : ''}"><td style="padding:3px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${mine ? ' <b style="color:#1d4ed8">(đang dùng)</b>' : ''}</td><td style="padding:3px 6px">${esc(x.prov?.name || x.prov?.code || '')}</td><td style="padding:3px 6px;text-align:right;font-weight:800;color:${c}">${x.price.toLocaleString('vi-VN')}</td><td style="padding:3px 6px;text-align:right;color:${c};white-space:nowrap">${mine ? '—' : dd === 0 ? 'bằng giá' : `${dd < 0 ? '▼ rẻ hơn' : '▲ đắt hơn'} ${Math.abs(dd).toLocaleString('vi-VN')}đ`}</td><td style="padding:3px 6px;color:#64748b">${day(x.updatedAt)}</td></tr>`;
       }).join('')}</tbody></table>`;
     };
+    const peerTbl = () => '';
     const st = (r) => {
       if (!r.code) return '<span style="color:#94a3b8">không tính được mã lớp</span>';
       if (!r.me) return '<span style="color:#d97706">giấy không còn trong kho (đã đổi tên / ẩn)</span>';
@@ -16547,7 +16549,22 @@ ${(() => {
       const ok = await gtLoadOrders((pg) => (b.textContent = `⏳ Đang đọc trang ${pg}…`));
       gtUi.msg = ok ? '✓ Đã tải lại danh sách đơn mới.' : 'Đang tải ở tab khác – thử lại sau ít phút.';
     } else if (k === 'opeer') {
-      gtUi.oPeer = gtUi.oPeer === b.dataset.k ? '' : b.dataset.k;
+      // popup các giấy cùng nhóm + sóng (giá thấp → cao) cạnh chữ vừa bấm
+      const r = gtUi.oPeerRows?.get(b.dataset.k);
+      document.getElementById('dg-gtpeer-pop')?.remove();
+      if (!r) return;
+      const pop = document.createElement('div');
+      pop.id = 'dg-gtpeer-pop';
+      const br = b.getBoundingClientRect();
+      pop.setAttribute('style', `position:fixed;z-index:2147483000;top:${Math.max(8, Math.min(br.bottom + 6, window.innerHeight - 340))}px;left:${Math.max(8, Math.min(br.left - 40, window.innerWidth - 680))}px;width:660px;max-height:330px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
+      pop.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><b style="flex:1">${r.peers} giấy cùng nhóm ${esc(r.g?.name || r.code)} · sóng ${esc(r.w)} <span style="font-weight:500;color:#64748b;font-size:12px">– giá thấp → cao</span></b><span data-x style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>${gtUi.oPeerHtml(r)}<div style="margin-top:6px;font-size:11px;color:#94a3b8">🟦 đang dùng · 🟩 rẻ hơn · 🟥 đắt hơn · chỉ NCC đang lọc, giá cập nhật trong ${GT_FRESH_D} ngày</div>`;
+      document.body.append(pop);
+      pop.querySelector('[data-x]').onclick = () => pop.remove();
+      setTimeout(() => {
+        const off = (ev) => { if (!ev.composedPath().includes(pop)) { pop.remove(); document.removeEventListener('mousedown', off, true); } };
+        document.addEventListener('mousedown', off, true);
+      }, 0);
+      return;
     } else if (k === 'osort') {
       gtUi.oSort = b.dataset.k;
       lsSet('dgGtOSort', gtUi.oSort);
