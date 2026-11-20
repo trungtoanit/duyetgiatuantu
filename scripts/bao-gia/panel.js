@@ -15850,10 +15850,11 @@ Quy tắc:
       const ic = document.createElement('span');
       ic.className = 'dg-gtq';
       ic.dataset.id = id;
-      ic.textContent = info.state === 'q' ? '❓' : info.state === 'ok' ? '✅' : '①';
-      ic.title = info.state === 'q' ? `Chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem` : info.state === 'ok' ? `Rẻ nhất nhóm ${info.code} sóng ${info.w} (${info.peers.length + 1} giấy) – bấm để xem so sánh` : `Chỉ có 1 giấy trong nhóm ${info.code} sóng ${info.w} – nên hỏi thêm NCC khác`;
-      ic.setAttribute('style', `cursor:pointer;margin-left:4px;font-size:${info.state === 'solo' ? 13 : 14}px;display:inline-block;${info.state === 'q' ? 'animation:dgGtqPulse 1.6s infinite' : info.state === 'solo' ? 'color:#d97706;font-weight:800' : ''}`);
-      if (!document.getElementById('dg-gtq-css')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-gtq-css">@keyframes dgGtqPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}</style>');
+      if (info.state === 'q') ic.innerHTML = GT_ANGRY_SVG.replace('width="92" height="100"', 'width="30" height="32"').replace(/gaFace/g, `gaFace${id}`);
+      else ic.textContent = info.state === 'ok' ? '✅' : '①';
+      ic.title = info.state === 'q' ? `😡 Kế toán giận: chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem` : info.state === 'ok' ? `Rẻ nhất nhóm ${info.code} sóng ${info.w} (${info.peers.length + 1} giấy) – bấm để xem so sánh` : `Chỉ có 1 giấy trong nhóm ${info.code} sóng ${info.w} – nên hỏi thêm NCC khác`;
+      ic.setAttribute('style', `cursor:pointer;margin-left:4px;font-size:${info.state === 'solo' ? 13 : 14}px;display:inline-block;${info.state === 'q' ? 'vertical-align:middle;line-height:0;animation:dgGtqShake 1.4s ease-in-out infinite;transform-origin:50% 90%' : info.state === 'solo' ? 'color:#d97706;font-weight:800' : ''}`);
+      if (!document.getElementById('dg-gtq-css2')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-gtq-css2">@keyframes dgGtqPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}@keyframes dgGtqShake{0%,55%,100%{transform:rotate(0) scale(1)}60%{transform:rotate(-12deg) scale(1.15)}68%{transform:rotate(12deg) scale(1.15)}76%{transform:rotate(-9deg) scale(1.1)}84%{transform:rotate(9deg) scale(1.1)}92%{transform:rotate(-3deg)}}.dg-gtq .ga-steam path{fill:none;stroke:#94a3b8;stroke-width:5;stroke-linecap:round}@media (prefers-reduced-motion:reduce){.dg-gtq{animation:none!important}}</style>');
       ic.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -15909,6 +15910,7 @@ Quy tắc:
       }
       gtUi.zsent = zsent;
       gtUi.done = (await kvGet(GT_DONE).catch(() => ({}))) || {};
+      gtUi.poDiff = (await kvGet(GT_PODIFF).catch(() => ({}))) || {};
       if (!gtPrefsLoaded) {
         gtPrefsLoaded = true;
         const pf = (await kvGet(GT_PREFS))[norm(meName)];
@@ -16017,7 +16019,121 @@ Quy tắc:
         out.push({ l, me, min, diff, money: m2 ? Math.round(diff * m2) : 0 });
       }
     }
-    return out.sort((a, b) => b.money - a.money || (b.l.at || 0) - (a.l.at || 0));
+    // chỉ 10 dòng đơn gần nhất chưa xử lý (mới lên đơn trước)
+    return out.sort((a, b) => (b.l.at || 0) - (a.l.at || 0) || String(b.l.order).localeCompare(String(a.l.order))).slice(0, 10);
+  }
+  // 🧾 Tiền chênh CHÍNH XÁC của 1 dòng đơn: mở báo giá trong khung ẩn (chỉ đọc – mọi lệnh ghi bị chặn), Lên PO → Giấy tấm,
+  // chọn NCC của giấy đang dùng, thay "Giá cuối" của dòng = giá cũ rồi = giá rẻ nhất, đọc "Tổng thanh toán" 2 lần → chênh lệch.
+  // Không bấm Lưu / Tạo PO. Kết quả: kv gtPoDiff "<mã đơn>|<dòng>" → { old, new, diff, p1, p2, at }
+  const GT_PODIFF = 'gtPoDiff';
+  const gtPoOk = (pd, me, min) => pd && !pd.err && pd.p1 === me.price && pd.p2 === min.price;
+  async function gtPoDiffOne({ l, me, min }) {
+    const quotes = await kvGet('quotes');
+    const q = Object.values(quotes || {}).find((v) => v?.code === l.quote);
+    if (!q?.id) throw new Error(`Không thấy báo giá ${l.quote || '(trống)'} trong dữ liệu`);
+    let res = null;
+    let err = 'Không mở được báo giá';
+    await loadInFrame(q.id, undefined, undefined, async (f) => {
+      try {
+        const doc = f.contentDocument;
+        const win = f.contentWindow;
+        const modal = await openPoGiayTam(doc);
+        const selTxt = () => modal.querySelector('.ant-select-selection-item')?.innerText || '';
+        const want = me.prov?.code;
+        if (want && !selTxt().startsWith(`${want} `)) {
+          const b = [...modal.querySelectorAll('button.ant-btn')].find((x) => x.innerText.trim() === want);
+          if (b) b.click();
+          await sleep(1500);
+        }
+        const readTotal = () => Number((modal.innerText.match(/Tổng thanh toán:?\s*([\d.]+)/) || [])[1]?.replace(/\./g, '') || 0);
+        // chờ bảng dòng hàng của PO có dòng đúng Mã TP / ID giấy
+        const findRow = () => {
+          const t = [...modal.querySelectorAll('table')].find((x) => [...x.querySelectorAll('th')].some((th) => th.innerText.trim() === 'Mã TP'));
+          if (!t) return null;
+          const hs = [...t.querySelectorAll('thead th')].map((th) => th.innerText.trim());
+          const iTp = hs.indexOf('Mã TP');
+          const iCl = hs.indexOf('Chất liệu');
+          const iGc = hs.indexOf('Giá cuối');
+          if (iGc < 0) return null;
+          const rows = [...t.querySelectorAll('tbody tr')].filter((tr) => tr.cells.length > iGc);
+          const tr = rows.find((x) => l.tp && x.cells[iTp]?.innerText.trim() === l.tp && x.cells[iCl]?.innerText.trim().startsWith(`${me.id} `)) ||
+            rows.find((x) => l.tp && x.cells[iTp]?.innerText.trim() === l.tp) || rows.find((x) => x.cells[iCl]?.innerText.trim().startsWith(`${me.id} `));
+          const inp = tr?.cells[iGc]?.querySelector('input');
+          return inp ? { inp } : null;
+        };
+        const row = await waitFor(() => readTotal() && findRow(), 20000, 400);
+        if (!row) throw new Error(`Không thấy dòng ${l.tp || me.id} trong PO giấy tấm`);
+        const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
+        const setPrice = async (price) => {
+          const inp = findRow()?.inp || row.inp;
+          inp.focus();
+          setter.call(inp, String(price));
+          inp.dispatchEvent(new win.Event('input', { bubbles: true }));
+          inp.dispatchEvent(new win.Event('change', { bubbles: true }));
+          inp.blur();
+          inp.dispatchEvent(new win.FocusEvent('focusout', { bubbles: true }));
+          let last = -1;
+          let same = 0;
+          for (let i = 0; i < 25 && same < 2; i++) {
+            await sleep(300);
+            const t = readTotal();
+            same = t && t === last && i >= 2 ? same + 1 : 0;
+            last = t;
+          }
+          return last;
+        };
+        const tOld = await setPrice(me.price);
+        const tNew = await setPrice(min.price);
+        if (!tOld || !tNew) throw new Error('Không đọc được Tổng thanh toán');
+        res = { old: tOld, new: tNew, diff: tOld - tNew, p1: me.price, p2: min.price, pid: me.id, mid: min.id, quote: l.quote, at: Date.now() };
+        modal.querySelector('.ant-modal-close')?.click();
+      } catch (e) {
+        err = e.message || String(e);
+      }
+    });
+    if (!res) throw new Error(err);
+    return res;
+  }
+  // Mỗi 2 phút: tính 1 dòng còn thiếu (trong 10 đơn gần nhất chưa xử lý). Chỉ 1 tab chạy (khoá localStorage)
+  let gtPoBusy = false;
+  async function gtPoRun() {
+    if (!IS_TOP || gtPoBusy || document.hidden) return;
+    const lock = Number(lsGet('dgGtPoLock')) || 0;
+    if (Date.now() - lock < 3 * 60e3) return;
+    gtPoBusy = true;
+    try {
+      const meObj = await kvGet('me');
+      meName = myName(meObj);
+      if (!PERMS || !Object.keys(PERMS).length) PERMS = (await kvGet('perms')) || {};
+      if (!userPerm(meObj).tabs.includes('gt')) return;
+      const list = await gtAngryList();
+      const pds = (await kvGet(GT_PODIFF).catch(() => ({}))) || {};
+      const x = list.find((y) => {
+        const pd = pds[`${y.l.order}|${y.l.did ?? ''}`];
+        if (gtPoOk(pd, y.me, y.min)) return false;
+        return !(pd?.err && pd.p1 === y.me.price && pd.p2 === y.min.price && Date.now() - pd.at < 3600e3); // lỗi → 1 giờ sau thử lại
+      });
+      if (!x) return;
+      lsSet('dgGtPoLock', String(Date.now()));
+      const key = `${x.l.order}|${x.l.did ?? ''}`;
+      let v;
+      try {
+        v = await gtPoDiffOne(x);
+      } catch (e) {
+        v = { err: e.message || String(e), p1: x.me.price, p2: x.min.price, at: Date.now() };
+      }
+      await kvMerge(GT_PODIFF, { [key]: v });
+      lsSet('dgGtPoLock', '0');
+      injectGtAngry();
+      if (lsGet('dgTab') === 'gt') gtFill(true);
+    } catch {
+    } finally {
+      gtPoBusy = false;
+    }
+  }
+  if (IS_TOP) {
+    setTimeout(() => gtPoRun(), 20e3);
+    setInterval(() => gtPoRun(), 2 * 60e3);
   }
   const GT_ANGRY_SVG = `<svg viewBox="0 0 120 130" width="92" height="100" aria-hidden="true">
   <g class="ga-steam"><path d="M22 30c-6-6 4-10-2-17" /><path d="M98 30c6-6-4-10 2-17" /><path d="M60 8c-5-5 4-8-1-14" /></g>
@@ -16042,6 +16158,12 @@ Quy tắc:
       PERMS = PERMS && Object.keys(PERMS).length ? PERMS : (await kvGet('perms')) || {};
       const ok = userPerm(meObj).tabs.includes('gt');
       const list = ok ? await gtAngryList() : [];
+      const pds = ok ? (await kvGet(GT_PODIFF).catch(() => ({}))) || {} : {};
+      for (const x of list) {
+        const pd = pds[`${x.l.order}|${x.l.did ?? ''}`];
+        x.po = gtPoOk(pd, x.me, x.min) ? pd : null;
+        if (x.po) x.money = x.po.diff;
+      }
       let box = document.getElementById('dg-gt-angry');
       if (!list.length) return box?.remove();
       if (!document.getElementById('dg-gt-angry-css')) {
@@ -16102,9 +16224,10 @@ Quy tắc:
       const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
 <div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${GT_ANGRY_SVG}</div><div class="ga-body">
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
-<div class="ga-s"><b>${nOrd}</b> đơn dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>≈ ${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
+<div class="ga-s"><b>${nOrd}</b> đơn gần nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
-<div class="ga-li">${list.slice(0, 12).map(({ l, me, min, diff, money }) => `<div class="ga-r"><span class="m">${money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b> · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}${list.length > 12 ? `<div class="ga-r p">… và ${list.length - 12} dòng nữa</div>` : ''}</div>
+<div class="ga-li">${list.slice(0, 12).map(({ l, me, min, diff, money, po }) => `<div class="ga-r"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b> · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}${list.length > 12 ? `<div class="ga-r p">… và ${list.length - 12} dòng nữa</div>` : ''}</div>
+<div style="font-size:10.5px;color:#94a3b8;margin-top:4px">🧾 = tiền chênh tính trên PO giấy tấm (thay Giá cuối cũ → rẻ nhất, so Tổng thanh toán) · ≈ = ước tính, đang tính PO</div>
 <div class="ga-btns"><button class="go" data-ga="go">📄 Xử lý ở tab Giấy tấm</button><button data-ga="min">Để sau 30 phút</button></div>
 </div></div>`;
       if (box.dataset.h !== html) {
@@ -16483,7 +16606,13 @@ tr.dg-gt-read>td span[style*="background"]:not(.dg-gt-badge){filter:grayscale(1)
   <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
-  <td style="padding-left:8px">${dBadge}${st({ ...r, money, m2, _ok: `${l.order}|${l.did}` })}${zalo}</td>
+  <td style="padding-left:8px">${dBadge}${(() => {
+    const pd = r.me && r.min && r.diff > 0 ? (gtUi.poDiff || {})[dk] : null;
+    if (!pd) return '';
+    if (pd.err) return pd.p1 === r.myP ? `<div style="font-size:11px;color:#94a3b8" title="${esc(pd.err)}">🧾 Chưa tính được trên PO: ${esc(pd.err.slice(0, 60))}</div>` : '';
+    if (pd.p1 !== r.myP || pd.p2 !== r.min.price) return '';
+    return `<div style="margin-bottom:3px;font-size:12px"><span style="display:inline-block;padding:1px 8px;border-radius:6px;background:#fff1f2;border:1px solid #fda4af;color:#9f1239;font-weight:800" title="Lên PO giấy tấm ${esc(pd.quote || '')}: Giá cuối ${pd.p1.toLocaleString('vi-VN')} → Tổng thanh toán ${pd.old.toLocaleString('vi-VN')}; Giá cuối ${pd.p2.toLocaleString('vi-VN')} → ${pd.new.toLocaleString('vi-VN')}">🧾 PO: ${pd.old.toLocaleString('vi-VN')} → ${pd.new.toLocaleString('vi-VN')} = chênh ${pd.diff.toLocaleString('vi-VN')}đ</span></div>`;
+  })()}${st({ ...r, money, m2, _ok: `${l.order}|${l.did}` })}${zalo}</td>
   <td style="position:relative;vertical-align:top;padding:6px 6px 0 0;text-align:right"><button data-gt="omenu" data-k="${esc(dk)}" title="Thao tác: đánh dấu đã xử lý" style="cursor:pointer;border:1px solid ${dd ? '#86efac' : '#cbd5e1'};background:${dd ? '#dcfce7' : '#fff'};border-radius:7px;width:28px;height:24px;font:inherit;font-weight:900;color:${dd ? '#15803d' : '#475569'}">${dd ? '✔' : '⋯'}</button>${menu}</td></tr>`;
   }).join('')}</tbody></table></div>`;
   }
