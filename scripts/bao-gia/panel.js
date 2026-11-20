@@ -15742,6 +15742,86 @@ Quy tắc:
     setInterval(() => gtScan().catch(() => {}), 5 * 60e3); // 5 phút kiểm tra 1 lần, chỉ đồng bộ khi bản trên cloud đã quá 1 tiếng
   }
 
+  // ---------- ❓ Trang báo giá / cơ hội: cột "Kết cấu giấy" – giấy đang chọn chưa rẻ nhất nhóm (mã lớp + sóng) → icon ❓,
+  // bấm ❓ hiện popup các giấy rẻ hơn cùng nhóm (chỉ NCC đang lọc ở tab 📄 Giấy tấm, giá cập nhật trong 90 ngày). Chỉ đọc, không đổi gì trên CRM.
+  const gtQ = { at: 0, items: {}, provs: new Set() };
+  async function gtQLoad() {
+    if (Date.now() - gtQ.at < 60e3) return;
+    gtQ.at = Date.now();
+    const [items, prefs] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_PREFS)]);
+    gtQ.items = items || {};
+    gtQ.provs = new Set(prefs?.[norm(meName)]?.provs || []);
+  }
+  function gtQCheaper(id) {
+    const me = gtQ.items[id];
+    if (!me) return null;
+    const code = gtCode(me.name);
+    const w = gtWave(me.name);
+    if (!code) return null;
+    const now = Date.now() / 1000;
+    const list = Object.values(gtQ.items).filter((x) => x && x.id !== me.id && x.visible !== false && x.price >= 500 && now - (x.updatedAt || 0) < GT_FRESH_D * 86400 && gtCode(x.name) === code && gtWave(x.name) === w && x.price < me.price && (!gtQ.provs.size || gtQ.provs.has(x.prov?.code || '')));
+    return { me, code, w, list: list.sort((a, b) => a.price - b.price) };
+  }
+  function gtQPopup(icon, info) {
+    document.getElementById('dg-gtq-pop')?.remove();
+    const pop = document.createElement('div');
+    pop.id = 'dg-gtq-pop';
+    const r = icon.getBoundingClientRect();
+    pop.setAttribute('style', `position:fixed;z-index:2147483000;top:${Math.min(r.bottom + 6, window.innerHeight - 320)}px;left:${Math.max(8, Math.min(r.left - 20, window.innerWidth - 560))}px;width:540px;max-height:300px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
+    const { me, code, w, list } = info;
+    const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
+    pop.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><b style="flex:1">❓ Có ${list.length} giấy rẻ hơn cùng nhóm ${esc(code)} · sóng ${esc(w)}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
+<div style="font-size:12px;margin-bottom:6px;padding:4px 8px;border-radius:6px;background:#fef2f2">Đang chọn: <b style="color:#2563eb">${me.id}</b> | ${esc(me.name)} · <b style="color:#dc2626">${me.price.toLocaleString('vi-VN')} đ/m2</b> <span style="color:#64748b">· ${esc(me.prov?.name || '')}</span></div>
+<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:4px 6px">ID | Chất liệu giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Rẻ hơn</th><th style="padding-left:6px">Cập nhật</th></tr></thead>
+<tbody>${list.map((x, i) => `<tr style="border-top:1px solid #f1f5f9;${i === 0 ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td>${esc(x.prov?.name || x.prov?.code || '')}</td><td style="text-align:right;font-weight:800;color:#15803d">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:#dc2626">−${(me.price - x.price).toLocaleString('vi-VN')}đ (${Math.round(((me.price - x.price) / me.price) * 100)}%)</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td></tr>`).join('')}</tbody></table>
+<div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>`;
+    document.body.append(pop);
+    pop.querySelector('[data-x]').onclick = () => pop.remove();
+    setTimeout(() => {
+      const off = (e) => {
+        if (!pop.contains(e.target) && e.target !== icon) {
+          pop.remove();
+          document.removeEventListener('mousedown', off, true);
+        }
+      };
+      document.addEventListener('mousedown', off, true);
+    }, 0);
+  }
+  async function gtQMount() {
+    if (!currentQuoteId() || SITE.key !== 'tuantu') return;
+    const pt = productTable();
+    if (!pt) return;
+    await gtQLoad();
+    if (!Object.keys(gtQ.items).length) return;
+    for (const tr of pt.t.querySelectorAll('tbody tr.ant-table-row')) {
+      const cell = paperCell(tr, pt.iKc);
+      const id = pidOf(cell);
+      if (!cell || !id) continue;
+      const old = cell.querySelector('.dg-gtq');
+      if (old && old.dataset.id === id) continue;
+      old?.remove();
+      const info = gtQCheaper(id);
+      if (!info?.list.length) continue;
+      const ic = document.createElement('span');
+      ic.className = 'dg-gtq';
+      ic.dataset.id = id;
+      ic.textContent = '❓';
+      ic.title = `Chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem`;
+      ic.setAttribute('style', 'cursor:pointer;margin-left:4px;font-size:14px;display:inline-block;animation:dgGtqPulse 1.6s infinite');
+      if (!document.getElementById('dg-gtq-css')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-gtq-css">@keyframes dgGtqPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}</style>');
+      ic.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const cur = gtQCheaper(ic.dataset.id);
+        if (cur?.list.length) gtQPopup(ic, cur);
+      });
+      const link = pidLink(cell);
+      if (link) link.after(ic); // ngay sau số ID giấy
+      else cell.append(ic);
+    }
+  }
+  if (IS_TOP) setInterval(() => gtQMount().catch(() => {}), 2000);
+
   // ---------- Tab 📄 Giấy tấm: kho giấy tấm + nhóm do extension tự quản lý (cloud) ----------
   const GT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#475569'];
   const GT_COLOR_VI = { NAU: 'Nâu', TRANG: 'Trắng', VANG: 'Vàng', XAM: 'Xám' };
