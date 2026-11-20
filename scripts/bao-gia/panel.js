@@ -15834,16 +15834,17 @@ Quy tắc:
     const sent = await kvGet(GT_ZSENT);
     const ls = r.ol.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
     if (!ls.length) throw new Error('Các đơn của giấy này đã gửi yêu cầu rồi.');
-    const m = gtZaloMsg(r, ls);
+    // mỗi đơn 1 tin nhắn (tin đầu + các tin sau gửi lần lượt trong cùng khung chat nhóm)
+    const parts = ls.map((l) => gtZaloMsg(r, [l]));
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-gt`;
-    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: m.text, html: m.html, status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
+    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: parts[0].text, html: parts[0].html, more: parts.slice(1), status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     const mark = (state, error) => kvMerge(GT_ZSENT, Object.fromEntries(ls.map((l) => [gtZKey(l.order, r.me.id), { at: Date.now(), by: meName || '', state, job: jobId, cheap: r.min.id, diff: r.diff, ...(error ? { error } : {}) }])));
     await mark('queue');
-    gtUi.msg = `⏳ Đã xếp tin gửi nhóm Zalo “${GT_ZGROUP}” (${ls.length} đơn) – chờ tab Zalo gửi…`;
+    gtUi.msg = `⏳ Đã xếp ${ls.length} tin (mỗi đơn 1 tin) gửi nhóm Zalo “${GT_ZGROUP}” – chờ tab Zalo gửi…`;
     (async () => {
       for (let i = 0; i < 200; i++) {
         await sleep(1500);
