@@ -15676,7 +15676,7 @@ Quy tắc:
   if (IS_TOP) setInterval(pmMount, 700);
   // ---------- 📄 Danh sách giấy tấm (/carton/giay-tam) → cloud (kv 'giayTam'), 1 tiếng / lần đọc trang 1 ----------
   // Chỉ đọc: gọi đúng API mà trang Giấy tấm dùng (cartonStruct, trang 1, 100 dòng, đang Hiển thị) bằng phiên đăng nhập sẵn có.
-  // Mọi máy Tuấn Tú đều có thể quét, nhưng chỉ 1 tab / lần (khoá) và bỏ qua nếu cloud đã có bản < 1 tiếng.
+  // Mọi máy (Tuấn Tú, Đại Dương – dữ liệu riêng từng domain) đều có thể quét, nhưng chỉ 1 tab / lần (khoá) và bỏ qua nếu cloud đã có bản < 1 tiếng.
   const GT_KEY = 'giayTam'; // bản quét trang 1 gần nhất: { _list, _total, _at, _by, _first }
   const GT_ITEMS = 'gtItems'; // kho giấy tấm của extension: { [id]: giấy tấm (gọn) } – gộp dần từ mỗi lần quét
   const GT_GROUPS = 'gtGroups'; // nhóm do extension tự quản lý: { [gid]: { name, color, note, ids: [id…], pos, at, by } }
@@ -15702,7 +15702,7 @@ Quy tắc:
   // Đồng bộ ĐỦ danh sách giấy tấm đang Hiển thị (mọi trang, ~18 trang × 100) – 1 tiếng / lần, 1 tab làm; đọc hết rồi ghi 1 lần.
   // Giấy đã có trong kho mà lần đồng bộ đủ này không còn thấy → đánh dấu Ẩn (vẫn giữ trong kho).
   async function gtSyncAll(force = false, onStep) {
-    if (!IS_TOP || gtBusy || SITE.key !== 'tuantu') return null;
+    if (!IS_TOP || gtBusy) return null;
     const cur = await kvGet(GT_KEY);
     if (!force && Date.now() - (cur._allAt || 0) < 60 * 60e3) return null;
     if (!tabLock('dgGtLock', 10 * 60e3) && !force) return null;
@@ -15824,7 +15824,7 @@ Quy tắc:
     }, 0);
   }
   async function gtQMount() {
-    if (!currentQuoteId() || SITE.key !== 'tuantu') return;
+    if (!currentQuoteId()) return;
     const pt = productTable();
     if (!pt) return;
     await gtQLoad();
@@ -16077,6 +16077,51 @@ Quy tắc:
     })();
   }
   // ⟳ Tải danh sách đơn (tab Mới) trong khung ẩn, chỉ trang 1 (100 đơn mới nhất) → hook đọc giấy từng dòng đơn (orderPapers). Chỉ đọc.
+  // Đại Dương không có Danh sách đơn Misa → đọc bảng /don-hang (trang 1 = 100 đơn mới nhất): mỗi dòng sản phẩm của đơn "Mới"
+  // ghép với ô Giấy tấm cùng vị trí ("209 | CL_N120/X95/N120-B"). Đơn đã sang trạng thái khác → giấy để trống (không còn tính).
+  const GT_ORD_SRC = SITE.key === 'daiduong' ? 'trang Đơn hàng (trạng thái Mới)' : 'Danh sách đơn (tab Mới)';
+  const ddNum = (t) => Number((String(t || '').match(/\d[\d.]*/) || [''])[0].replace(/\./g, '')) || 0;
+  function ddOrderLines(doc) {
+    const t = doc && [...doc.querySelectorAll('.ant-table')].find((x) => /Giấy tấm/.test(x.querySelector('.ant-table-thead')?.innerText || ''));
+    if (!t) return [];
+    const hs = [...t.querySelectorAll('.ant-table-thead th')].map((th) => th.innerText.trim());
+    const [iCode, iSt, iCust, iSp, iGt, iTot, iAt] = [/^Mã đơn/, /^Trạng thái/, /^Khách hàng/, /^Sản phẩm/, /^Giấy tấm/, /^Thành tiền/, /^Ngày tạo/].map((re) => hs.findIndex((h) => re.test(h)));
+    if (iCode < 0 || iSp < 0 || iGt < 0) return [];
+    const out = [];
+    for (const tr of t.querySelectorAll('.ant-table-tbody tr.ant-table-row')) {
+      const c = tr.cells;
+      const oid = (c[iCode]?.querySelector('a')?.innerText || '').trim();
+      if (!/^\d+$/.test(oid)) continue;
+      const isNew = (c[iSt]?.innerText || '').trim() === 'Mới';
+      const quote = ((c[iCode].innerText || '').match(/BG\d+/) || [])[0] || '';
+      const cust = ((c[iCust]?.innerText || '').match(/Khách hàng:\s*([^\n]+)/) || [])[1]?.trim() || '';
+      const at = Date.parse((((c[iAt]?.innerText || '').match(/\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d)?/) || [])[0] || '').replace(' ', 'T')) || undefined;
+      const oTotal = ddNum(c[iTot]?.innerText);
+      const prods = [...(c[iSp]?.firstElementChild?.children || [])].filter((x) => x.querySelector('label.font-bold'));
+      const papers = [...(c[iGt]?.children || [])];
+      prods.forEach((pe, i) => {
+        const m = (papers[i]?.innerText || '').replace(/\s+/g, ' ').trim().match(/^(\d+)\s*\|\s*(\S+)/);
+        const txt = pe.innerText || '';
+        const qty = ddNum((txt.match(/SL:\s*([\d.]+)/) || [])[1]);
+        const price = ddNum((txt.match(/Giá:\s*([\d.]+)/) || [])[1]);
+        out.push({ did: `${oid}-${i}`, oid: Number(oid), order: oid, at, quote, cust, prod: pe.querySelector('label.font-bold').innerText.trim(), tp: '', qty, oTotal, lTotal: qty * price, paper: isNew && m ? m[2] : '', pid: m ? Number(m[1]) : undefined });
+      });
+    }
+    return out;
+  }
+  const ddSaveOrderLines = (lines) => { const now = Date.now(); return kvMerge('orderPapers', { ...Object.fromEntries(lines.map((l) => [l.did, { ...l, seenAt: now }])), _at: now }); };
+  // đang mở trang Đơn hàng (Đại Dương): 30 giây đọc bảng đang hiện 1 lần, chỉ lưu khi có thay đổi
+  if (IS_TOP && SITE.key === 'daiduong') {
+    let last = '';
+    setInterval(() => {
+      if (!/^\/don-hang\/?$/.test(location.pathname)) return;
+      const lines = ddOrderLines(document);
+      const sig = JSON.stringify(lines);
+      if (!lines.length || sig === last) return;
+      last = sig;
+      ddSaveOrderLines(lines).then(() => lsGet('dgTab') === 'gt' && gtFill(true)).catch(() => {});
+    }, 30e3);
+  }
   let gtOrdBusy = false;
   // bảng đơn mới đang mở: 1 phút vẽ lại 1 lần để "x phút trước" luôn đúng (không vẽ khi đang gõ / popup mở)
   if (IS_TOP) setInterval(() => { if (gtUi.view === 'orders' && !gtUi.pick && gtHost()) gtFill(true).catch(() => {}); }, 60e3);
@@ -16085,6 +16130,17 @@ Quy tắc:
     if (!tabLock('dgGtOrdLock', 5 * 60e3)) return false;
     gtOrdBusy = true;
     try {
+      if (SITE.key === 'daiduong') {
+        const lines = await tkInFrame('/don-hang', async (doc) => {
+          for (let i = 0; i < 60 && !ddOrderLines(doc()).length; i++) await sleep(500);
+          await sleep(1000);
+          onStep?.(1);
+          return ddOrderLines(doc());
+        });
+        if (!lines.length) throw new Error('Không đọc được bảng Đơn hàng.');
+        await ddSaveOrderLines(lines);
+        return true;
+      }
       await tkInFrame('/misa-order/list?tab=NEW', async (doc) => {
         const first = () => [...(doc()?.querySelectorAll('.ant-table-tbody tr.ant-table-row') || [])].find(dnShown)?.innerText.match(/DH\d{4,}/)?.[0] || '';
         const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
@@ -16116,7 +16172,7 @@ Quy tắc:
   function gtOrdersHtml(all, gs, orders) {
     const now = Date.now();
     const lines = Object.values(orders || {}).filter((l) => l && l.paper && now - (l.seenAt || 0) < 3 * 86400e3); // đơn còn ở tab Mới (thấy trong 3 ngày)
-    if (!lines.length) return '<div style="padding:16px;color:#94a3b8">Chưa có dữ liệu đơn mới – mở trang Danh sách đơn (tab Mới), lật qua các trang để extension đọc.</div>';
+    if (!lines.length) return `<div style="padding:16px;color:#94a3b8">Chưa có dữ liệu đơn mới – mở ${GT_ORD_SRC}, lật qua các trang để extension đọc.</div>`;
     const byName = new Map(all.map((x) => [x.name, x]));
     // chỉ so với NCC đang chọn ở bộ lọc NCC (bỏ trống = mọi NCC) – NCC không lọc thì không đưa vào so / bảng gửi Zalo
     const fresh = all.filter((x) => x.price >= 500 && x.visible !== false && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400 && (!gtUi.provs.size || gtUi.provs.has(x.prov?.code || '')));
@@ -16171,7 +16227,7 @@ Quy tắc:
       gtLoadOrders().then((ok) => ok && gtFill()).catch(() => {}).finally(() => setTimeout(() => (gtUi.ordAutoAt = 0), 15 * 60e3));
     }
     const loadBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#475569">🕒 Đọc đơn lần cuối: <b>${lastAt ? new Date(lastAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa'}</b>${stale ? ' <span style="color:#d97706">(quá 15 phút)</span>' : ''}<button data-gt="oload" style="cursor:pointer;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${stale ? '#f59e0b' : '#cbd5e1'};background:${stale ? '#fffbeb' : '#fff'};color:${stale ? '#b45309' : '#334155'}">${gtOrdBusy ? '⏳ Đang tải danh sách đơn…' : '⟳ Tải danh sách đơn mới'}</button></div>`;
-    return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b>${nSolo ? ` · <b style="color:#d97706">${nSolo} chỉ 1 giấy cùng nhóm</b>` : ''} · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
+    return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ${SITE.key === 'daiduong' ? 'trạng thái Mới' : 'ở tab Mới'} dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b>${nSolo ? ` · <b style="color:#d97706">${nSolo} chỉ 1 giấy cùng nhóm</b>` : ''} · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
   <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px;white-space:nowrap">Lên đơn</th><th style="padding:6px;text-align:right;white-space:nowrap">Giá trị đơn</th><th style="padding:6px">Đơn hàng</th><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th style="padding-left:8px">So với nhóm</th></tr></thead>
@@ -19185,7 +19241,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
       ${state.error ? `<div class="err">Lỗi: ${esc(state.error)}</div>` : ''}
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
-        const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t) && (t !== 'gt' || SITE.key === 'tuantu')); // 📄 Giấy tấm: chỉ Tuấn Tú
+        const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t));
         if (IS_OWNER()) allowed.push('gap'); // tab riêng của Nguyễn Trung Toán
         if (TASK_ON) allowed.push('task'); // 📋 Công việc: ai có extension cũng cần để nhận và cập nhật việc
         const tkAll = TASK_ON ? await kvGet('tasks') : {};
