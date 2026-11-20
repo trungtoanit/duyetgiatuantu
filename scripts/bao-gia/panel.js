@@ -15918,7 +15918,7 @@ Quy tắc:
   const GT_SECS = [['2', '2 LỚP'], ['3', '3 LỚP'], ['4', '4 LỚP'], ['5', '5 LỚP'], ['x', 'KHÁC']];
   // ⚡ Map nhanh: mã nhóm từ kết cấu giấy, mỗi lớp 1 số – 90/95/100 → 1, 120/125 → 2, 140/145/150 → 5, 160/165 → 6,
   // 170/175/180/185 → 7, giấy Trắng (T…) → 8, 230/235 → 9. Lớp viết "N.230" / "N 230" / "N230" đều là 230.
-  // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp không đổi được (vd. *) → không map. Dùng chung cho toàn extension
+  // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp "*" bỏ qua (giấy 4 lớp); lớp không đổi được → không map. Dùng chung cho toàn extension
   // (tab Giấy tấm, đơn mới, icon ❓/✅ ở báo giá, Zalo, PDF).
   // Ngày cập nhật (giây): hôm nay / hôm qua / x ngày trước; quá 30 ngày → ngày/tháng/năm
   function gtRelDay(sec) {
@@ -15938,6 +15938,7 @@ Quy tắc:
     if (parts.length < 2) return '';
     let out = '';
     for (const p of parts) {
+      if (p.trim() === '*') continue; // lớp "*" = không có lớp đó → CL_*/X140/X90/X140/N140-BC là giấy 4 lớp (5155)
       const m = p.trim().match(/^([A-Z])[\s.]*(\d+)/i);
       if (!m) return '';
       if (m[1].toUpperCase() === 'T') { out += '8'; continue; }
@@ -15946,7 +15947,7 @@ Quy tắc:
       if (!d) return '';
       out += d;
     }
-    return out;
+    return out.length >= 2 ? out : '';
   }
   // 📦 Đơn mới dùng giấy: mỗi giấy đang dùng ở các đơn tab Mới → so giá với giấy cùng nhóm (mã lớp) + cùng sóng.
   // Chỉ so với giấy có giá cập nhật trong 90 ngày (giá cũ – vd. NCC lâu không báo giá – dễ thấp ảo), bỏ giá < 500đ (giá tạm).
