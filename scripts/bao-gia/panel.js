@@ -15823,8 +15823,10 @@ Quy tắc:
       const myP = me?.price ?? null;
       const diff = min && myP != null ? myP - min.price : null;
       const money = diff > 0 && u.m2 ? Math.round(diff * u.m2) : 0; // tiền giấy đắt hơn = chênh giá/m² × m² giấy của các đơn
-      return { ...u, me, code, w, g: gByName.get(code), min, myP, diff, money, peers: peers.length };
-    }).sort((a, b) => b.money - a.money || (b.diff ?? -1) - (a.diff ?? -1) || b.orders.size - a.orders.size);
+      // đơn mới nhất trước (theo ngày đặt, cùng ngày thì mã đơn lớn hơn)
+      const ol = [...u.orders.values()].sort((a, b) => (b.at || 0) - (a.at || 0) || String(b.order).localeCompare(String(a.order)));
+      return { ...u, ol, newest: ol[0]?.at || 0, newestCode: ol[0]?.order || '', me, code, w, g: gByName.get(code), min, myP, diff, money, peers: peers.length };
+    }).sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money || (b.diff ?? -1) - (a.diff ?? -1) : 0) || (b.newest - a.newest) || String(b.newestCode).localeCompare(String(a.newestCode)));
     const sumMoney = rows.reduce((t, r) => t + r.money, 0);
     const nBad = rows.filter((r) => r.diff > 0).length;
     const nOk = rows.filter((r) => r.diff === 0 || (r.diff != null && r.diff <= 0)).length;
@@ -15839,7 +15841,7 @@ Quy tắc:
     };
     const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
     return `${few}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b> · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
-  <div style="color:#64748b;font-size:11.5px">So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
+  <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th>So với nhóm</th><th>Đơn (tab Mới)</th></tr></thead>
 <tbody>${rows.map((r, i) => `<tr style="border-top:1px solid #f1f5f9;background:${r.diff > 0 ? '#fef2f2' : i % 2 ? '#fcfcfd' : '#fff'}">
@@ -15847,7 +15849,7 @@ Quy tắc:
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
   <td>${st(r)}</td>
-  <td style="font-size:11.5px">${[...r.orders.values()].slice(0, 4).map((l) => `<div>${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  <td style="font-size:11.5px">${r.ol.slice(0, 4).map((l) => `<div>${l.at ? `<span style="color:#64748b">${new Date((l.at > 1e11 ? l.at : l.at * 1000)).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span> ` : ''}${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
   function gtDraw(host, items, groups, scan) {
     const all = Object.values(items || {}).filter((x) => x && x.id);
@@ -16117,6 +16119,7 @@ ${(() => {
       for (const id of ids) b.checked ? gtUi.sel.add(id) : gtUi.sel.delete(id);
     } else if (k === 'clr') gtUi.sel.clear();
     else if (k === 'provmore') gtUi.provOpen = !gtUi.provOpen;
+    else if (k === 'osort') gtUi.oSort = b.dataset.k;
     else if (k === 'hidesmall') {
       gtUi.hideSmall = b.checked;
       gtSavePrefs();
