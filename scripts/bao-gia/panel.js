@@ -15828,23 +15828,65 @@ Quy tắc:
     const html = `${ls.map((l, i) => `<div>Đơn hàng <b>${esc(l.order)}</b>${l.tp ? ` mã TP <b>${esc(l.tp)}</b>` : ''} hiện đang chọn giấy tấm ID <b>${r.me.id}</b> | ${esc(r.me.name)} đơn giá là <b>${vnd(r.myP)} đ/m2</b> tuy nhiên nhà cung cấp <b>${esc(prov)}</b> có ID <b>${r.min.id}</b> | ${esc(r.min.name)} có đơn giá là <b><span style="color:#15a85f"><font color="#15a85f">${vnd(r.min.price)} đ/m2</font></span></b></div>${i < ls.length - 1 ? '<div><br></div>' : ''}`).join('')}<div><br></div><div><b>${esc(tail)}</b></div>`;
     return { text, html };
   }
+  // Ảnh bảng gửi Zalo: Mã ĐH | Mã TP | Tên sản phẩm | Số lượng | đơn giá từng NCC (giấy rẻ nhất của mỗi NCC trong cùng nhóm + sóng)
+  // rẻ nhất tô xanh lá, đắt hơn tô đỏ; cột giấy đang chọn ghi "đang chọn"
+  async function gtTablePng(r, ls) {
+    const pk = (x) => x.prov?.code || x.prov?.name || String(x.id);
+    const byProv = new Map();
+    for (const x of r.peerList || []) if (!byProv.has(pk(x)) || x.price < byProv.get(pk(x)).price) byProv.set(pk(x), x);
+    byProv.set(pk(r.me), r.me); // cột NCC đang chọn = đúng giấy đang chọn
+    let cols = [...byProv.values()].sort((a, b) => a.price - b.price).slice(0, 6);
+    if (!cols.includes(r.me)) cols = [...cols.slice(0, 5), r.me];
+    const min = Math.min(...cols.map((x) => x.price));
+    const th = 'padding:8px 10px;border:1px solid #cbd5e1;background:#1e3a8a;color:#fff;font-weight:800;text-align:center;vertical-align:middle';
+    const td = 'padding:7px 10px;border:1px solid #cbd5e1;vertical-align:middle';
+    const head = `<tr><th style="${th}">Mã ĐH</th><th style="${th}">Mã TP</th><th style="${th}">Tên sản phẩm</th><th style="${th}">Số lượng</th>${cols.map((x) => `<th style="${th};${x === r.me ? 'background:#7c2d12' : ''}"><div>${esc(x.prov?.name || x.prov?.code || '')}${x === r.me ? ' <span style="color:#fde68a">(đang chọn)</span>' : ''}</div><div style="font-weight:600;font-size:11.5px;opacity:.9">ID ${x.id} | ${esc(x.name)}</div></th>`).join('')}</tr>`;
+    const cell = (x) => { const cheap = x.price === min; return `<td style="${td};text-align:right;font-weight:800;${cheap ? 'background:#dcfce7;color:#15803d' : 'background:#fee2e2;color:#dc2626'}">${vnd(x.price)} đ/m2</td>`; };
+    const body = ls.map((l, i) => `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'}"><td style="${td};font-weight:800">${esc(l.order)}</td><td style="${td}">${esc(l.tp || '')}</td><td style="${td};max-width:340px">${esc(l.prod || '')}</td><td style="${td};text-align:right">${vnd(l.qty)}</td>${cols.map(cell).join('')}</tr>`).join('');
+    const box = document.createElement('div');
+    const base = 'box-sizing:border-box;background:#fff;padding:16px 18px;font:14px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;';
+    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;max-width:1500px;${base}`);
+    box.innerHTML = `<div style="font-size:17px;font-weight:900;color:#b91c1c;margin-bottom:4px">⚠️ Giấy tấm chưa rẻ nhất nhóm ${esc(r.code)} · sóng ${esc(r.w)}</div><div style="font-size:12.5px;color:#475569;margin-bottom:10px">Đang chọn ID ${r.me.id} | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 – rẻ nhất ID ${r.min.id} | ${esc(r.min.name)} · ${vnd(r.min.price)} đ/m2 (${esc(r.min.prov?.name || '')})</div><table style="border-collapse:collapse;font-size:13.5px">${head}${body}</table><div style="margin-top:8px;font-size:11.5px;color:#64748b">🟩 rẻ nhất · 🟥 đắt hơn · ${new Date().toLocaleString('vi-VN')}</div>`;
+    document.body.append(box);
+    const w = Math.ceil(box.scrollWidth);
+    const h = Math.ceil(box.scrollHeight);
+    box.setAttribute('style', `${base}width:${w}px;height:${h}px`);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(box)}</foreignObject></svg>`;
+    box.remove();
+    const img = new Image();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await img.decode();
+    const S = 2;
+    const c = document.createElement('canvas');
+    c.width = w * S;
+    c.height = h * S;
+    const x = c.getContext('2d');
+    x.scale(S, S);
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, w, h);
+    x.drawImage(img, 0, 0);
+    return c.toDataURL('image/png');
+  }
   async function gtZaloSend(pid) {
     const r = (gtUi.oRows || []).find((x) => String(x.me?.id) === String(pid));
     if (!r || !(r.diff > 0) || !r.min) throw new Error('Giấy này không còn chênh giá.');
     const sent = await kvGet(GT_ZSENT);
     const ls = r.ol.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
     if (!ls.length) throw new Error('Các đơn của giấy này đã gửi yêu cầu rồi.');
-    // mỗi đơn 1 tin nhắn (tin đầu + các tin sau gửi lần lượt trong cùng khung chat nhóm)
-    const parts = ls.map((l) => gtZaloMsg(r, [l]));
+    // 1 ảnh bảng (mỗi đơn 1 dòng) + câu đề nghị kèm theo
+    const image = await gtTablePng(r, ls);
+    const prov = r.min.prov?.name || r.min.prov?.code || '';
+    const caption = `Hãy đổi qua nhà cung cấp ${prov} (ID ${r.min.id} | ${r.min.name}) hoặc trả về bằng giá tiền`;
+    const parts = [gtZaloMsg(r, ls)];
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-gt`;
-    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: parts[0].text, html: parts[0].html, more: parts.slice(1), status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
+    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: parts[0].text, html: parts[0].html, image, caption, status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
     const mark = (state, error) => kvMerge(GT_ZSENT, Object.fromEntries(ls.map((l) => [gtZKey(l.order, r.me.id), { at: Date.now(), by: meName || '', state, job: jobId, cheap: r.min.id, diff: r.diff, ...(error ? { error } : {}) }])));
     await mark('queue');
-    gtUi.msg = `⏳ Đã xếp ${ls.length} tin (mỗi đơn 1 tin) gửi nhóm Zalo “${GT_ZGROUP}” – chờ tab Zalo gửi…`;
+    gtUi.msg = `⏳ Đã xếp ảnh bảng (${ls.length} đơn) gửi nhóm Zalo “${GT_ZGROUP}” – chờ tab Zalo gửi…`;
     (async () => {
       for (let i = 0; i < 200; i++) {
         await sleep(1500);
@@ -15884,7 +15926,7 @@ Quy tắc:
       const money = diff > 0 && u.m2 ? Math.round(diff * u.m2) : 0; // tiền giấy đắt hơn = chênh giá/m² × m² giấy của các đơn
       // đơn mới nhất trước (theo ngày đặt, cùng ngày thì mã đơn lớn hơn)
       const ol = [...u.orders.values()].sort((a, b) => (b.at || 0) - (a.at || 0) || String(b.order).localeCompare(String(a.order)));
-      return { ...u, ol, newest: ol[0]?.at || 0, newestCode: ol[0]?.order || '', me, code, w, g: gByName.get(code), min, myP, diff, money, peers: peers.length };
+      return { ...u, ol, newest: ol[0]?.at || 0, newestCode: ol[0]?.order || '', me, code, w, g: gByName.get(code), min, myP, diff, money, peers: peers.length, peerList: peers };
     }).sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money || (b.diff ?? -1) - (a.diff ?? -1) : 0) || (b.newest - a.newest) || String(b.newestCode).localeCompare(String(a.newestCode)));
     const sumMoney = rows.reduce((t, r) => t + r.money, 0);
     gtUi.oRows = rows;
