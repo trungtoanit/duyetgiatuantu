@@ -15901,8 +15901,9 @@ Quy tắc:
   }
   // Chỉ có 1 giấy trong nhóm (cùng mã lớp + sóng, NCC đang lọc) → không có gì để so: đề nghị hỏi thêm NCC khác
   const gtSolo = (r) => !!r?.me && !!r.code && !(r.diff > 0) && r.peers <= 1 && (!r.min || r.min.id === r.me.id);
-  function gtSoloMsg(r, l) {
-    const tail = 'Hãy hỏi thêm các nhà cung ứng khác để so sánh giá';
+  function gtSoloMsg(r, l, ask = []) {
+    // NCC cần hỏi = các NCC đang lọc hiển thị, trừ NCC của giấy đang chọn
+    const tail = ask.length ? `Hãy hỏi thêm các nhà cung ứng khác để so sánh giá: ${ask.join(', ')}` : 'Hãy hỏi thêm các nhà cung ứng khác để so sánh giá';
     const g = `nhóm ${r.code} sóng ${r.w}`;
     const text = `Đơn hàng ${l.order}${l.tp ? ` mã TP ${l.tp}` : ''} hiện đang chọn giấy tấm ID ${r.me.id} | ${r.me.name} đơn giá là ${vnd(r.myP)} đ/m2 – hiện chỉ có 1 giấy cùng ${g}, chưa có nhà cung cấp nào khác để so sánh giá.\n${tail}`;
     const html = `<div>Đơn hàng <b>${esc(l.order)}</b>${l.tp ? ` mã TP <b>${esc(l.tp)}</b>` : ''} hiện đang chọn giấy tấm ID <b>${r.me.id}</b> | ${esc(r.me.name)} đơn giá là <b>${vnd(r.myP)} đ/m2</b> – hiện <b><span style="color:#d97706"><font color="#d97706">chỉ có 1 giấy cùng ${esc(g)}</font></span></b>, chưa có nhà cung cấp nào khác để so sánh giá.</div><div><br></div><div><b>${esc(tail)}</b></div>`;
@@ -15920,7 +15921,14 @@ Quy tắc:
     const image = solo ? null : await gtTablePng(r, ls);
     const prov = solo ? '' : r.min.prov?.name || r.min.prov?.code || '';
     const caption = solo ? '' : `Hãy đổi qua nhà cung cấp ${prov} (ID ${r.min.id} | ${r.min.name}) hoặc trả về bằng giá tiền`;
-    const parts = solo ? ls.map((l) => gtSoloMsg(r, l)) : [gtZaloMsg(r, ls)];
+    let ask = [];
+    if (solo) {
+      const items = await kvGet(GT_ITEMS);
+      const pname = new Map(Object.values(items).filter((x) => x?.prov?.code).map((x) => [x.prov.code, x.prov.name || x.prov.code]));
+      const meCode = r.me.prov?.code || '';
+      ask = [...(gtUi.provs.size ? gtUi.provs : pname.keys())].filter((c) => c && c !== meCode).map((c) => `${pname.get(c) || c} (${c})`);
+    }
+    const parts = solo ? ls.map((l) => gtSoloMsg(r, l, ask)) : [gtZaloMsg(r, ls)];
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
