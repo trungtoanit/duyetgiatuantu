@@ -16286,6 +16286,7 @@ Quy tắc:
     const wr = (w) => { const i = WAVE_ORD.indexOf(w); return i < 0 ? 50 + (w ? w.charCodeAt(0) : 99) : i; };
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
     const fresh = (t) => t && Date.now() / 1000 - t < GT_FRESH_D * 86400;
+    let gi = 0; // đếm nhóm có dòng → nền xám xen kẽ theo nhóm
     const secs = GT_SECS.map(([sk, sl]) => {
       const rows = [];
       for (const g of gs.filter((g) => gtSec(g.name) === sk)) {
@@ -16293,13 +16294,14 @@ Quy tắc:
         const ws = [...new Set(mem.map((x) => gtWave(x.name).toUpperCase()))].sort((a, b) => wr(a) - wr(b));
         ws.forEach((w, i) => {
           const ls = mem.filter((x) => gtWave(x.name).toUpperCase() === w).sort((a, b) => a.price - b.price || (b.updatedAt || 0) - (a.updatedAt || 0));
-          rows.push({ g, w, first: i === 0, span: ws.length, min: ls[0], n: ls.length, next: ls.find((x) => x.price > ls[0].price) });
+          rows.push({ g, w, first: i === 0, span: ws.length, min: ls[0], n: ls.length, alt: gi % 2 === 1 });
         });
+        if (ws.length) gi++;
       }
       return { sl, rows };
     }).filter((s) => s.rows.length);
     let stt = 0;
-    const body = secs.map(({ sl, rows }) => `<tr class="sec"><td colspan="7">${sl}</td></tr>${rows.map((r) => `<tr>
+    const body = secs.map(({ sl, rows }) => `<tr class="sec"><td colspan="7">${sl}</td></tr>${rows.map((r) => `<tr${r.alt ? ' class="alt"' : ''}>
       ${r.first ? `<td rowspan="${r.span}" class="c">${++stt}</td><td rowspan="${r.span}" class="g"><span style="background:${r.g.color || '#475569'}">${esc(r.g.name)}</span></td>` : ''}
       <td class="c">${esc(r.w || '?')}</td>
       <td><b>${r.min.id}</b> | ${esc(r.min.name)}</td>
@@ -16319,6 +16321,8 @@ Quy tắc:
       tr.sec td{background:#0f172a;color:#fff;font-weight:800;letter-spacing:1px}
       .g span{display:inline-block;color:#fff;font-weight:800;border-radius:99px;padding:0 8px}
       td.g{text-align:center}.sm{font-size:9.5px;color:#64748b}.old{color:#b91c1c;font-weight:700}
+      tr.alt td{background:#eef1f5}
+      *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
       tr{page-break-inside:avoid}.ft{margin-top:6px;font-size:10px;color:#64748b}
     </style></head><body>
       <div class="hd"><img src="${location.origin}/logo.png" onerror="this.remove()"><div><div class="co">${esc(GT_CO.name)}</div><div class="ad">${esc(GT_CO.addr)}</div></div></div>
