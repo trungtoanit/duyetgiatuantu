@@ -15760,6 +15760,12 @@ Quy tắc:
     try {
       const [items, groups, scan, orders, zsent] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY), kvGet('orderPapers'), kvGet(GT_ZSENT)]);
       gtUi.orders = orders;
+      // dọn nhóm thử "ZZ test Claude" (lần xoá cũ không lên được cloud nên bị kéo về lại)
+      const zz = Object.entries(groups || {}).filter(([, g]) => g && !g.deleted && /^ZZ test Claude$/i.test(String(g.name || '').trim()));
+      if (zz.length) {
+        await kvMerge(GT_GROUPS, Object.fromEntries(zz.map(([id, g]) => [id, { ...g, deleted: true, ids: [], at: Date.now(), by: meName || '' }])));
+        zz.forEach(([id]) => (groups[id] = { ...groups[id], deleted: true, ids: [] }));
+      }
       // Dấu "đang gửi" còn treo (F5 giữa lúc chờ): đối chiếu việc trong hàng đợi Zalo → đã gửi / lỗi
       const pend = Object.entries(zsent || {}).filter(([, v]) => v?.state === 'queue');
       if (pend.length) {
@@ -15904,7 +15910,8 @@ Quy tắc:
     const lines = Object.values(orders || {}).filter((l) => l && l.paper && now - (l.seenAt || 0) < 3 * 86400e3); // đơn còn ở tab Mới (thấy trong 3 ngày)
     if (!lines.length) return '<div style="padding:16px;color:#94a3b8">Chưa có dữ liệu đơn mới – mở trang Danh sách đơn (tab Mới), lật qua các trang để extension đọc.</div>';
     const byName = new Map(all.map((x) => [x.name, x]));
-    const fresh = all.filter((x) => x.price >= 500 && x.visible !== false && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400);
+    // chỉ so với NCC đang chọn ở bộ lọc NCC (bỏ trống = mọi NCC) – NCC không lọc thì không đưa vào so / bảng gửi Zalo
+    const fresh = all.filter((x) => x.price >= 500 && x.visible !== false && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400 && (!gtUi.provs.size || gtUi.provs.has(x.prov?.code || '')));
     const gByName = new Map(gs.map((g) => [String(g.name).trim(), g]));
     const use = new Map();
     for (const l of lines) {
@@ -15944,7 +15951,7 @@ Quy tắc:
     };
     const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
     return `${few}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b> · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
-  <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
+  <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th>So với nhóm</th><th>Đơn (tab Mới)</th></tr></thead>
 <tbody>${rows.map((r, i) => `<tr style="border-top:1px solid #f1f5f9;background:${r.diff > 0 ? '#fef2f2' : i % 2 ? '#fcfcfd' : '#fff'}">
