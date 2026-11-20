@@ -15789,11 +15789,19 @@ Quy tắc:
     const gs = gtLive(groups).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) }));
     const inG = new Map(); // id giấy → các nhóm
     for (const g of gs) for (const id of g.ids) inG.set(id, [...(inG.get(id) || []), g]);
+    // Nhóm theo mã lớp là tự động: giấy có mã lớp 22122 thuộc luôn nhóm tên "22122" (không cần thêm tay)
+    const gByName = new Map(gs.map((g) => [String(g.name).trim(), g]));
+    const codeOf = new Map(all.map((x) => [x.id, gtCode(x.name)]));
+    for (const x of all) {
+      const g = gByName.get(codeOf.get(x.id));
+      if (g && !(inG.get(x.id) || []).includes(g)) inG.set(x.id, [g, ...(inG.get(x.id) || [])]);
+    }
+    const gCount = (g) => all.filter((x) => (inG.get(x.id) || []).includes(g)).length;
     if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.some((g) => g.id === gtUi.g)) gtUi.g = 'all';
     const q = norm(gtUi.q.trim());
     let rows = all.filter((x) => {
       if (gtUi.g === 'none' && inG.has(x.id)) return false;
-      if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.find((g) => g.id === gtUi.g).ids.includes(x.id)) return false;
+      if (gtUi.g !== 'all' && gtUi.g !== 'none' && !(inG.get(x.id) || []).some((g) => g.id === gtUi.g)) return false;
       if (gtUi.layer && String(x.layer) !== gtUi.layer) return false;
       if (gtUi.provs.size && !gtUi.provs.has(x.prov?.code || '')) return false;
       if (q && !norm(`${x.id} ${x.name} ${x.group} ${x.prov?.name || ''} ${x.note}`).includes(q)) return false;
@@ -15828,7 +15836,7 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     <div style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:1px;margin:2px 4px 6px">NHÓM (EXTENSION)</div>
     ${gBtn('all', '📚 Tất cả', all.length)}${gBtn('none', '❔ Chưa có nhóm', all.filter((x) => !inG.has(x.id)).length)}
     <div style="border-top:1px dashed #e2e8f0;margin:6px 0"></div>
-    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10.5px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:8px 4px 3px">${sl} <span style="font-weight:600">· ${list.length}</span></div>${list.map((g) => gBtn(g.id, esc(g.name), g.ids.filter((id) => items[id]).length, g.color, sk)).join('')}` : ''; }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:4px">Chưa có nhóm nào</div>'}
+    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10.5px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:8px 4px 3px">${sl} <span style="font-weight:600">· ${list.length}</span></div>${list.map((g) => gBtn(g.id, esc(g.name), gCount(g), g.color, sk)).join('')}` : ''; }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:4px">Chưa có nhóm nào</div>'}
     ${MY_ADMIN && gs.length > 1 ? '<div style="font-size:10.5px;color:#94a3b8;margin:4px">↕ Kéo thả nhóm để đổi vị trí · kéo dòng giấy thả vào nhóm để thêm</div>' : ''}
     ${MY_ADMIN ? `<div style="display:flex;gap:4px;margin-top:8px"><input data-gt-in="newg" placeholder="Tên nhóm mới…" ${inp.replace('style="', 'style="flex:1;min-width:0;')}>${bt('newg', '＋')}</div>` : ''}
     ${curG && MY_ADMIN ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;flex-direction:column;gap:6px">
@@ -15859,16 +15867,15 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     </div>` : ''}
     <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th title="Mã nhóm tính từ kết cấu giấy: 90/95→1, 120/125→2, 140/145/150→5, Trắng→8">Mã lớp</th><th>Nhóm extension</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
+      <thead><tr style="background:#f8fafc;text-align:left">${MY_ADMIN ? `<th style="padding:6px"><input type="checkbox" data-gt="selall" ${shown.length && shown.every((x) => gtUi.sel.has(x.id)) ? 'checked' : ''}></th>` : ''}<th style="padding:6px">ID | Chất liệu giấy</th><th>Lớp</th><th>Màu</th><th>Xeo</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Mét tới</th><th>NCC</th><th>Nhóm CRM</th><th title="Nhóm = mã lớp tính từ kết cấu giấy (90/95→1, 120/125→2, 140/145/150→5, Trắng→8) + nhóm thêm tay">Nhóm</th><th style="text-align:right">Dùng</th><th>Cập nhật</th></tr></thead>
       <tbody>${shown.map((x, i) => `<tr${MY_ADMIN ? ` draggable="true" data-row="${x.id}"` : ''} style="border-top:1px solid #f1f5f9;background:${gtUi.sel.has(x.id) ? '#eef2ff' : i % 2 ? '#fcfcfd' : '#fff'}${x.visible === false ? ';opacity:.55' : ''}">
         ${MY_ADMIN ? `<td style="padding:5px 6px"><input type="checkbox" data-gt="sel" data-id="${x.id}" ${gtUi.sel.has(x.id) ? 'checked' : ''}></td>` : ''}
         <td style="padding:5px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${x.visible === false ? ' <i style="color:#94a3b8">(ẩn)</i>' : ''}${x.note ? `<div style="color:#64748b;font-size:11px">${esc(x.note)}</div>` : ''}</td>
         <td>${x.layer || ''}</td><td>${esc(GT_COLOR_VI[x.color] || x.color)}</td><td>${x.xeo || ''}</td>
         <td style="text-align:right;font-weight:700">${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
-        <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td><td style="font-weight:800;color:#b45309">${gtCode(x.name) || '<span style="color:#cbd5e1">–</span>'}</td>
-        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : (inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}</td>
+        <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) ? `<span title="Chưa có nhóm ${codeOf.get(x.id)} – tạo nhóm tên này (hoặc ⚡ Map nhanh) để giấy tự vào nhóm" style="display:inline-block;margin:1px 3px 1px 0;padding:0 6px;border-radius:99px;font-size:11px;font-weight:700;color:#64748b;border:1px dashed #94a3b8">${codeOf.get(x.id)}</span>` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : `${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) ? `<span style="font-size:11px;font-weight:700;color:#64748b">${codeOf.get(x.id)}</span> ` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}`}</td>
         <td style="text-align:right">${x.totalUses ? `${x.uses}/${x.totalUses}` : ''}</td>
-        <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="13" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
+        <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
     </table></div>
     ${pages > 1 ? `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:6px">${bt('prev', '‹')}<span style="font-size:12px">Trang ${gtUi.page + 1}/${pages}</span>${bt('next', '›')}</div>` : ''}
   </div>
@@ -15882,7 +15889,7 @@ ${(() => {
   return `<div data-gt-pop style="position:absolute;z-index:50;top:${pk.top}px;left:${pk.left}px;width:250px;max-height:360px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.2);padding:8px">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><b style="flex:1;font-size:12px">${px.id} · chọn nhóm</b><span data-gt="pclose" style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
     <div style="font-size:11px;color:#64748b;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(px.name)}</div>
-    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:6px 2px 2px">${sl}</div>${list.map((g) => `<div data-gt="pt" data-gid="${g.id}" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;background:${mine.has(g.id) ? '#eef2ff' : 'transparent'}"><input type="checkbox" ${mine.has(g.id) ? 'checked' : ''} style="pointer-events:none"><span style="width:9px;height:9px;border-radius:3px;background:${g.color || '#475569'}"></span><span style="flex:1;font-weight:${mine.has(g.id) ? 800 : 500}">${esc(g.name)}</span></div>`).join('')}` : ''; }).join('') || '<div style="font-size:12px;color:#94a3b8">Chưa có nhóm – tạo ở cột bên trái</div>'}
+    ${GT_SECS.map(([sk, sl]) => { const list = gs.filter((g) => gtSec(g.name) === sk); return list.length ? `<div style="font-size:10px;font-weight:900;color:#94a3b8;letter-spacing:1px;margin:6px 2px 2px">${sl}</div>${list.map((g) => { const auto = gByName.get(codeOf.get(px.id)) === g; return `<div ${auto ? 'title="Tự động theo mã lớp của giấy – không bỏ được"' : `data-gt="pt" data-gid="${g.id}"`} style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:${auto ? 'default' : 'pointer'};background:${mine.has(g.id) ? '#eef2ff' : 'transparent'}"><input type="checkbox" ${mine.has(g.id) ? 'checked' : ''} ${auto ? 'disabled' : ''} style="pointer-events:none"><span style="width:9px;height:9px;border-radius:3px;background:${g.color || '#475569'}"></span><span style="flex:1;font-weight:${mine.has(g.id) ? 800 : 500}">${esc(g.name)}${auto ? ' <i style="font-size:10px;color:#64748b;font-weight:500">tự động</i>' : ''}</span></div>`; }).join('')}` : ''; }).join('') || '<div style="font-size:12px;color:#94a3b8">Chưa có nhóm – tạo ở cột bên trái</div>'}
   </div>`;
 })()}`;
     if (!host.dataset.wired) {
