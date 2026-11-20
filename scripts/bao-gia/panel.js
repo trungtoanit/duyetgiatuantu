@@ -15961,6 +15961,8 @@ Quy tắc:
   }
   // ⟳ Tải danh sách đơn (tab Mới) trong khung ẩn, chỉ trang 1 (100 đơn mới nhất) → hook đọc giấy từng dòng đơn (orderPapers). Chỉ đọc.
   let gtOrdBusy = false;
+  // bảng đơn mới đang mở: 1 phút vẽ lại 1 lần để "x phút trước" luôn đúng (không vẽ khi đang gõ / popup mở)
+  if (IS_TOP) setInterval(() => { if (gtUi.view === 'orders' && !gtUi.pick && gtHost()) gtFill(true).catch(() => {}); }, 60e3);
   async function gtLoadOrders(onStep) {
     if (gtOrdBusy) return false;
     if (!tabLock('dgGtOrdLock', 5 * 60e3)) return false;
