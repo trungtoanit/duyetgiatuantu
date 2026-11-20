@@ -16172,7 +16172,15 @@ Quy tắc:
   function gtOrdersHtml(all, gs, orders) {
     const now = Date.now();
     const lines = Object.values(orders || {}).filter((l) => l && l.paper && now - (l.seenAt || 0) < 3 * 86400e3); // đơn còn ở tab Mới (thấy trong 3 ngày)
-    if (!lines.length) return `<div style="padding:16px;color:#94a3b8">Chưa có dữ liệu đơn mới – mở ${GT_ORD_SRC}, lật qua các trang để extension đọc.</div>`;
+    const lastAt = Number(orders?._at) || 0;
+    const stale = Date.now() - lastAt > 15 * 60e3;
+    if (stale && !gtOrdBusy && !gtUi.ordAutoAt) {
+      // quá 15 phút chưa đọc đơn mới → tự tải lại 1 lần (khung ẩn), xong vẽ lại
+      gtUi.ordAutoAt = Date.now();
+      gtLoadOrders().then((ok) => ok && gtFill()).catch(() => {}).finally(() => setTimeout(() => (gtUi.ordAutoAt = 0), 15 * 60e3));
+    }
+    const loadBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#475569">🕒 Đọc đơn lần cuối: <b>${lastAt ? new Date(lastAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa'}</b>${stale ? ' <span style="color:#d97706">(quá 15 phút)</span>' : ''}<button data-gt="oload" style="cursor:pointer;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${stale ? '#f59e0b' : '#cbd5e1'};background:${stale ? '#fffbeb' : '#fff'};color:${stale ? '#b45309' : '#334155'}">${gtOrdBusy ? '⏳ Đang tải danh sách đơn…' : '⟳ Tải danh sách đơn mới'}</button></div>`;
+    if (!lines.length) return `${loadBar}<div style="padding:16px;color:#94a3b8">${gtOrdBusy ? '⏳ Đang đọc đơn mới…' : `Chưa có dữ liệu đơn mới – bấm tải lại ở trên hoặc mở ${GT_ORD_SRC} để extension đọc.`}</div>`;
     const byName = new Map(all.map((x) => [x.name, x]));
     // chỉ so với NCC đang chọn ở bộ lọc NCC (bỏ trống = mọi NCC) – NCC không lọc thì không đưa vào so / bảng gửi Zalo
     const fresh = all.filter((x) => x.price >= 500 && x.visible !== false && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400 && (!gtUi.provs.size || gtUi.provs.has(x.prov?.code || '')));
@@ -16219,14 +16227,6 @@ Quy tắc:
       return `<b style="color:#dc2626">❌ Đắt hơn ${r.diff.toLocaleString('vi-VN')}đ/m² (${Math.round((r.diff / r.min.price) * 100)}%)</b>${r.money ? ` → <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${r.money.toLocaleString('vi-VN')}đ</b> <span style="color:#64748b;font-size:11px">trên ${Math.round(r.m2).toLocaleString('vi-VN')} m²</span>` : r.m2 === 0 ? ' <span style="color:#94a3b8;font-size:11px">(chưa có m² – mở lại Danh sách đơn để đọc)</span>' : ''}<div style="margin-top:2px;font-size:12.5px">Rẻ nhất: <b style="color:#2563eb">${r.min.id}</b> | ${esc(r.min.name)} · <b>${r.min.price.toLocaleString('vi-VN')}</b> <span style="font-size:11px;color:#64748b">· ${esc(r.min.prov?.name || '')} · cập nhật ${day(r.min.updatedAt)}</span></div>`;
     };
     const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
-    const lastAt = Number(orders?._at) || 0;
-    const stale = Date.now() - lastAt > 15 * 60e3;
-    if (stale && !gtOrdBusy && !gtUi.ordAutoAt) {
-      // quá 15 phút chưa đọc đơn mới → tự tải lại 1 lần (khung ẩn), xong vẽ lại
-      gtUi.ordAutoAt = Date.now();
-      gtLoadOrders().then((ok) => ok && gtFill()).catch(() => {}).finally(() => setTimeout(() => (gtUi.ordAutoAt = 0), 15 * 60e3));
-    }
-    const loadBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#475569">🕒 Đọc đơn lần cuối: <b>${lastAt ? new Date(lastAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa'}</b>${stale ? ' <span style="color:#d97706">(quá 15 phút)</span>' : ''}<button data-gt="oload" style="cursor:pointer;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${stale ? '#f59e0b' : '#cbd5e1'};background:${stale ? '#fffbeb' : '#fff'};color:${stale ? '#b45309' : '#334155'}">${gtOrdBusy ? '⏳ Đang tải danh sách đơn…' : '⟳ Tải danh sách đơn mới'}</button></div>`;
     return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ${SITE.key === 'daiduong' ? 'trạng thái Mới' : 'ở tab Mới'} dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b>${nSolo ? ` · <b style="color:#d97706">${nSolo} chỉ 1 giấy cùng nhóm</b>` : ''} · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
   <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
