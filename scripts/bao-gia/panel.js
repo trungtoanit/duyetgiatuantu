@@ -4676,7 +4676,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- 🔁 Đổi ID giấy hàng loạt (cột "Kết cấu giấy"): mỗi dòng bấm ID giấy → hộp "Chọn giấy tấm"
   // → tab "Danh sách giấy tấm" → nhập ID vào ô "Tìm ID" → chọn đúng dòng giấy có ID đó → bấm "Chọn". Không bấm "Cập nhật" của báo giá.
   const pidModal = () => visModalsTop().find((m) => /Chọn giấy tấm/.test(m.querySelector('.ant-modal-title')?.textContent || '') && m.querySelector('.ant-modal')?.offsetParent);
-  const pidOf = (cell) => ((cell?.innerText || '').match(/(\d+)\s*\|/) || [])[1] || '';
+  const pidOf = (cell) => ((cell?.innerText || '').replace(/❓/g, '').match(/(\d+)\s*\|/) || [])[1] || ''; // bỏ icon ❓ chèn sau số ID
   const pidLink = (cell) => cell && ([...cell.querySelectorAll('a')].find((a) => /^\d+$/.test(a.textContent.trim()))
     || [...cell.querySelectorAll('*')].find((e) => !e.children.length && /^\d+$/.test(e.textContent.trim())));
   const pidSetInput = (inp, v) => {
