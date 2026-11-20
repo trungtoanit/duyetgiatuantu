@@ -16290,7 +16290,7 @@ Quy tắc:
       <td class="c">${esc(r.w || '?')}</td>
       <td><b>${r.min.id}</b> | ${esc(r.min.name)}</td>
       <td class="r"><b>${r.min.price.toLocaleString('vi-VN')}</b></td>
-      <td>${esc(r.min.prov?.name || r.min.prov?.code || '')}</td>
+      <td class="c"><b>${esc(r.min.prov?.code || r.min.prov?.name || '')}</b></td>
       <td class="c${fresh(r.min.updatedAt) ? '' : ' old'}">${day(r.min.updatedAt)}</td></tr>`).join('')}`).join('');
     const nccs = gtUi.provs.size ? [...gtUi.provs].join(', ') : 'mọi NCC';
     const now = new Date();
@@ -16310,7 +16310,7 @@ Quy tắc:
       <div class="hd"><img src="${location.origin}/logo.png" onerror="this.remove()"><div><div class="co">${esc(GT_CO.name)}</div><div class="ad">${esc(GT_CO.addr)}</div></div></div>
       <h1>BẢNG GIÁ GIẤY TẤM RẺ NHẤT THEO NHÓM</h1>
       <div class="sub">NCC: ${esc(nccs)} · ${stt} nhóm · In lúc ${esc(now.toLocaleString('vi-VN'))}</div>
-      <table><thead><tr><th>STT</th><th>Nhóm</th><th>Sóng</th><th>ID rẻ nhất | Chất liệu giấy</th><th>Giá rẻ nhất (đ/m²)</th><th>Nhà cung cấp</th><th>Cập nhật lần cuối</th></tr></thead><tbody>${body || '<tr><td colspan="7" class="c">Không có giấy nào có giá</td></tr>'}</tbody></table>
+      <table><thead><tr><th>STT</th><th>Nhóm</th><th>Sóng</th><th>ID rẻ nhất | Chất liệu giấy</th><th>Giá rẻ nhất (đ/m²)</th><th>NCC</th><th>Cập nhật lần cuối</th></tr></thead><tbody>${body || '<tr><td colspan="7" class="c">Không có giấy nào có giá</td></tr>'}</tbody></table>
       <div class="ft">Mỗi nhóm so theo từng sóng; chỉ tính giấy đang hiện và NCC đang lọc. Ngày cập nhật màu đỏ: giá cũ hơn ${GT_FRESH_D} ngày.</div>
     </body></html>`;
     csPrint(html, `Bang gia giay tam re nhat ${now.toLocaleDateString('vi-VN').replace(/\//g, '-')}`);
