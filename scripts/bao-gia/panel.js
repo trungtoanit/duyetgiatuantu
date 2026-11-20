@@ -15915,15 +15915,17 @@ Quy tắc:
   // Phân nhóm theo tên: 3 chữ số = 3 lớp, 5 chữ số = 5 lớp, còn lại = Khác
   const gtSec = (name) => { const d = String(name || '').trim(); return /^\d{3}$/.test(d) ? '3' : /^\d{5}$/.test(d) ? '5' : 'x'; };
   const GT_SECS = [['3', '3 LỚP'], ['5', '5 LỚP'], ['x', 'KHÁC']];
-  // ⚡ Map nhanh: mã nhóm từ kết cấu giấy, mỗi lớp 1 số – 90/95 → 1, 120/125 → 2, 140/145/150 → 5, 160/165 → 6, 170/175 → 7, giấy Trắng (T…) → 8
-  // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp không đổi được (vd. *, 160) → không map
+  // ⚡ Map nhanh: mã nhóm từ kết cấu giấy, mỗi lớp 1 số – 90/95/100 → 1, 120/125 → 2, 140/145/150 → 5, 160/165 → 6,
+  // 170/175/180/185 → 7, giấy Trắng (T…) → 8, 230 → 9. Lớp viết "N.230" / "N 230" / "N230" đều là 230.
+  // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp không đổi được (vd. *) → không map. Dùng chung cho toàn extension
+  // (tab Giấy tấm, đơn mới, icon ❓/✅ ở báo giá, Zalo, PDF).
   function gtCode(name) {
     const body = String(name || '').replace(/^[^_]*_/, '').replace(/-[A-Z]+$/i, '');
     const parts = body.split('/');
     if (parts.length < 2) return '';
     let out = '';
     for (const p of parts) {
-      const m = p.trim().match(/^([A-Z])\s*(\d+)/i);
+      const m = p.trim().match(/^([A-Z])[\s.]*(\d+)/i);
       if (!m) return '';
       if (m[1].toUpperCase() === 'T') { out += '8'; continue; }
       const n = Number(m[2]);
