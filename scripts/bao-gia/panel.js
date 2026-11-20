@@ -3663,7 +3663,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Ô "Kết cấu giấy" của 1 dòng: ô có dạng "1253 | PNTP_…" (không dựa vào vị trí cột – bảng có cột cố định)
   const paperCell = (tr, iKc) =>
-    [...tr.cells].find((td) => /\d+\s*\|\s*[A-Z0-9]+_/.test((td.innerText || '').replace(/❓/g, ''))) || tr.cells[iKc];
+    [...tr.cells].find((td) => /\d+\s*\|\s*[A-Z0-9]+_/.test((td.innerText || '').replace(/[❓✅①]/g, ''))) || tr.cells[iKc];
   // Giấy cũ: ô có dấu ⚠ (chữ) hoặc bất kỳ biểu tượng nào (hình / SVG / icon) – ô giấy mới chỉ có chữ + thanh
   const isOldPaper = (cell) =>
     !!cell && (/⚠/.test(cell.innerText || '') || !!cell.querySelector('svg, img, .anticon, [role="img"], i[class*="icon"], [class*="warning"], [class*="Warning"]'));
@@ -4676,7 +4676,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ---------- 🔁 Đổi ID giấy hàng loạt (cột "Kết cấu giấy"): mỗi dòng bấm ID giấy → hộp "Chọn giấy tấm"
   // → tab "Danh sách giấy tấm" → nhập ID vào ô "Tìm ID" → chọn đúng dòng giấy có ID đó → bấm "Chọn". Không bấm "Cập nhật" của báo giá.
   const pidModal = () => visModalsTop().find((m) => /Chọn giấy tấm/.test(m.querySelector('.ant-modal-title')?.textContent || '') && m.querySelector('.ant-modal')?.offsetParent);
-  const pidOf = (cell) => ((cell?.innerText || '').replace(/❓/g, '').match(/(\d+)\s*\|/) || [])[1] || ''; // bỏ icon ❓ chèn sau số ID
+  const pidOf = (cell) => ((cell?.innerText || '').replace(/[❓✅①]/g, '').match(/(\d+)\s*\|/) || [])[1] || ''; // bỏ icon ❓ chèn sau số ID
   const pidLink = (cell) => cell && ([...cell.querySelectorAll('a')].find((a) => /^\d+$/.test(a.textContent.trim()))
     || [...cell.querySelectorAll('*')].find((e) => !e.children.length && /^\d+$/.test(e.textContent.trim())));
   const pidSetInput = (inp, v) => {
@@ -15759,8 +15759,9 @@ Quy tắc:
     const w = gtWave(me.name);
     if (!code) return null;
     const now = Date.now() / 1000;
-    const list = Object.values(gtQ.items).filter((x) => x && x.id !== me.id && x.visible !== false && x.price >= 500 && now - (x.updatedAt || 0) < GT_FRESH_D * 86400 && gtCode(x.name) === code && gtWave(x.name) === w && x.price < me.price && (!gtQ.provs.size || gtQ.provs.has(x.prov?.code || '')));
-    return { me, code, w, list: list.sort((a, b) => a.price - b.price) };
+    const peers = Object.values(gtQ.items).filter((x) => x && x.id !== me.id && x.visible !== false && x.price >= 500 && now - (x.updatedAt || 0) < GT_FRESH_D * 86400 && gtCode(x.name) === code && gtWave(x.name) === w && (!gtQ.provs.size || gtQ.provs.has(x.prov?.code || ''))).sort((a, b) => a.price - b.price);
+    const list = peers.filter((x) => x.price < me.price);
+    return { me, code, w, list, peers, state: list.length ? 'q' : peers.length ? 'ok' : 'solo' };
   }
   function gtQPopup(icon, info) {
     document.getElementById('dg-gtq-pop')?.remove();
@@ -15768,12 +15769,14 @@ Quy tắc:
     pop.id = 'dg-gtq-pop';
     const r = icon.getBoundingClientRect();
     pop.setAttribute('style', `position:fixed;z-index:2147483000;top:${Math.min(r.bottom + 6, window.innerHeight - 320)}px;left:${Math.max(8, Math.min(r.left - 20, window.innerWidth - 560))}px;width:540px;max-height:300px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
-    const { me, code, w, list } = info;
+    const { me, code, w, peers, state } = info;
+    const list = peers;
+    const head = state === 'q' ? `❓ Có ${info.list.length} giấy rẻ hơn cùng nhóm ${esc(code)} · sóng ${esc(w)}` : state === 'ok' ? `✅ Giấy đang chọn rẻ nhất nhóm ${esc(code)} · sóng ${esc(w)}` : `① Chỉ có 1 giấy trong nhóm ${esc(code)} · sóng ${esc(w)} – nên hỏi thêm NCC khác`;
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
-    pop.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><b style="flex:1">❓ Có ${list.length} giấy rẻ hơn cùng nhóm ${esc(code)} · sóng ${esc(w)}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
-<div style="font-size:12px;margin-bottom:6px;padding:4px 8px;border-radius:6px;background:#fef2f2">Đang chọn: <b style="color:#2563eb">${me.id}</b> | ${esc(me.name)} · <b style="color:#dc2626">${me.price.toLocaleString('vi-VN')} đ/m2</b> <span style="color:#64748b">· ${esc(me.prov?.name || '')}</span></div>
-<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:4px 6px">ID | Chất liệu giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Rẻ hơn</th><th style="padding-left:6px">Cập nhật</th></tr></thead>
-<tbody>${list.map((x, i) => `<tr style="border-top:1px solid #f1f5f9;${i === 0 ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td>${esc(x.prov?.name || x.prov?.code || '')}</td><td style="text-align:right;font-weight:800;color:#15803d">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:#dc2626">−${(me.price - x.price).toLocaleString('vi-VN')}đ (${Math.round(((me.price - x.price) / me.price) * 100)}%)</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td></tr>`).join('')}</tbody></table>
+    pop.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><b style="flex:1">${head}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
+<div style="font-size:12px;margin-bottom:6px;padding:4px 8px;border-radius:6px;background:${state === 'q' ? '#fef2f2' : '#f0fdf4'}">Đang chọn: <b style="color:#2563eb">${me.id}</b> | ${esc(me.name)} · <b style="color:${state === 'q' ? '#dc2626' : '#15803d'}">${me.price.toLocaleString('vi-VN')} đ/m2</b> <span style="color:#64748b">· ${esc(me.prov?.name || '')}</span></div>
+<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:4px 6px">ID | Chất liệu giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">So với đang chọn</th><th style="padding-left:6px">Cập nhật</th></tr></thead>
+<tbody>${list.length ? '' : '<tr><td colspan="5" style="padding:8px;color:#94a3b8;text-align:center">Không có giấy nào khác cùng nhóm (theo NCC đang lọc, giá 90 ngày)</td></tr>'}${list.map((x) => { const dd = x.price - me.price; const cheap = dd < 0; return `<tr style="border-top:1px solid #f1f5f9;${cheap ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td>${esc(x.prov?.name || x.prov?.code || '')}</td><td style="text-align:right;font-weight:800;color:${cheap ? '#15803d' : '#dc2626'}">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:${cheap ? '#15803d' : '#dc2626'}">${dd === 0 ? 'bằng giá' : `${cheap ? 'rẻ hơn ' : 'đắt hơn '}${Math.abs(dd).toLocaleString('vi-VN')}đ (${Math.round((Math.abs(dd) / me.price) * 100)}%)`}</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td></tr>`; }).join('')}</tbody></table>
 <div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>`;
     document.body.append(pop);
     pop.querySelector('[data-x]').onclick = () => pop.remove();
@@ -15801,19 +15804,19 @@ Quy tắc:
       if (old && old.dataset.id === id) continue;
       old?.remove();
       const info = gtQCheaper(id);
-      if (!info?.list.length) continue;
+      if (!info) continue;
       const ic = document.createElement('span');
       ic.className = 'dg-gtq';
       ic.dataset.id = id;
-      ic.textContent = '❓';
-      ic.title = `Chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem`;
-      ic.setAttribute('style', 'cursor:pointer;margin-left:4px;font-size:14px;display:inline-block;animation:dgGtqPulse 1.6s infinite');
+      ic.textContent = info.state === 'q' ? '❓' : info.state === 'ok' ? '✅' : '①';
+      ic.title = info.state === 'q' ? `Chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem` : info.state === 'ok' ? `Rẻ nhất nhóm ${info.code} sóng ${info.w} (${info.peers.length + 1} giấy) – bấm để xem so sánh` : `Chỉ có 1 giấy trong nhóm ${info.code} sóng ${info.w} – nên hỏi thêm NCC khác`;
+      ic.setAttribute('style', `cursor:pointer;margin-left:4px;font-size:${info.state === 'solo' ? 13 : 14}px;display:inline-block;${info.state === 'q' ? 'animation:dgGtqPulse 1.6s infinite' : info.state === 'solo' ? 'color:#d97706;font-weight:800' : ''}`);
       if (!document.getElementById('dg-gtq-css')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-gtq-css">@keyframes dgGtqPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}</style>');
       ic.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const cur = gtQCheaper(ic.dataset.id);
-        if (cur?.list.length) gtQPopup(ic, cur);
+        if (cur) gtQPopup(ic, cur);
       });
       const link = pidLink(cell);
       if (link) link.after(ic); // ngay sau số ID giấy
