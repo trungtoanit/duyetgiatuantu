@@ -1,5 +1,5 @@
 {
-  "version": "1.2.689",
+  "version": "1.2.690",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -140,6 +140,7 @@
     "gtDone",
     "dd.gtDone",
     "gtPoDiff",
-    "dd.gtPoDiff"
+    "dd.gtPoDiff",
+    "gtAngryImg"
   ]
 }

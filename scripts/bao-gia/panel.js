@@ -15764,6 +15764,7 @@ Quy tắc:
     const [items, prefs] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_PREFS)]);
     gtQ.items = items || {};
     gtQ.provs = new Set(prefs?.[norm(meName)]?.provs || []);
+    await gtAngryImgLoad();
   }
   function gtQCheaper(id) {
     const me = gtQ.items[id];
@@ -15850,7 +15851,7 @@ Quy tắc:
       const ic = document.createElement('span');
       ic.className = 'dg-gtq';
       ic.dataset.id = id;
-      if (info.state === 'q') ic.innerHTML = GT_ANGRY_SVG.replace('width="92" height="100"', 'width="30" height="32"').replace(/gaFace/g, `gaFace${id}`);
+      if (info.state === 'q') ic.innerHTML = gtAngryFig(30, id);
       else ic.textContent = info.state === 'ok' ? '✅' : '①';
       ic.title = info.state === 'q' ? `😡 Kế toán giận: chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem` : info.state === 'ok' ? `Rẻ nhất nhóm ${info.code} sóng ${info.w} (${info.peers.length + 1} giấy) – bấm để xem so sánh` : `Chỉ có 1 giấy trong nhóm ${info.code} sóng ${info.w} – nên hỏi thêm NCC khác`;
       ic.setAttribute('style', `cursor:pointer;margin-left:4px;font-size:${info.state === 'solo' ? 13 : 14}px;display:inline-block;${info.state === 'q' ? 'vertical-align:middle;line-height:0;animation:dgGtqShake 1.4s ease-in-out infinite;transform-origin:50% 90%' : info.state === 'solo' ? 'color:#d97706;font-weight:800' : ''}`);
@@ -16162,6 +16163,29 @@ Quy tắc:
     setTimeout(() => gtPoRun(), 20e3);
     setInterval(() => gtPoRun(), 2 * 60e3);
   }
+  // 📷 Ảnh thật của kế toán: admin tải lên ở panel (cắt vuông phần mặt, 180px JPEG) → kv gtAngryImg { img: { src, at, by } }
+  // đồng bộ qua cloud của extension – không đưa ảnh nhân viên vào repo GitHub công khai. Chưa có ảnh → dùng hình vẽ.
+  let gtAngryImg = '';
+  async function gtAngryImgLoad() {
+    try {
+      gtAngryImg = (await kvGet('gtAngryImg'))?.img?.src || '';
+    } catch {}
+    return gtAngryImg;
+  }
+  // Mặt thật + hiệu ứng giận: viền đỏ, ửng đỏ nhấp nháy, 💢, bốc khói, máy tính
+  function gtAngryFig(px, uid = '') {
+    if (!gtAngryImg) {
+      const h = Math.round((px * 100) / 92);
+      return GT_ANGRY_SVG.replace('width="92" height="100"', `width="${px}" height="${h}"`).replace(/gaFace/g, `gaFace${uid}`);
+    }
+    const big = px >= 60;
+    return `<span class="ga-ph" style="position:relative;display:inline-block;width:${px}px;height:${px}px;line-height:0">
+<img src="${gtAngryImg}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;border:${big ? 3 : 2}px solid #dc2626;box-sizing:border-box;box-shadow:0 0 0 ${big ? 3 : 1}px #fecaca">
+<span class="ga-tint" style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 50% 60%,rgba(239,68,68,.45),rgba(239,68,68,0) 70%);mix-blend-mode:multiply"></span>
+<span style="position:absolute;right:${big ? -4 : -3}px;top:${big ? -6 : -4}px;font-size:${big ? 24 : 11}px;line-height:1">💢</span>
+${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0;top:-26px" aria-hidden="true"><g class="ga-steam"><path d="M30 34c-6-6 4-10-2-17" /><path d="M90 34c6-6-4-10 2-17" /><path d="M60 30c-5-5 4-8-1-14" /></g></svg>
+<span class="ga-calc" style="position:absolute;right:-12px;bottom:-8px;font-size:30px;line-height:1">🧮</span>` : ''}</span>`;
+  }
   // Hình kế toán (vẽ theo ảnh chị kế toán Tuấn Tú): tóc bob nâu ngang vai, kính gọng mảnh, áo sơ mi trắng logo Tuấn Tú, chân váy đen – đang giận
   const GT_ANGRY_SVG = `<svg viewBox="0 0 120 130" width="92" height="100" aria-hidden="true">
   <defs><radialGradient id="gaFace" cx=".5" cy=".62" r=".5"><stop offset="0" stop-color="#ef4444" stop-opacity=".55"/><stop offset="1" stop-color="#ef4444" stop-opacity="0"/></radialGradient>
@@ -16185,6 +16209,37 @@ Quy tắc:
   <g class="ga-calc"><path d="M86 112c-6-4-10-8-12-13" stroke="#f6d3b8" stroke-width="6" stroke-linecap="round" fill="none"/><rect x="84" y="86" width="30" height="40" rx="4" fill="#334155"/><rect x="88" y="90" width="22" height="9" rx="1.5" fill="#a7f3d0"/><text x="108" y="97.5" font-size="7" text-anchor="end" font-family="monospace" fill="#b91c1c" font-weight="900">-₫₫₫</text>
   <g fill="#e2e8f0"><rect x="88" y="103" width="6" height="5" rx="1"/><rect x="96" y="103" width="6" height="5" rx="1"/><rect x="104" y="103" width="6" height="5" rx="1" fill="#f87171"/><rect x="88" y="111" width="6" height="5" rx="1"/><rect x="96" y="111" width="6" height="5" rx="1"/><rect x="104" y="111" width="6" height="5" rx="1"/><rect x="88" y="119" width="22" height="4" rx="1"/></g></g>
 </svg>`;
+  // Chọn ảnh → cắt vuông phần mặt (giữa ngang, phần trên ảnh chân dung) → 180px JPEG → lưu kv (đồng bộ)
+  function gtAngryPhotoPick() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.onchange = () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      const img = new Image();
+      img.onload = async () => {
+        const W = img.naturalWidth;
+        const H = img.naturalHeight;
+        const side = Math.round(Math.min(W, H) * (H > W * 1.1 ? 0.6 : 0.85)); // ảnh đứng: mặt ở phần trên
+        const sx = Math.round((W - side) / 2);
+        const sy = H > W * 1.1 ? Math.round(H * 0.05) : Math.round((H - side) / 2);
+        const c = document.createElement('canvas');
+        c.width = c.height = 180;
+        c.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, 180, 180);
+        const src = c.toDataURL('image/jpeg', 0.85);
+        URL.revokeObjectURL(img.src);
+        await kvMerge('gtAngryImg', { img: { src, at: Date.now(), by: meName || '' } });
+        gtAngryImg = src;
+        const box = document.getElementById('dg-gt-angry');
+        if (box) box.dataset.h = '';
+        gtQ.at = 0;
+        injectGtAngry();
+      };
+      img.src = URL.createObjectURL(f);
+    };
+    inp.click();
+  }
   let gtAngryBusy = false;
   async function injectGtAngry() {
     if (!IS_TOP || gtAngryBusy || !document.body) return;
@@ -16195,6 +16250,7 @@ Quy tắc:
       PERMS = PERMS && Object.keys(PERMS).length ? PERMS : (await kvGet('perms')) || {};
       const ok = userPerm(meObj).tabs.includes('gt');
       const list = ok ? await gtAngryList() : [];
+      if (ok) await gtAngryImgLoad();
       const pds = ok ? (await kvGet(GT_PODIFF).catch(() => ({}))) || {} : {};
       const qIds = ok ? await gtQuoteIds() : {};
       for (const x of list) {
@@ -16204,9 +16260,10 @@ Quy tắc:
       }
       let box = document.getElementById('dg-gt-angry');
       if (!list.length) return box?.remove();
-      if (!document.getElementById('dg-gt-angry-css')) {
+      if (!document.getElementById('dg-gt-angry-css2')) {
+        document.getElementById('dg-gt-angry-css')?.remove();
         const st = document.createElement('style');
-        st.id = 'dg-gt-angry-css';
+        st.id = 'dg-gt-angry-css2';
         st.textContent = `#dg-gt-angry{position:fixed;right:18px;bottom:18px;z-index:2147482000;width:min(430px,calc(100vw - 32px));font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a}
 #dg-gt-angry .ga-card{display:flex;gap:10px;background:#fff;border:2px solid #ef4444;border-radius:16px;box-shadow:0 18px 44px rgba(185,28,28,.35);padding:12px 12px 10px;animation:gaIn .35s ease-out}
 @keyframes gaIn{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none}}
@@ -16214,8 +16271,9 @@ Quy tắc:
 @keyframes gaShake{0%,60%,100%{transform:rotate(0)}65%{transform:rotate(-6deg)}70%{transform:rotate(6deg)}75%{transform:rotate(-5deg)}80%{transform:rotate(5deg)}85%{transform:rotate(-2deg)}}
 #dg-gt-angry .ga-steam path{fill:none;stroke:#94a3b8;stroke-width:4;stroke-linecap:round;opacity:0;animation:gaSteam 1.4s ease-out infinite}#dg-gt-angry .ga-steam path:nth-child(2){animation-delay:.45s}#dg-gt-angry .ga-steam path:nth-child(3){animation-delay:.9s}
 @keyframes gaSteam{0%{opacity:0;transform:translateY(6px)}30%{opacity:.9}100%{opacity:0;transform:translateY(-10px)}}
+#dg-gt-angry .ga-tint{animation:gaTint 1.2s ease-in-out infinite alternate}@keyframes gaTint{from{opacity:.4}to{opacity:1}}
 #dg-gt-angry .ga-brow{animation:gaBrow .8s ease-in-out infinite alternate}@keyframes gaBrow{to{transform:translateY(2px)}}
-#dg-gt-angry .ga-calc{animation:gaCalc .5s ease-in-out infinite alternate;transform-origin:99px 106px}@keyframes gaCalc{to{transform:rotate(-8deg)}}
+#dg-gt-angry svg .ga-calc{animation:gaCalc .5s ease-in-out infinite alternate;transform-origin:99px 106px}#dg-gt-angry span.ga-calc{animation:gaCalc .5s ease-in-out infinite alternate}@keyframes gaCalc{to{transform:rotate(-8deg)}}
 #dg-gt-angry .ga-body{flex:1;min-width:0}#dg-gt-angry .ga-t{font-weight:900;font-size:15px;color:#b91c1c}#dg-gt-angry .ga-s{font-size:12.5px;color:#475569;margin:2px 0 6px}
 #dg-gt-angry .ga-s b{color:#b91c1c;background:#fee2e2;border-radius:5px;padding:0 5px}
 #dg-gt-angry .ga-say{position:relative;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:5px 8px;font-weight:700;color:#7f1d1d;margin-bottom:6px}
@@ -16240,6 +16298,7 @@ Quy tắc:
           const k = a.dataset.ga;
           if (k === 'min') { lsSet('dgGtAngryMin', String(Date.now())); box.classList.add('min'); }
           else if (k === 'max') { lsSet('dgGtAngryMin', ''); box.classList.remove('min'); }
+          else if (k === 'photo') gtAngryPhotoPick();
           else if (k === 'go') {
             lsSet('dgTab', 'gt');
             lsSet('dgGtView', 'orders');
@@ -16260,7 +16319,7 @@ Quy tắc:
       const SAY = ['Ai cho chọn giấy đắt hơn vậy hả?!', 'Tiền công ty chứ đâu phải lá mít!', 'Giấy rẻ hơn nằm sờ sờ kia kìa!', 'Đổi NCC hoặc bắt trả về bằng giá ngay!'];
       const say = SAY[Math.floor(Date.now() / 60e3) % SAY.length];
       const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
-<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${GT_ANGRY_SVG}</div><div class="ga-body">
+<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${gtAngryFig(92)}${MY_ADMIN ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button></div>` : ''}</div><div class="ga-body">
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> /10 đơn mới nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
