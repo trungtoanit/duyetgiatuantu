@@ -15932,7 +15932,7 @@ Quy tắc:
       gtFill();
     })();
   }
-  // ⟳ Tải danh sách đơn (tab Mới) trong khung ẩn, lật hết các trang → hook đọc giấy từng dòng đơn (orderPapers). Chỉ đọc.
+  // ⟳ Tải danh sách đơn (tab Mới) trong khung ẩn, chỉ trang 1 (100 đơn mới nhất) → hook đọc giấy từng dòng đơn (orderPapers). Chỉ đọc.
   let gtOrdBusy = false;
   async function gtLoadOrders(onStep) {
     if (gtOrdBusy) return false;
@@ -15945,7 +15945,7 @@ Quy tắc:
         for (let i = 0; i < 60 && !first(); i++) await sleep(500);
         await sleep(1500);
         onStep?.(1);
-        for (let page = 2; page <= 20; page++) {
+        for (let page = 2; page <= 1; page++) { // chỉ đọc trang 1 (100 đơn mới nhất) – đủ cho đơn mới, nhanh
           const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
           if (!li) break;
           const prev = first();
