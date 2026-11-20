@@ -601,7 +601,7 @@
           if (!op.cartonStructCode) continue;
           const c = o.customer || o.opportunity?.customer || {};
           lines.push({
-            did: x.id, oid: o.id, order: o.code, at: o.orderedAt || o.createdAt, quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
+            did: x.id, oid: o.id, order: o.code, at: o.createdAt || o.orderedAt, // giờ lên đơn (như cột ID của Danh sách đơn) quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
             cust: c.shortName || c.code || c.name || o.customerName || '', prod: x.description || op.name || '', qty: x.quantity || 0,
             tp: x.productionCode || op.product?.code || '',
             paper: op.cartonStructCode, cp: Number(op.cartonPrice) || 0, layer: op.layer,
