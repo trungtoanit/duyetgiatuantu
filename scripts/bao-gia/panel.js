@@ -15737,7 +15737,10 @@ Quy tắc:
   // ---------- Tab 📄 Giấy tấm: kho giấy tấm + nhóm do extension tự quản lý (cloud) ----------
   const GT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#475569'];
   const GT_COLOR_VI = { NAU: 'Nâu', TRANG: 'Trắng', VANG: 'Vàng', XAM: 'Xám' };
-  const gtUi = { g: 'all', q: '', layer: '', prov: '', sel: new Set(), sort: 'id', page: 0, msg: '' };
+  const gtUi = { g: 'all', q: '', layer: '', provs: new Set(), sel: new Set(), sort: 'id', page: 0, msg: '' };
+  const GT_PREFS = 'gtPrefs'; // lựa chọn lọc của từng người trên cloud: { [tên chuẩn hoá]: { provs: [mã NCC…], at } }
+  let gtPrefsLoaded = false;
+  const gtSavePrefs = () => kvMerge(GT_PREFS, { [norm(meName)]: { provs: [...gtUi.provs], at: Date.now() } }).catch(() => {});
   const gtHost = () => root?.querySelector('#dg-gt');
   const gtTab = () => '<div id="dg-gt" style="padding:10px 12px"><div style="color:#94a3b8">⏳ Đang tải giấy tấm…</div></div>';
   let gtFillBusy = false;
@@ -15748,6 +15751,11 @@ Quy tắc:
     gtFillBusy = true;
     try {
       const [items, groups, scan] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY)]);
+      if (!gtPrefsLoaded) {
+        gtPrefsLoaded = true;
+        const pf = (await kvGet(GT_PREFS))[norm(meName)];
+        if (Array.isArray(pf?.provs)) gtUi.provs = new Set(pf.provs);
+      }
       gtDraw(host, items, groups, scan);
     } finally {
       gtFillBusy = false;
@@ -15764,7 +15772,7 @@ Quy tắc:
       if (gtUi.g === 'none' && inG.has(x.id)) return false;
       if (gtUi.g !== 'all' && gtUi.g !== 'none' && !gs.find((g) => g.id === gtUi.g).ids.includes(x.id)) return false;
       if (gtUi.layer && String(x.layer) !== gtUi.layer) return false;
-      if (gtUi.prov && x.prov?.code !== gtUi.prov) return false;
+      if (gtUi.provs.size && !gtUi.provs.has(x.prov?.code || '')) return false;
       if (q && !norm(`${x.id} ${x.name} ${x.group} ${x.prov?.name || ''} ${x.note}`).includes(q)) return false;
       return true;
     });
@@ -15810,9 +15818,14 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">
       <input data-gt-in="q" value="${esc(gtUi.q)}" placeholder="🔍 Tìm ID, tên giấy, nhóm CRM, NCC…" ${inp.replace('style="', 'style="width:260px;')}>
       <select data-gt-in="layer" ${inp}><option value="">Mọi số lớp</option>${layers.map((l) => `<option value="${l}"${gtUi.layer === String(l) ? ' selected' : ''}>${l} lớp</option>`).join('')}</select>
-      <select data-gt-in="prov" ${inp}><option value="">Mọi NCC</option>${provs.map(([c, n]) => `<option value="${esc(c)}"${gtUi.prov === c ? ' selected' : ''}>${esc(n)} (${esc(c)})</option>`).join('')}</select>
       <select data-gt-in="sort" ${inp}>${[['id', 'Mới nhất'], ['price', 'Giá thấp → cao'], ['uses', 'Dùng nhiều nhất'], ['name', 'Tên A→Z']].map(([k, l]) => `<option value="${k}"${gtUi.sort === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
       <span style="color:#64748b;font-size:12px">${rows.length} giấy</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;color:#64748b;font-weight:700">NCC:</span>
+      <button data-gt="provall" title="Bỏ lọc NCC" style="cursor:pointer;border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${gtUi.provs.size ? '#cbd5e1' : '#2563eb'};background:${gtUi.provs.size ? '#fff' : '#2563eb'};color:${gtUi.provs.size ? '#334155' : '#fff'}">Tất cả</button>
+      ${provs.map(([c, n]) => { const on = gtUi.provs.has(c); const k = all.filter((x) => x.prov?.code === c).length; return `<button data-gt="prov" data-c="${esc(c)}" title="Bấm để ${on ? 'bỏ' : 'chọn'} ${esc(n)} – chọn được nhiều NCC" style="cursor:pointer;border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${on ? '#2563eb' : '#cbd5e1'};background:${on ? '#dbeafe' : '#fff'};color:${on ? '#1d4ed8' : '#334155'}">${on ? '✓ ' : ''}${esc(n)} (${esc(c)}) <span style="opacity:.6">${k}</span></button>`; }).join('')}
+      ${gtUi.provs.size ? `<span style="font-size:11px;color:#94a3b8">đã lưu trên cloud</span>` : ''}
     </div>
     ${MY_ADMIN ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;padding:6px 8px;border-radius:8px;background:${sel.length ? '#eef2ff' : '#f8fafc'}">
       <span style="font-size:12px">Đã chọn <b>${sel.length}</b></span>
@@ -15855,7 +15868,7 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
       });
       host.addEventListener('change', (e) => {
         const k = e.target.dataset?.gtIn;
-        if (['layer', 'prov', 'sort'].includes(k)) {
+        if (['layer', 'sort'].includes(k)) {
           gtUi[k] = e.target.value;
           gtUi.page = 0;
           gtFill();
@@ -15888,7 +15901,13 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
       const ids = [...host.querySelectorAll('[data-gt="sel"]')].map((x) => Number(x.dataset.id));
       for (const id of ids) b.checked ? gtUi.sel.add(id) : gtUi.sel.delete(id);
     } else if (k === 'clr') gtUi.sel.clear();
-    else if (k === 'prev') gtUi.page = Math.max(0, gtUi.page - 1);
+    else if (k === 'prov' || k === 'provall') {
+      if (k === 'provall') gtUi.provs.clear();
+      else if (gtUi.provs.has(b.dataset.c)) gtUi.provs.delete(b.dataset.c);
+      else gtUi.provs.add(b.dataset.c);
+      gtUi.page = 0;
+      gtSavePrefs();
+    } else if (k === 'prev') gtUi.page = Math.max(0, gtUi.page - 1);
     else if (k === 'next') gtUi.page++;
     else if (k === 'newg') {
       const name = val('newg');
