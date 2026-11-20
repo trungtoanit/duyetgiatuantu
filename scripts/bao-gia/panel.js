@@ -16391,7 +16391,7 @@ Quy tắc:
   <b style="font-size:16px">📄 Giấy tấm</b>
   <span style="color:#64748b;font-size:12px">Kho extension: <b>${all.filter((x) => x.visible !== false).length}</b> / CRM ${scan._total || '?'} giấy đang hiển thị · đồng bộ đủ lần cuối: ${ago(scan._allAt)}${scan._allBy ? ` (${esc(scan._allBy)})` : ''} · tự đồng bộ mỗi giờ</span>
   <span style="flex:1"></span>
-  ${bt('pdf', '🖨 Xuất PDF giá rẻ nhất theo nhóm', 'border-color:#86efac;color:#15803d')}${bt('pdfn', '🖨 PDF không hiện NCC', 'border-color:#cbd5e1;color:#334155')}${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
+  <span style="position:relative;display:inline-block">${bt('pdfmenu', `🖨 Xuất PDF giá rẻ nhất ${gtUi.pdfOpen ? '▴' : '▾'}`, 'border-color:#86efac;color:#15803d')}${gtUi.pdfOpen ? `<div style="position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:240px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 10px 24px rgba(15,23,42,.18);padding:4px">${[['pdf', '🖨 Có cột NCC', 'bản nội bộ – có mã NCC'], ['pdfn', '🖨 Không hiện NCC', 'gửi ra ngoài – ẩn NCC']].map(([k, l, d]) => `<div data-gt="${k}" style="cursor:pointer;padding:6px 10px;border-radius:6px;font-size:12.5px;font-weight:700;color:#0f172a" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''">${l}<div style="font-weight:500;font-size:11px;color:#64748b">${d}</div></div>`).join('')}</div>` : ''}</span>${bt('view', gtUi.view === 'orders' ? '📄 Về danh sách giấy' : '📦 Đơn mới dùng giấy – rẻ nhất nhóm?', 'border-color:#c4b5fd;color:#6d28d9')}${bt('all', '⟳ Đồng bộ ngay (mọi trang)', 'border-color:#93c5fd;color:#1d4ed8')}
 </div>
 ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#f1f5f9;font-size:12px">${esc(gtUi.msg)}</div>` : ''}
 ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
@@ -16587,9 +16587,13 @@ ${(() => {
         gtUi.pick = null;
         if (!b) return gtFill();
       }
-      if (!b) return;
+    }
+    if (!b) {
+      if (gtUi.pdfOpen) { gtUi.pdfOpen = false; gtFill(); } // bấm ra ngoài → đóng menu PDF
+      return;
     }
     const k = b.dataset.gt;
+    if (gtUi.pdfOpen && k !== 'pdfmenu' && k !== 'pdf' && k !== 'pdfn') gtUi.pdfOpen = false;
     const groups = await kvGet(GT_GROUPS);
     const val = (n) => host.querySelector(`[data-gt-in="${n}"]`)?.value?.trim() || '';
     const save = async (gid, patch) => {
@@ -16628,9 +16632,11 @@ ${(() => {
       b.textContent = '⏳ Đang tải danh sách đơn…';
       const ok = await gtLoadOrders((pg) => (b.textContent = `⏳ Đang đọc trang ${pg}…`));
       gtUi.msg = ok ? '✓ Đã tải lại danh sách đơn mới.' : 'Đang tải ở tab khác – thử lại sau ít phút.';
+    } else if (k === 'pdfmenu') {
+      gtUi.pdfOpen = !gtUi.pdfOpen;
     } else if (k === 'pdf' || k === 'pdfn') {
+      gtUi.pdfOpen = false;
       gtPdf(k === 'pdfn');
-      return;
     } else if (k === 'opeer') {
       // popup các giấy cùng nhóm + sóng (giá thấp → cao) cạnh chữ vừa bấm
       const r = gtUi.oPeerRows?.get(b.dataset.k);
