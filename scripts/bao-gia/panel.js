@@ -4685,6 +4685,35 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     inp.dispatchEvent(new Event('input', { bubbles: true }));
     inp.dispatchEvent(new Event('change', { bubbles: true }));
   };
+  // Đổi giấy tấm của 1 dòng: bấm ID giấy → tab Danh sách giấy tấm → nhập ID → chọn đúng giấy → Chọn (dùng chung cho Đổi ID hàng loạt và nút Áp dụng ở popup ❓)
+  async function pidSwap(cell, id, pre = '') {
+      if (pidModal()) throw new Error('Đang có hộp Chọn giấy tấm mở – đóng hộp đó rồi thử lại.');
+      pidLink(cell).click();
+      const m = await waitFor(pidModal, 8000, 150);
+      if (!m) throw new Error(`${pre}bấm ID giấy không mở được hộp Chọn giấy tấm.`);
+      await sleep(400);
+      const tab = [...m.querySelectorAll('.ant-tabs-tab')].find((x) => x.innerText.trim() === 'Danh sách giấy tấm');
+      if (!tab) throw new Error(`${pre}không thấy tab Danh sách giấy tấm.`);
+      if (!tab.classList.contains('ant-tabs-tab-active')) (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
+      const inpOf = () => [...m.querySelectorAll('input')].find((x) => /Tìm theo ID/i.test(x.placeholder || '') && x.offsetParent && !x.closest('.ant-tabs-tabpane-hidden'));
+      const inp = await waitFor(inpOf, 6000, 150);
+      if (!inp) throw new Error(`${pre}không thấy ô Tìm ID ở tab Danh sách giấy tấm.`);
+      pidSetInput(inp, id);
+      const re = new RegExp(`(^|\\s)${id}\\s*\\|`);
+      const rowOf = () => [...m.querySelectorAll('tbody tr')].find((tr) => tr.offsetParent && !tr.closest('.ant-tabs-tabpane-hidden') && re.test(tr.innerText || '') && tr.querySelector('input[type="radio"], input[type="checkbox"], .ant-radio, .ant-checkbox'));
+      const row = await waitFor(rowOf, 12000, 250);
+      if (!row) throw new Error(`${pre}không tìm thấy giấy tấm ID ${id} – hộp để nguyên để anh xem.`);
+      await sleep(300);
+      const r2 = rowOf() || row;
+      (r2.querySelector('input[type="radio"], input[type="checkbox"]') || r2.querySelector('.ant-radio, .ant-checkbox')).click();
+      await sleep(400);
+      const ok = [...m.querySelectorAll('.ant-modal-footer button, button')].find((b) => b.innerText.trim() === 'Chọn' && b.offsetParent);
+      if (!ok) throw new Error(`${pre}không thấy nút Chọn.`);
+      if (ok.disabled) throw new Error(`${pre}nút Chọn chưa bấm được (chưa chọn được giấy ${id}).`);
+      ok.click();
+      const closed = await waitFor(() => !pidModal(), 10000, 200);
+      if (!closed) throw new Error(`${pre}CRM chưa đóng hộp sau khi bấm Chọn – xem thông báo trong hộp.`);
+  }
   async function pidRun(btn, id) {
     const pt = productTable();
     if (!pt) throw new Error('Không thấy bảng sản phẩm.');
@@ -4696,32 +4725,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const cell = paperCell(rows()[i], pt.iKc);
       if (pidOf(cell) === id) continue;
       btn.dataset.label = `⏳ Dòng ${i + 1}/${n}…`;
-      if (pidModal()) throw new Error('Đang có hộp Chọn giấy tấm mở – đóng hộp đó rồi thử lại.');
-      pidLink(cell).click();
-      const m = await waitFor(pidModal, 8000, 150);
-      if (!m) throw new Error(`Dòng ${i + 1}: bấm ID giấy không mở được hộp Chọn giấy tấm.`);
-      await sleep(400);
-      const tab = [...m.querySelectorAll('.ant-tabs-tab')].find((x) => x.innerText.trim() === 'Danh sách giấy tấm');
-      if (!tab) throw new Error(`Dòng ${i + 1}: không thấy tab Danh sách giấy tấm.`);
-      if (!tab.classList.contains('ant-tabs-tab-active')) (tab.querySelector('.ant-tabs-tab-btn') || tab).click();
-      const inpOf = () => [...m.querySelectorAll('input')].find((x) => /Tìm theo ID/i.test(x.placeholder || '') && x.offsetParent && !x.closest('.ant-tabs-tabpane-hidden'));
-      const inp = await waitFor(inpOf, 6000, 150);
-      if (!inp) throw new Error(`Dòng ${i + 1}: không thấy ô Tìm ID ở tab Danh sách giấy tấm.`);
-      pidSetInput(inp, id);
-      const re = new RegExp(`(^|\\s)${id}\\s*\\|`);
-      const rowOf = () => [...m.querySelectorAll('tbody tr')].find((tr) => tr.offsetParent && !tr.closest('.ant-tabs-tabpane-hidden') && re.test(tr.innerText || '') && tr.querySelector('input[type="radio"], input[type="checkbox"], .ant-radio, .ant-checkbox'));
-      const row = await waitFor(rowOf, 12000, 250);
-      if (!row) throw new Error(`Dòng ${i + 1}: không tìm thấy giấy tấm ID ${id} – hộp để nguyên để anh xem.`);
-      await sleep(300);
-      const r2 = rowOf() || row;
-      (r2.querySelector('input[type="radio"], input[type="checkbox"]') || r2.querySelector('.ant-radio, .ant-checkbox')).click();
-      await sleep(400);
-      const ok = [...m.querySelectorAll('.ant-modal-footer button, button')].find((b) => b.innerText.trim() === 'Chọn' && b.offsetParent);
-      if (!ok) throw new Error(`Dòng ${i + 1}: không thấy nút Chọn.`);
-      if (ok.disabled) throw new Error(`Dòng ${i + 1}: nút Chọn chưa bấm được (chưa chọn được giấy ${id}).`);
-      ok.click();
-      const closed = await waitFor(() => !pidModal(), 10000, 200);
-      if (!closed) throw new Error(`Dòng ${i + 1}: CRM chưa đóng hộp sau khi bấm Chọn – xem thông báo trong hộp.`);
+      await pidSwap(cell, id, `Dòng ${i + 1}: `);
       await sleep(900); // CRM tính lại giá theo giấy mới
       changed++;
     }
@@ -15768,18 +15772,47 @@ Quy tắc:
     const pop = document.createElement('div');
     pop.id = 'dg-gtq-pop';
     const r = icon.getBoundingClientRect();
-    pop.setAttribute('style', `position:fixed;z-index:2147483000;top:${Math.min(r.bottom + 6, window.innerHeight - 320)}px;left:${Math.max(8, Math.min(r.left - 20, window.innerWidth - 560))}px;width:540px;max-height:300px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
+    pop.setAttribute('style', `position:fixed;z-index:2147483000;top:${Math.min(r.bottom + 6, window.innerHeight - 320)}px;left:${Math.max(8, Math.min(r.left - 20, window.innerWidth - 640))}px;width:620px;max-height:340px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
     const { me, code, w, peers, state } = info;
     const list = peers;
     const head = state === 'q' ? `❓ Có ${info.list.length} giấy rẻ hơn cùng nhóm ${esc(code)} · sóng ${esc(w)}` : state === 'ok' ? `✅ Giấy đang chọn rẻ nhất nhóm ${esc(code)} · sóng ${esc(w)}` : `① Chỉ có 1 giấy trong nhóm ${esc(code)} · sóng ${esc(w)} – nên hỏi thêm NCC khác`;
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
     pop.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><b style="flex:1">${head}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>
 <div style="font-size:12px;margin-bottom:6px;padding:4px 8px;border-radius:6px;background:${state === 'q' ? '#fef2f2' : '#f0fdf4'}">Đang chọn: <b style="color:#2563eb">${me.id}</b> | ${esc(me.name)} · <b style="color:${state === 'q' ? '#dc2626' : '#15803d'}">${me.price.toLocaleString('vi-VN')} đ/m2</b> <span style="color:#64748b">· ${esc(me.prov?.name || '')}</span></div>
-<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:4px 6px">ID | Chất liệu giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">So với đang chọn</th><th style="padding-left:6px">Cập nhật</th></tr></thead>
-<tbody>${list.length ? '' : '<tr><td colspan="5" style="padding:8px;color:#94a3b8;text-align:center">Không có giấy nào khác cùng nhóm (theo NCC đang lọc, giá 90 ngày)</td></tr>'}${list.map((x) => { const dd = x.price - me.price; const cheap = dd < 0; return `<tr style="border-top:1px solid #f1f5f9;${cheap ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td>${esc(x.prov?.name || x.prov?.code || '')}</td><td style="text-align:right;font-weight:800;color:${cheap ? '#15803d' : '#dc2626'}">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:${cheap ? '#15803d' : '#dc2626'}">${dd === 0 ? 'bằng giá' : `${cheap ? 'rẻ hơn ' : 'đắt hơn '}${Math.abs(dd).toLocaleString('vi-VN')}đ (${Math.round((Math.abs(dd) / me.price) * 100)}%)`}</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td></tr>`; }).join('')}</tbody></table>
+<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:4px 6px">ID | Chất liệu giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">So với đang chọn</th><th style="padding-left:6px">Cập nhật</th><th></th></tr></thead>
+<tbody>${list.length ? '' : '<tr><td colspan="6" style="padding:8px;color:#94a3b8;text-align:center">Không có giấy nào khác cùng nhóm (theo NCC đang lọc, giá 90 ngày)</td></tr>'}${list.map((x) => { const dd = x.price - me.price; const cheap = dd < 0; return `<tr style="border-top:1px solid #f1f5f9;${cheap ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td>${esc(x.prov?.name || x.prov?.code || '')}</td><td style="text-align:right;font-weight:800;color:${cheap ? '#15803d' : '#dc2626'}">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:${cheap ? '#15803d' : '#dc2626'}">${dd === 0 ? 'bằng giá' : `${cheap ? 'rẻ hơn ' : 'đắt hơn '}${Math.abs(dd).toLocaleString('vi-VN')}đ (${Math.round((Math.abs(dd) / me.price) * 100)}%)`}</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td><td style="padding-left:6px"><button data-apply="${x.id}" title="Đổi giấy của dòng này sang ID ${x.id} (như Đổi ID hàng loạt nhưng chỉ dòng này)" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;font-size:11.5px;font-weight:800;color:#fff;background:${cheap ? 'linear-gradient(90deg,#16a34a,#15803d)' : '#64748b'};white-space:nowrap">Áp dụng</button></td></tr>`; }).join('')}</tbody></table><div data-st style="margin-top:6px;font-size:12px;font-weight:700"></div>
 <div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>`;
     document.body.append(pop);
     pop.querySelector('[data-x]').onclick = () => pop.remove();
+    // Áp dụng: đổi giấy của đúng dòng này sang ID đã chọn (bấm ID giấy → Danh sách giấy tấm → nhập ID → chọn → Chọn). Không bấm Cập nhật báo giá.
+    const cell = icon.closest('td');
+    pop.querySelectorAll('[data-apply]').forEach((b) =>
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (pop.dataset.busy) return;
+        pop.dataset.busy = '1';
+        const nid = b.dataset.apply;
+        const st = pop.querySelector('[data-st]');
+        st.style.color = '#2563eb';
+        st.textContent = `⏳ Đang đổi sang ID ${nid}…`;
+        pop.style.opacity = '.55'; // để thấy hộp Chọn giấy tấm của CRM bên dưới
+        try {
+          await pidSwap(cell, nid);
+          await sleep(900);
+          icon.remove(); // vẽ lại icon theo giấy mới
+          st.style.color = '#15803d';
+          st.textContent = `✅ Đã đổi sang ID ${nid} – kiểm tra giá rồi bấm Cập nhật báo giá.`;
+          setTimeout(() => pop.remove(), 4000);
+        } catch (err) {
+          st.style.color = '#dc2626';
+          st.textContent = `⚠️ ${err.message}`;
+        } finally {
+          pop.style.opacity = '1';
+          delete pop.dataset.busy;
+        }
+      }),
+    );
     setTimeout(() => {
       const off = (e) => {
         if (!pop.contains(e.target) && e.target !== icon) {
