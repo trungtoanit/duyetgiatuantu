@@ -15939,7 +15939,8 @@ Quy tắc:
     let out = '';
     for (const p of parts) {
       if (p.trim() === '*') continue; // lớp "*" = không có lớp đó → CL_*/X140/X90/X140/N140-BC là giấy 4 lớp (5155)
-      const m = p.trim().match(/^([A-Z])[\s.]*(\d+)/i);
+      // chữ đầu (N / X / T…) có thể không ghi: CL_N145/95/120-C → 145, 95, 120 → 512
+      const m = p.trim().match(/^([A-Z]?)[\s.]*(\d+)/i);
       if (!m) return '';
       if (m[1].toUpperCase() === 'T') { out += '8'; continue; }
       const n = Number(m[2]);
