@@ -16252,19 +16252,42 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
         g.drawImage(img, sx, sy, side, side, 0, 0, 1024, 1024);
         URL.revokeObjectURL(img.src);
         const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-        const fd = new FormData();
-        fd.append('model', 'gpt-image-1');
-        fd.append('image', blob, 'ketoan.png');
-        fd.append('prompt', GT_AI_PROMPT);
-        fd.append('size', '1024x1024');
-        fd.append('quality', 'medium');
-        fd.append('n', '1');
-        say('🎨 AI đang vẽ… (30–60 giây)');
+        // Model vẽ ảnh mà key này dùng được: hỏi /v1/models, ưu tiên gpt-image mới nhất → dall-e-2; lỗi model thì thử model kế
+        say('🔎 Tìm model vẽ ảnh…');
+        let ids = [];
+        try {
+          const mr = await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${cfg.openaiKey}` } });
+          ids = ((await mr.json()).data || []).map((x) => x.id);
+        } catch {}
+        const rank = (id) => (/^gpt-image-[\d.]+$/.test(id) ? 0 : /^chatgpt-image/.test(id) ? 1 : /^gpt-image.*mini/.test(id) ? 2 : /^gpt-image/.test(id) ? 3 : /^dall-e-2$/.test(id) ? 9 : 99);
+        let models = ids.filter((id) => rank(id) < 99 && !/\d{4}-\d{2}-\d{2}/.test(id)).sort((x, y) => rank(x) - rank(y) || y.localeCompare(x, 'en', { numeric: true }));
+        if (!models.length) models = ['gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini', 'dall-e-2'];
+        let j = null;
+        let lastErr = '';
+        let used = '';
         const t0 = Date.now();
-        const res = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { authorization: `Bearer ${cfg.openaiKey}` }, body: fd });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
-        try { aiLogAdd({ at: t0, prov: 'OpenAI', model: 'gpt-image-1', what: 'Vẽ ảnh kế toán', ms: Date.now() - t0, page: location.pathname }); } catch {}
+        for (const model of models) {
+          const fd = new FormData();
+          fd.append('model', model);
+          fd.append('image', blob, 'ketoan.png');
+          fd.append('prompt', model === 'dall-e-2' ? GT_AI_PROMPT.slice(0, 990) : GT_AI_PROMPT);
+          fd.append('size', '1024x1024');
+          if (model !== 'dall-e-2') fd.append('quality', 'medium');
+          else fd.append('response_format', 'b64_json');
+          fd.append('n', '1');
+          say(`🎨 AI đang vẽ (${model})… 30–60 giây`);
+          const res = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { authorization: `Bearer ${cfg.openaiKey}` }, body: fd });
+          const jj = await res.json().catch(() => ({}));
+          if (res.ok && jj.data?.[0]?.b64_json) {
+            j = jj;
+            used = model;
+            break;
+          }
+          lastErr = `${model}: ${jj.error?.message || `lỗi ${res.status}`}`;
+          if (!/model|not exist|not found|does not have access|verif|unsupported|invalid.*(model|param)/i.test(lastErr)) break; // lỗi khác (ảnh, nội dung, tiền) → dừng
+        }
+        if (!j) throw new Error(`OpenAI: ${lastErr}${ids.length ? '' : ' (không đọc được danh sách model)'}`);
+        try { aiLogAdd({ at: t0, prov: 'OpenAI', model: used, what: 'Vẽ ảnh kế toán', ms: Date.now() - t0, page: location.pathname }); } catch {}
         const b64 = j.data?.[0]?.b64_json;
         if (!b64) throw new Error('OpenAI không trả ảnh');
         const out = await new Promise((ok, bad) => {
