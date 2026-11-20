@@ -15919,6 +15919,18 @@ Quy tắc:
   // 170/175/180/185 → 7, giấy Trắng (T…) → 8, 230 → 9. Lớp viết "N.230" / "N 230" / "N230" đều là 230.
   // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp không đổi được (vd. *) → không map. Dùng chung cho toàn extension
   // (tab Giấy tấm, đơn mới, icon ❓/✅ ở báo giá, Zalo, PDF).
+  // Ngày cập nhật (giây): hôm nay / hôm qua / x ngày trước; quá 30 ngày → ngày/tháng/năm
+  function gtRelDay(sec) {
+    if (!sec) return '';
+    const d = new Date(sec * 1000);
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const t = new Date();
+    const n = Math.round((new Date(t.getFullYear(), t.getMonth(), t.getDate()) - a) / 864e5);
+    if (n <= 0) return '<b style="color:#16a34a">Hôm nay</b>';
+    if (n === 1) return '<span style="color:#15803d">Hôm qua</span>';
+    if (n <= 30) return `${n} ngày trước`;
+    return d.toLocaleDateString('vi-VN');
+  }
   function gtCode(name) {
     const body = String(name || '').replace(/^[^_]*_/, '').replace(/-[A-Z]+$/i, '');
     const parts = body.split('/');
@@ -16426,7 +16438,7 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
         })()}${x.price ? x.price.toLocaleString('vi-VN') : ''}</td><td style="text-align:right">${x.moq || ''}</td>
         <td title="${esc(x.prov?.name || '')}">${esc(x.prov?.code || '')}</td><td style="color:#64748b">${esc(x.group || '')}</td>        <td>${MY_ADMIN ? `<span data-gt="pick" data-id="${x.id}" title="Chọn nhanh nhóm cho giấy này" style="cursor:pointer;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:60px;padding:2px 4px;border-radius:6px;border:1px dashed ${gtUi.pick?.id === x.id ? '#2563eb' : '#cbd5e1'}">${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) && !inG.has(x.id) ? `<span title="Chưa có nhóm ${codeOf.get(x.id)} – tạo nhóm tên này (hoặc ⚡ Map nhanh) để giấy tự vào nhóm" style="display:inline-block;margin:1px 3px 1px 0;padding:0 6px;border-radius:99px;font-size:11px;font-weight:700;color:#64748b;border:1px dashed #94a3b8">${codeOf.get(x.id)}</span>` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}<span style="color:#64748b;font-size:11px;font-weight:700">＋</span></span>` : `${codeOf.get(x.id) && !gByName.has(codeOf.get(x.id)) && !inG.has(x.id) ? `<span style="font-size:11px;font-weight:700;color:#64748b">${codeOf.get(x.id)}</span> ` : ''}${(inG.get(x.id) || []).map((g) => chip(g, 1)).join('')}`}</td>
         <td style="text-align:right">${x.totalUses ? `${x.uses}/${x.totalUses}` : ''}</td>
-        <td style="color:#64748b;white-space:nowrap">${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleDateString('vi-VN') : ''}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
+        <td style="color:#64748b;white-space:nowrap" title="${x.updatedAt ? new Date(x.updatedAt * 1000).toLocaleString('vi-VN') : ''}">${gtRelDay(x.updatedAt)}</td></tr>`).join('') || `<tr><td colspan="12" style="padding:16px;color:#94a3b8;text-align:center">${all.length ? 'Không có giấy nào khớp bộ lọc' : 'Kho trống – bấm “⟳ Quét trang 1” hoặc “⬇️ Tải toàn bộ từ CRM”'}</td></tr>`}</tbody>
     </table></div>
     ${pages > 1 ? `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:6px">${bt('prev', '‹')}<span style="font-size:12px">Trang ${gtUi.page + 1}/${pages}</span>${bt('next', '›')}</div>` : ''}
   </div>
