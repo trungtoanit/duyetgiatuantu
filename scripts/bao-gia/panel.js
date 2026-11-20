@@ -15913,8 +15913,9 @@ Quy tắc:
   // Nhóm còn dùng (xoá = đánh dấu deleted vì cloud không nhận lệnh xoá hẳn), sắp theo vị trí
   const gtLive = (groups) => Object.entries(groups || {}).filter(([, g]) => g && g.name && !g.deleted).sort((a, b) => (a[1].pos ?? 0) - (b[1].pos ?? 0) || a[1].name.localeCompare(b[1].name, 'vi'));
   // Phân nhóm theo tên: 3 chữ số = 3 lớp, 5 chữ số = 5 lớp, còn lại = Khác
-  const gtSec = (name) => { const d = String(name || '').trim(); return /^\d{3}$/.test(d) ? '3' : /^\d{5}$/.test(d) ? '5' : 'x'; };
-  const GT_SECS = [['3', '3 LỚP'], ['5', '5 LỚP'], ['x', 'KHÁC']];
+  // Mục theo số lớp = số chữ số của tên nhóm mã lớp (11 → 2 lớp, 211 → 3 lớp, 2112 → 4 lớp, 21122 → 5 lớp)
+  const gtSec = (name) => { const d = String(name || '').trim(); return /^\d{2,5}$/.test(d) ? String(d.length) : 'x'; };
+  const GT_SECS = [['2', '2 LỚP'], ['3', '3 LỚP'], ['4', '4 LỚP'], ['5', '5 LỚP'], ['x', 'KHÁC']];
   // ⚡ Map nhanh: mã nhóm từ kết cấu giấy, mỗi lớp 1 số – 90/95/100 → 1, 120/125 → 2, 140/145/150 → 5, 160/165 → 6,
   // 170/175/180/185 → 7, giấy Trắng (T…) → 8, 230/235 → 9. Lớp viết "N.230" / "N 230" / "N230" đều là 230.
   // vd. GP_N120/X120/X95/X120/N120-BC → 22122; lớp không đổi được (vd. *) → không map. Dùng chung cho toàn extension
