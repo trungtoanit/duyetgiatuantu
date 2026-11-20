@@ -15897,9 +15897,8 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
       const gid = `g${Date.now().toString(36)}`;
       const n = Object.values(groups).filter((g) => g?.name).length;
       await save(gid, { name, color: GT_COLORS[n % GT_COLORS.length], ids: [], pos: n, note: '' });
-      gtUi.g = gid;
-      gtUi.target = gid;
-      gtUi.msg = `✓ Đã tạo nhóm “${name}” – chọn giấy ở bảng rồi bấm “➕ Thêm vào nhóm”.`;
+      gtUi.target = gid; // giữ nguyên danh sách đang xem để chọn giấy thêm vào nhóm mới
+      gtUi.msg = `✓ Đã tạo nhóm “${name}” – tích chọn giấy ở bảng rồi bấm “➕ Thêm vào nhóm”.`;
     } else if (k === 'gsave') {
       const name = val('gname');
       if (!name) throw new Error('Tên nhóm không được trống.');
@@ -15915,7 +15914,16 @@ ${gtUi.msg ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;b
       await kvMerge(GT_GROUPS, Object.fromEntries(list.map(([id, g], pos) => [id, { ...g, pos }])));
     } else if (k === 'gdel') {
       const g = groups[gtUi.g];
-      if (!g || !confirm(`Xoá nhóm “${g.name}” (${(g.ids || []).length} giấy)? Giấy tấm vẫn còn trong kho, chỉ bỏ nhóm.`)) return;
+      if (!g) return;
+      // bấm 2 lần (không dùng hộp thoại trình duyệt): lần 1 đổi nút thành "Bấm lần nữa để xoá" trong 4 giây
+      if (gtUi.delArm !== gtUi.g || Date.now() - (gtUi.delAt || 0) > 4000) {
+        gtUi.delArm = gtUi.g;
+        gtUi.delAt = Date.now();
+        b.textContent = `⚠️ Bấm lần nữa để xoá (${(g.ids || []).length} giấy vẫn còn trong kho)`;
+        b.style.background = '#fee2e2';
+        return;
+      }
+      gtUi.delArm = null;
       await save(gtUi.g, null);
       gtUi.g = 'all';
       gtUi.msg = `✓ Đã xoá nhóm “${g.name}”.`;
