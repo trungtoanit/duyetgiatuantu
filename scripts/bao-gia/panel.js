@@ -15941,6 +15941,8 @@ Quy tắc:
     if (n <= 30) return `${n} ngày trước`;
     return d.toLocaleDateString('vi-VN');
   }
+  // Bảng giải thích chữ số mã nhóm (in cuối PDF) – giữ khớp với gtCode bên dưới
+  const GT_LEGEND = [['1', '90 / 95 / 100'], ['2', '120 / 125'], ['3', '—'], ['4', '—'], ['5', '140 / 145 / 150'], ['6', '160 / 165'], ['7', '170 / 175 / 180 / 185'], ['8', 'Giấy trắng (T…)'], ['9', '230 / 235']];
   function gtCode(name) {
     const body = String(name || '').replace(/^[^_]*_/, '').replace(/-[A-Z]+$/i, '');
     // ngăn lớp bằng "/" hoặc "+" (CL_N.145+2X.120+X.145+N.120-BC); "2X.120" = 2 lớp X120 liền nhau
@@ -16388,6 +16390,8 @@ Quy tắc:
       td.g{text-align:center}.sm{font-size:9.5px;color:#64748b}.old{color:#b91c1c;font-weight:700}
       tr.alt td{background:#eef1f5}
       *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .lg{margin-top:10px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:10.5px;page-break-inside:avoid}
+      .lg table{margin:5px 0 3px;width:auto}.lg th,.lg td{padding:2px 10px;text-align:center}.lg th{font-size:12px}
       tr{page-break-inside:avoid}.ft{margin-top:6px;font-size:10px;color:#64748b}
     </style></head><body>
       <div class="hd"><img src="${location.origin}/logo.png" onerror="this.remove()"><div><div class="co">${esc(GT_CO.name)}</div><div class="ad">${esc(GT_CO.addr)}</div></div></div>
@@ -16395,6 +16399,9 @@ Quy tắc:
       <div class="sub">${noNcc ? '' : `NCC: ${esc(nccs)} · `}${gtUi.pdf6m ? 'chỉ định lượng đã lên đơn 6 tháng gần nhất · ' : ''}${stt} nhóm · In lúc ${esc(now.toLocaleString('vi-VN'))}</div>
       <table><thead><tr><th>STT</th><th>Nhóm</th><th>Sóng</th><th>ID rẻ nhất | Chất liệu giấy</th><th>Giá rẻ nhất (đ/m²)</th>${noNcc ? '' : '<th>NCC</th>'}<th>Cập nhật lần cuối</th></tr></thead><tbody>${body || `<tr><td colspan="${cols}" class="c">Không có giấy nào có giá</td></tr>`}</tbody></table>
       <div class="ft">Mỗi nhóm so theo từng sóng${noNcc ? '' : '; chỉ tính giấy đang hiện và NCC đang lọc'}. Ngày cập nhật màu đỏ: giá cũ hơn ${GT_FRESH_D} ngày.</div>
+      <div class="lg"><b>Cách đọc mã nhóm</b> – mỗi chữ số là 1 lớp giấy, theo thứ tự trong kết cấu (vd. <b>22122</b> = N120/X120/X95/X120/N120: 5 lớp; số chữ số = số lớp):
+        <table><tr>${GT_LEGEND.map(([d]) => `<th>${d}</th>`).join('')}</tr><tr>${GT_LEGEND.map(([, t]) => `<td>${t}</td>`).join('')}</tr></table>
+        <div class="sm">Lớp ghi “*” là không có lớp đó (vd. *&#8203;/X140/X90/X140/N140 → 5155, giấy 4 lớp). “2X.120” = 2 lớp X120 liền nhau.</div></div>
     </body></html>`;
     csPrint(html, `Bang gia giay tam re nhat ${now.toLocaleDateString('vi-VN').replace(/\//g, '-')}`);
   }
