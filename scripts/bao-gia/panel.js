@@ -15942,7 +15942,7 @@ Quy tắc:
     if (m < 1) return 'vừa xong';
     if (m < 60) return `${m} phút trước`;
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h} giờ ${m % 60 ? `${m % 60} phút ` : ''}trước`;
+    if (h < 24) return `${h} giờ trước`; // đã sang giờ thì không cần phút
     return `${Math.floor(h / 24)} ngày trước`;
   };
   const gtWave = (n) => (String(n || '').match(/-([A-Z]+)$/i) || [])[1] || '';
