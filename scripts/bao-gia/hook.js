@@ -603,6 +603,7 @@
           lines.push({
             did: x.id, oid: o.id, order: o.code, at: o.orderedAt || o.createdAt, quote: o.opportunity?.code || '', qid: o.opportunity?.id || undefined,
             cust: c.shortName || c.code || c.name || o.customerName || '', prod: x.description || op.name || '', qty: x.quantity || 0,
+            tp: x.productionCode || op.product?.code || '',
             paper: op.cartonStructCode, cp: Number(op.cartonPrice) || 0, layer: op.layer,
             // m² giấy của dòng = dài tấm × khổ tấm (mm) × số lượng – để tính tiền chênh khi giấy chưa rẻ nhất
             m2: op.daiTam && op.khoTam ? Math.round(((Number(op.daiTam) * Number(op.khoTam)) / 1e6) * (Number(x.quantity) || Number(op.quantity) || 0) * 100) / 100 : undefined,

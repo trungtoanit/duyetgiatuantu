@@ -15758,8 +15758,9 @@ Quy tắc:
     if (keepFocus && root.activeElement?.classList?.contains('gt-edit')) return; // đang gõ – không vẽ lại
     gtFillBusy = true;
     try {
-      const [items, groups, scan, orders] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY), kvGet('orderPapers')]);
+      const [items, groups, scan, orders, zsent] = await Promise.all([kvGet(GT_ITEMS), kvGet(GT_GROUPS), kvGet(GT_KEY), kvGet('orderPapers'), kvGet(GT_ZSENT)]);
       gtUi.orders = orders;
+      gtUi.zsent = zsent;
       if (!gtPrefsLoaded) {
         gtPrefsLoaded = true;
         const pf = (await kvGet(GT_PREFS))[norm(meName)];
@@ -15798,6 +15799,47 @@ Quy tắc:
   // Chỉ so với giấy có giá cập nhật trong 90 ngày (giá cũ – vd. NCC lâu không báo giá – dễ thấp ảo), bỏ giá < 500đ (giá tạm).
   const GT_FRESH_D = 90;
   const gtWave = (n) => (String(n || '').match(/-([A-Z]+)$/i) || [])[1] || '';
+  // 📨 Gửi nhóm Zalo khi giấy chưa rẻ nhất nhóm: mỗi đơn + giấy chỉ gửi 1 lần (kv gtZaloSent: "<mã đơn>|<id giấy>")
+  const GT_ZGROUP = 'Điều hướng giấy tấm Flexo';
+  const GT_ZSENT = 'gtZaloSent';
+  const gtZKey = (order, pid) => `${order}|${pid}`;
+  const vnd = (n) => Number(n || 0).toLocaleString('vi-VN');
+  function gtZaloMsg(r, ls) {
+    const prov = r.min.prov?.name || r.min.prov?.code || '';
+    const lines = ls.map((l) => `Đơn hàng ${l.order}${l.tp ? ` mã TP ${l.tp}` : ''} hiện đang chọn giấy tấm ID ${r.me.id} | ${r.me.name} đơn giá là ${vnd(r.myP)} đ/m2 tuy nhiên nhà cung cấp ${prov} có ID ${r.min.id} | ${r.min.name} có đơn giá là ${vnd(r.min.price)} đ/m2`);
+    const tail = `Hãy đổi qua nhà cung cấp ${prov} hoặc trả về bằng giá tiền`;
+    const text = [...lines, tail].join('\n');
+    const html = `${ls.map((l, i) => `<div>Đơn hàng <b>${esc(l.order)}</b>${l.tp ? ` mã TP <b>${esc(l.tp)}</b>` : ''} hiện đang chọn giấy tấm ID <b>${r.me.id}</b> | ${esc(r.me.name)} đơn giá là <b>${vnd(r.myP)} đ/m2</b> tuy nhiên nhà cung cấp <b>${esc(prov)}</b> có ID <b>${r.min.id}</b> | ${esc(r.min.name)} có đơn giá là <b><span style="color:#15a85f"><font color="#15a85f">${vnd(r.min.price)} đ/m2</font></span></b></div>${i < ls.length - 1 ? '<div><br></div>' : ''}`).join('')}<div><br></div><div><b>${esc(tail)}</b></div>`;
+    return { text, html };
+  }
+  async function gtZaloSend(pid) {
+    const r = (gtUi.oRows || []).find((x) => String(x.me?.id) === String(pid));
+    if (!r || !(r.diff > 0) || !r.min) throw new Error('Giấy này không còn chênh giá.');
+    const sent = await kvGet(GT_ZSENT);
+    const ls = r.ol.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
+    if (!ls.length) throw new Error('Các đơn của giấy này đã gửi yêu cầu rồi.');
+    const m = gtZaloMsg(r, ls);
+    const names = await kvGet('zaloNames');
+    const old = await kvGet('zaloJobs');
+    const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
+    const jobId = `${Date.now()}-gt`;
+    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: m.text, html: m.html, status: 'pending', at: Date.now() };
+    await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
+    const mark = (state, error) => kvMerge(GT_ZSENT, Object.fromEntries(ls.map((l) => [gtZKey(l.order, r.me.id), { at: Date.now(), by: meName || '', state, job: jobId, cheap: r.min.id, diff: r.diff, ...(error ? { error } : {}) }])));
+    await mark('queue');
+    gtUi.msg = `⏳ Đã xếp tin gửi nhóm Zalo “${GT_ZGROUP}” (${ls.length} đơn) – chờ tab Zalo gửi…`;
+    (async () => {
+      for (let i = 0; i < 200; i++) {
+        await sleep(1500);
+        const j = (await kvGet('zaloJobs').catch(() => ({})))[jobId];
+        if (j?.status === 'sent') { await mark('sent'); gtUi.msg = `✅ Đã gửi yêu cầu vào nhóm “${GT_ZGROUP}”.`; return gtFill(); }
+        if (j?.status === 'error') { await mark('error', j.error || 'Lỗi gửi Zalo'); gtUi.msg = `⚠️ Gửi Zalo lỗi: ${j.error || 'không rõ'} – bấm gửi lại.`; return gtFill(); }
+      }
+      await mark('error', 'Tab Zalo không nhận việc sau 5 phút');
+      gtUi.msg = '⚠️ Tab Zalo không nhận việc sau 5 phút (mở Zalo Web) – bấm gửi lại.';
+      gtFill();
+    })();
+  }
   function gtOrdersHtml(all, gs, orders) {
     const now = Date.now();
     const lines = Object.values(orders || {}).filter((l) => l && l.paper && now - (l.seenAt || 0) < 3 * 86400e3); // đơn còn ở tab Mới (thấy trong 3 ngày)
@@ -15828,6 +15870,8 @@ Quy tắc:
       return { ...u, ol, newest: ol[0]?.at || 0, newestCode: ol[0]?.order || '', me, code, w, g: gByName.get(code), min, myP, diff, money, peers: peers.length };
     }).sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money || (b.diff ?? -1) - (a.diff ?? -1) : 0) || (b.newest - a.newest) || String(b.newestCode).localeCompare(String(a.newestCode)));
     const sumMoney = rows.reduce((t, r) => t + r.money, 0);
+    gtUi.oRows = rows;
+    const zs = gtUi.zsent || {};
     const nBad = rows.filter((r) => r.diff > 0).length;
     const nOk = rows.filter((r) => r.diff === 0 || (r.diff != null && r.diff <= 0)).length;
     const nNo = rows.length - nBad - nOk;
@@ -15848,7 +15892,13 @@ Quy tắc:
   <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
-  <td>${st(r)}</td>
+  <td>${st(r)}${r.diff > 0 && r.me && r.min ? (() => {
+    const done = r.ol.filter((l) => zs[gtZKey(l.order, r.me.id)] && zs[gtZKey(l.order, r.me.id)].state !== 'error'); // lỗi gửi → coi như chưa gửi
+    const todo = r.ol.length - done.length;
+    const last = done.map((l) => zs[gtZKey(l.order, r.me.id)]).sort((a, b) => b.at - a.at)[0];
+    const sentInfo = done.length ? `<span style="font-size:11px;color:${last.state === 'sent' ? '#16a34a' : '#d97706'};font-weight:700">${last.state === 'sent' ? '✅ Đã gửi yêu cầu' : '⏳ Đang gửi'}${done.length < r.ol.length ? ` ${done.length}/${r.ol.length} đơn` : ''} · ${new Date(last.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${last.by ? ` · ${esc(last.by)}` : ''}</span>` : '';
+    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}</div>`;
+  })() : ''}</td>
   <td style="font-size:11.5px">${r.ol.slice(0, 4).map((l) => `<div>${l.at ? `<span style="color:#64748b">${new Date((l.at > 1e11 ? l.at : l.at * 1000)).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span> ` : ''}${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
   function gtDraw(host, items, groups, scan) {
@@ -16120,6 +16170,11 @@ ${(() => {
     } else if (k === 'clr') gtUi.sel.clear();
     else if (k === 'provmore') gtUi.provOpen = !gtUi.provOpen;
     else if (k === 'osort') gtUi.oSort = b.dataset.k;
+    else if (k === 'zsend') {
+      b.disabled = true;
+      b.textContent = '⏳ Đang xếp tin…';
+      await gtZaloSend(b.dataset.id);
+    }
     else if (k === 'hidesmall') {
       gtUi.hideSmall = b.checked;
       gtSavePrefs();
