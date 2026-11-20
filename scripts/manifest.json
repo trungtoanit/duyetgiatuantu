@@ -1,5 +1,5 @@
 {
-  "version": "1.2.610",
+  "version": "1.2.611",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -121,5 +121,15 @@
     "zaloSent",
     "donGuiPending",
     "tpCheck",
-  "buyReq", "custPrices", "dd.custPrices"]
+    "buyReq",
+    "custPrices",
+    "dd.custPrices",
+    "giayTam",
+    "haPrint",
+    "askPrompts",
+    "aiSugLearn",
+    "dd.haPrint",
+    "dd.askPrompts",
+    "dd.aiSugLearn"
+  ]
 }

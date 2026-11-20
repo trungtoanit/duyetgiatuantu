@@ -15663,6 +15663,46 @@ Quy tắc:
     if (tg.textContent !== want) tg.textContent = want;
   }
   if (IS_TOP) setInterval(pmMount, 700);
+  // ---------- 📄 Danh sách giấy tấm (/carton/giay-tam) → cloud (kv 'giayTam'), 1 tiếng / lần đọc trang 1 ----------
+  // Chỉ đọc: gọi đúng API mà trang Giấy tấm dùng (cartonStruct, trang 1, 100 dòng, đang Hiển thị) bằng phiên đăng nhập sẵn có.
+  // Mọi máy Tuấn Tú đều có thể quét, nhưng chỉ 1 tab / lần (khoá) và bỏ qua nếu cloud đã có bản < 1 tiếng.
+  const GT_KEY = 'giayTam';
+  let gtBusy = false;
+  async function gtScan(force = false) {
+    if (!IS_TOP || gtBusy || SITE.key !== 'tuantu') return;
+    const cur = await kvGet(GT_KEY);
+    if (!force && Date.now() - (cur._at || 0) < 60 * 60e3) return;
+    if (!tabLock('dgGtLock', 5 * 60e3)) return;
+    gtBusy = true;
+    try {
+      const tok = JSON.parse(localStorage.getItem('UserStore') || '{}').token;
+      const ver = (document.body.innerText.match(/v(\d+\.\d+\.\d+)/) || [])[1];
+      if (!tok || !ver) return;
+      const r = await fetch(`${API_BASE}/v1/admin/cartonStruct?page=1&limit=100&search=&isVisible=true`, { headers: { token: tok, version: ver, 'X-Client-Version': ver } });
+      const j = await r.json();
+      const arr = j?.data?.cartonStructs;
+      if (!r.ok || !Array.isArray(arr) || !arr.length) return;
+      const list = arr.map((x) => ({
+        id: x.id, name: x.name || '', code: x.code || '', layer: x.layer, color: x.color || '', xeo: x.xeo, wave: x.waveCode || '',
+        price: Number(x.price) || 0, moq: x.moq, note: x.note || '', uses: x.numOfUses || 0, totalUses: x.totalUses || 0,
+        group: x.cartonGroupDetail?.cartonGroup?.name || x.cartonGroupDetail?.name || '', details: (x.cartonStructDetails || []).length,
+        prov: x.provider ? { code: x.provider.code || '', name: x.provider.shortName || x.provider.name || '' } : null,
+        updatedAt: x.updatedAt, createdAt: x.createdAt,
+      }));
+      // 1 khoá chung (_list) để bản mới thay hẳn bản cũ; giữ thêm theo id để tra nhanh / biết lần đầu thấy
+      const seen = cur._first || {};
+      const first = { ...seen };
+      for (const x of list) if (!first[x.id]) first[x.id] = Date.now();
+      await kvMerge(GT_KEY, { _list: list, _total: j.data.total || list.length, _at: Date.now(), _by: meName || '', _first: first });
+    } catch {
+    } finally {
+      gtBusy = false;
+    }
+  }
+  if (IS_TOP) {
+    setTimeout(() => gtScan().catch(() => {}), 20e3);
+    setInterval(() => gtScan().catch(() => {}), 5 * 60e3); // 5 phút kiểm tra 1 lần, chỉ quét khi bản trên cloud đã quá 1 tiếng
+  }
   // ---------- 📸 Vinh danh Top Sale (trang /dashboard, khung "Top 5 Sale") ----------
   // Đọc tên + doanh số + ảnh đại diện từ khung → AI viết lời tuyên dương người #1 và lời nhắc thẳng người cuối bảng
   // → vẽ ảnh "Bảng vinh danh" (sửa được 2 lời, vẽ lại) → chép ảnh / tải ảnh để gửi nhóm.
