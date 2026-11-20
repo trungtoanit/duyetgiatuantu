@@ -16009,35 +16009,39 @@ Quy tắc:
     const byProv = new Map();
     for (const x of r.peerList || []) if (!byProv.has(pk(x)) || x.price < byProv.get(pk(x)).price) byProv.set(pk(x), x);
     byProv.set(pk(r.me), r.me); // cột NCC đang chọn = đúng giấy đang chọn
-    let cols = [...byProv.values()].sort((a, b) => a.price - b.price).slice(0, 6);
-    if (!cols.includes(r.me)) cols = [...cols.slice(0, 5), r.me];
+    // khổ A4 đứng (794 × 1123 px) → tối đa 5 cột NCC
+    let cols = [...byProv.values()].sort((a, b) => a.price - b.price).slice(0, 5);
+    if (!cols.includes(r.me)) cols = [...cols.slice(0, 4), r.me];
     const min = Math.min(...cols.map((x) => x.price));
-    const th = 'padding:8px 10px;border:1px solid #cbd5e1;background:#1e3a8a;color:#fff;font-weight:800;text-align:center;vertical-align:middle';
-    const td = 'padding:7px 10px;border:1px solid #cbd5e1;vertical-align:middle';
-    const head = `<tr><th style="${th}">Mã ĐH</th><th style="${th}">Mã TP</th><th style="${th}">Tên sản phẩm</th><th style="${th}">Số lượng</th>${cols.map((x) => `<th style="${th};${x === r.me ? 'background:#7c2d12' : ''}"><div>${esc(x.prov?.name || x.prov?.code || '')}${x === r.me ? ' <span style="color:#fde68a">(đang chọn)</span>' : ''}</div><div style="font-weight:600;font-size:11.5px;opacity:.9">ID ${x.id} | ${esc(x.name)}</div></th>`).join('')}</tr>`;
-    const cell = (x) => { const cheap = x.price === min; return `<td style="${td};text-align:right;font-weight:800;${cheap ? 'background:#dcfce7;color:#15803d' : 'background:#fee2e2;color:#dc2626'}">${vnd(x.price)} đ/m2</td>`; };
-    const body = ls.map((l, i) => `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'}"><td style="${td};font-weight:800">${esc(l.order)}</td><td style="${td}">${esc(l.tp || '')}</td><td style="${td};max-width:340px">${esc(l.prod || '')}</td><td style="${td};text-align:right">${vnd(l.qty)}</td>${cols.map(cell).join('')}</tr>`).join('');
+    const th = 'padding:6px 5px;border:1px solid #cbd5e1;background:#1e3a8a;color:#fff;font-weight:800;text-align:center;vertical-align:middle;font-size:11px';
+    const td = 'padding:6px 5px;border:1px solid #cbd5e1;vertical-align:middle';
+    const head = `<tr><th style="${th}">Mã ĐH</th><th style="${th}">Mã TP</th><th style="${th}">Tên sản phẩm</th><th style="${th}">Số lượng</th>${cols.map((x) => `<th style="${th};${x === r.me ? 'background:#7c2d12' : ''}"><div>${esc(x.prov?.name || x.prov?.code || '')}${x === r.me ? ' <span style="color:#fde68a">(đang chọn)</span>' : ''}</div><div style="font-weight:600;font-size:9.5px;opacity:.9;word-break:break-all">ID ${x.id} | ${esc(x.name)}</div></th>`).join('')}</tr>`;
+    const cell = (x) => { const cheap = x.price === min; return `<td style="${td};text-align:right;font-weight:800;${cheap ? 'background:#dcfce7;color:#15803d' : 'background:#fee2e2;color:#dc2626'};white-space:nowrap">${vnd(x.price)}<div style="font-size:9.5px;font-weight:600">đ/m2</div></td>`; };
+    const body = ls.map((l, i) => `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'}"><td style="${td};font-weight:800">${esc(l.order)}</td><td style="${td}">${esc(l.tp || '')}</td><td style="${td}">${esc(l.prod || '')}</td><td style="${td};text-align:right">${vnd(l.qty)}</td>${cols.map(cell).join('')}</tr>`).join('');
     const box = document.createElement('div');
     const base = 'box-sizing:border-box;background:#fff;padding:16px 18px;font:14px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;';
-    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;min-width:900px;max-width:1500px;${base}`);
+    const A4W = 794; // A4 đứng ở 96 dpi
+    const A4H = 1123;
+    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:${A4W}px;min-height:${A4H}px;${base}padding:28px 26px`);
     const logo = await gtLogo();
     const now = new Date();
     const prov = r.min.prov?.name || r.min.prov?.code || '';
     box.innerHTML = `<div style="display:flex;align-items:center;gap:14px;padding-bottom:10px;border-bottom:3px double #1e3a8a">
-  ${logo ? `<img src="${logo}" style="width:70px;height:70px;object-fit:contain;flex:none">` : ''}
-  <div style="flex:1"><div style="font-size:19px;font-weight:900;color:#1e3a8a;letter-spacing:.3px">${esc(GT_CO.name)}</div>
-  <div style="font-size:12.5px;color:#334155">Địa chỉ: ${esc(GT_CO.addr)}</div>
-  <div style="font-size:11.5px;color:#64748b;font-style:italic">${esc(GT_CO.tag)}</div></div>
-  <div style="text-align:right;font-size:12px;color:#475569;white-space:nowrap">Ngày: <b>${now.toLocaleDateString('vi-VN')}</b><br>Giờ: <b>${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b></div></div>
-<div style="text-align:center;margin:12px 0 4px;font-size:21px;font-weight:900;color:#b91c1c;letter-spacing:.5px">PHIẾU ĐIỀU HƯỚNG GIẤY TẤM FLEXO</div>
-<div style="text-align:center;font-size:12.5px;color:#475569;margin-bottom:10px">Nhóm <b>${esc(r.code)}</b> · sóng <b>${esc(r.w)}</b> · Đang chọn <b>ID ${r.me.id}</b> | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 → rẻ nhất <b style="color:#15803d">ID ${r.min.id}</b> | ${esc(r.min.name)} · <b style="color:#15803d">${vnd(r.min.price)} đ/m2</b> (${esc(prov)})</div>
-<table style="border-collapse:collapse;font-size:13.5px;width:100%">${head}${body}</table>
-<div style="margin-top:10px;padding:8px 12px;border-left:4px solid #b91c1c;background:#fef2f2;font-size:13.5px;font-weight:700;color:#7f1d1d">Đề nghị: đổi qua nhà cung cấp ${esc(prov)} (ID ${r.min.id} | ${esc(r.min.name)}) hoặc trả về bằng giá tiền.</div>
-<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;font-size:11.5px;color:#64748b"><span>🟩 rẻ nhất · 🟥 đắt hơn · so trong cùng nhóm mã lớp + sóng, giá giấy cập nhật trong 90 ngày</span><span style="text-align:center;min-width:160px">Người lập<br><b style="color:#0f172a;font-size:12.5px">${esc(meName || '')}</b></span></div>`;
+  ${logo ? `<img src="${logo}" style="width:58px;height:58px;object-fit:contain;flex:none">` : ''}
+  <div style="flex:1;min-width:0"><div style="font-size:15.5px;font-weight:900;color:#1e3a8a;letter-spacing:.2px">${esc(GT_CO.name)}</div>
+  <div style="font-size:11px;color:#334155">Địa chỉ: ${esc(GT_CO.addr)}</div>
+  <div style="font-size:10px;color:#64748b;font-style:italic">${esc(GT_CO.tag)}</div></div>
+  <div style="text-align:right;font-size:11px;color:#475569;white-space:nowrap">Ngày: <b>${now.toLocaleDateString('vi-VN')}</b><br>Giờ: <b>${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b></div></div>
+<div style="text-align:center;margin:18px 0 6px;font-size:20px;font-weight:900;color:#b91c1c;letter-spacing:.5px">PHIẾU ĐIỀU HƯỚNG GIẤY TẤM FLEXO</div>
+<div style="text-align:center;font-size:11.5px;color:#475569;margin-bottom:12px">Nhóm <b>${esc(r.code)}</b> · sóng <b>${esc(r.w)}</b> · Đang chọn <b>ID ${r.me.id}</b> | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 → rẻ nhất <b style="color:#15803d">ID ${r.min.id}</b> | ${esc(r.min.name)} · <b style="color:#15803d">${vnd(r.min.price)} đ/m2</b> (${esc(prov)})</div>
+<table style="border-collapse:collapse;font-size:12px;width:100%;table-layout:auto">${head}${body}</table>
+<div style="margin-top:12px;padding:8px 12px;border-left:4px solid #b91c1c;background:#fef2f2;font-size:12.5px;font-weight:700;color:#7f1d1d">Đề nghị: đổi qua nhà cung cấp ${esc(prov)} (ID ${r.min.id} | ${esc(r.min.name)}) hoặc trả về bằng giá tiền.</div>
+<div style="margin-top:8px;font-size:10.5px;color:#64748b">🟩 rẻ nhất · 🟥 đắt hơn · so trong cùng nhóm mã lớp + sóng, giá giấy cập nhật trong 90 ngày</div>
+<div style="display:flex;justify-content:flex-end;margin-top:24px"><div style="text-align:center;min-width:200px;font-size:12px;color:#64748b">Người lập<div style="height:56px"></div><b style="color:#0f172a;font-size:13px">${esc(meName || '')}</b></div></div>`;
     document.body.append(box);
-    const w = Math.ceil(box.scrollWidth);
-    const h = Math.ceil(box.scrollHeight);
-    box.setAttribute('style', `${base}width:${w}px;height:${h}px`);
+    const w = A4W;
+    const h = Math.max(A4H, Math.ceil(box.scrollHeight)); // nhiều đơn quá 1 trang thì kéo dài
+    box.setAttribute('style', `${base}padding:28px 26px;width:${w}px;height:${h}px`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(box)}</foreignObject></svg>`;
     box.remove();
     const img = new Image();
