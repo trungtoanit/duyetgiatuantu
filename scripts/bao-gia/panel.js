@@ -399,7 +399,7 @@
     if (kind === 'orderPapers') {
       // giấy tấm của các dòng đơn ở tab Mới (Danh sách đơn) – theo id dòng đơn, kèm lúc thấy gần nhất
       const now = Date.now();
-      await kvMerge('orderPapers', Object.fromEntries(data.map((l) => [l.did, { ...l, seenAt: now }])));
+      await kvMerge('orderPapers', { ...Object.fromEntries(data.map((l) => [l.did, { ...l, seenAt: now }])), _at: now });
       if (lsGet('dgTab') === 'gt') gtFill(true);
       return;
     }
@@ -15873,11 +15873,12 @@ Quy tắc:
     x.drawImage(img, 0, 0);
     return c.toDataURL('image/png');
   }
-  async function gtZaloSend(pid) {
+  async function gtZaloSend(pid, again = false) {
     const r = (gtUi.oRows || []).find((x) => String(x.me?.id) === String(pid));
     if (!r || !(r.diff > 0) || !r.min) throw new Error('Giấy này không còn chênh giá.');
     const sent = await kvGet(GT_ZSENT);
-    const ls = r.ol.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
+    // gửi lại: gửi mọi đơn của giấy này; bình thường chỉ các đơn chưa gửi (hoặc lần trước lỗi)
+    const ls = again ? r.ol : r.ol.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
     if (!ls.length) throw new Error('Các đơn của giấy này đã gửi yêu cầu rồi.');
     // 1 ảnh bảng (mỗi đơn 1 dòng) + câu đề nghị kèm theo
     const image = await gtTablePng(r, ls);
@@ -15904,6 +15905,41 @@ Quy tắc:
       gtUi.msg = '⚠️ Tab Zalo không nhận việc sau 5 phút (mở Zalo Web) – bấm gửi lại.';
       gtFill();
     })();
+  }
+  // ⟳ Tải danh sách đơn (tab Mới) trong khung ẩn, lật hết các trang → hook đọc giấy từng dòng đơn (orderPapers). Chỉ đọc.
+  let gtOrdBusy = false;
+  async function gtLoadOrders(onStep) {
+    if (gtOrdBusy) return false;
+    if (!tabLock('dgGtOrdLock', 5 * 60e3)) return false;
+    gtOrdBusy = true;
+    try {
+      await tkInFrame('/misa-order/list?tab=NEW', async (doc) => {
+        const first = () => [...(doc()?.querySelectorAll('.ant-table-tbody tr.ant-table-row') || [])].find(dnShown)?.innerText.match(/DH\d{4,}/)?.[0] || '';
+        const spinning = () => !!doc()?.querySelector('.ant-spin-spinning');
+        for (let i = 0; i < 60 && !first(); i++) await sleep(500);
+        await sleep(1500);
+        onStep?.(1);
+        for (let page = 2; page <= 20; page++) {
+          const li = [...(doc()?.querySelectorAll(`.ant-pagination-item-${page}`) || [])].find(dnShown);
+          if (!li) break;
+          const prev = first();
+          li.click();
+          let moved = false;
+          for (let i = 0; i < 50; i++) {
+            await sleep(300);
+            if (!spinning() && first() && first() !== prev) { moved = true; break; }
+          }
+          if (!moved) break;
+          await sleep(1500); // chờ hook lưu xong
+          onStep?.(page);
+        }
+      });
+      await kvMerge('orderPapers', { _at: Date.now() });
+      return true;
+    } finally {
+      gtOrdBusy = false;
+      lsSet('dgGtOrdLock', 'null');
+    }
   }
   function gtOrdersHtml(all, gs, orders) {
     const now = Date.now();
@@ -15950,7 +15986,15 @@ Quy tắc:
       return `<b style="color:#dc2626">❌ Đắt hơn ${r.diff.toLocaleString('vi-VN')}đ/m² (${Math.round((r.diff / r.min.price) * 100)}%)</b>${r.money ? ` → <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${r.money.toLocaleString('vi-VN')}đ</b> <span style="color:#64748b;font-size:11px">trên ${Math.round(r.m2).toLocaleString('vi-VN')} m²</span>` : r.m2 === 0 ? ' <span style="color:#94a3b8;font-size:11px">(chưa có m² – mở lại Danh sách đơn để đọc)</span>' : ''}<div style="margin-top:2px;font-size:12.5px">Rẻ nhất: <b style="color:#2563eb">${r.min.id}</b> | ${esc(r.min.name)} · <b>${r.min.price.toLocaleString('vi-VN')}</b> <span style="font-size:11px;color:#64748b">· ${esc(r.min.prov?.name || '')} · cập nhật ${day(r.min.updatedAt)}</span></div>`;
     };
     const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
-    return `${few}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b> · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
+    const lastAt = Number(orders?._at) || 0;
+    const stale = Date.now() - lastAt > 15 * 60e3;
+    if (stale && !gtOrdBusy && !gtUi.ordAutoAt) {
+      // quá 15 phút chưa đọc đơn mới → tự tải lại 1 lần (khung ẩn), xong vẽ lại
+      gtUi.ordAutoAt = Date.now();
+      gtLoadOrders().then((ok) => ok && gtFill()).catch(() => {}).finally(() => setTimeout(() => (gtUi.ordAutoAt = 0), 15 * 60e3));
+    }
+    const loadBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#475569">🕒 Đọc đơn lần cuối: <b>${lastAt ? new Date(lastAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa'}</b>${stale ? ' <span style="color:#d97706">(quá 15 phút)</span>' : ''}<button data-gt="oload" style="cursor:pointer;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${stale ? '#f59e0b' : '#cbd5e1'};background:${stale ? '#fffbeb' : '#fff'};color:${stale ? '#b45309' : '#334155'}">${gtOrdBusy ? '⏳ Đang tải danh sách đơn…' : '⟳ Tải danh sách đơn mới'}</button></div>`;
+    return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b> · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
   <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px;white-space:nowrap" title="Thời điểm lên đơn của đơn mới nhất dùng giấy này">Lên đơn</th><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th>So với nhóm</th><th>Đơn (tab Mới)</th></tr></thead>
@@ -15966,7 +16010,7 @@ Quy tắc:
     const errs = r.ol.map((l) => zs[gtZKey(l.order, r.me.id)]).filter((v) => v?.state === 'error').sort((a, b) => b.at - a.at);
     const errInfo = errs.length ? `<span style="font-size:11px;color:#dc2626" title="${esc(errs[0].error || '')}">⚠️ Lần gửi trước lỗi: ${esc((errs[0].error || '').slice(0, 60))}</span>` : '';
     const sentInfo = done.length ? `<span style="font-size:11px;color:${last.state === 'sent' ? '#16a34a' : '#d97706'};font-weight:700">${last.state === 'sent' ? '✅ Đã gửi yêu cầu' : '⏳ Đang gửi'}${done.length < r.ol.length ? ` ${done.length}/${r.ol.length} đơn` : ''} · ${new Date(last.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${last.by ? ` · ${esc(last.by)}` : ''}</span>` : '';
-    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}${errInfo}</div>`;
+    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}${done.length && !todo ? `<button data-gt="zsend" data-id="${r.me.id}" data-again="1" title="Gửi lại ảnh bảng của mọi đơn dùng giấy này vào nhóm “${esc(GT_ZGROUP)}”" style="cursor:pointer;border:1px solid #93c5fd;border-radius:6px;padding:1px 8px;font:inherit;font-size:11.5px;font-weight:700;color:#1d4ed8;background:#fff">↻ Gửi lại</button>` : ''}${errInfo}</div>`;
   })() : ''}</td>
   <td style="font-size:11.5px">${r.ol.slice(0, 4).map((l) => `<div>${l.at ? `<span style="color:#64748b">${new Date((l.at > 1e11 ? l.at : l.at * 1000)).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span> ` : ''}${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
@@ -16242,14 +16286,19 @@ ${(() => {
       for (const id of ids) b.checked ? gtUi.sel.add(id) : gtUi.sel.delete(id);
     } else if (k === 'clr') gtUi.sel.clear();
     else if (k === 'provmore') gtUi.provOpen = !gtUi.provOpen;
-    else if (k === 'osort') {
+    else if (k === 'oload') {
+      if (gtOrdBusy) return;
+      b.textContent = '⏳ Đang tải danh sách đơn…';
+      const ok = await gtLoadOrders((pg) => (b.textContent = `⏳ Đang đọc trang ${pg}…`));
+      gtUi.msg = ok ? '✓ Đã tải lại danh sách đơn mới.' : 'Đang tải ở tab khác – thử lại sau ít phút.';
+    } else if (k === 'osort') {
       gtUi.oSort = b.dataset.k;
       lsSet('dgGtOSort', gtUi.oSort);
     }
     else if (k === 'zsend') {
       b.disabled = true;
       b.textContent = '⏳ Đang xếp tin…';
-      await gtZaloSend(b.dataset.id);
+      await gtZaloSend(b.dataset.id, b.dataset.again === '1');
     }
     else if (k === 'hidesmall') {
       gtUi.hideSmall = b.checked;
