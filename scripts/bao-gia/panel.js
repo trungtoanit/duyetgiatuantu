@@ -16218,13 +16218,26 @@ Quy tắc:
     const nOk = rows.filter((r) => !gtSolo(r) && (r.diff === 0 || (r.diff != null && r.diff <= 0))).length;
     const nNo = rows.length - nBad - nOk - nSolo;
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
+    // Bấm "(N giấy cùng nhóm)" → mở bảng các giấy cùng nhóm + sóng (giá thấp → cao): rẻ hơn xanh, đắt hơn đỏ, giấy đang dùng tô xanh dương
+    const peerBtn = (r) => `<span data-gt="opeer" data-k="${esc(r._ok)}" title="Bấm để xem các giấy cùng nhóm – giá cao / thấp" style="cursor:pointer;color:#2563eb;text-decoration:underline dotted;font-size:12px">(${r.peers} giấy cùng nhóm ${gtUi.oPeer === r._ok ? '▴' : '▾'})</span>`;
+    const peerTbl = (r) => {
+      if (gtUi.oPeer !== r._ok || !r.me) return '';
+      const me = r.myP;
+      const ls = [...r.peerList].sort((a, b) => a.price - b.price || a.id - b.id);
+      return `<table style="margin-top:4px;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid #e2e8f0;border-radius:6px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:3px 6px">ID | Chất liệu giấy</th><th style="padding:3px 6px">NCC</th><th style="padding:3px 6px;text-align:right">Đơn giá</th><th style="padding:3px 6px;text-align:right">So với đang dùng</th><th style="padding:3px 6px">Cập nhật</th></tr></thead><tbody>${ls.map((x) => {
+        const dd = x.price - me;
+        const mine = String(x.id) === String(r.me.id);
+        const c = mine ? '#1d4ed8' : dd < 0 ? '#15803d' : dd > 0 ? '#dc2626' : '#334155';
+        return `<tr style="border-top:1px solid #f1f5f9;${mine ? 'background:#eff6ff' : dd < 0 ? 'background:#f0fdf4' : ''}"><td style="padding:3px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}${mine ? ' <b style="color:#1d4ed8">(đang dùng)</b>' : ''}</td><td style="padding:3px 6px">${esc(x.prov?.name || x.prov?.code || '')}</td><td style="padding:3px 6px;text-align:right;font-weight:800;color:${c}">${x.price.toLocaleString('vi-VN')}</td><td style="padding:3px 6px;text-align:right;color:${c};white-space:nowrap">${mine ? '—' : dd === 0 ? 'bằng giá' : `${dd < 0 ? '▼ rẻ hơn' : '▲ đắt hơn'} ${Math.abs(dd).toLocaleString('vi-VN')}đ`}</td><td style="padding:3px 6px;color:#64748b">${day(x.updatedAt)}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    };
     const st = (r) => {
       if (!r.code) return '<span style="color:#94a3b8">không tính được mã lớp</span>';
       if (!r.me) return '<span style="color:#d97706">giấy không còn trong kho (đã đổi tên / ẩn)</span>';
       if (!r.min && !gtSolo(r)) return '<span style="color:#94a3b8">nhóm chưa có giá mới để so</span>';
       if (gtSolo(r)) return `<b style="color:#d97706">⚠️ Chỉ có 1 giấy cùng nhóm</b> <span style="color:#64748b">– chưa có NCC khác để so, cần hỏi thêm NCC</span>`;
-      if (r.diff <= 0) return `<b style="color:#16a34a">✅ Rẻ nhất</b> <span style="color:#64748b">(${r.peers} giấy cùng nhóm)</span>`;
-      return `<b style="color:#dc2626">❌ Đắt hơn ${r.diff.toLocaleString('vi-VN')}đ/m² (${Math.round((r.diff / r.min.price) * 100)}%)</b>${r.money ? ` → <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${r.money.toLocaleString('vi-VN')}đ</b> <span style="color:#64748b;font-size:11px">trên ${Math.round(r.m2).toLocaleString('vi-VN')} m²</span>` : r.m2 === 0 && SITE.key !== 'daiduong' ? ' <span style="color:#94a3b8;font-size:11px">(chưa có m² – mở lại Danh sách đơn để đọc)</span>' : ''}<div style="margin-top:2px;font-size:12.5px">Rẻ nhất: <b style="color:#2563eb">${r.min.id}</b> | ${esc(r.min.name)} · <b>${r.min.price.toLocaleString('vi-VN')}</b> <span style="font-size:11px;color:#64748b">· ${esc(r.min.prov?.name || '')} · cập nhật ${day(r.min.updatedAt)}</span></div>`;
+      if (r.diff <= 0) return `<b style="color:#16a34a">✅ Rẻ nhất</b> ${peerBtn(r)}${peerTbl(r)}`;
+      return `<b style="color:#dc2626">❌ Đắt hơn ${r.diff.toLocaleString('vi-VN')}đ/m² (${Math.round((r.diff / r.min.price) * 100)}%)</b>${r.money ? ` → <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${r.money.toLocaleString('vi-VN')}đ</b> <span style="color:#64748b;font-size:11px">trên ${Math.round(r.m2).toLocaleString('vi-VN')} m²</span>` : r.m2 === 0 && SITE.key !== 'daiduong' ? ' <span style="color:#94a3b8;font-size:11px">(chưa có m² – mở lại Danh sách đơn để đọc)</span>' : ''}<div style="margin-top:2px;font-size:12.5px">Rẻ nhất: <b style="color:#2563eb">${r.min.id}</b> | ${esc(r.min.name)} · <b>${r.min.price.toLocaleString('vi-VN')}</b> <span style="font-size:11px;color:#64748b">· ${esc(r.min.prov?.name || '')} · cập nhật ${day(r.min.updatedAt)}</span></div><div style="margin-top:2px">${peerBtn(r)}</div>${peerTbl(r)}`;
     };
     const few = all.length < 1000 ? `<div style="margin-bottom:8px;padding:6px 10px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;font-size:12px">⚠️ Kho mới có ${all.length} giấy – bấm <b>⬇️ Tải toàn bộ từ CRM</b> để so đủ các giấy cùng nhóm.</div>` : '';
     return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ${SITE.key === 'daiduong' ? 'trạng thái Mới' : 'ở tab Mới'} dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b>${nSolo ? ` · <b style="color:#d97706">${nSolo} chỉ 1 giấy cùng nhóm</b>` : ''} · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
@@ -16244,7 +16257,7 @@ Quy tắc:
   <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
-  <td style="padding-left:8px">${st({ ...r, money, m2 })}${zalo}</td></tr>`;
+  <td style="padding-left:8px">${st({ ...r, money, m2, _ok: `${l.order}|${l.did}` })}${zalo}</td></tr>`;
   }).join('')}</tbody></table></div>`;
   }
   function gtDraw(host, items, groups, scan) {
@@ -16533,6 +16546,8 @@ ${(() => {
       b.textContent = '⏳ Đang tải danh sách đơn…';
       const ok = await gtLoadOrders((pg) => (b.textContent = `⏳ Đang đọc trang ${pg}…`));
       gtUi.msg = ok ? '✓ Đã tải lại danh sách đơn mới.' : 'Đang tải ở tab khác – thử lại sau ít phút.';
+    } else if (k === 'opeer') {
+      gtUi.oPeer = gtUi.oPeer === b.dataset.k ? '' : b.dataset.k;
     } else if (k === 'osort') {
       gtUi.oSort = b.dataset.k;
       lsSet('dgGtOSort', gtUi.oSort);
