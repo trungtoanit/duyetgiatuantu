@@ -16188,7 +16188,14 @@ ${(() => {
       await gtScan(true);
       gtUi.msg = '✓ Đã quét trang 1 và lưu lên cloud.';
     } else if (k === 'all') {
-      if (!confirm('Tải toàn bộ danh sách giấy tấm từ CRM (khoảng 18 trang, cả giấy đang Ẩn) vào kho của extension? Chỉ đọc, không sửa gì trên CRM.')) return;
+      // bấm 2 lần (không dùng hộp thoại trình duyệt)
+      if (Date.now() - (gtUi.allAt || 0) > 5000) {
+        gtUi.allAt = Date.now();
+        b.textContent = '⚠️ Bấm lần nữa: tải ~18 trang (chỉ đọc CRM)';
+        b.style.background = '#dbeafe';
+        return;
+      }
+      gtUi.allAt = 0;
       const got = await gtFetchAll((n, t) => (b.textContent = `⏳ ${n}/${t}…`));
       gtUi.msg = `✓ Đã tải ${got} giấy tấm vào kho (cloud).`;
     } else return;
