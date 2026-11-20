@@ -15836,6 +15836,19 @@ Quy tắc:
   }
   // Ảnh bảng gửi Zalo: Mã ĐH | Mã TP | Tên sản phẩm | Số lượng | đơn giá từng NCC (giấy rẻ nhất của mỗi NCC trong cùng nhóm + sóng)
   // rẻ nhất tô xanh lá, đắt hơn tô đỏ; cột giấy đang chọn ghi "đang chọn"
+  // Thông tin công ty (như phần đầu mẫu in báo giá của CRM) + logo của CRM (tải 1 lần, dạng data để vẽ được vào ảnh)
+  const GT_CO = { name: 'CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ', addr: 'Số 48/13 Khu phố Bình Phước B, Phường An Phú, Tp Hồ Chí Minh, Việt Nam', tag: 'Chuyên cung cấp thùng carton in Flexo, thùng in Offset 3-5-7 lớp và các loại ấn phẩm Offset như tem nhãn, sticker, tờ rời, sách hướng dẫn,...' };
+  let gtLogoData = null;
+  async function gtLogo() {
+    if (gtLogoData != null) return gtLogoData;
+    try {
+      const b = await (await fetch(`${location.origin}/logo.png`)).blob();
+      gtLogoData = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || '')); fr.onerror = () => res(''); fr.readAsDataURL(b); });
+    } catch {
+      gtLogoData = '';
+    }
+    return gtLogoData;
+  }
   async function gtTablePng(r, ls) {
     const pk = (x) => x.prov?.code || x.prov?.name || String(x.id);
     const byProv = new Map();
@@ -15851,8 +15864,21 @@ Quy tắc:
     const body = ls.map((l, i) => `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'}"><td style="${td};font-weight:800">${esc(l.order)}</td><td style="${td}">${esc(l.tp || '')}</td><td style="${td};max-width:340px">${esc(l.prod || '')}</td><td style="${td};text-align:right">${vnd(l.qty)}</td>${cols.map(cell).join('')}</tr>`).join('');
     const box = document.createElement('div');
     const base = 'box-sizing:border-box;background:#fff;padding:16px 18px;font:14px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;';
-    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;max-width:1500px;${base}`);
-    box.innerHTML = `<div style="font-size:17px;font-weight:900;color:#b91c1c;margin-bottom:4px">⚠️ Giấy tấm chưa rẻ nhất nhóm ${esc(r.code)} · sóng ${esc(r.w)}</div><div style="font-size:12.5px;color:#475569;margin-bottom:10px">Đang chọn ID ${r.me.id} | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 – rẻ nhất ID ${r.min.id} | ${esc(r.min.name)} · ${vnd(r.min.price)} đ/m2 (${esc(r.min.prov?.name || '')})</div><table style="border-collapse:collapse;font-size:13.5px">${head}${body}</table><div style="margin-top:8px;font-size:11.5px;color:#64748b">🟩 rẻ nhất · 🟥 đắt hơn · ${new Date().toLocaleString('vi-VN')}</div>`;
+    box.setAttribute('style', `position:fixed;left:-20000px;top:0;width:max-content;min-width:900px;max-width:1500px;${base}`);
+    const logo = await gtLogo();
+    const now = new Date();
+    const prov = r.min.prov?.name || r.min.prov?.code || '';
+    box.innerHTML = `<div style="display:flex;align-items:center;gap:14px;padding-bottom:10px;border-bottom:3px double #1e3a8a">
+  ${logo ? `<img src="${logo}" style="width:70px;height:70px;object-fit:contain;flex:none">` : ''}
+  <div style="flex:1"><div style="font-size:19px;font-weight:900;color:#1e3a8a;letter-spacing:.3px">${esc(GT_CO.name)}</div>
+  <div style="font-size:12.5px;color:#334155">Địa chỉ: ${esc(GT_CO.addr)}</div>
+  <div style="font-size:11.5px;color:#64748b;font-style:italic">${esc(GT_CO.tag)}</div></div>
+  <div style="text-align:right;font-size:12px;color:#475569;white-space:nowrap">Ngày: <b>${now.toLocaleDateString('vi-VN')}</b><br>Giờ: <b>${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b></div></div>
+<div style="text-align:center;margin:12px 0 4px;font-size:21px;font-weight:900;color:#b91c1c;letter-spacing:.5px">PHIẾU ĐIỀU HƯỚNG GIẤY TẤM FLEXO</div>
+<div style="text-align:center;font-size:12.5px;color:#475569;margin-bottom:10px">Nhóm <b>${esc(r.code)}</b> · sóng <b>${esc(r.w)}</b> · Đang chọn <b>ID ${r.me.id}</b> | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 → rẻ nhất <b style="color:#15803d">ID ${r.min.id}</b> | ${esc(r.min.name)} · <b style="color:#15803d">${vnd(r.min.price)} đ/m2</b> (${esc(prov)})</div>
+<table style="border-collapse:collapse;font-size:13.5px;width:100%">${head}${body}</table>
+<div style="margin-top:10px;padding:8px 12px;border-left:4px solid #b91c1c;background:#fef2f2;font-size:13.5px;font-weight:700;color:#7f1d1d">Đề nghị: đổi qua nhà cung cấp ${esc(prov)} (ID ${r.min.id} | ${esc(r.min.name)}) hoặc trả về bằng giá tiền.</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;font-size:11.5px;color:#64748b"><span>🟩 rẻ nhất · 🟥 đắt hơn · so trong cùng nhóm mã lớp + sóng, giá giấy cập nhật trong 90 ngày</span><span style="text-align:center;min-width:160px">Người lập<br><b style="color:#0f172a;font-size:12.5px">${esc(meName || '')}</b></span></div>`;
     document.body.append(box);
     const w = Math.ceil(box.scrollWidth);
     const h = Math.ceil(box.scrollHeight);
@@ -16015,7 +16041,7 @@ Quy tắc:
   <td style="font-size:11.5px">${r.ol.slice(0, 4).map((l) => `<div>${l.at ? `<span style="color:#64748b">${new Date((l.at > 1e11 ? l.at : l.at * 1000)).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span> ` : ''}${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
   function gtDraw(host, items, groups, scan) {
-    const all = Object.values(items || {}).filter((x) => x && x.id);
+    const all = Object.values(items || {}).filter((x) => x && x.id && x.visible !== false); // giấy đang Ẩn trên CRM: không hiện
     const gs = gtLive(groups).map(([id, g]) => ({ id, ...g, ids: (g.ids || []).map(Number) }));
     // Mỗi giấy đúng 1 nhóm: nhóm gán tay (nếu có) thay cho nhóm tự động theo mã lớp (giấy mã 22122 → nhóm tên "22122")
     const inG = new Map(); // id giấy → [nhóm]
