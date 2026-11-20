@@ -15984,6 +15984,142 @@ Quy tắc:
   // ✔ Đánh dấu đã xử lý từng dòng đơn (menu ⋯ cuối dòng) – kv gtDone: "<mã đơn>|<dòng>" → { k, at, by } (null = bỏ đánh dấu)
   const GT_DONE = 'gtDone';
   const GT_DONE_K = { swap: '🔁 Đã đổi sang giấy rẻ nhất', match: '💲 NCC đã trả về bằng giá', keep: '👌 Giữ nguyên (đã duyệt)', other: '✔ Đã xử lý' };
+  // ---------- 😡 Panel "Kế toán giận dữ" trên trang CRM (gắn vào trang, không nằm trong bảng extension) ----------
+  // Có đơn ở tab Mới dùng giấy chưa rẻ nhất nhóm (cùng mã lớp + sóng, NCC đang lọc, giá ≤ 90 ngày) mà chưa đánh dấu đã xử lý → hiện panel
+  async function gtAngryList() {
+    const [items, orders, done, prefs] = await Promise.all([kvGet(GT_ITEMS), kvGet('orderPapers'), kvGet(GT_DONE).catch(() => ({})), kvGet(GT_PREFS).catch(() => ({}))]);
+    const now = Date.now();
+    const lines = Object.values(orders || {}).filter((l) => l && l.paper && now - (l.seenAt || 0) < 3 * 86400e3);
+    if (!lines.length) return [];
+    const provs = new Set(prefs?.[norm(meName)]?.provs || []);
+    const all = Object.values(items || {}).filter((x) => x && x.id && x.visible !== false);
+    const byName = new Map(all.map((x) => [x.name, x]));
+    const fresh = all.filter((x) => x.price >= 500 && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400 && (!provs.size || provs.has(x.prov?.code || '')));
+    const use = new Map();
+    for (const l of lines) {
+      const u = use.get(l.paper) || { orders: new Map(), oM2: new Map() };
+      u.orders.set(l.order, l);
+      u.oM2.set(l.order, (u.oM2.get(l.order) || 0) + (Number(l.m2) || 0));
+      use.set(l.paper, u);
+    }
+    const out = [];
+    for (const [paper, u] of use) {
+      const me = byName.get(paper);
+      const code = gtCode(paper);
+      if (!me || !code || me.price == null) continue;
+      const w = gtWave(paper);
+      const min = fresh.filter((x) => gtCode(x.name) === code && gtWave(x.name) === w).reduce((a, b) => (!a || b.price < a.price ? b : a), null);
+      const diff = min ? me.price - min.price : 0;
+      if (!(diff > 0)) continue;
+      for (const l of u.orders.values()) {
+        if (done?.[`${l.order}|${l.did ?? ''}`]) continue;
+        const m2 = u.oM2.get(l.order) || 0;
+        out.push({ l, me, min, diff, money: m2 ? Math.round(diff * m2) : 0 });
+      }
+    }
+    return out.sort((a, b) => b.money - a.money || (b.l.at || 0) - (a.l.at || 0));
+  }
+  const GT_ANGRY_SVG = `<svg viewBox="0 0 120 130" width="92" height="100" aria-hidden="true">
+  <g class="ga-steam"><path d="M22 30c-6-6 4-10-2-17" /><path d="M98 30c6-6-4-10 2-17" /><path d="M60 8c-5-5 4-8-1-14" /></g>
+  <path d="M18 128c2-26 18-36 42-36s40 10 42 36z" fill="#1e3a8a"/><path d="M50 92l10 16 10-16z" fill="#fff"/><path d="M57 96h6l2 22-5 6-5-6z" fill="#dc2626"/>
+  <circle cx="60" cy="58" r="34" fill="#ef4444"/><circle cx="60" cy="58" r="34" fill="url(#gaFace)"/>
+  <defs><radialGradient id="gaFace" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#fca5a5"/><stop offset="1" stop-color="#dc2626" stop-opacity=".2"/></radialGradient></defs>
+  <path d="M28 44c4-22 60-24 64 0-8-10-56-10-64 0z" fill="#3f2a1d"/>
+  <path class="ga-brow" d="M34 45l18 7M86 45l-18 7" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/>
+  <g fill="none" stroke="#111827" stroke-width="3"><circle cx="45" cy="59" r="9" fill="#fff"/><circle cx="75" cy="59" r="9" fill="#fff"/><path d="M54 59h12"/></g>
+  <circle cx="47" cy="61" r="3.5" fill="#111827"/><circle cx="73" cy="61" r="3.5" fill="#111827"/>
+  <path d="M46 80c8-8 20-8 28 0" stroke="#111827" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <g class="ga-calc"><rect x="84" y="86" width="30" height="40" rx="4" fill="#334155"/><rect x="88" y="90" width="22" height="9" rx="1.5" fill="#a7f3d0"/><text x="108" y="97.5" font-size="7" text-anchor="end" font-family="monospace" fill="#b91c1c" font-weight="900">-₫₫₫</text>
+  <g fill="#e2e8f0"><rect x="88" y="103" width="6" height="5" rx="1"/><rect x="96" y="103" width="6" height="5" rx="1"/><rect x="104" y="103" width="6" height="5" rx="1" fill="#f87171"/><rect x="88" y="111" width="6" height="5" rx="1"/><rect x="96" y="111" width="6" height="5" rx="1"/><rect x="104" y="111" width="6" height="5" rx="1"/><rect x="88" y="119" width="22" height="4" rx="1"/></g></g>
+</svg>`;
+  let gtAngryBusy = false;
+  async function injectGtAngry() {
+    if (!IS_TOP || gtAngryBusy || !document.body) return;
+    gtAngryBusy = true;
+    try {
+      const meObj = await kvGet('me');
+      meName = myName(meObj);
+      PERMS = PERMS && Object.keys(PERMS).length ? PERMS : (await kvGet('perms')) || {};
+      const ok = userPerm(meObj).tabs.includes('gt');
+      const list = ok ? await gtAngryList() : [];
+      let box = document.getElementById('dg-gt-angry');
+      if (!list.length) return box?.remove();
+      if (!document.getElementById('dg-gt-angry-css')) {
+        const st = document.createElement('style');
+        st.id = 'dg-gt-angry-css';
+        st.textContent = `#dg-gt-angry{position:fixed;right:18px;bottom:18px;z-index:2147482000;width:min(430px,calc(100vw - 32px));font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a}
+#dg-gt-angry .ga-card{display:flex;gap:10px;background:#fff;border:2px solid #ef4444;border-radius:16px;box-shadow:0 18px 44px rgba(185,28,28,.35);padding:12px 12px 10px;animation:gaIn .35s ease-out}
+@keyframes gaIn{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none}}
+#dg-gt-angry .ga-fig{flex:none;animation:gaShake 1.6s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes gaShake{0%,60%,100%{transform:rotate(0)}65%{transform:rotate(-6deg)}70%{transform:rotate(6deg)}75%{transform:rotate(-5deg)}80%{transform:rotate(5deg)}85%{transform:rotate(-2deg)}}
+#dg-gt-angry .ga-steam path{fill:none;stroke:#94a3b8;stroke-width:4;stroke-linecap:round;opacity:0;animation:gaSteam 1.4s ease-out infinite}#dg-gt-angry .ga-steam path:nth-child(2){animation-delay:.45s}#dg-gt-angry .ga-steam path:nth-child(3){animation-delay:.9s}
+@keyframes gaSteam{0%{opacity:0;transform:translateY(6px)}30%{opacity:.9}100%{opacity:0;transform:translateY(-10px)}}
+#dg-gt-angry .ga-brow{animation:gaBrow .8s ease-in-out infinite alternate}@keyframes gaBrow{to{transform:translateY(2px)}}
+#dg-gt-angry .ga-calc{animation:gaCalc .5s ease-in-out infinite alternate;transform-origin:99px 106px}@keyframes gaCalc{to{transform:rotate(-8deg)}}
+#dg-gt-angry .ga-body{flex:1;min-width:0}#dg-gt-angry .ga-t{font-weight:900;font-size:15px;color:#b91c1c}#dg-gt-angry .ga-s{font-size:12.5px;color:#475569;margin:2px 0 6px}
+#dg-gt-angry .ga-s b{color:#b91c1c;background:#fee2e2;border-radius:5px;padding:0 5px}
+#dg-gt-angry .ga-say{position:relative;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:5px 8px;font-weight:700;color:#7f1d1d;margin-bottom:6px}
+#dg-gt-angry .ga-li{max-height:190px;overflow:auto;border-top:1px dashed #fecaca}
+#dg-gt-angry .ga-r{padding:4px 0;border-bottom:1px dashed #fecaca;font-size:12px}#dg-gt-angry .ga-r b.o{color:#1d4ed8}#dg-gt-angry .ga-r .m{float:right;font-weight:800;color:#b91c1c}
+#dg-gt-angry .ga-r .p{color:#64748b;font-size:11.5px}
+#dg-gt-angry .ga-btns{display:flex;gap:6px;margin-top:8px}#dg-gt-angry .ga-btns button{cursor:pointer;border-radius:8px;padding:4px 10px;font:inherit;font-size:12px;font-weight:800;border:1px solid #cbd5e1;background:#fff;color:#334155}
+#dg-gt-angry .ga-btns .go{background:#dc2626;border-color:#dc2626;color:#fff}
+#dg-gt-angry .ga-x{position:absolute;top:6px;right:10px;border:0;background:none;font-size:18px;cursor:pointer;color:#94a3b8}
+#dg-gt-angry.min .ga-card{display:none}#dg-gt-angry .ga-bub{display:none}
+#dg-gt-angry.min{width:auto}#dg-gt-angry.min .ga-bub{display:flex;align-items:center;gap:6px;cursor:pointer;background:#dc2626;color:#fff;font-weight:900;border-radius:999px;padding:4px 12px 4px 4px;box-shadow:0 8px 24px rgba(185,28,28,.4);animation:gaShake 1.6s ease-in-out infinite}
+#dg-gt-angry.min .ga-bub span.f{font-size:22px}
+@media (prefers-reduced-motion:reduce){#dg-gt-angry *{animation:none!important}}`;
+        document.head.append(st);
+      }
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'dg-gt-angry';
+        box.addEventListener('click', (e) => {
+          const a = e.target.closest('[data-ga]');
+          if (!a) return;
+          const k = a.dataset.ga;
+          if (k === 'min') { lsSet('dgGtAngryMin', String(Date.now())); box.classList.add('min'); }
+          else if (k === 'max') { lsSet('dgGtAngryMin', ''); box.classList.remove('min'); }
+          else if (k === 'go') {
+            lsSet('dgTab', 'gt');
+            lsSet('dgGtView', 'orders');
+            gtUi.view = 'orders';
+            gtUi.hideDone = true;
+            lsSet('dgGtHideDone', '1');
+            setPanelOpen(true);
+            render();
+          }
+        });
+        document.body.append(box);
+      }
+      // thu nhỏ: giữ 30 phút rồi tự mở lại
+      const minAt = Number(lsGet('dgGtAngryMin')) || 0;
+      box.classList.toggle('min', Date.now() - minAt < 30 * 60e3);
+      const sum = list.reduce((a, x) => a + x.money, 0);
+      const nOrd = new Set(list.map((x) => x.l.order)).size;
+      const SAY = ['Ai cho chọn giấy đắt hơn vậy hả?!', 'Tiền công ty chứ đâu phải lá mít!', 'Giấy rẻ hơn nằm sờ sờ kia kìa!', 'Đổi NCC hoặc bắt trả về bằng giá ngay!'];
+      const say = SAY[Math.floor(Date.now() / 60e3) % SAY.length];
+      const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
+<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig">${GT_ANGRY_SVG}</div><div class="ga-body">
+<div class="ga-t">😡 Kế toán đang nổi giận!</div>
+<div class="ga-s"><b>${nOrd}</b> đơn dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>≈ ${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
+<div class="ga-say">“${esc(say)}”</div>
+<div class="ga-li">${list.slice(0, 12).map(({ l, me, min, diff, money }) => `<div class="ga-r"><span class="m">${money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b> · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}${list.length > 12 ? `<div class="ga-r p">… và ${list.length - 12} dòng nữa</div>` : ''}</div>
+<div class="ga-btns"><button class="go" data-ga="go">📄 Xử lý ở tab Giấy tấm</button><button data-ga="min">Để sau 30 phút</button></div>
+</div></div>`;
+      if (box.dataset.h !== html) {
+        box.dataset.h = html;
+        box.innerHTML = html;
+      }
+    } catch {
+    } finally {
+      gtAngryBusy = false;
+    }
+  }
+  if (IS_TOP) {
+    setTimeout(() => injectGtAngry(), 4000);
+    setInterval(() => injectGtAngry(), 60e3);
+  }
   const vnd = (n) => Number(n || 0).toLocaleString('vi-VN');
   function gtZaloMsg(r, ls) {
     const prov = r.min.prov?.name || r.min.prov?.code || '';
@@ -16767,6 +16903,7 @@ ${(() => {
       gtUi.oMenu = null;
       gtUi.done = { ...(gtUi.done || {}), [dk]: v };
       await kvMerge(GT_DONE, { [dk]: v });
+      injectGtAngry(); // cập nhật panel 😡 kế toán ngay
       gtUi.msg = v ? `✓ ${dk.split('|')[0]}: ${GT_DONE_K[v.k]}.` : `↩ ${dk.split('|')[0]}: bỏ đánh dấu đã xử lý.`;
     } else if (k === 'ohidedone') {
       gtUi.hideDone = b.checked;
