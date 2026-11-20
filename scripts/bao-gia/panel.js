@@ -15925,7 +15925,8 @@ ${gtUi.view === 'orders' ? gtOrdersHtml(all, gs, gtUi.orders || {}) : ''}
     <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:6px">
       <span style="font-size:12px;color:#64748b;font-weight:700">NCC:</span>
       <button data-gt="provall" title="Bỏ lọc NCC" style="cursor:pointer;border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${gtUi.provs.size ? '#cbd5e1' : '#2563eb'};background:${gtUi.provs.size ? '#fff' : '#2563eb'};color:${gtUi.provs.size ? '#334155' : '#fff'}">Tất cả</button>
-      ${provs.map(([c, n]) => { const on = gtUi.provs.has(c); const k = all.filter((x) => x.prov?.code === c).length; return `<button data-gt="prov" data-c="${esc(c)}" title="Bấm để ${on ? 'bỏ' : 'chọn'} ${esc(n)} – chọn được nhiều NCC" style="cursor:pointer;border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${on ? '#2563eb' : '#cbd5e1'};background:${on ? '#dbeafe' : '#fff'};color:${on ? '#1d4ed8' : '#334155'}">${on ? '✓ ' : ''}${esc(n)} (${esc(c)}) <span style="opacity:.6">${k}</span></button>`; }).join('')}
+      ${provs.filter(([c]) => gtUi.provOpen || gtUi.provs.has(c)).map(([c, n]) => { const on = gtUi.provs.has(c); const k = all.filter((x) => x.prov?.code === c).length; return `<button data-gt="prov" data-c="${esc(c)}" title="Bấm để ${on ? 'bỏ' : 'chọn'} ${esc(n)} – chọn được nhiều NCC" style="cursor:pointer;border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${on ? '#2563eb' : '#cbd5e1'};background:${on ? '#dbeafe' : '#fff'};color:${on ? '#1d4ed8' : '#334155'}">${on ? '✓ ' : ''}${esc(n)} (${esc(c)}) <span style="opacity:.6">${k}</span></button>`; }).join('')}
+      <button data-gt="provmore" style="cursor:pointer;border-radius:99px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px dashed #94a3b8;background:#fff;color:#475569">${gtUi.provOpen ? '▴ Thu gọn' : `▾ ${gtUi.provs.size ? 'Thêm NCC' : 'Chọn NCC'} (${provs.length - gtUi.provs.size})`}</button>
       ${gtUi.provs.size ? `<span style="font-size:11px;color:#94a3b8">đã lưu trên cloud</span>` : ''}
     </div>
     ${MY_ADMIN ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;padding:6px 8px;border-radius:8px;background:${sel.length ? '#eef2ff' : '#f8fafc'}">
@@ -16111,6 +16112,7 @@ ${(() => {
       const ids = [...host.querySelectorAll('[data-gt="sel"]')].map((x) => Number(x.dataset.id));
       for (const id of ids) b.checked ? gtUi.sel.add(id) : gtUi.sel.delete(id);
     } else if (k === 'clr') gtUi.sel.clear();
+    else if (k === 'provmore') gtUi.provOpen = !gtUi.provOpen;
     else if (k === 'hidesmall') {
       gtUi.hideSmall = b.checked;
       gtSavePrefs();
