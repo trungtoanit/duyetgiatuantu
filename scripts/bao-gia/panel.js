@@ -3663,7 +3663,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   }
   // Ô "Kết cấu giấy" của 1 dòng: ô có dạng "1253 | PNTP_…" (không dựa vào vị trí cột – bảng có cột cố định)
   const paperCell = (tr, iKc) =>
-    [...tr.cells].find((td) => /\d+\s*\|\s*[A-Z0-9]+_/.test(td.innerText || '')) || tr.cells[iKc];
+    [...tr.cells].find((td) => /\d+\s*\|\s*[A-Z0-9]+_/.test((td.innerText || '').replace(/❓/g, ''))) || tr.cells[iKc];
   // Giấy cũ: ô có dấu ⚠ (chữ) hoặc bất kỳ biểu tượng nào (hình / SVG / icon) – ô giấy mới chỉ có chữ + thanh
   const isOldPaper = (cell) =>
     !!cell && (/⚠/.test(cell.innerText || '') || !!cell.querySelector('svg, img, .anticon, [role="img"], i[class*="icon"], [class*="warning"], [class*="Warning"]'));
