@@ -15899,27 +15899,37 @@ Quy tắc:
     x.drawImage(img, 0, 0);
     return c.toDataURL('image/png');
   }
+  // Chỉ có 1 giấy trong nhóm (cùng mã lớp + sóng, NCC đang lọc) → không có gì để so: đề nghị hỏi thêm NCC khác
+  const gtSolo = (r) => !!r?.me && !!r.code && !(r.diff > 0) && r.peers <= 1 && (!r.min || r.min.id === r.me.id);
+  function gtSoloMsg(r, l) {
+    const tail = 'Hãy hỏi thêm các nhà cung ứng khác để so sánh giá';
+    const g = `nhóm ${r.code} sóng ${r.w}`;
+    const text = `Đơn hàng ${l.order}${l.tp ? ` mã TP ${l.tp}` : ''} hiện đang chọn giấy tấm ID ${r.me.id} | ${r.me.name} đơn giá là ${vnd(r.myP)} đ/m2 – hiện chỉ có 1 giấy cùng ${g}, chưa có nhà cung cấp nào khác để so sánh giá.\n${tail}`;
+    const html = `<div>Đơn hàng <b>${esc(l.order)}</b>${l.tp ? ` mã TP <b>${esc(l.tp)}</b>` : ''} hiện đang chọn giấy tấm ID <b>${r.me.id}</b> | ${esc(r.me.name)} đơn giá là <b>${vnd(r.myP)} đ/m2</b> – hiện <b><span style="color:#d97706"><font color="#d97706">chỉ có 1 giấy cùng ${esc(g)}</font></span></b>, chưa có nhà cung cấp nào khác để so sánh giá.</div><div><br></div><div><b>${esc(tail)}</b></div>`;
+    return { text, html };
+  }
   async function gtZaloSend(pid, again = false) {
     const r = (gtUi.oRows || []).find((x) => String(x.me?.id) === String(pid));
-    if (!r || !(r.diff > 0) || !r.min) throw new Error('Giấy này không còn chênh giá.');
+    const solo = gtSolo(r);
+    if (!r || (!solo && (!(r.diff > 0) || !r.min))) throw new Error('Giấy này không còn chênh giá.');
     const sent = await kvGet(GT_ZSENT);
     // gửi lại: gửi mọi đơn của giấy này; bình thường chỉ các đơn chưa gửi (hoặc lần trước lỗi)
     const ls = again ? r.ol : r.ol.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
     if (!ls.length) throw new Error('Các đơn của giấy này đã gửi yêu cầu rồi.');
-    // 1 ảnh bảng (mỗi đơn 1 dòng) + câu đề nghị kèm theo
-    const image = await gtTablePng(r, ls);
-    const prov = r.min.prov?.name || r.min.prov?.code || '';
-    const caption = `Hãy đổi qua nhà cung cấp ${prov} (ID ${r.min.id} | ${r.min.name}) hoặc trả về bằng giá tiền`;
-    const parts = [gtZaloMsg(r, ls)];
+    // chưa rẻ nhất: 1 ảnh bảng (mỗi đơn 1 dòng) + câu đề nghị; chỉ 1 giấy cùng nhóm: mỗi đơn 1 tin chữ đề nghị hỏi thêm NCC
+    const image = solo ? null : await gtTablePng(r, ls);
+    const prov = solo ? '' : r.min.prov?.name || r.min.prov?.code || '';
+    const caption = solo ? '' : `Hãy đổi qua nhà cung cấp ${prov} (ID ${r.min.id} | ${r.min.name}) hoặc trả về bằng giá tiền`;
+    const parts = solo ? ls.map((l) => gtSoloMsg(r, l)) : [gtZaloMsg(r, ls)];
     const names = await kvGet('zaloNames');
     const old = await kvGet('zaloJobs');
     const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 86400e3));
     const jobId = `${Date.now()}-gt`;
-    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: parts[0].text, html: parts[0].html, image, caption, status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
+    keep[jobId] = { draft: false, to: GT_ZGROUP, zaloName: names[norm(GT_ZGROUP)]?.name || GT_ZGROUP, text: parts[0].text, html: parts[0].html, more: parts.slice(1), image, caption, status: 'pending', at: Date.now(), task: 'gt' }; // task: không áp luật "đã nhắn trong 30 phút" 
     await call({ type: 'kv.set', key: 'zaloJobs', value: keep });
-    const mark = (state, error) => kvMerge(GT_ZSENT, Object.fromEntries(ls.map((l) => [gtZKey(l.order, r.me.id), { at: Date.now(), by: meName || '', state, job: jobId, cheap: r.min.id, diff: r.diff, ...(error ? { error } : {}) }])));
+    const mark = (state, error) => kvMerge(GT_ZSENT, Object.fromEntries(ls.map((l) => [gtZKey(l.order, r.me.id), { at: Date.now(), by: meName || '', state, job: jobId, cheap: r.min?.id, diff: r.diff, solo, ...(error ? { error } : {}) }])));
     await mark('queue');
-    gtUi.msg = `⏳ Đã xếp ảnh bảng (${ls.length} đơn) gửi nhóm Zalo “${GT_ZGROUP}” – chờ tab Zalo gửi…`;
+    gtUi.msg = solo ? `⏳ Đã xếp ${ls.length} tin đề nghị hỏi thêm NCC gửi nhóm Zalo “${GT_ZGROUP}” – chờ tab Zalo gửi…` : `⏳ Đã xếp ảnh bảng (${ls.length} đơn) gửi nhóm Zalo “${GT_ZGROUP}” – chờ tab Zalo gửi…`;
     (async () => {
       for (let i = 0; i < 200; i++) {
         await sleep(1500);
@@ -16001,13 +16011,15 @@ Quy tắc:
     gtUi.oRows = rows;
     const zs = gtUi.zsent || {};
     const nBad = rows.filter((r) => r.diff > 0).length;
-    const nOk = rows.filter((r) => r.diff === 0 || (r.diff != null && r.diff <= 0)).length;
-    const nNo = rows.length - nBad - nOk;
+    const nSolo = rows.filter(gtSolo).length;
+    const nOk = rows.filter((r) => !gtSolo(r) && (r.diff === 0 || (r.diff != null && r.diff <= 0))).length;
+    const nNo = rows.length - nBad - nOk - nSolo;
     const day = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN') : '');
     const st = (r) => {
       if (!r.code) return '<span style="color:#94a3b8">không tính được mã lớp</span>';
       if (!r.me) return '<span style="color:#d97706">giấy không còn trong kho (đã đổi tên / ẩn)</span>';
-      if (!r.min) return '<span style="color:#94a3b8">nhóm chưa có giá mới để so</span>';
+      if (!r.min && !gtSolo(r)) return '<span style="color:#94a3b8">nhóm chưa có giá mới để so</span>';
+      if (gtSolo(r)) return `<b style="color:#d97706">⚠️ Chỉ có 1 giấy cùng nhóm</b> <span style="color:#64748b">– chưa có NCC khác để so, cần hỏi thêm NCC</span>`;
       if (r.diff <= 0) return `<b style="color:#16a34a">✅ Rẻ nhất</b> <span style="color:#64748b">(${r.peers} giấy cùng nhóm)</span>`;
       return `<b style="color:#dc2626">❌ Đắt hơn ${r.diff.toLocaleString('vi-VN')}đ/m² (${Math.round((r.diff / r.min.price) * 100)}%)</b>${r.money ? ` → <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${r.money.toLocaleString('vi-VN')}đ</b> <span style="color:#64748b;font-size:11px">trên ${Math.round(r.m2).toLocaleString('vi-VN')} m²</span>` : r.m2 === 0 ? ' <span style="color:#94a3b8;font-size:11px">(chưa có m² – mở lại Danh sách đơn để đọc)</span>' : ''}<div style="margin-top:2px;font-size:12.5px">Rẻ nhất: <b style="color:#2563eb">${r.min.id}</b> | ${esc(r.min.name)} · <b>${r.min.price.toLocaleString('vi-VN')}</b> <span style="font-size:11px;color:#64748b">· ${esc(r.min.prov?.name || '')} · cập nhật ${day(r.min.updatedAt)}</span></div>`;
     };
@@ -16020,7 +16032,7 @@ Quy tắc:
       gtLoadOrders().then((ok) => ok && gtFill()).catch(() => {}).finally(() => setTimeout(() => (gtUi.ordAutoAt = 0), 15 * 60e3));
     }
     const loadBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#475569">🕒 Đọc đơn lần cuối: <b>${lastAt ? new Date(lastAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa'}</b>${stale ? ' <span style="color:#d97706">(quá 15 phút)</span>' : ''}<button data-gt="oload" style="cursor:pointer;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${stale ? '#f59e0b' : '#cbd5e1'};background:${stale ? '#fffbeb' : '#fff'};color:${stale ? '#b45309' : '#334155'}">${gtOrdBusy ? '⏳ Đang tải danh sách đơn…' : '⟳ Tải danh sách đơn mới'}</button></div>`;
-    return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b> · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
+    return `${few}${loadBar}<div style="margin-bottom:8px;font-size:12.5px">📦 <b>${lines.length}</b> dòng đơn ở tab Mới dùng <b>${rows.length}</b> loại giấy · <b style="color:#16a34a">${nOk} rẻ nhất nhóm</b>${nSolo ? ` · <b style="color:#d97706">${nSolo} chỉ 1 giấy cùng nhóm</b>` : ''} · <b style="color:#dc2626">${nBad} chưa rẻ nhất</b>${sumMoney ? ` – tổng đắt hơn <b style="color:#b91c1c;background:#fee2e2;padding:0 6px;border-radius:5px">≈ ${sumMoney.toLocaleString('vi-VN')}đ</b>` : ''} · ${nNo} không so được
   <div style="margin:4px 0">Sắp xếp: ${[['new', '🕒 Đơn mới nhất'], ['money', '💸 Tiền đắt hơn']].map(([k, l]) => `<button data-gt="osort" data-k="${k}" style="cursor:pointer;border-radius:99px;padding:1px 10px;margin-right:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${(gtUi.oSort || 'new') === k ? '#2563eb' : '#cbd5e1'};background:${(gtUi.oSort || 'new') === k ? '#dbeafe' : '#fff'};color:${(gtUi.oSort || 'new') === k ? '#1d4ed8' : '#334155'}">${l}</button>`).join('')}</div><div style="color:#64748b;font-size:11.5px">${gtUi.provs.size ? `Chỉ so với NCC đang lọc: <b>${[...gtUi.provs].join(', ')}</b> · ` : '<span style="color:#d97706">Chưa lọc NCC – đang so với mọi NCC (lọc ở 📄 danh sách giấy) · </span>'}So trong cùng nhóm (mã lớp) và cùng sóng; chỉ tính giấy có giá cập nhật trong ${GT_FRESH_D} ngày – giá cũ hơn (vd. NCC lâu không báo giá) bỏ qua để không thấp ảo.</div></div>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:6px;white-space:nowrap" title="Thời điểm lên đơn của đơn mới nhất dùng giấy này">Lên đơn</th><th style="padding:6px">Giấy đang dùng</th><th>Nhóm</th><th style="text-align:right">Giá hiện tại</th><th>So với nhóm</th><th>Đơn (tab Mới)</th></tr></thead>
@@ -16029,14 +16041,14 @@ Quy tắc:
   <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : ''}${esc(r.paper)}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
-  <td>${st(r)}${r.diff > 0 && r.me && r.min ? (() => {
+  <td>${st(r)}${(r.diff > 0 && r.me && r.min) || gtSolo(r) ? (() => {
     const done = r.ol.filter((l) => zs[gtZKey(l.order, r.me.id)] && zs[gtZKey(l.order, r.me.id)].state !== 'error'); // lỗi gửi → coi như chưa gửi
     const todo = r.ol.length - done.length;
     const last = done.map((l) => zs[gtZKey(l.order, r.me.id)]).sort((a, b) => b.at - a.at)[0];
     const errs = r.ol.map((l) => zs[gtZKey(l.order, r.me.id)]).filter((v) => v?.state === 'error').sort((a, b) => b.at - a.at);
     const errInfo = errs.length ? `<span style="font-size:11px;color:#dc2626" title="${esc(errs[0].error || '')}">⚠️ Lần gửi trước lỗi: ${esc((errs[0].error || '').slice(0, 60))}</span>` : '';
     const sentInfo = done.length ? `<span style="font-size:11px;color:${last.state === 'sent' ? '#16a34a' : '#d97706'};font-weight:700">${last.state === 'sent' ? '✅ Đã gửi yêu cầu' : '⏳ Đang gửi'}${done.length < r.ol.length ? ` ${done.length}/${r.ol.length} đơn` : ''} · ${new Date(last.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}${last.by ? ` · ${esc(last.by)}` : ''}</span>` : '';
-    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}${done.length && !todo ? `<button data-gt="zsend" data-id="${r.me.id}" data-again="1" title="Gửi lại ảnh bảng của mọi đơn dùng giấy này vào nhóm “${esc(GT_ZGROUP)}”" style="cursor:pointer;border:1px solid #93c5fd;border-radius:6px;padding:1px 8px;font:inherit;font-size:11.5px;font-weight:700;color:#1d4ed8;background:#fff">↻ Gửi lại</button>` : ''}${errInfo}</div>`;
+    return `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${todo ? `<button data-gt="zsend" data-id="${r.me.id}" title="${gtSolo(r) ? `Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: chỉ có 1 giấy cùng nhóm – đề nghị hỏi thêm NCC khác` : `Gửi vào nhóm Zalo “${esc(GT_ZGROUP)}”: đề nghị đổi sang ${esc(r.min.prov?.name || '')} (ID ${r.min.id}) hoặc trả về bằng giá`}" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb)">📨 Gửi Zalo${done.length ? ` (${todo} đơn mới)` : ''}</button>` : ''}${sentInfo}${done.length && !todo ? `<button data-gt="zsend" data-id="${r.me.id}" data-again="1" title="Gửi lại ảnh bảng của mọi đơn dùng giấy này vào nhóm “${esc(GT_ZGROUP)}”" style="cursor:pointer;border:1px solid #93c5fd;border-radius:6px;padding:1px 8px;font:inherit;font-size:11.5px;font-weight:700;color:#1d4ed8;background:#fff">↻ Gửi lại</button>` : ''}${errInfo}</div>`;
   })() : ''}</td>
   <td style="font-size:11.5px">${r.ol.slice(0, 4).map((l) => `<div>${l.at ? `<span style="color:#64748b">${new Date((l.at > 1e11 ? l.at : l.at * 1000)).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span> ` : ''}${esc(l.order)} · ${esc(l.cust || '')}${l.quote ? ` · ${esc(l.quote)}` : ''}${r.diff > 0 && r.oM2.get(l.order) ? ` <b style="color:#b91c1c">+${Math.round(r.diff * r.oM2.get(l.order)).toLocaleString('vi-VN')}đ</b>` : ''}</div>`).join('')}${r.orders.size > 4 ? `<div style="color:#94a3b8">+${r.orders.size - 4} đơn</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
