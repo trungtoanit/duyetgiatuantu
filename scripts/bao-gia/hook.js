@@ -612,6 +612,9 @@
             tp: x.productionCode || op.product?.code || '',
             oTotal, lTotal: Number(x.totalPrice) || 0,
             paper: op.cartonStructCode, cp: Number(op.cartonPrice) || 0, layer: op.layer,
+            // ID giấy tấm của dòng (nếu CRM có gửi) – để vẫn khớp được khi giấy đã đổi tên trong danh mục
+            csid: op.cartonStructId ?? op.cartonStruct?.id ?? op.cartonStructDetail?.cartonStructId ?? op.cartonStructDetailId ?? undefined,
+            csx: Object.fromEntries(Object.entries(op).filter(([k, v]) => /carton|struct/i.test(k) && v != null && typeof v !== 'object').slice(0, 12)),
             // m² giấy của dòng = dài tấm × khổ tấm (mm) × số lượng – để tính tiền chênh khi giấy chưa rẻ nhất
             m2: op.daiTam && op.khoTam ? Math.round(((Number(op.daiTam) * Number(op.khoTam)) / 1e6) * (Number(x.quantity) || Number(op.quantity) || 0) * 100) / 100 : undefined,
           });
