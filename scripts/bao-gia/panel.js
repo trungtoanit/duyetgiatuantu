@@ -15824,10 +15824,13 @@ Quy tắc:
 <div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>`;
     document.body.append(pop);
     // luôn bám ngay dưới icon (trang cuộn / đổi cỡ → đặt lại); không đủ chỗ phía dưới thì lật lên trên icon
+    const iid = icon.dataset.id;
     const place = () => {
-      if (!pop.isConnected) return window.removeEventListener('scroll', place, true), window.removeEventListener('resize', place);
-      if (!icon.isConnected) return;
-      const rr = icon.getBoundingClientRect();
+      if (!pop.isConnected) return window.removeEventListener('scroll', place, true), window.removeEventListener('resize', place), clearInterval(tk);
+      // CRM vẽ lại bảng → icon cũ bị thay: bám icon mới cùng ID giấy
+      const ic = icon.isConnected ? icon : document.querySelector(`.dg-gtq[data-id="${iid}"]`);
+      if (!ic) return;
+      const rr = ic.getBoundingClientRect();
       const h = pop.offsetHeight;
       const below = rr.bottom + 6;
       const top = below + h <= window.innerHeight - 8 ? below : Math.max(8, rr.top - 6 - h);
@@ -15835,6 +15838,7 @@ Quy tắc:
       pop.style.left = `${Math.round(Math.max(8, Math.min(rr.left - 20, window.innerWidth - pop.offsetWidth - 8)))}px`;
     };
     place();
+    const tk = setInterval(place, 400); // bảng CRM đổi bố cục (tải xong ảnh / dòng) không có sự kiện cuộn
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
     pop.querySelector('[data-x]').onclick = () => pop.remove();
