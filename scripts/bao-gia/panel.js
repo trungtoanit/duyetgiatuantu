@@ -13132,8 +13132,8 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const ae = root.activeElement;
     if (ae && el.contains(ae) && (ae.tagName === 'TEXTAREA' || ae.classList?.contains('osim'))) return;
     if (!qid) {
-      // Không ở trang báo giá: thẻ chỉ hiện khi có bàn giao khách hàng cần xử lý
-      if (!ho) {
+      // Không ở trang 1 báo giá: thẻ bàn giao khách hàng chỉ hiện ở màn hình Báo giá (/bao-gia), các trang khác (dashboard…) ẩn
+      if (!ho || !/^\/bao-gia(\/|$)/.test(location.pathname)) {
         el.hidden = true;
         return;
       }
