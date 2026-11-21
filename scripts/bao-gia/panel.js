@@ -15786,8 +15786,8 @@ Quy tắc:
     if (!sw || Date.now() - sw.at > 15 * 60e3 || String(sw.from) !== String(id)) return;
     if (Number(location.pathname.match(/\/(?:bao-gia|co-hoi)\/update\/(\d+)/)?.[1]) !== Number(sw.qid)) return;
     lsSet('dgGtSwap', '');
+    ic.scrollIntoView({ block: 'center' });
     setTimeout(() => {
-      ic.scrollIntoView({ block: 'center' });
       const cur = gtQCheaper(id);
       if (!cur) return;
       gtQPopup(ic, cur);
@@ -15803,8 +15803,9 @@ Quy tắc:
       tip.setAttribute('style', 'margin:0 0 6px;padding:6px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fb923c;color:#9a3412;font-weight:800;font-size:12.5px');
       tip.textContent = `🔁 Nên chuyển giấy ${sw.from} → ${sw.to}: bấm “👉 Áp dụng ${sw.to}” ở dòng xanh, kiểm tra giá rồi bấm Cập nhật báo giá.`;
       pop.querySelector('table')?.before(tip);
-      tr.scrollIntoView({ block: 'nearest' });
-    }, 600);
+      pop.dispatchEvent(new Event('scroll')); // tip làm popup cao hơn → đặt lại vị trí
+      window.dispatchEvent(new Event('resize'));
+    }, 900);
   }
   function gtQPopup(icon, info) {
     document.getElementById('dg-gtq-pop')?.remove();
@@ -15822,6 +15823,20 @@ Quy tắc:
 <tbody>${list.length ? '' : '<tr><td colspan="6" style="padding:8px;color:#94a3b8;text-align:center">Không có giấy nào khác cùng nhóm (theo NCC đang lọc, giá 90 ngày)</td></tr>'}${list.map((x) => { const dd = x.price - me.price; const cheap = dd < 0; return `<tr style="border-top:1px solid #f1f5f9;${cheap ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td title="${esc(x.prov?.name || '')}" style="font-weight:700">${esc(x.prov?.code || x.prov?.name || '')}</td><td style="text-align:right;font-weight:800;color:${cheap ? '#15803d' : '#dc2626'}">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:${cheap ? '#15803d' : '#dc2626'}">${dd === 0 ? 'bằng giá' : `${cheap ? 'rẻ hơn ' : 'đắt hơn '}${Math.abs(dd).toLocaleString('vi-VN')}đ (${Math.round((Math.abs(dd) / me.price) * 100)}%)`}</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td><td style="padding-left:6px"><button data-apply="${x.id}" title="Đổi giấy của dòng này sang ID ${x.id} (như Đổi ID hàng loạt nhưng chỉ dòng này)" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;font-size:11.5px;font-weight:800;color:#fff;background:${cheap ? 'linear-gradient(90deg,#16a34a,#15803d)' : '#64748b'};white-space:nowrap">Áp dụng</button></td></tr>`; }).join('')}</tbody></table><div data-st style="margin-top:6px;font-size:12px;font-weight:700"></div>
 <div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>`;
     document.body.append(pop);
+    // luôn bám ngay dưới icon (trang cuộn / đổi cỡ → đặt lại); không đủ chỗ phía dưới thì lật lên trên icon
+    const place = () => {
+      if (!pop.isConnected) return window.removeEventListener('scroll', place, true), window.removeEventListener('resize', place);
+      if (!icon.isConnected) return;
+      const rr = icon.getBoundingClientRect();
+      const h = pop.offsetHeight;
+      const below = rr.bottom + 6;
+      const top = below + h <= window.innerHeight - 8 ? below : Math.max(8, rr.top - 6 - h);
+      pop.style.top = `${Math.round(top)}px`;
+      pop.style.left = `${Math.round(Math.max(8, Math.min(rr.left - 20, window.innerWidth - pop.offsetWidth - 8)))}px`;
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
     pop.querySelector('[data-x]').onclick = () => pop.remove();
     // Áp dụng: đổi giấy của đúng dòng này sang ID đã chọn (bấm ID giấy → Danh sách giấy tấm → nhập ID → chọn → Chọn). Không bấm Cập nhật báo giá.
     const cell = icon.closest('td');
