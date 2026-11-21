@@ -17408,8 +17408,9 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
     }
     const rows = [...use.values()].map((u) => {
       const me = byName.get(gtNorm(u.paper)) || (u.csid != null ? byId.get(String(u.csid)) : null);
-      const code = gtCode(u.paper);
-      const w = gtWave(u.paper);
+      // tính nhóm theo tên đúng trong danh mục (tên trên đơn ERP có thể ghi sai, vd. thiếu dấu / giữa các lớp)
+      const code = gtCode(me?.name || u.paper);
+      const w = gtWave(me?.name || u.paper);
       const peers = code ? fresh.filter((x) => gtCode(x.name) === code && gtWave(x.name) === w) : [];
       const min = peers.reduce((a, b) => (!a || b.price < a.price ? b : a), null);
       const myP = me?.price ?? null;
@@ -17503,7 +17504,7 @@ tr.dg-gt-read>td span[style*="background"]:not(.dg-gt-badge){filter:grayscale(1)
   <td style="padding:6px;white-space:nowrap;font-size:12px;color:#334155">${d ? `<b>${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b><div style="color:#64748b">${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div><div style="font-size:11px;color:#d97706;font-weight:700">${gtAgo(d.getTime())}</div>` : ''}</td>
   <td style="padding:6px;text-align:right;white-space:nowrap;font-weight:800">${l.oTotal ? `${vnd(l.oTotal)}<div style="font-weight:500;font-size:11px;color:#64748b">đ</div>` : '<span style="color:#cbd5e1">–</span>'}</td>
   <td style="padding:6px;font-size:12px"><b style="color:#1d4ed8">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, gtUi.qIds)}` : ''}${l.cust || l.ccode ? `<div style="font-weight:600">${l.ccode ? `<span title="Mã khách hàng" style="display:inline-block;margin-right:5px;padding:0 6px;border-radius:5px;background:#ecfeff;border:1px solid #67e8f9;color:#0e7490;font-size:11px;font-weight:800">${esc(l.ccode)}</span>` : ''}${esc(l.cust || '')}</div>` : ''}<div style="color:#475569">${l.tp ? `${esc(l.tp)} · ` : ''}${esc((l.prod || '').slice(0, 70))}${l.qty ? ` · SL <b>${vnd(l.qty)}</b>` : ''}</div></td>
-  <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : r.csid != null ? `<b style="color:#94a3b8">${esc(r.csid)}</b> | ` : '<b style="color:#94a3b8" title="Đơn chỉ ghi tên giấy, không khớp tên nào trong danh mục giấy tấm CRM nên không biết ID">ID ?</b> | '}${esc(r.paper)}${r.me && gtNorm(r.me.name) !== gtNorm(r.paper) ? `<div style="font-size:11px;color:#d97706">tên hiện tại trong danh mục: ${esc(r.me.name)}</div>` : ''}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
+  <td style="padding:6px">${r.me ? `<b style="color:#2563eb">${r.me.id}</b> | ` : r.csid != null ? `<b style="color:#94a3b8">${esc(r.csid)}</b> | ` : '<b style="color:#94a3b8" title="Đơn chỉ ghi tên giấy, không khớp tên nào trong danh mục giấy tấm CRM nên không biết ID">ID ?</b> | '}${esc(r.paper)}${r.me && gtNorm(r.me.name) !== gtNorm(r.paper) ? `<div style="font-size:11px;color:#d97706">⚠️ ERP ghi sai tên giấy – tên đúng trong danh mục: ${esc(r.me.name)} (nhóm tính theo tên đúng)</div>` : ''}${r.me ? `<div style="font-size:11px;color:#64748b">${esc(r.me.prov?.name || '')} · giá cập nhật ${day(r.me.updatedAt)}</div>` : ''}</td>
   <td>${r.code ? (r.g ? `<span style="display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff;background:${r.g.color || '#475569'}">${esc(r.g.name)}</span>` : `<span style="font-weight:700;color:#64748b">${r.code}</span>`) + ` <span style="color:#94a3b8;font-size:11px">sóng ${r.w}</span>` : ''}</td>
   <td style="text-align:right;font-weight:700">${r.myP != null ? r.myP.toLocaleString('vi-VN') : ''}</td>
   <td style="padding:6px;text-align:right;white-space:nowrap;vertical-align:middle">${gtPoCell(r, dk, money)}</td>
