@@ -16475,16 +16475,41 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
 </div>
 ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – tiết kiệm cho đơn này</div><table class="gp-tb"><thead><tr><th>Giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Rẻ hơn</th><th style="text-align:right">Tiết kiệm</th><th>Cập nhật</th></tr></thead><tbody>${scen}</tbody></table></div>` : ''}
 <div class="gp-zrow">
-  <div class="gp-box gp-a4w"><div class="gp-bh">🖼 Phiếu điều hướng giấy tấm (A4 đứng – ảnh gửi Zalo)</div><div class="gp-a4" data-gp="a4" title="Bấm để phóng to / thu nhỏ"><span class="gp-mut">⏳ Đang tạo phiếu…</span></div></div>
+  <div class="gp-box gp-a4w"><div class="gp-bh">🖼 Ảnh gửi Zalo – phiếu A4 đứng (đánh giá tổng quan + bảng giá NCC)</div><div class="gp-a4" data-gp="a4" title="Bấm để phóng to / thu nhỏ"><span class="gp-mut">⏳ Đang tạo phiếu…</span></div></div>
   <div class="gp-box gp-zb"><div class="gp-bh">📨 Gửi nhóm Zalo “${esc(GT_ZGROUP)}”</div><div data-gp-z></div>
-    <div class="gp-mut" style="margin-top:6px">Gửi ảnh phiếu bên trái + câu đề nghị “đổi qua ${esc(min.prov?.name || min.prov?.code || '')} (ID ${min.id}) hoặc trả về bằng giá tiền”. Cần mở Zalo Web ở 1 tab để extension gửi.</div></div>
+    <div class="gp-mut" style="margin-top:6px">Gửi ảnh phiếu A4 bên trái (khối nên chuyển giấy, số liệu, biểu đồ giá, bảng giá các NCC, việc cần làm) + câu đề nghị “đổi qua ${esc(min.prov?.name || min.prov?.code || '')} (ID ${min.id}) hoặc trả về bằng giá tiền”. Cần mở Zalo Web ở 1 tab để extension gửi.</div></div>
 </div>
 <div class="gp-box"><div class="gp-bh">✅ Cần làm để tối ưu giá thành</div><ol class="gp-todo">${todo.map((t) => `<li>${t[1]}</li>`).join('')}</ol>
 <div class="gp-acts">${Object.entries(GT_DONE_K).map(([k, t]) => `<button data-gp="done" data-v="${k}">${t}</button>`).join('')}<button data-gp="zgo" class="zgo">📨 Gửi Zalo</button><button data-gp="tab" class="tab">📄 Mở tab Giấy tấm</button></div></div>
 </div>`;
     document.body.append(pop);
     // dòng giấy theo dạng bảng Đơn mới (để dùng chung ảnh phiếu + gửi Zalo)
-    const rr = { me, min, peerList: x.peers || [], peers: (x.peers || []).length, code: x.code, w: x.w, myP: me.price, diff: me.price - min.price, ol: [l] };
+    const card = 'border-radius:10px;padding:8px 10px;background:#fff;';
+    const ovTop = `<div style="border:2px solid #fb923c;border-radius:12px;padding:8px 10px;margin:4px 0 10px;background:#fff7ed">
+<div style="font-weight:900;font-size:11px;letter-spacing:.06em;color:#c2410c;margin-bottom:6px">🔁 NÊN CHUYỂN GIẤY TẤM</div>
+<div style="display:flex;gap:8px;align-items:stretch">
+<div style="${card}flex:1;border:2px solid #fca5a5"><div style="font-size:10px;font-weight:800;color:#b91c1c">ĐANG DÙNG</div><div style="font-size:22px;font-weight:900;color:#b91c1c;text-decoration:line-through">${me.id}</div><div style="font-size:10.5px;color:#334155">${esc(me.name)}</div><div style="font-size:11px;font-weight:700;color:#b91c1c">${esc(me.prov?.code || '')} · ${vn(me.price)}đ/m²</div></div>
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ea580c;font-weight:800"><div style="font-size:26px;line-height:1">➜</div><div style="font-size:10px;white-space:nowrap">rẻ hơn ${vn(me.price - min.price)}đ/m²</div></div>
+<div style="${card}flex:1;border:2px solid #22c55e;background:#f0fdf4"><div style="font-size:10px;font-weight:800;color:#15803d">CHUYỂN SANG</div><div style="font-size:22px;font-weight:900;color:#15803d">${min.id}</div><div style="font-size:10.5px;color:#334155">${esc(min.name)}</div><div style="font-size:11px;font-weight:700;color:#15803d">${esc(min.prov?.code || '')} · ${vn(min.price)}đ/m²</div></div>
+<div style="border-radius:10px;padding:8px 10px;flex:.9;background:#047857;color:#fff;display:flex;flex-direction:column;justify-content:center"><div style="font-size:10px;font-weight:800;opacity:.85">TIẾT KIỆM</div><div style="font-size:21px;font-weight:900">${po ? '' : '≈ '}${vn(saveMax)}đ</div></div>
+</div></div>
+<div style="display:flex;gap:6px;margin-bottom:10px">${[
+      ['Tổng PO hiện tại', total ? `${vn(total)}đ` : '–', `giấy ${me.id} · ${vn(me.price)}đ/m²`, '#0f172a', '#fff', '#e2e8f0'],
+      ['Nếu đổi giấy rẻ nhất', po ? `${vn(po.new)}đ` : '–', `giấy ${min.id} · ${vn(min.price)}đ/m²`, '#15803d', '#fff', '#e2e8f0'],
+      ['💰 Tiết kiệm được', `${po ? '' : '≈ '}${vn(saveMax)}đ`, po ? `tính trên PO ${esc(po.quote || '')}` : 'ước tính', '#047857', '#ecfdf5', '#6ee7b7'],
+      ['% tiền PO / giá trị đơn', `${total ? `${pctPo.toFixed(1)}%` : '–'} / ${l.oTotal ? `${pctOrder.toFixed(2)}%` : '–'}`, l.oTotal ? `đơn ${vn(l.oTotal)}đ` : '', '#0f172a', '#fff', '#e2e8f0'],
+    ].map(([a, b2, c2, col, bg, bd]) => `<div style="flex:1;border:1px solid ${bd};background:${bg};border-radius:10px;padding:6px 8px"><div style="font-size:10px;color:#64748b;font-weight:700">${a}</div><div style="font-size:15px;font-weight:900;color:${col}">${b2}</div><div style="font-size:9.5px;color:#94a3b8">${c2}</div></div>`).join('')}</div>
+<div style="display:flex;gap:8px;margin-bottom:10px">
+<div style="flex:.8;border:1px solid #e2e8f0;border-radius:10px;padding:8px;text-align:center"><div style="font-size:24px;font-weight:900;color:${grade[1]}">${eff.toFixed(1)}%</div><div style="font-size:10px;color:#64748b">hiệu quả giá giấy</div><div style="display:inline-block;margin:4px 0;width:26px;height:26px;line-height:26px;border-radius:50%;background:${grade[1]};color:#fff;font-weight:900">${grade[0]}</div><div style="font-size:11px;font-weight:800;color:${grade[1]}">${grade[2]}</div><div style="font-size:10px;color:#64748b">xếp ${rank}/${peers.length || 1} trong nhóm ${esc(x.code)} · sóng ${esc(x.w)}</div></div>
+<div style="flex:1.6;border:1px solid #e2e8f0;border-radius:10px;padding:8px"><div style="font-size:11px;font-weight:800;color:#334155;margin-bottom:4px">Giá các giấy cùng nhóm (đ/m², thấp → cao)</div>${peers.map((pp) => {
+      const mine = String(pp.id) === String(me.id);
+      const best = String(pp.id) === String(min.id);
+      const ww = 30 + ((pp.price - pMin) / Math.max(1, pMax - pMin)) * 70;
+      const c = mine ? '#2563eb' : best ? '#16a34a' : pp.price < me.price ? '#4ade80' : '#f87171';
+      return `<div style="display:flex;align-items:center;gap:6px;margin:3px 0;${mine ? 'background:#dbeafe;border-radius:6px' : ''}"><span style="width:120px;font-size:10.5px;white-space:nowrap"><b>${pp.id}</b> ${esc(pp.prov?.code || '')}${mine ? ' <b style="color:#2563eb">đang dùng</b>' : best ? ' <b style="color:#15803d">rẻ nhất</b>' : ''}</span><span style="flex:1;height:9px;background:#f1f5f9;border-radius:5px;overflow:hidden"><span style="display:block;height:100%;width:${ww.toFixed(0)}%;background:${c};border-radius:5px"></span></span><b style="width:44px;text-align:right;font-size:10.5px;color:${c}">${vn(pp.price)}</b></div>`;
+    }).join('')}</div></div>`;
+    const ovBottom = `<div style="margin-top:10px;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px"><div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:4px">✅ Cần làm để tối ưu giá thành</div><ol style="margin:0;padding-left:18px;font-size:11px;line-height:1.5">${todo.filter((t) => !/đánh dấu đã xử lý/.test(t[1])).map((t) => `<li>${t[1]}</li>`).join('')}</ol></div>`;
+    const rr = { me, min, peerList: x.peers || [], peers: (x.peers || []).length, code: x.code, w: x.w, myP: me.price, diff: me.price - min.price, ol: [l], ov: { top: ovTop, bottom: ovBottom } };
     const zKey = gtZKey(l.order, me.id);
     const zBox = pop.querySelector('[data-gp-z]');
     const zDraw = (v) => {
@@ -16511,7 +16536,7 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       }, 2000);
     };
     if (zv?.state === 'queue') zWatch();
-    gtTablePng(rr, [l]).then((src) => {
+    gtTablePng(rr, [l], rr.ov).then((src) => {
       const a4 = pop.querySelector('.gp-a4');
       if (a4) a4.innerHTML = `<img src="${src}" alt="Phiếu điều hướng giấy tấm">`;
     }).catch((e) => {
@@ -16763,7 +16788,8 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
     }
     return gtLogoData;
   }
-  async function gtTablePng(r, ls) {
+  // ov (từ popup Đánh giá tổng quan): { top, bottom } – HTML inline chèn vào phiếu A4 (khối nên chuyển giấy + số liệu + biểu đồ / việc cần làm)
+  async function gtTablePng(r, ls, ov = null) {
     const pk = (x) => x.prov?.code || x.prov?.name || String(x.id);
     const byProv = new Map();
     for (const x of r.peerList || []) if (!byProv.has(pk(x)) || x.price < byProv.get(pk(x)).price) byProv.set(pk(x), x);
@@ -16793,9 +16819,9 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
   <div style="text-align:right;font-size:11px;color:#475569;white-space:nowrap">Ngày: <b>${now.toLocaleDateString('vi-VN')}</b><br>Giờ: <b>${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b></div></div>
 <div style="text-align:center;margin:18px 0 6px;font-size:20px;font-weight:900;color:#b91c1c;letter-spacing:.5px">PHIẾU ĐIỀU HƯỚNG GIẤY TẤM FLEXO</div>
 <div style="text-align:center;font-size:11.5px;color:#475569;margin-bottom:12px">Nhóm <b>${esc(r.code)}</b> · sóng <b>${esc(r.w)}</b> · Đang chọn <b>ID ${r.me.id}</b> | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 → rẻ nhất <b style="color:#15803d">ID ${r.min.id}</b> | ${esc(r.min.name)} · <b style="color:#15803d">${vnd(r.min.price)} đ/m2</b> (${esc(prov)})</div>
-<table style="border-collapse:collapse;font-size:12px;width:100%;table-layout:auto">${head}${body}</table>
+${ov?.top || ''}<table style="border-collapse:collapse;font-size:12px;width:100%;table-layout:auto">${head}${body}</table>
 <div style="margin-top:12px;padding:8px 12px;border-left:4px solid #b91c1c;background:#fef2f2;font-size:12.5px;font-weight:700;color:#7f1d1d">Đề nghị: đổi qua nhà cung cấp ${esc(prov)} (ID ${r.min.id} | ${esc(r.min.name)}) hoặc trả về bằng giá tiền.</div>
-<div style="margin-top:8px;font-size:10.5px;color:#64748b">🟩 rẻ nhất · 🟥 đắt hơn · so trong cùng nhóm mã lớp + sóng, giá giấy cập nhật trong 90 ngày</div>
+${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">🟩 rẻ nhất · 🟥 đắt hơn · so trong cùng nhóm mã lớp + sóng, giá giấy cập nhật trong 90 ngày</div>
 <div style="display:flex;justify-content:flex-end;margin-top:24px"><div style="text-align:center;min-width:200px;font-size:12px;color:#64748b">Người lập<div style="height:56px"></div><b style="color:#0f172a;font-size:13px">${esc(meName || '')}</b></div></div>`;
     document.body.append(box);
     const w = A4W;
@@ -16837,7 +16863,7 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
     const ls = again ? base : base.filter((l) => !sent[gtZKey(l.order, r.me.id)] || sent[gtZKey(l.order, r.me.id)].state === 'error');
     if (!ls.length) throw new Error('Các đơn của giấy này đã gửi yêu cầu rồi.');
     // chưa rẻ nhất: 1 ảnh bảng (mỗi đơn 1 dòng) + câu đề nghị; chỉ 1 giấy cùng nhóm: mỗi đơn 1 tin chữ đề nghị hỏi thêm NCC
-    const image = solo ? null : await gtTablePng(r, ls);
+    const image = solo ? null : await gtTablePng(r, ls, r.ov || null);
     const prov = solo ? '' : r.min.prov?.name || r.min.prov?.code || '';
     const caption = solo ? '' : `Hãy đổi qua nhà cung cấp ${prov} (ID ${r.min.id} | ${r.min.name}) hoặc trả về bằng giá tiền`;
     let ask = [];
