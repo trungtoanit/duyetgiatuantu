@@ -15824,7 +15824,7 @@ Quy tắc:
 <div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>${(() => {
       const best = state === 'q' ? [...info.list].sort((a, b) => a.price - b.price)[0] : null;
       if (!best) return '';
-      const txt = `Đơn hàng này chuyển ID | ${me.id} thành ID | ${best.id} nhé em`;
+      const txt = `Đơn hàng này chuyển ${me.id} | ${me.name} thành ${best.id} | ${best.name} nhé em`;
       return `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:220px;font-size:12.5px;color:#1e3a8a">💬 <b data-cmt-txt>${esc(txt)}</b></span><button data-cmt="${esc(txt)}" title="Trả lời vào luồng bình luận đang có của báo giá này; chưa có bình luận nào thì đăng bình luận mới" style="cursor:pointer;border:0;border-radius:8px;padding:5px 12px;font:inherit;font-size:12.5px;font-weight:800;color:#fff;background:linear-gradient(90deg,#2563eb,#1d4ed8)">💬 Bình luận</button></div>`;
     })()}`;
     document.body.append(pop);
