@@ -15744,6 +15744,28 @@ Quy tắc:
       lsSet('dgGtLock', 'null');
     }
   }
+  // Tìm thẳng 1 giấy trên CRM theo tên (cả giấy đang Ẩn) → thêm vào kho extension. Trả về 'ok' | 'hidden' | 'none' | 'err'
+  async function gtFindPaper(name) {
+    try {
+      const tok = JSON.parse(localStorage.getItem('UserStore') || '{}').token;
+      const ver = (document.body.innerText.match(/v(\d+\.\d+\.\d+)/) || [])[1];
+      if (!tok || !ver) return 'err';
+      const norm = (v) => String(v || '').replace(/\s+/g, '').toUpperCase();
+      const want = norm(name);
+      const tries = [name, String(name).split('/')[0]];
+      for (const q of tries) {
+        const r = await fetch(`${API_BASE}/v1/admin/cartonStruct?page=1&limit=100&search=${encodeURIComponent(q)}`, { headers: { token: tok, version: ver, 'X-Client-Version': ver } });
+        const arr = (await r.json())?.data?.cartonStructs;
+        if (!r.ok || !Array.isArray(arr)) return 'err';
+        const hit = arr.map(gtSlim).find((x) => norm(x.name) === want || norm(x.code) === want);
+        if (hit) {
+          await kvMerge(GT_ITEMS, { [hit.id]: { ...hit, seenAt: Date.now() } });
+          return hit.visible === false ? 'hidden' : 'ok';
+        }
+      }
+      return 'none';
+    } catch { return 'err'; }
+  }
   const gtScan = async (force = false) => {
     const n = await gtSyncAll(force);
     if (n != null) gtFill(true);
@@ -17403,6 +17425,15 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
       gtUi.missSyncAt = now;
       gtScan(true).catch(() => {});
     }
+    // vẫn thiếu → tìm thẳng tên giấy trên CRM (cả giấy Ẩn), mỗi tên 1 lần / 10 phút
+    gtUi.missRes = gtUi.missRes || {};
+    const miss = rows.filter((r) => !r.me && !(gtUi.missRes[r.paper] && now - gtUi.missRes[r.paper].at < 10 * 60e3));
+    if (miss.length && !gtUi.missBusy) {
+      gtUi.missBusy = true;
+      (async () => {
+        for (const r of miss) gtUi.missRes[r.paper] = { k: await gtFindPaper(r.paper), at: Date.now() };
+      })().finally(() => { gtUi.missBusy = false; gtFill(true); });
+    }
     // mỗi đơn 1 dòng (không gom theo giấy): đơn mới nhất trước, hoặc tiền đắt hơn của đơn đó
     const orows = rows.flatMap((r) => r.ol.map((l) => { const m2 = r.oM2.get(l.order) || 0; return { r, l, m2, money: r.diff > 0 && m2 ? Math.round(r.diff * m2) : 0 }; }))
       .sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money : 0) || (b.l.at || 0) - (a.l.at || 0) || String(b.l.order).localeCompare(String(a.l.order)));
@@ -17435,7 +17466,13 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
     const peerTbl = () => '';
     const st = (r) => {
       if (!r.code) return '<span style="color:#94a3b8">không tính được mã lớp</span>';
-      if (!r.me) return `<span style="color:#d97706">${gtBusy ? '⏳ giấy chưa có trong kho – đang đồng bộ lại kho giấy tấm…' : 'giấy chưa có trong kho extension (giấy mới tạo / đã đổi tên / ẩn) – bấm đồng bộ lại kho'}</span>`;
+      if (!r.me) {
+        const k = gtUi.missRes?.[r.paper]?.k;
+        if (gtBusy || gtUi.missBusy || !k) return '<span style="color:#d97706">⏳ giấy chưa có trong kho – đang tìm giấy này trên CRM…</span>';
+        if (k === 'none') return '<span style="color:#dc2626">CRM không có giấy tấm nào tên đúng như vậy (giấy đã đổi tên / xoá, hoặc đơn ghi tên khác danh mục) – kiểm tra lại kết cấu giấy của báo giá</span>';
+        if (k === 'err') return '<span style="color:#d97706">không tìm được giấy này trên CRM (lỗi đọc) – thử lại sau</span>';
+        return '<span style="color:#d97706">giấy chưa có trong kho extension – bấm đồng bộ lại kho</span>';
+      }
       if (!r.min && !gtSolo(r)) return '<span style="color:#94a3b8">nhóm chưa có giá mới để so</span>';
       if (gtSolo(r)) return `<b style="color:#d97706">⚠️ Chỉ có 1 giấy cùng nhóm</b> <span style="color:#64748b">– chưa có NCC khác để so, cần hỏi thêm NCC</span>`;
       if (r.diff <= 0) return `<b style="color:#16a34a">✅ Rẻ nhất</b> ${peerBtn(r)}${peerTbl(r)}`;
