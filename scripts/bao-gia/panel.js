@@ -15821,7 +15821,12 @@ Quy tắc:
 <div style="font-size:12px;margin-bottom:6px;padding:4px 8px;border-radius:6px;background:${state === 'q' ? '#fef2f2' : '#f0fdf4'}">Đang chọn: <b style="color:#2563eb">${me.id}</b> | ${esc(me.name)} · <b style="color:${state === 'q' ? '#dc2626' : '#15803d'}">${me.price.toLocaleString('vi-VN')} đ/m2</b> <span style="color:#64748b">· ${esc(me.prov?.name || '')}</span></div>
 <table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:4px 6px">ID | Chất liệu giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">So với đang chọn</th><th style="padding-left:6px">Cập nhật</th><th></th></tr></thead>
 <tbody>${list.length ? '' : '<tr><td colspan="6" style="padding:8px;color:#94a3b8;text-align:center">Không có giấy nào khác cùng nhóm (theo NCC đang lọc, giá 90 ngày)</td></tr>'}${list.map((x) => { const dd = x.price - me.price; const cheap = dd < 0; return `<tr style="border-top:1px solid #f1f5f9;${cheap ? 'background:#f0fdf4' : ''}"><td style="padding:4px 6px"><b style="color:#2563eb">${x.id}</b> | ${esc(x.name)}</td><td title="${esc(x.prov?.name || '')}" style="font-weight:700">${esc(x.prov?.code || x.prov?.name || '')}</td><td style="text-align:right;font-weight:800;color:${cheap ? '#15803d' : '#dc2626'}">${x.price.toLocaleString('vi-VN')}</td><td style="text-align:right;color:${cheap ? '#15803d' : '#dc2626'}">${dd === 0 ? 'bằng giá' : `${cheap ? 'rẻ hơn ' : 'đắt hơn '}${Math.abs(dd).toLocaleString('vi-VN')}đ (${Math.round((Math.abs(dd) / me.price) * 100)}%)`}</td><td style="padding-left:6px;color:#64748b">${day(x.updatedAt)}</td><td style="padding-left:6px"><button data-apply="${x.id}" title="Đổi giấy của dòng này sang ID ${x.id} (như Đổi ID hàng loạt nhưng chỉ dòng này)" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;font-size:11.5px;font-weight:800;color:#fff;background:${cheap ? 'linear-gradient(90deg,#16a34a,#15803d)' : '#64748b'};white-space:nowrap">Áp dụng</button></td></tr>`; }).join('')}</tbody></table><div data-st style="margin-top:6px;font-size:12px;font-weight:700"></div>
-<div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>`;
+<div style="margin-top:6px;font-size:11px;color:#94a3b8">${gtQ.provs.size ? `Chỉ NCC đang lọc: ${esc([...gtQ.provs].join(', '))} · ` : ''}giá cập nhật trong ${GT_FRESH_D} ngày · đổi giấy: bấm ID giấy ở cột Kết cấu giấy</div>${(() => {
+      const best = state === 'q' ? [...info.list].sort((a, b) => a.price - b.price)[0] : null;
+      if (!best) return '';
+      const txt = `Đơn hàng này chuyển ID | ${me.id} thành ID | ${best.id} nhé em`;
+      return `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:220px;font-size:12.5px;color:#1e3a8a">💬 <b data-cmt-txt>${esc(txt)}</b></span><button data-cmt="${esc(txt)}" title="Trả lời vào luồng bình luận đang có của báo giá này; chưa có bình luận nào thì đăng bình luận mới" style="cursor:pointer;border:0;border-radius:8px;padding:5px 12px;font:inherit;font-size:12.5px;font-weight:800;color:#fff;background:linear-gradient(90deg,#2563eb,#1d4ed8)">💬 Bình luận</button></div>`;
+    })()}`;
     document.body.append(pop);
     // luôn bám ngay dưới icon (trang cuộn / đổi cỡ → đặt lại); không đủ chỗ phía dưới thì lật lên trên icon
     const iid = icon.dataset.id;
@@ -15842,6 +15847,28 @@ Quy tắc:
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
     pop.querySelector('[data-x]').onclick = () => pop.remove();
+    // 💬 Bình luận: trả lời vào luồng của đúng báo giá này (không tạo luồng mới); chưa có bình luận nào thì bình luận mới
+    pop.querySelector('[data-cmt]')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const b = e.currentTarget;
+      const st = pop.querySelector('[data-st]');
+      const qid = Number(location.pathname.match(/\/(?:bao-gia|co-hoi)\/update\/(\d+)/)?.[1]);
+      const code = renderCtx.quotes?.[qid]?.code || (document.title.match(/BG\d+/) || [])[0] || '';
+      b.disabled = true;
+      b.textContent = '⏳ Đang gửi…';
+      try {
+        await sendComment(b.dataset.cmt, code);
+        b.textContent = '✅ Đã bình luận';
+        st.style.color = '#15803d';
+        st.textContent = `✅ Đã bình luận vào ${code || 'báo giá'}: “${b.dataset.cmt}”`;
+      } catch (err) {
+        b.disabled = false;
+        b.textContent = '↻ Thử lại';
+        st.style.color = '#dc2626';
+        st.textContent = `⚠️ ${err.message || err}`;
+      }
+    });
     // Áp dụng: đổi giấy của đúng dòng này sang ID đã chọn (bấm ID giấy → Danh sách giấy tấm → nhập ID → chọn → Chọn). Không bấm Cập nhật báo giá.
     const cell = icon.closest('td');
     pop.querySelectorAll('[data-apply]').forEach((b) =>
@@ -16799,9 +16826,12 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
     if (!cols.includes(r.me)) cols = [...cols.slice(0, 4), r.me];
     const min = Math.min(...cols.map((x) => x.price));
     const th = 'padding:6px 5px;border:1px solid #cbd5e1;background:#1e3a8a;color:#fff;font-weight:800;text-align:center;vertical-align:middle;font-size:11px';
-    const td = 'padding:6px 5px;border:1px solid #cbd5e1;vertical-align:middle';
-    const head = `<tr><th style="${th}">Mã ĐH</th><th style="${th}">Mã TP</th><th style="${th}">Tên sản phẩm</th><th style="${th}">Số lượng</th>${cols.map((x) => `<th style="${th};${x === r.me ? 'background:#7c2d12' : ''}"><div>${esc(x.prov?.name || x.prov?.code || '')}${x === r.me ? ' <span style="color:#fde68a">(đang chọn)</span>' : ''}</div><div style="font-weight:600;font-size:9.5px;opacity:.9;word-break:break-all">ID ${x.id} | ${esc(x.name)}</div></th>`).join('')}</tr>`;
-    const cell = (x) => { const cheap = x.price === min; return `<td style="${td};text-align:right;font-weight:800;${cheap ? 'background:#dcfce7;color:#15803d' : 'background:#fee2e2;color:#dc2626'};white-space:nowrap">${vnd(x.price)}<div style="font-size:9.5px;font-weight:600">đ/m2</div></td>`; };
+    const td = ov ? 'padding:6px 6px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:11.5px' : 'padding:6px 5px;border:1px solid #cbd5e1;vertical-align:middle';
+    const th2 = ov ? 'padding:6px 6px;background:#f8fafc;color:#475569;font-weight:800;text-align:center;vertical-align:middle;font-size:10.5px;border-bottom:1px solid #e2e8f0' : th;
+    const head = ov
+      ? `<tr><th style="${th2};text-align:left">Mã ĐH</th><th style="${th2};text-align:left">Mã TP</th><th style="${th2};text-align:left">Tên sản phẩm</th><th style="${th2}">Số lượng</th>${cols.map((x) => `<th style="${th2};${x === r.me ? 'background:#dbeafe;color:#1d4ed8' : x.price === min ? 'background:#dcfce7;color:#15803d' : ''}"><div>${esc(x.prov?.code || x.prov?.name || '')}${x === r.me ? ' · đang dùng' : x.price === min ? ' · rẻ nhất' : ''}</div><div style="font-weight:600;font-size:9px;opacity:.85;word-break:break-all">ID ${x.id} | ${esc(x.name)}</div></th>`).join('')}</tr>`
+      : `<tr><th style="${th}">Mã ĐH</th><th style="${th}">Mã TP</th><th style="${th}">Tên sản phẩm</th><th style="${th}">Số lượng</th>${cols.map((x) => `<th style="${th};${x === r.me ? 'background:#7c2d12' : ''}"><div>${esc(x.prov?.name || x.prov?.code || '')}${x === r.me ? ' <span style="color:#fde68a">(đang chọn)</span>' : ''}</div><div style="font-weight:600;font-size:9.5px;opacity:.9;word-break:break-all">ID ${x.id} | ${esc(x.name)}</div></th>`).join('')}</tr>`;
+    const cell = (x) => { const cheap = x.price === min; return `<td style="${td};text-align:right;font-weight:800;${ov ? (cheap ? 'background:#f0fdf4;color:#15803d' : x === r.me ? 'background:#eff6ff;color:#b91c1c' : 'color:#dc2626') : cheap ? 'background:#dcfce7;color:#15803d' : 'background:#fee2e2;color:#dc2626'};white-space:nowrap">${vnd(x.price)}<div style="font-size:9.5px;font-weight:600">đ/m2</div></td>`; };
     const body = ls.map((l, i) => `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'}"><td style="${td};font-weight:800">${esc(l.order)}</td><td style="${td}">${esc(l.tp || '')}</td><td style="${td}">${esc(l.prod || '')}</td><td style="${td};text-align:right">${vnd(l.qty)}</td>${cols.map(cell).join('')}</tr>`).join('');
     const box = document.createElement('div');
     const base = 'box-sizing:border-box;background:#fff;padding:16px 18px;font:14px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;';
@@ -16819,8 +16849,8 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
   <div style="text-align:right;font-size:11px;color:#475569;white-space:nowrap">Ngày: <b>${now.toLocaleDateString('vi-VN')}</b><br>Giờ: <b>${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b></div></div>
 <div style="text-align:center;margin:18px 0 6px;font-size:20px;font-weight:900;color:#b91c1c;letter-spacing:.5px">PHIẾU ĐIỀU HƯỚNG GIẤY TẤM FLEXO</div>
 <div style="text-align:center;font-size:11.5px;color:#475569;margin-bottom:12px">Nhóm <b>${esc(r.code)}</b> · sóng <b>${esc(r.w)}</b> · Đang chọn <b>ID ${r.me.id}</b> | ${esc(r.me.name)} · ${vnd(r.myP)} đ/m2 → rẻ nhất <b style="color:#15803d">ID ${r.min.id}</b> | ${esc(r.min.name)} · <b style="color:#15803d">${vnd(r.min.price)} đ/m2</b> (${esc(prov)})</div>
-${ov?.top || ''}<table style="border-collapse:collapse;font-size:12px;width:100%;table-layout:auto">${head}${body}</table>
-<div style="margin-top:12px;padding:8px 12px;border-left:4px solid #b91c1c;background:#fef2f2;font-size:12.5px;font-weight:700;color:#7f1d1d">Đề nghị: đổi qua nhà cung cấp ${esc(prov)} (ID ${r.min.id} | ${esc(r.min.name)}) hoặc trả về bằng giá tiền.</div>
+${ov?.top || ''}${ov ? `<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:#fff"><div style="padding:8px 10px 4px;font-size:12px;font-weight:800;color:#334155">📋 Bảng giá các NCC cùng nhóm cho đơn hàng</div><table style="border-collapse:collapse;width:100%;table-layout:auto">${head}${body}</table></div>` : `<table style="border-collapse:collapse;font-size:12px;width:100%;table-layout:auto">${head}${body}</table>`}
+<div style="margin-top:12px;padding:8px 12px;${ov ? 'border:1px solid #fecaca;border-radius:10px' : 'border-left:4px solid #b91c1c'};background:#fef2f2;font-size:12.5px;font-weight:700;color:#7f1d1d">Đề nghị: đổi qua nhà cung cấp ${esc(prov)} (ID ${r.min.id} | ${esc(r.min.name)}) hoặc trả về bằng giá tiền.</div>
 ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">🟩 rẻ nhất · 🟥 đắt hơn · so trong cùng nhóm mã lớp + sóng, giá giấy cập nhật trong 90 ngày</div>
 <div style="display:flex;justify-content:flex-end;margin-top:24px"><div style="text-align:center;min-width:200px;font-size:12px;color:#64748b">Người lập<div style="height:56px"></div><b style="color:#0f172a;font-size:13px">${esc(meName || '')}</b></div></div>`;
     document.body.append(box);
