@@ -17367,7 +17367,10 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
     }
     const loadBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#475569">🕒 Đọc đơn lần cuối: <b>${lastAt ? new Date(lastAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'chưa'}</b>${stale ? ' <span style="color:#d97706">(quá 15 phút)</span>' : ''}<button data-gt="oload" style="cursor:pointer;border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;font-weight:700;border:1px solid ${stale ? '#f59e0b' : '#cbd5e1'};background:${stale ? '#fffbeb' : '#fff'};color:${stale ? '#b45309' : '#334155'}">${gtOrdBusy ? '⏳ Đang tải danh sách đơn…' : '⟳ Tải danh sách đơn mới'}</button></div>`;
     if (!lines.length) return `${loadBar}<div style="padding:16px;color:#94a3b8">${gtOrdBusy ? '⏳ Đang đọc đơn mới…' : `Chưa có dữ liệu đơn mới – bấm tải lại ở trên hoặc mở ${GT_ORD_SRC} để extension đọc.`}</div>`;
-    const byName = new Map(all.map((x) => [x.name, x]));
+    // khớp giấy của đơn với kho: bỏ khoảng trắng thừa / hoa-thường, khớp cả theo tên lẫn mã giấy (cartonStructCode)
+    const gtNorm = (v) => String(v || '').replace(/\s+/g, '').toUpperCase();
+    const byName = new Map();
+    for (const x of all) for (const k of [x.name, x.code]) { const n = gtNorm(k); if (n && (!byName.has(n) || (byName.get(n).visible === false && x.visible !== false))) byName.set(n, x); }
     // chỉ so với NCC đang chọn ở bộ lọc NCC (bỏ trống = mọi NCC) – NCC không lọc thì không đưa vào so / bảng gửi Zalo
     const fresh = all.filter((x) => x.price >= 500 && x.visible !== false && now / 1000 - (x.updatedAt || 0) < GT_FRESH_D * 86400 && (!gtUi.provs.size || gtUi.provs.has(x.prov?.code || '')));
     const gByName = new Map(gs.map((g) => [String(g.name).trim(), g]));
@@ -17381,7 +17384,7 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
       use.set(l.paper, u);
     }
     const rows = [...use.values()].map((u) => {
-      const me = byName.get(u.paper);
+      const me = byName.get(gtNorm(u.paper));
       const code = gtCode(u.paper);
       const w = gtWave(u.paper);
       const peers = code ? fresh.filter((x) => gtCode(x.name) === code && gtWave(x.name) === w) : [];
@@ -17395,6 +17398,11 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
     }).sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money || (b.diff ?? -1) - (a.diff ?? -1) : 0) || (b.newest - a.newest) || String(b.newestCode).localeCompare(String(a.newestCode)));
     const sumMoney = rows.reduce((t, r) => t + r.money, 0);
     gtUi.oRows = rows;
+    // giấy của đơn chưa có trong kho (thường là giấy mới tạo sau lần đồng bộ) → tự đồng bộ lại kho 1 lần (cách nhau ≥ 5 phút), xong vẽ lại
+    if (rows.some((r) => !r.me) && !gtBusy && now - (gtUi.missSyncAt || 0) > 5 * 60e3) {
+      gtUi.missSyncAt = now;
+      gtScan(true).catch(() => {});
+    }
     // mỗi đơn 1 dòng (không gom theo giấy): đơn mới nhất trước, hoặc tiền đắt hơn của đơn đó
     const orows = rows.flatMap((r) => r.ol.map((l) => { const m2 = r.oM2.get(l.order) || 0; return { r, l, m2, money: r.diff > 0 && m2 ? Math.round(r.diff * m2) : 0 }; }))
       .sort((a, b) => (gtUi.oSort === 'money' ? b.money - a.money : 0) || (b.l.at || 0) - (a.l.at || 0) || String(b.l.order).localeCompare(String(a.l.order)));
@@ -17427,7 +17435,7 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
     const peerTbl = () => '';
     const st = (r) => {
       if (!r.code) return '<span style="color:#94a3b8">không tính được mã lớp</span>';
-      if (!r.me) return '<span style="color:#d97706">giấy không còn trong kho (đã đổi tên / ẩn)</span>';
+      if (!r.me) return `<span style="color:#d97706">${gtBusy ? '⏳ giấy chưa có trong kho – đang đồng bộ lại kho giấy tấm…' : 'giấy chưa có trong kho extension (giấy mới tạo / đã đổi tên / ẩn) – bấm đồng bộ lại kho'}</span>`;
       if (!r.min && !gtSolo(r)) return '<span style="color:#94a3b8">nhóm chưa có giá mới để so</span>';
       if (gtSolo(r)) return `<b style="color:#d97706">⚠️ Chỉ có 1 giấy cùng nhóm</b> <span style="color:#64748b">– chưa có NCC khác để so, cần hỏi thêm NCC</span>`;
       if (r.diff <= 0) return `<b style="color:#16a34a">✅ Rẻ nhất</b> ${peerBtn(r)}${peerTbl(r)}`;
