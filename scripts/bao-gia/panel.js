@@ -16474,11 +16474,52 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
   <div class="gp-box" style="flex:1.6"><div class="gp-bh">Giá các giấy cùng nhóm (đ/m², thấp → cao)</div>${bars || '<div class="gp-mut">Không có dữ liệu</div>'}<div class="gp-mut" style="margin-top:4px">🟦 đang dùng · 🟩 rẻ hơn · 🟥 đắt hơn · NCC đang lọc, giá ≤ ${GT_FRESH_D} ngày</div></div>
 </div>
 ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – tiết kiệm cho đơn này</div><table class="gp-tb"><thead><tr><th>Giấy</th><th>NCC</th><th style="text-align:right">Đơn giá</th><th style="text-align:right">Rẻ hơn</th><th style="text-align:right">Tiết kiệm</th><th>Cập nhật</th></tr></thead><tbody>${scen}</tbody></table></div>` : ''}
+<div class="gp-zrow">
+  <div class="gp-box gp-a4w"><div class="gp-bh">🖼 Phiếu điều hướng giấy tấm (A4 đứng – ảnh gửi Zalo)</div><div class="gp-a4" data-gp="a4" title="Bấm để phóng to / thu nhỏ"><span class="gp-mut">⏳ Đang tạo phiếu…</span></div></div>
+  <div class="gp-box gp-zb"><div class="gp-bh">📨 Gửi nhóm Zalo “${esc(GT_ZGROUP)}”</div><div data-gp-z></div>
+    <div class="gp-mut" style="margin-top:6px">Gửi ảnh phiếu bên trái + câu đề nghị “đổi qua ${esc(min.prov?.name || min.prov?.code || '')} (ID ${min.id}) hoặc trả về bằng giá tiền”. Cần mở Zalo Web ở 1 tab để extension gửi.</div></div>
+</div>
 <div class="gp-box"><div class="gp-bh">✅ Cần làm để tối ưu giá thành</div><ol class="gp-todo">${todo.map((t) => `<li>${t[1]}</li>`).join('')}</ol>
-<div class="gp-acts">${Object.entries(GT_DONE_K).map(([k, t]) => `<button data-gp="done" data-v="${k}">${t}</button>`).join('')}<button data-gp="tab" class="tab">📄 Mở tab Giấy tấm</button></div></div>
+<div class="gp-acts">${Object.entries(GT_DONE_K).map(([k, t]) => `<button data-gp="done" data-v="${k}">${t}</button>`).join('')}<button data-gp="zgo" class="zgo">📨 Gửi Zalo</button><button data-gp="tab" class="tab">📄 Mở tab Giấy tấm</button></div></div>
 </div>`;
     document.body.append(pop);
+    // dòng giấy theo dạng bảng Đơn mới (để dùng chung ảnh phiếu + gửi Zalo)
+    const rr = { me, min, peerList: x.peers || [], peers: (x.peers || []).length, code: x.code, w: x.w, myP: me.price, diff: me.price - min.price, ol: [l] };
+    const zKey = gtZKey(l.order, me.id);
+    const zBox = pop.querySelector('[data-gp-z]');
+    const zDraw = (v) => {
+      const t = (at) => new Date(at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+      const st = !v ? '<span class="gp-zs none">Chưa gửi</span>'
+        : v.state === 'sent' ? `<span class="gp-zs ok">✅ Đã gửi · ${t(v.at)}${v.by ? ` · ${esc(v.by)}` : ''}</span>`
+        : v.state === 'queue' ? `<span class="gp-zs wait">⏳ Đang gửi… · ${t(v.at)}</span>`
+        : `<span class="gp-zs err" title="${esc(v.error || '')}">⚠️ Chưa gửi được: ${esc((v.error || 'lỗi').slice(0, 70))}</span>`;
+      const btn = !v ? '<button data-gp="zsend" class="gp-zbtn">📨 Gửi Zalo</button>'
+        : v.state === 'queue' ? '<button class="gp-zbtn" disabled>⏳ Đang gửi…</button>'
+        : v.state === 'sent' ? '<button data-gp="zsend" data-again="1" class="gp-zbtn again">↻ Gửi lại</button>'
+        : '<button data-gp="zsend" class="gp-zbtn retry">↻ Gửi lại (lần trước lỗi)</button>';
+      zBox.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${st}${btn}</div>`;
+    };
+    zDraw(zv);
+    let zPoll = 0;
+    const zWatch = () => {
+      clearInterval(zPoll);
+      zPoll = setInterval(async () => {
+        if (!pop.isConnected) return clearInterval(zPoll);
+        const v = ((await kvGet(GT_ZSENT).catch(() => ({}))) || {})[zKey];
+        zDraw(v);
+        if (v && v.state !== 'queue') clearInterval(zPoll);
+      }, 2000);
+    };
+    if (zv?.state === 'queue') zWatch();
+    gtTablePng(rr, [l]).then((src) => {
+      const a4 = pop.querySelector('.gp-a4');
+      if (a4) a4.innerHTML = `<img src="${src}" alt="Phiếu điều hướng giấy tấm">`;
+    }).catch((e) => {
+      const a4 = pop.querySelector('.gp-a4');
+      if (a4) a4.innerHTML = `<span class="gp-mut">⚠️ Không tạo được phiếu: ${esc(e.message || String(e))}</span>`;
+    });
     const close = () => {
+      clearInterval(zPoll);
       pop.remove();
       document.removeEventListener('keydown', onKey, true);
     };
@@ -16489,6 +16530,31 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       const b = e.target.closest('[data-gp]');
       if (!b) return;
       if (b.dataset.gp === 'x') return close();
+      if (b.dataset.gp === 'zgo') {
+        const zb = pop.querySelector('.gp-zb');
+        zb?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const sb = zb?.querySelector('[data-gp="zsend"]');
+        if (sb) sb.click();
+        return;
+      }
+      if (b.dataset.gp === 'a4') {
+        b.classList.toggle('big');
+        return;
+      }
+      if (b.dataset.gp === 'zsend') {
+        b.disabled = true;
+        b.textContent = '⏳ Đang xếp tin…';
+        try {
+          await gtZaloSend(me.id, b.dataset.again === '1', l.order, rr);
+          zDraw({ state: 'queue', at: Date.now() });
+          zWatch();
+        } catch (err) {
+          zBox.insertAdjacentHTML('beforeend', `<div class="gp-zs err" style="margin-top:4px">⚠️ ${esc(err.message || String(err))}</div>`);
+          b.disabled = false;
+          b.textContent = '↻ Thử lại';
+        }
+        return;
+      }
       if (b.dataset.gp === 'swap') {
         // mở báo giá ở tab mới; trang báo giá tự mở popup giấy cùng nhóm của dòng đang dùng giấy cũ và làm nổi bật giấy cần chuyển
         lsSet('dgGtSwap', JSON.stringify({ qid: qIds[l.quote], quote: l.quote, from: String(me.id), to: String(min.id), at: Date.now() }));
@@ -16510,12 +16576,13 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
         if (lsGet('dgTab') === 'gt') gtFill(true);
       }
     });
-    if (!document.getElementById('dg-ga-pop-css4')) {
+    if (!document.getElementById('dg-ga-pop-css5')) {
+      document.getElementById('dg-ga-pop-css4')?.remove();
       document.getElementById('dg-ga-pop-css3')?.remove();
       document.getElementById('dg-ga-pop-css')?.remove();
       document.getElementById('dg-ga-pop-css2')?.remove();
       const st = document.createElement('style');
-      st.id = 'dg-ga-pop-css4';
+      st.id = 'dg-ga-pop-css5';
       st.textContent = `#dg-ga-pop{position:fixed;inset:0;z-index:2147483100;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a}
 #dg-ga-pop .gp-card{width:min(860px,100%);background:#f8fafc;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);padding:16px;animation:gaIn .2s ease-out}
 #dg-ga-pop .gp-h{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}#dg-ga-pop .gp-h>div{flex:1}#dg-ga-pop .gp-t{font-size:16px;font-weight:900}#dg-ga-pop .gp-s{color:#475569;font-size:12.5px;margin-top:2px}
@@ -16547,8 +16614,17 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
 @keyframes gpBlink{0%,100%{background:transparent}50%{background:#dbeafe}}@keyframes gpBlinkBar{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(37,99,235,0)}50%{opacity:.45;box-shadow:0 0 0 4px rgba(37,99,235,.25)}}
 @media (prefers-reduced-motion:reduce){#dg-ga-pop .gp-bar.mine,#dg-ga-pop .gp-bar.mine .gp-bt>span:first-child{animation:none}}#dg-ga-pop .gp-bv{width:58px;text-align:right;font-size:12.5px}
 #dg-ga-pop .gp-tb{width:100%;border-collapse:collapse;font-size:12.5px}#dg-ga-pop .gp-tb th{text-align:left;color:#64748b;font-size:11.5px;padding:3px 6px;border-bottom:1px solid #e2e8f0}#dg-ga-pop .gp-tb td{padding:4px 6px;border-bottom:1px solid #f1f5f9}
+#dg-ga-pop .gp-zrow{display:flex;gap:8px;margin-bottom:8px}#dg-ga-pop .gp-zrow .gp-box{margin-bottom:0}@media (max-width:700px){#dg-ga-pop .gp-zrow{flex-direction:column}}
+#dg-ga-pop .gp-a4w{flex:1.25}#dg-ga-pop .gp-a4{cursor:zoom-in;aspect-ratio:794/1123;max-height:430px;margin:0 auto;background:#fff;border:1px solid #cbd5e1;box-shadow:0 6px 18px rgba(15,23,42,.18);display:flex;align-items:center;justify-content:center;overflow:hidden}
+#dg-ga-pop .gp-a4 img{width:100%;height:100%;object-fit:contain;object-position:top;display:block}
+#dg-ga-pop .gp-a4.big{position:fixed;top:3vh;left:50%;transform:translateX(-50%);width:auto;max-height:94vh;height:94vh;z-index:3;cursor:zoom-out;box-shadow:0 20px 60px rgba(15,23,42,.5)}
+#dg-ga-pop .gp-zb{flex:1;display:flex;flex-direction:column}
+#dg-ga-pop .gp-zs{font-size:12.5px;font-weight:800;border-radius:8px;padding:3px 9px}#dg-ga-pop .gp-zs.none{background:#f1f5f9;color:#475569}#dg-ga-pop .gp-zs.ok{background:#dcfce7;color:#166534}#dg-ga-pop .gp-zs.wait{background:#fef3c7;color:#92400e}#dg-ga-pop .gp-zs.err{background:#fee2e2;color:#b91c1c}
+#dg-ga-pop .gp-zbtn{cursor:pointer;border:0;border-radius:9px;padding:8px 14px;font:inherit;font-size:13.5px;font-weight:900;color:#fff;background:linear-gradient(90deg,#0068ff,#2563eb);box-shadow:0 4px 12px rgba(37,99,235,.35)}
+#dg-ga-pop .gp-zbtn.again{background:#fff;color:#1d4ed8;border:1px solid #93c5fd;box-shadow:none}#dg-ga-pop .gp-zbtn.retry{background:linear-gradient(90deg,#f97316,#dc2626)}#dg-ga-pop .gp-zbtn:disabled{opacity:.6;cursor:default}
 #dg-ga-pop .gp-todo{margin:0;padding-left:20px}#dg-ga-pop .gp-todo li{margin:4px 0}
 #dg-ga-pop .gp-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}#dg-ga-pop .gp-acts button{cursor:pointer;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:8px;padding:5px 10px;font:inherit;font-size:12px;font-weight:800}#dg-ga-pop .gp-acts button:hover{background:#dcfce7}
+#dg-ga-pop .gp-acts .zgo{border-color:#2563eb;background:linear-gradient(90deg,#0068ff,#2563eb);color:#fff}#dg-ga-pop .gp-acts .zgo:hover{background:#1d4ed8}
 #dg-ga-pop .gp-acts .tab{border-color:#dc2626;background:#dc2626;color:#fff;margin-left:auto}`;
       document.head.append(st);
     }
@@ -16751,8 +16827,8 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
     const html = `<div>Đơn hàng <b>${esc(l.order)}</b>${l.tp ? ` mã TP <b>${esc(l.tp)}</b>` : ''} hiện đang chọn giấy tấm ID <b>${r.me.id}</b> | ${esc(r.me.name)} đơn giá là <b>${vnd(r.myP)} đ/m2</b> – hiện <b><span style="color:#d97706"><font color="#d97706">chỉ có 1 giấy cùng ${esc(g)}</font></span></b>, chưa có nhà cung cấp nào khác để so sánh giá.</div><div><br></div><div><b>${esc(tail)}</b></div>`;
     return { text, html };
   }
-  async function gtZaloSend(pid, again = false, order = '') {
-    const r = (gtUi.oRows || []).find((x) => String(x.me?.id) === String(pid));
+  async function gtZaloSend(pid, again = false, order = '', rr = null) {
+    const r = rr || (gtUi.oRows || []).find((x) => String(x.me?.id) === String(pid));
     const solo = gtSolo(r);
     if (!r || (!solo && (!(r.diff > 0) || !r.min))) throw new Error('Giấy này không còn chênh giá.');
     const sent = await kvGet(GT_ZSENT);
@@ -16792,6 +16868,7 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       gtUi.msg = '⚠️ Tab Zalo không nhận việc sau 5 phút (mở Zalo Web) – bấm gửi lại.';
       gtFill();
     })();
+    return jobId;
   }
   // ⟳ Tải danh sách đơn (tab Mới) trong khung ẩn, chỉ trang 1 (100 đơn mới nhất) → hook đọc giấy từng dòng đơn (orderPapers). Chỉ đọc.
   // Đại Dương không có Danh sách đơn Misa → đọc bảng /don-hang (trang 1 = 100 đơn mới nhất): mỗi dòng sản phẩm của đơn "Mới"
