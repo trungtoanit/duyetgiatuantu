@@ -15777,6 +15777,35 @@ Quy tắc:
     const list = peers.filter((x) => x.price < me.price);
     return { me, code, w, list, peers, state: list.length ? 'q' : peers.length ? 'ok' : 'solo' };
   }
+  // Lệnh "🔁 Mở báo giá để đổi giấy" từ popup Đánh giá tổng quan (localStorage dgGtSwap, 15 phút)
+  function gtSwapAuto(ic, id) {
+    let sw = null;
+    try {
+      sw = JSON.parse(lsGet('dgGtSwap') || 'null');
+    } catch {}
+    if (!sw || Date.now() - sw.at > 15 * 60e3 || String(sw.from) !== String(id)) return;
+    if (Number(location.pathname.match(/\/(?:bao-gia|co-hoi)\/update\/(\d+)/)?.[1]) !== Number(sw.qid)) return;
+    lsSet('dgGtSwap', '');
+    setTimeout(() => {
+      ic.scrollIntoView({ block: 'center' });
+      const cur = gtQCheaper(id);
+      if (!cur) return;
+      gtQPopup(ic, cur);
+      const pop = document.getElementById('dg-gtq-pop');
+      const btn = pop?.querySelector(`[data-apply="${sw.to}"]`);
+      const tr = btn?.closest('tr');
+      if (!tr) return;
+      if (!document.getElementById('dg-gtsw-css')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-gtsw-css">@keyframes dgSwRow{0%,100%{background:#dcfce7}50%{background:#86efac}}@keyframes dgSwBtn{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(22,163,74,.6)}50%{transform:scale(1.12);box-shadow:0 0 0 6px rgba(22,163,74,0)}}.dg-sw-row{animation:dgSwRow 1s ease-in-out infinite;outline:2px solid #16a34a}.dg-sw-btn{animation:dgSwBtn 1s ease-in-out infinite}</style>');
+      tr.classList.add('dg-sw-row');
+      btn.classList.add('dg-sw-btn');
+      btn.textContent = `👉 Áp dụng ${sw.to}`;
+      const tip = document.createElement('div');
+      tip.setAttribute('style', 'margin:0 0 6px;padding:6px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fb923c;color:#9a3412;font-weight:800;font-size:12.5px');
+      tip.textContent = `🔁 Nên chuyển giấy ${sw.from} → ${sw.to}: bấm “👉 Áp dụng ${sw.to}” ở dòng xanh, kiểm tra giá rồi bấm Cập nhật báo giá.`;
+      pop.querySelector('table')?.before(tip);
+      tr.scrollIntoView({ block: 'nearest' });
+    }, 600);
+  }
   function gtQPopup(icon, info) {
     document.getElementById('dg-gtq-pop')?.remove();
     const pop = document.createElement('div');
@@ -15865,6 +15894,7 @@ Quy tắc:
       const link = pidLink(cell);
       if (link) link.after(ic); // ngay sau số ID giấy
       else cell.append(ic);
+      gtSwapAuto(ic, id);
     }
   }
   if (IS_TOP) setInterval(() => gtQMount().catch(() => {}), 2000);
@@ -16405,6 +16435,15 @@ ${big ? `<svg viewBox="0 0 120 40" width="${px}" style="position:absolute;left:0
     pop.id = 'dg-ga-pop';
     pop.innerHTML = `<div class="gp-card" role="dialog">
 <div class="gp-h"><div><div class="gp-t">📊 Đánh giá tổng quan · <b style="color:#1d4ed8">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds)}` : ''}</div><div class="gp-s">${l.ccode ? `<span class="gp-tag">${esc(l.ccode)}</span>` : ''}${esc(l.cust || '')}${l.tp ? ` · ${esc(l.tp)}` : ''} · ${esc((l.prod || '').slice(0, 70))}${l.qty ? ` · SL ${vn(l.qty)}` : ''}</div></div><button class="gp-x" data-gp="x" title="Đóng (Esc)">✕</button></div>
+<div class="gp-sw">
+  <div class="gp-swt">🔁 NÊN CHUYỂN GIẤY TẤM</div>
+  <div class="gp-swr">
+    <div class="gp-sc from"><span>Đang dùng</span><b>${me.id}</b><i>${esc(me.name)}</i><em title="${esc(me.prov?.name || '')}">${esc(me.prov?.code || me.prov?.name || '')} · <s>${vn(me.price)}đ/m²</s></em></div>
+    <div class="gp-arr"><span>➜</span><small>rẻ hơn ${vn(me.price - min.price)}đ/m²</small></div>
+    <div class="gp-sc to"><span>Chuyển sang</span><b>${min.id}</b><i>${esc(min.name)}</i><em title="${esc(min.prov?.name || '')}">${esc(min.prov?.code || min.prov?.name || '')} · ${vn(min.price)}đ/m²</em></div>
+    <div class="gp-sv"><span>Tiết kiệm</span><b>${po ? '' : '≈ '}${vn(saveMax)}đ</b>${qIds[l.quote] ? `<button data-gp="swap">🔁 Mở ${esc(l.quote)} để đổi ${me.id} → ${min.id}</button>` : ''}</div>
+  </div>
+</div>
 <div class="gp-kpis">
   <div class="gp-k"><span>Tổng PO hiện tại</span><b>${total ? `${vn(total)}đ` : '–'}</b><i>giấy ${me.id} · ${vn(me.price)}đ/m²</i></div>
   <div class="gp-k"><span>Nếu đổi giấy rẻ nhất</span><b style="color:#15803d">${po ? `${vn(po.new)}đ` : '–'}</b><i>giấy ${min.id} · ${vn(min.price)}đ/m²</i></div>
@@ -16431,6 +16470,12 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       const b = e.target.closest('[data-gp]');
       if (!b) return;
       if (b.dataset.gp === 'x') return close();
+      if (b.dataset.gp === 'swap') {
+        // mở báo giá ở tab mới; trang báo giá tự mở popup giấy cùng nhóm của dòng đang dùng giấy cũ và làm nổi bật giấy cần chuyển
+        lsSet('dgGtSwap', JSON.stringify({ qid: qIds[l.quote], quote: l.quote, from: String(me.id), to: String(min.id), at: Date.now() }));
+        window.open(`/bao-gia/update/${qIds[l.quote]}`, '_blank', 'noopener');
+        return;
+      }
       if (b.dataset.gp === 'tab') {
         close();
         document.querySelector('#dg-gt-angry [data-ga="go"]')?.click();
@@ -16446,16 +16491,31 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
         if (lsGet('dgTab') === 'gt') gtFill(true);
       }
     });
-    if (!document.getElementById('dg-ga-pop-css3')) {
+    if (!document.getElementById('dg-ga-pop-css4')) {
+      document.getElementById('dg-ga-pop-css3')?.remove();
       document.getElementById('dg-ga-pop-css')?.remove();
       document.getElementById('dg-ga-pop-css2')?.remove();
       const st = document.createElement('style');
-      st.id = 'dg-ga-pop-css3';
+      st.id = 'dg-ga-pop-css4';
       st.textContent = `#dg-ga-pop{position:fixed;inset:0;z-index:2147483100;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a}
 #dg-ga-pop .gp-card{width:min(860px,100%);background:#f8fafc;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.35);padding:16px;animation:gaIn .2s ease-out}
 #dg-ga-pop .gp-h{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}#dg-ga-pop .gp-h>div{flex:1}#dg-ga-pop .gp-t{font-size:16px;font-weight:900}#dg-ga-pop .gp-s{color:#475569;font-size:12.5px;margin-top:2px}
 #dg-ga-pop .gp-tag{display:inline-block;margin-right:5px;padding:0 6px;border-radius:5px;background:#ecfeff;border:1px solid #67e8f9;color:#0e7490;font-size:11px;font-weight:800}
 #dg-ga-pop .gp-x{border:0;background:#e2e8f0;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;color:#334155}
+#dg-ga-pop .gp-sw{background:linear-gradient(135deg,#fff7ed,#ecfdf5);border:2px solid #fb923c;border-radius:14px;padding:10px 12px;margin-bottom:8px;box-shadow:0 0 0 0 rgba(249,115,22,.5);animation:gpSwGlow 1.8s ease-out infinite}
+@keyframes gpSwGlow{0%{box-shadow:0 0 0 0 rgba(249,115,22,.45)}100%{box-shadow:0 0 0 12px rgba(249,115,22,0)}}
+#dg-ga-pop .gp-swt{font-weight:900;font-size:12px;letter-spacing:.06em;color:#c2410c;margin-bottom:6px}
+#dg-ga-pop .gp-swr{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}
+#dg-ga-pop .gp-sc{flex:1;min-width:170px;border-radius:12px;padding:8px 10px;background:#fff;display:flex;flex-direction:column}
+#dg-ga-pop .gp-sc span{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}#dg-ga-pop .gp-sc b{font-size:26px;font-weight:900;line-height:1.1}#dg-ga-pop .gp-sc i{font-style:normal;font-size:12px;color:#334155;word-break:break-all}#dg-ga-pop .gp-sc em{font-style:normal;font-size:12px;font-weight:700;margin-top:2px}
+#dg-ga-pop .gp-sc.from{border:2px solid #fca5a5}#dg-ga-pop .gp-sc.from span,#dg-ga-pop .gp-sc.from b,#dg-ga-pop .gp-sc.from em{color:#b91c1c}#dg-ga-pop .gp-sc.from b{text-decoration:line-through;text-decoration-thickness:3px;text-decoration-color:rgba(185,28,28,.55)}
+#dg-ga-pop .gp-sc.to{border:2px solid #22c55e;background:#f0fdf4;animation:gpTo 1.2s ease-in-out infinite alternate}#dg-ga-pop .gp-sc.to span,#dg-ga-pop .gp-sc.to b,#dg-ga-pop .gp-sc.to em{color:#15803d}
+@keyframes gpTo{from{box-shadow:0 0 0 0 rgba(34,197,94,.0)}to{box-shadow:0 0 0 5px rgba(34,197,94,.3)}}
+#dg-ga-pop .gp-arr{display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ea580c;font-weight:800}#dg-ga-pop .gp-arr span{font-size:34px;line-height:1;animation:gpArr .9s ease-in-out infinite}#dg-ga-pop .gp-arr small{font-size:11px;white-space:nowrap}
+@keyframes gpArr{0%,100%{transform:translateX(-4px)}50%{transform:translateX(6px)}}
+#dg-ga-pop .gp-sv{min-width:170px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:6px 10px;border-radius:12px;background:#047857;color:#fff}#dg-ga-pop .gp-sv span{font-size:11px;font-weight:800;text-transform:uppercase;opacity:.85}#dg-ga-pop .gp-sv b{font-size:24px;font-weight:900}
+#dg-ga-pop .gp-sv button{cursor:pointer;border:0;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;font-weight:900;color:#065f46;background:#fff}#dg-ga-pop .gp-sv button:hover{background:#d1fae5}
+@media (prefers-reduced-motion:reduce){#dg-ga-pop .gp-sw,#dg-ga-pop .gp-sc.to,#dg-ga-pop .gp-arr span{animation:none}}
 #dg-ga-pop .gp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}@media (max-width:700px){#dg-ga-pop .gp-kpis{grid-template-columns:repeat(2,1fr)}#dg-ga-pop .gp-row{flex-direction:column}}
 #dg-ga-pop .gp-k{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:10px}#dg-ga-pop .gp-k span{display:block;font-size:11.5px;color:#64748b;font-weight:700}#dg-ga-pop .gp-k b{display:block;font-size:19px;font-weight:900;margin:2px 0}#dg-ga-pop .gp-k b small{font-size:12px;color:#64748b}#dg-ga-pop .gp-k i{font-style:normal;font-size:11px;color:#94a3b8}
 #dg-ga-pop .gp-k.save{background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-color:#6ee7b7}#dg-ga-pop .gp-k.save b{color:#047857;font-size:22px}
