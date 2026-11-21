@@ -16681,6 +16681,305 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       document.head.append(st);
     }
   }
+  // ---------- 🎞 GIF "Kế toán nổi giận" → dán vào bình luận báo giá ----------
+  // Bộ mã GIF89a tối giản (bảng màu chung 256 màu, LZW) – không cần thư viện ngoài
+  function gifLzw(px, out) {
+    const minSize = 8;
+    out.push(minSize);
+    const clear = 1 << minSize;
+    const eoi = clear + 1;
+    let size = minSize + 1;
+    let next = eoi + 1;
+    let dict = new Map();
+    const bytes = [];
+    let buf = 0;
+    let cnt = 0;
+    const emit = (c) => {
+      buf |= c << cnt;
+      cnt += size;
+      while (cnt >= 8) {
+        bytes.push(buf & 255);
+        buf >>>= 8;
+        cnt -= 8;
+      }
+    };
+    emit(clear);
+    let prefix = px[0];
+    for (let i = 1; i < px.length; i++) {
+      const k = px[i];
+      const key = prefix * 256 + k;
+      const v = dict.get(key);
+      if (v !== undefined) {
+        prefix = v;
+        continue;
+      }
+      emit(prefix);
+      if (next === 4096) {
+        emit(clear);
+        dict = new Map();
+        size = minSize + 1;
+        next = eoi + 1;
+      } else {
+        if (next >= 1 << size) size++;
+        dict.set(key, next++);
+      }
+      prefix = k;
+    }
+    emit(prefix);
+    emit(eoi);
+    if (cnt > 0) bytes.push(buf & 255);
+    for (let i = 0; i < bytes.length; i += 255) {
+      const n = Math.min(255, bytes.length - i);
+      out.push(n);
+      for (let j = 0; j < n; j++) out.push(bytes[i + j]);
+    }
+    out.push(0);
+  }
+  // frames: mảng ImageData cùng cỡ → Blob image/gif (lặp vô hạn)
+  function gifEncode(frames, delayCs = 8) {
+    const { width: w, height: h } = frames[0];
+    // bảng màu: gom màu theo ô 4 bit / kênh, lấy 256 ô nhiều điểm nhất (màu trung bình của ô)
+    const sum = new Float64Array(4096 * 4);
+    for (const f of frames) {
+      const d = f.data;
+      for (let i = 0; i < d.length; i += 8) {
+        const bin = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+        sum[bin * 4] += d[i];
+        sum[bin * 4 + 1] += d[i + 1];
+        sum[bin * 4 + 2] += d[i + 2];
+        sum[bin * 4 + 3]++;
+      }
+    }
+    const bins = [...Array(4096).keys()].filter((b) => sum[b * 4 + 3]).sort((a, b) => sum[b * 4 + 3] - sum[a * 4 + 3]).slice(0, 256);
+    const pal = bins.map((b) => [0, 1, 2].map((c) => Math.round(sum[b * 4 + c] / sum[b * 4 + 3])));
+    while (pal.length < 256) pal.push([0, 0, 0]);
+    const near = new Int16Array(4096).fill(-1);
+    const pick = (bin) => {
+      if (near[bin] >= 0) return near[bin];
+      const r = ((bin >> 8) << 4) + 8;
+      const g = (((bin >> 4) & 15) << 4) + 8;
+      const b = ((bin & 15) << 4) + 8;
+      let best = 0;
+      let bd = Infinity;
+      for (let i = 0; i < 256; i++) {
+        const p = pal[i];
+        const dd = (p[0] - r) ** 2 * 3 + (p[1] - g) ** 2 * 4 + (p[2] - b) ** 2 * 2;
+        if (dd < bd) {
+          bd = dd;
+          best = i;
+        }
+      }
+      return (near[bin] = best);
+    };
+    const out = [];
+    const b8 = (x) => out.push(x & 255);
+    const b16 = (x) => (b8(x), b8(x >> 8));
+    for (const c of 'GIF89a') b8(c.charCodeAt(0));
+    b16(w);
+    b16(h);
+    b8(0xf7);
+    b8(0);
+    b8(0);
+    for (const p of pal) (b8(p[0]), b8(p[1]), b8(p[2]));
+    b8(0x21), b8(0xff), b8(11);
+    for (const c of 'NETSCAPE2.0') b8(c.charCodeAt(0));
+    b8(3), b8(1), b16(0), b8(0);
+    for (const f of frames) {
+      const d = f.data;
+      const px = new Uint8Array(w * h);
+      for (let i = 0, j = 0; j < px.length; i += 4, j++) px[j] = pick(((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4));
+      b8(0x21), b8(0xf9), b8(4), b8(0), b16(delayCs), b8(0), b8(0);
+      b8(0x2c), b16(0), b16(0), b16(w), b16(h), b8(0);
+      gifLzw(px, out);
+    }
+    b8(0x3b);
+    return new Blob([new Uint8Array(out)], { type: 'image/gif' });
+  }
+  // Vẽ GIF: mặt kế toán (ảnh thật / hình vẽ) rung lắc, ửng đỏ, bốc khói, 💢 + chữ đơn, giấy cũ → giấy rẻ nhất, tiền đắt hơn
+  async function gtAngryGif(x) {
+    const { l, me, min } = x;
+    const W = 480;
+    const H = 200;
+    const N = 12;
+    const loadImg = (src) => new Promise((ok, bad) => {
+      const im = new Image();
+      im.onload = () => ok(im);
+      im.onerror = bad;
+      im.src = src;
+    });
+    await gtAngryImgLoad();
+    const face = await loadImg(gtAngryImg || `data:image/svg+xml;charset=utf-8,${encodeURIComponent(GT_ANGRY_SVG.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ').replace(/class="ga-steam"/, 'class="ga-steam" fill="none" stroke="#94a3b8" stroke-width="4"'))}`).catch(() => null);
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    const F = '-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+    const vn = (n) => Math.round(n || 0).toLocaleString('vi-VN');
+    const money = x.po ? x.po.diff : x.money;
+    const frames = [];
+    for (let t = 0; t < N; t++) {
+      const ph = (t / N) * Math.PI * 2;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, W, H);
+      g.strokeStyle = '#ef4444';
+      g.lineWidth = 4;
+      g.beginPath();
+      g.roundRect(2, 2, W - 4, H - 4, 18);
+      g.stroke();
+      // khói
+      g.strokeStyle = '#94a3b8';
+      g.lineWidth = 4;
+      g.lineCap = 'round';
+      for (let s = 0; s < 3; s++) {
+        const k = ((t / N + s / 3) % 1);
+        g.globalAlpha = Math.max(0, 1 - k);
+        const sx = 50 + s * 35;
+        const sy = 34 - k * 22;
+        g.beginPath();
+        g.moveTo(sx, sy + 12);
+        g.quadraticCurveTo(sx - 7, sy + 6, sx, sy);
+        g.quadraticCurveTo(sx + 7, sy - 6, sx, sy - 12);
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+      // mặt rung lắc
+      const cx = 85;
+      const cy = 112;
+      const r = 66;
+      g.save();
+      g.translate(cx, cy + Math.abs(Math.sin(ph * 2)) * -3);
+      g.rotate(Math.sin(ph * 3) * 0.09);
+      g.beginPath();
+      g.arc(0, 0, r, 0, Math.PI * 2);
+      g.save();
+      g.clip();
+      g.fillStyle = '#fee2e2';
+      g.fillRect(-r, -r, r * 2, r * 2);
+      if (face) {
+        const sw = face.naturalWidth || face.width;
+        const sh = face.naturalHeight || face.height;
+        const sc = Math.max((r * 2) / sw, (r * 2) / sh);
+        g.drawImage(face, -(sw * sc) / 2, -(sh * sc) / 2, sw * sc, sh * sc);
+      }
+      g.fillStyle = `rgba(239,68,68,${0.12 + 0.14 * (1 + Math.sin(ph * 2)) / 2})`;
+      g.fillRect(-r, -r, r * 2, r * 2);
+      g.restore();
+      g.lineWidth = 5;
+      g.strokeStyle = '#dc2626';
+      g.stroke();
+      g.restore();
+      // 💢
+      const z = 1 + 0.18 * Math.max(0, Math.sin(ph * 2));
+      g.font = `${Math.round(30 * z)}px ${F}`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('💢', 150, 58);
+      g.textAlign = 'left';
+      g.textBaseline = 'alphabetic';
+      // chữ
+      const X = 172;
+      g.fillStyle = '#b91c1c';
+      g.font = `900 21px ${F}`;
+      g.fillText('😡 Kế toán đang nổi giận!', X, 40);
+      g.fillStyle = '#1d4ed8';
+      g.font = `800 15px ${F}`;
+      g.fillText(`${l.order}${l.quote ? ` · ${l.quote}` : ''}`, X, 66);
+      g.font = `700 14px ${F}`;
+      g.fillStyle = '#b91c1c';
+      g.fillText(`Đang dùng ${me.id}: ${vn(me.price)}đ/m²`, X, 94);
+      g.fillStyle = '#15803d';
+      g.fillText(`➜ Đổi sang ${min.id}: ${vn(min.price)}đ/m²`, X, 116);
+      g.fillStyle = '#64748b';
+      g.font = `600 12px ${F}`;
+      g.fillText(`${(min.prov?.name || min.prov?.code || '').slice(0, 34)}`, X, 134);
+      // tiền đắt hơn nhấp nháy
+      const on = t % 4 < 2;
+      g.fillStyle = on ? '#dc2626' : '#fee2e2';
+      g.beginPath();
+      g.roundRect(X - 4, 148, W - X - 14, 34, 9);
+      g.fill();
+      g.fillStyle = on ? '#fff' : '#b91c1c';
+      g.font = `900 18px ${F}`;
+      g.fillText(money ? `Đắt hơn ${vn(money)}đ!` : `Đắt hơn ${vn(me.price - min.price)}đ/m²!`, X + 8, 172);
+      frames.push(g.getImageData(0, 0, W, H));
+    }
+    return gifEncode(frames, 9);
+  }
+  // Dán GIF + câu nhắc vào ô TRẢ LỜI của luồng đang có của báo giá (chưa có bình luận thì ô bình luận mới).
+  // Chỉ dán + điền chữ – người dùng xem lại rồi tự bấm Trả lời / Bình luận (như 📋 dán ảnh báo giá).
+  async function gtGifToComment(job) {
+    const ta = (await openReplyBox(job.code)) || findCommentBox();
+    if (!ta) throw new Error('Không thấy ô bình luận trên trang báo giá.');
+    ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    ta.focus();
+    const blob = await (await fetch(job.gif)).blob();
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], `ke-toan-gian-${job.order || 'don'}.gif`, { type: 'image/gif' }));
+    ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    await sleep(300);
+    if (!ta.value.trim()) setTextarea(ta, job.text);
+    ta.style.outline = '3px solid #f97316';
+    setTimeout(() => (ta.style.outline = ''), 6000);
+  }
+  // Việc chờ từ panel kế toán (localStorage dgGtGifJob, 10 phút) → trang báo giá đúng id tự dán khi khung bình luận sẵn sàng
+  let gtGifBusy = false;
+  async function gtGifJobRun() {
+    if (!IS_TOP || gtGifBusy) return;
+    let job = null;
+    try {
+      job = JSON.parse(lsGet('dgGtGifJob') || 'null');
+    } catch {}
+    if (!job || Date.now() - job.at > 10 * 60e3) return;
+    const qid = Number(location.pathname.match(/\/(?:bao-gia|co-hoi)\/update\/(\d+)/)?.[1]);
+    if (qid !== Number(job.qid)) return;
+    if (!document.querySelector('.ant-comment') && !findCommentBox()) return; // khung bình luận chưa tải
+    gtGifBusy = true;
+    lsSet('dgGtGifJob', '');
+    try {
+      await sleep(800);
+      await gtGifToComment(job);
+      gtToast(`🎞 Đã dán GIF + câu nhắc vào ô ${job.code ? `trả lời của ${job.code}` : 'bình luận'} – xem lại rồi bấm Trả lời / Bình luận để gửi.`);
+    } catch (e) {
+      gtToast(`⚠️ ${e.message || e}`, true);
+    } finally {
+      gtGifBusy = false;
+    }
+  }
+  if (IS_TOP) setInterval(() => gtGifJobRun().catch(() => {}), 1500);
+  function gtToast(t, bad = false) {
+    const el = document.createElement('div');
+    el.textContent = t;
+    el.setAttribute('style', `position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483600;max-width:min(620px,92vw);padding:10px 16px;border-radius:12px;font:700 13.5px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#fff;background:${bad ? '#dc2626' : '#0f766e'};box-shadow:0 12px 30px rgba(15,23,42,.3)`);
+    document.body.append(el);
+    setTimeout(() => el.remove(), 7000);
+  }
+  // Nút 💬 ở panel kế toán: tạo GIF → mở báo giá (tab mới; đang ở đúng báo giá thì dán luôn)
+  async function gtAngryComment(x, btn) {
+    const qIds = await gtQuoteIds();
+    const qid = qIds[x.l.quote];
+    if (!qid) throw new Error(`Không thấy id báo giá ${x.l.quote || ''}`);
+    const label = btn?.textContent;
+    if (btn) btn.textContent = '🎞 Đang tạo GIF…';
+    const blob = await gtAngryGif(x);
+    const gif = await new Promise((ok) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(fr.result);
+      fr.readAsDataURL(blob);
+    });
+    const job = { qid, code: x.l.quote, order: x.l.order, text: `Đơn hàng này chuyển ${x.me.id} | ${x.me.name} thành ${x.min.id} | ${x.min.name} nhé em`, gif, at: Date.now() };
+    const here = Number(location.pathname.match(/\/(?:bao-gia|co-hoi)\/update\/(\d+)/)?.[1]) === Number(qid);
+    try {
+      lsSet('dgGtGifJob', JSON.stringify(job));
+    } catch {
+      throw new Error('GIF quá lớn để chuyển sang tab báo giá');
+    }
+    if (!here) window.open(`/bao-gia/update/${qid}`, '_blank', 'noopener');
+    if (btn) {
+      btn.textContent = here ? '✅ Đang dán vào bình luận…' : '✅ Đã mở báo giá – GIF tự dán';
+      setTimeout(() => (btn.textContent = label), 5000);
+    }
+  }
   let gtAngryEdit = false; // đã có ảnh → ẩn nút 📷 / 🎨; admin nhấp đúp vào ảnh để hiện lại
   let gtAngryBusy = false;
   async function injectGtAngry() {
@@ -16702,10 +17001,11 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       }
       let box = document.getElementById('dg-gt-angry');
       if (!list.length) return box?.remove();
-      if (!document.getElementById('dg-gt-angry-css2')) {
+      if (!document.getElementById('dg-gt-angry-css3')) {
         document.getElementById('dg-gt-angry-css')?.remove();
+        document.getElementById('dg-gt-angry-css2')?.remove();
         const st = document.createElement('style');
-        st.id = 'dg-gt-angry-css2';
+        st.id = 'dg-gt-angry-css3';
         st.textContent = `#dg-gt-angry{position:fixed;right:18px;bottom:18px;z-index:2147482000;width:min(430px,calc(100vw - 32px));font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a}
 #dg-gt-angry .ga-card{display:flex;gap:10px;background:#fff;border:2px solid #ef4444;border-radius:16px;box-shadow:0 18px 44px rgba(185,28,28,.35);padding:12px 12px 10px;animation:gaIn .35s ease-out}
 @keyframes gaIn{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none}}
@@ -16721,7 +17021,7 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
 #dg-gt-angry .ga-say{position:relative;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:5px 8px;font-weight:700;color:#7f1d1d;margin-bottom:6px}
 #dg-gt-angry .ga-li{max-height:190px;overflow:auto;border-top:1px dashed #fecaca}
 #dg-gt-angry .ga-r{cursor:pointer;border-radius:6px;transition:background .15s;padding:4px 0;border-bottom:1px dashed #fecaca;font-size:12px}#dg-gt-angry .ga-r b.o{color:#1d4ed8}#dg-gt-angry .ga-r .m{float:right;font-weight:800;color:#b91c1c}
-#dg-gt-angry .ga-r:hover{background:#fef2f2}#dg-gt-angry .ga-r .p{color:#64748b;font-size:11.5px}
+#dg-gt-angry .ga-r:hover{background:#fef2f2}#dg-gt-angry .ga-cmt{cursor:pointer;border:0;border-radius:9px;padding:5px 10px;font:inherit;font-size:12px;font-weight:900;line-height:1.25;color:#fff;background:linear-gradient(90deg,#2563eb,#1d4ed8);box-shadow:0 4px 10px rgba(37,99,235,.35)}#dg-gt-angry .ga-cmt:hover{filter:brightness(1.1)}#dg-gt-angry .ga-cmt.sm{padding:1px 7px;font-size:11px;box-shadow:none;border-radius:6px}#dg-gt-angry .ga-r .p{color:#64748b;font-size:11.5px}
 #dg-gt-angry .ga-btns{display:flex;gap:6px;margin-top:8px}#dg-gt-angry .ga-btns button{cursor:pointer;border-radius:8px;padding:4px 10px;font:inherit;font-size:12px;font-weight:800;border:1px solid #cbd5e1;background:#fff;color:#334155}
 #dg-gt-angry .ga-btns .go{background:#dc2626;border-color:#dc2626;color:#fff}
 #dg-gt-angry .ga-x{position:absolute;top:6px;right:10px;border:0;background:none;font-size:18px;cursor:pointer;color:#94a3b8}
@@ -16748,6 +17048,7 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
           else if (k === 'max') { lsSet('dgGtAngryMin', ''); box.classList.remove('min'); }
           else if (k === 'photo') gtAngryPhotoPick();
           else if (k === 'row') gtAngryDetail(gtAngryCur[Number(a.dataset.i)]);
+          else if (k === 'cmt') gtAngryComment(gtAngryCur[Number(a.dataset.i)], a).catch((err) => { a.textContent = `⚠️ ${err.message || err}`; });
           else if (k === 'ai') gtAngryAiPick();
           else if (k === 'go') {
             lsSet('dgTab', 'gt');
@@ -16770,11 +17071,11 @@ ${scen ? `<div class="gp-box"><div class="gp-bh">Kịch bản đổi giấy – 
       const say = SAY[Math.floor(Date.now() / 60e3) % SAY.length];
       gtAngryCur = list;
       const html = `<div class="ga-bub" data-ga="max" title="Mở lại cảnh báo giấy chưa rẻ nhất"><span class="f">😡</span>${nOrd} đơn giấy đắt${sum ? ` · ≈ ${moneyShortG(sum)}` : ''}</div>
-<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig"${MY_ADMIN && gtAngryImg ? ' title="Nhấp đúp để đổi ảnh"' : ''}>${gtAngryFig(92)}${MY_ADMIN && (!gtAngryImg || gtAngryEdit) ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button><button data-ga="ai" title="Chọn ảnh thật → AI (OpenAI) vẽ lại chân dung giống người thật, mặt đang giận. Ảnh được gửi tới OpenAI để vẽ." style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:6px;font-size:11px;padding:1px 6px;color:#6d28d9;margin-top:3px">${gtAiBusy ? '🎨 AI đang vẽ…' : '🎨 AI vẽ'}</button></div>` : ''}</div><div class="ga-body">
+<div class="ga-card" style="position:relative"><button class="ga-x" data-ga="min" title="Thu nhỏ (30 phút)">–</button><div class="ga-fig"${MY_ADMIN && gtAngryImg ? ' title="Nhấp đúp để đổi ảnh"' : ''}>${gtAngryFig(92)}${MY_ADMIN && (!gtAngryImg || gtAngryEdit) ? `<div style="text-align:center;margin-top:${gtAngryImg ? 14 : 2}px"><button data-ga="photo" title="Tải ảnh thật của kế toán (cắt vuông phần mặt, lưu trên cloud của extension)" style="cursor:pointer;border:1px solid #fecaca;background:#fff;border-radius:6px;font-size:11px;padding:1px 6px;color:#b91c1c">📷 ${gtAngryImg ? 'Đổi ảnh' : 'Ảnh thật'}</button><button data-ga="ai" title="Chọn ảnh thật → AI (OpenAI) vẽ lại chân dung giống người thật, mặt đang giận. Ảnh được gửi tới OpenAI để vẽ." style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:6px;font-size:11px;padding:1px 6px;color:#6d28d9;margin-top:3px">${gtAiBusy ? '🎨 AI đang vẽ…' : '🎨 AI vẽ'}</button></div>` : ''}${list.length && list[0].l.quote ? `<div style="text-align:center;margin-top:${gtAngryImg ? 16 : 6}px"><button data-ga="cmt" data-i="0" class="ga-cmt" title="Tạo GIF kế toán nổi giận + câu “Đơn hàng này chuyển … thành … nhé em” → dán vào ô trả lời của ${esc(list[0].l.quote)}">💬 Bình luận<br>${esc(list[0].l.quote)} + GIF</button></div>` : ''}</div><div class="ga-body">
 <div class="ga-t">😡 Kế toán đang nổi giận!</div>
 <div class="ga-s"><b>${nOrd}</b> /10 đơn mới nhất dùng giấy chưa rẻ nhất${sum ? ` – đắt hơn <b>${list.every((x) => x.po) ? '' : '≈ '}${sum.toLocaleString('vi-VN')}đ</b>` : ''}</div>
 <div class="ga-say">“${esc(say)}”</div>
-<div class="ga-li">${list.map(({ l, me, min, diff, money, po }, gi) => `<div class="ga-r" data-ga="row" data-i="${gi}" title="Bấm để xem đánh giá tổng quan & việc cần làm"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}</div>
+<div class="ga-li">${list.map(({ l, me, min, diff, money, po }, gi) => `<div class="ga-r" data-ga="row" data-i="${gi}" title="Bấm để xem đánh giá tổng quan & việc cần làm"><span class="m" title="${po ? `Tính trên PO ${esc(po.quote || '')}: Tổng thanh toán ${po.old.toLocaleString('vi-VN')} → ${po.new.toLocaleString('vi-VN')}` : 'Ước tính (chênh/m² × m²) – đang chờ tính trên PO'}">${po ? `🧾 ${money.toLocaleString('vi-VN')}đ` : money ? `≈ ${money.toLocaleString('vi-VN')}đ` : `+${diff.toLocaleString('vi-VN')}đ/m²`}</span><b class="o">${esc(l.order)}</b>${l.quote ? ` · ${gtQuoteLink(l.quote, qIds, 'font-size:11.5px')}` : ''} · ${esc((l.cust || l.ccode || '').slice(0, 34))}<div class="p">${list.length > 1 && l.quote ? `<button data-ga="cmt" data-i="${gi}" class="ga-cmt sm" title="Bình luận ${esc(l.quote)} kèm GIF kế toán nổi giận">💬 GIF</button> ` : ''}${me.id} | ${esc(me.name)} <b style="color:#b91c1c">${me.price.toLocaleString('vi-VN')}</b> → rẻ nhất ${min.id} <b style="color:#15803d">${min.price.toLocaleString('vi-VN')}</b> · ${esc(min.prov?.name || min.prov?.code || '')}</div></div>`).join('')}</div>
 <div style="font-size:10.5px;color:#94a3b8;margin-top:4px">🧾 = tiền chênh tính trên PO giấy tấm (thay Giá cuối cũ → rẻ nhất, so Tổng thanh toán) · ≈ = ước tính, đang tính PO</div>
 <div class="ga-btns"><button class="go" data-ga="go">📄 Xử lý ở tab Giấy tấm</button><button data-ga="min">Để sau 30 phút</button></div>
 </div></div>`;
