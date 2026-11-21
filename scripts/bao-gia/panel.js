@@ -18386,6 +18386,65 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     nameEl.after(wrap);
   }
   if (IS_TOP) setInterval(hoMount, 1500);
+  // ---------- 📋 Copy thông tin khách (trang cơ hội / báo giá): mã CODE, tên đầy đủ, SĐT, địa chỉ – nút cạnh nhãn "Khách hàng" ----------
+  function ciRead() {
+    const items = [...document.querySelectorAll('.ant-form-item')].filter((x) => !x.closest('#dg-root'));
+    const item = items.find((x) => /^\*?\s*Khách hàng\b/.test((x.querySelector('label')?.textContent || '').trim()));
+    const selT = (item?.querySelector('.ant-select-selection-item')?.getAttribute('title') || item?.querySelector('.ant-select-selection-item')?.textContent || '').trim();
+    const i = selT.indexOf(' - ');
+    const code = i > 0 ? selT.slice(0, i).trim() : '';
+    const full = i > 0 ? selT.slice(i + 3).trim() : selT;
+    // "Số điện thoại:" / "Địa chỉ:" → phần chữ ngay sau nhãn (lấy khối nhỏ nhất chứa nhãn + giá trị)
+    const field = (re, max) => {
+      const cands = [...document.querySelectorAll('div, p, span, li, td')].filter((e) => !e.closest('#dg-root') && re.test((e.innerText || '').trim()) && (e.innerText || '').length < max);
+      cands.sort((a, b) => a.innerText.length - b.innerText.length);
+      for (const e of cands) {
+        const v = e.innerText.trim().replace(re, '').replace(/\s*\n\s*/g, ' ').trim();
+        if (v) return v;
+      }
+      return '';
+    };
+    return { code, full, phone: field(/^Số điện thoại\s*:\s*/i, 80), addr: field(/^Địa chỉ\s*:\s*/i, 400) };
+  }
+  function ciMount() {
+    if (SITE.key !== 'tuantu' || !/^\/(co-hoi|bao-gia)\/update\/\d+/.test(location.pathname)) return document.querySelector('[data-dg-ci]')?.remove();
+    const item = [...document.querySelectorAll('.ant-form-item')].find((x) => !x.closest('#dg-root') && /^\*?\s*Khách hàng\b/.test((x.querySelector('label')?.textContent || '').trim()));
+    const lbl = item?.querySelector('label');
+    if (!lbl || lbl.querySelector('[data-dg-ci]')) return;
+    document.querySelector('[data-dg-ci]')?.remove();
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('data-dg-ci', '1');
+    const LABEL = '📋 Copy thông tin';
+    b.textContent = LABEL;
+    b.title = 'Copy mã CODE, tên đầy đủ, số điện thoại, địa chỉ của khách hàng';
+    b.setAttribute('style', 'margin-left:10px;vertical-align:middle;cursor:pointer;font-size:12px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #93c5fd;border-radius:999px;padding:1px 10px;line-height:20px');
+    b.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const c = ciRead();
+      if (!c.full) {
+        b.textContent = '⚠️ Chưa chọn khách hàng';
+        return setTimeout(() => (b.textContent = LABEL), 2500);
+      }
+      const text = [`Mã CODE: ${c.code || '—'}`, `Tên đầy đủ: ${c.full}`, `SĐT: ${c.phone || '—'}`, `Địa chỉ: ${c.addr || '—'}`].join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px';
+        document.body.append(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      b.textContent = '✅ Đã copy';
+      setTimeout(() => (b.textContent = LABEL), 2000);
+    });
+    lbl.append(b);
+  }
+  if (IS_TOP) setInterval(ciMount, 1500);
   // ---------- ❌ Thất bại nhanh (Tuấn Tú – danh sách /bao-gia): nút trên từng dòng ----------
   // Bấm → hỏi xác nhận → mở báo giá trong khung ẩn, chờ tải xong → bấm "Thất bại" ở Tình trạng báo giá → OK các hộp xác nhận
   // → tải lại danh sách (sang trang bên cạnh rồi về lại trang đang xem; chỉ 1 trang thì đổi tab rồi về).
