@@ -19775,6 +19775,13 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     if (/bao\s*ve\b|security/.test(u)) return 'bảo vệ';
     return '';
   }
+  // SĐT: di động (03/05/07/08/09) có icon 📱, chữ xanh đậm; số bàn ☎ xám
+  function mpPhone(p) {
+    if (!p) return '';
+    let d = String(p).replace(/\D/g, '');
+    if (d.startsWith('84')) d = `0${d.slice(2)}`;
+    return /^0[35789]\d{8}$/.test(d) ? `<span title="Di động" style="color:#15803d;font-weight:800">📱 ${esc(p)}</span>` : `<span title="Số bàn" style="color:#64748b">☎ ${esc(p)}</span>`;
+  }
   const mpOff = (c) => !!c.hidden || !!mpDropWhy(c); // đã xoá tay hoặc bị bộ lọc loại
   // khách ERP của 1 công ty: bỏ kết nối → không; kết nối tay → theo id; còn lại tên giống 100% (không phân biệt hoa thường)
   const mpErp = (c) => (c.erpNo ? null : (c.erpId && mpData.byId.get(String(c.erpId))) || mpData.byName.get(mpKey(c.name)) || (c.legalName && mpData.byName.get(mpKey(c.legalName))) || null);
@@ -19822,7 +19829,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${esc(c.legalAddr || c.addr || '')}</td>
-<td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : esc(c.phone || '')}</td>
+<td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)}</td>
 <td style="padding:4px 6px;white-space:nowrap">${e ? `<a href="/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` <span style="font-size:11px;color:#64748b">· ${esc(e.staff.name)}</span>` : ''}<div style="font-size:11px;color:#64748b">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-mp="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : `<button data-mp="link" data-id="${esc(c.id)}" style="${b};border-color:#86efac;color:#166534;background:#f0fdf4">🔗 Kết nối ERP</button>${c.erpNo ? '<div style="font-size:11px;color:#94a3b8">đã bỏ kết nối</div>' : ''}`}</td>
 <td style="padding:4px 6px;white-space:nowrap"><a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a> ${c.hidden ? `<button data-mp="restore" data-id="${esc(c.id)}" style="${b}">↩ Khôi phục</button>` : mpDropWhy(c) ? `<span style="font-size:11px;color:#94a3b8" title="Bị bộ lọc loại tự động (giống Google Maps)">🚫 ${esc(mpDropWhy(c))}</span>` : `<button data-mp="del" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">🗑 Xoá</button>`}</td></tr>`;
     }).join('');
