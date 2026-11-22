@@ -19805,7 +19805,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
       return `<tr style="border-top:1px solid #f1f5f9;${e ? 'background:#f0fdf4' : ''}">
 <td style="padding:4px 6px"><input type="checkbox" data-mp="sel" data-id="${esc(c.id)}" ${mpUi.sel.has(c.id) ? 'checked' : ''}></td>
 <td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
-<td style="padding:4px 6px;max-width:300px"><b>${esc(e?.name || c.legalName || c.name)}</b>${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
+<td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
 <td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>` : '<span style="color:#cbd5e1">—</span>'}</td>
 <td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
