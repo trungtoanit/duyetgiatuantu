@@ -104,7 +104,7 @@
     const n = Object.keys(cache).length;
     const feedN = document.querySelectorAll('div[role="feed"] div[role="article"]').length;
     box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:900;color:#1e3a8a">📍 Trợ lý ERP · địa chỉ công ty <span style="margin-left:auto;background:#dbeafe;border-radius:99px;padding:0 8px">${n}</span><span data-m="min" title="Thu nhỏ" style="cursor:pointer;color:#94a3b8">–</span></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button><button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button><button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
 ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</div>` : ''}`;
   }
   box.addEventListener('click', async (e) => {
@@ -130,6 +130,27 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       a.download = `dia-chi-cong-ty-google-maps-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
+      return;
+    }
+    if (k === 'kdraw') {
+      const n = prompt('Tên khu công nghiệp cần vẽ (vd. KCN Hải Sơn mở rộng):', '');
+      if (!n || !n.trim()) return;
+      drawName = n.trim();
+      drawPts = [];
+      drawUi();
+      return;
+    }
+    if (k === 'klist') {
+      const list = Object.entries(kcnCustom).filter(([, x]) => x && !x.deleted);
+      const pick = prompt(`KCN tự vẽ – nhập số để XOÁ:\n${list.map(([, x], i) => `${i + 1}. ${x.name}${x.by ? ` (${x.by})` : ''}`).join('\n')}`, '');
+      const it = list[Number(pick) - 1];
+      if (it && confirm(`Xoá viền “${it[1].name}”?`)) {
+        await kvMerge('kcnCustom', { [it[0]]: { ...it[1], deleted: true, at: Date.now() } });
+        kcnCustom[it[0]] = { ...it[1], deleted: true };
+        kcnData.delete(`c/${it[0]}`);
+        kcnDraw();
+        draw();
+      }
       return;
     }
     if (k === 'kcn') {
@@ -176,7 +197,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   // – chỉ gửi toạ độ khung bản đồ, không gửi dữ liệu nào khác. Lưu tạm localStorage 7 ngày.
   // Vẽ lớp SVG đè lên bản đồ theo phép chiếu Web Mercator từ tâm + mức zoom trên URL (@lat,lng,zoom). Đang kéo / cuộn thì ẩn, dừng thì vẽ lại.
   let kcnOn = localStorage.getItem('dgKcnOn') !== '0';
-  const KCN_RE = 'Khu công nghiệp|Khu Công Nghiệp|KHU CÔNG NGHIỆP|KCN|Industrial Park|Industrial Zone|Cụm công nghiệp|CCN';
+  const KCN_RE = 'Khu công nghiệp|Khu Công Nghiệp|KHU CÔNG NGHIỆP|KCN|Khu CN|Industrial Park|Industrial Zone|Cụm công nghiệp|Cụm CN|CCN';
   const svgNS = 'http://www.w3.org/2000/svg';
   const kcnSvg = document.createElementNS(svgNS, 'svg');
   kcnSvg.id = 'dg-kcn';
@@ -226,7 +247,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     const need = tiles.filter((k) => {
       if (kcnLoaded.has(k)) return false;
       try {
-        const c = JSON.parse(localStorage.getItem(`dgKcn:${k}`) || 'null');
+        const c = JSON.parse(localStorage.getItem(`dgKcn2:${k}`) || 'null');
         if (c && Date.now() - c.at < 7 * 86400e3) {
           for (const [id, p] of c.list) kcnData.set(id, p);
           kcnLoaded.add(k);
@@ -269,7 +290,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       for (const k of tiles) {
         kcnLoaded.add(k);
         try {
-          localStorage.setItem(`dgKcn:${k}`, JSON.stringify({ at: Date.now(), list: byTile[k] || [] }));
+          localStorage.setItem(`dgKcn2:${k}`, JSON.stringify({ at: Date.now(), list: byTile[k] || [] }));
         } catch {}
       }
     } finally {
@@ -277,7 +298,73 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     }
     kcnDraw();
   }
+  // ✏️ KCN tự vẽ (OSM chưa có, vd. KCN Hải Sơn mở rộng): kv kcnCustom { id: { name, rings, by, at } } – đồng bộ cloud
+  let kcnCustom = {};
+  const loadCustom = async () => {
+    kcnCustom = (await kvGet('kcnCustom').catch(() => ({}))) || {};
+    for (const [id, p] of Object.entries(kcnCustom)) if (p?.rings?.length && !p.deleted) kcnData.set(`c/${id}`, { ...p, custom: true });
+    for (const k of [...kcnData.keys()]) if (k.startsWith('c/') && (!kcnCustom[k.slice(2)] || kcnCustom[k.slice(2)].deleted)) kcnData.delete(k);
+  };
+  loadCustom().then(() => kcnDraw()).catch(() => {});
+  setInterval(() => loadCustom().then(() => kcnDraw()).catch(() => {}), 60e3);
+  let drawPts = null; // đang vẽ: [[lat,lng]…]
+  let drawName = '';
+  const drawLayer = document.createElement('div');
+  drawLayer.setAttribute('style', 'position:fixed;inset:0;z-index:2147482000;cursor:crosshair;display:none');
+  const drawBar = document.createElement('div');
+  drawBar.setAttribute('style', 'position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:2147482001;background:#0f172a;color:#fff;border-radius:12px;padding:8px 12px;font:700 13px -apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:none;gap:8px;align-items:center;box-shadow:0 10px 28px rgba(0,0,0,.35)');
+  const drawPreview = document.createElementNS(svgNS, 'svg');
+  drawPreview.setAttribute('style', 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147481999');
+  function drawUi() {
+    const on = !!drawPts;
+    drawLayer.style.display = on ? 'block' : 'none';
+    drawBar.style.display = on ? 'flex' : 'none';
+    if (!on) return (drawPreview.innerHTML = '');
+    if (!drawLayer.isConnected) document.body.append(drawPreview, drawLayer, drawBar);
+    drawBar.innerHTML = `✏️ Vẽ viền “${esc(drawName)}”: bấm từng góc trên bản đồ (${drawPts.length} điểm) <button data-d="undo" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit">↶ Bỏ điểm</button><button data-d="ok" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;background:#22c55e;color:#fff" ${drawPts.length < 3 ? 'disabled' : ''}>✔ Xong</button><button data-d="x" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;background:#ef4444;color:#fff">✕ Huỷ</button>`;
+    const v = mapView();
+    if (!v) return;
+    const [cx, cy] = proj(v.lat, v.lng, v.z);
+    const pts = drawPts.map(([la, ln]) => {
+      const [x, y] = proj(la, ln, v.z);
+      return [x - cx + v.r.left + v.r.width / 2, y - cy + v.r.top + v.r.height / 2];
+    });
+    drawPreview.innerHTML = `<polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="rgba(34,197,94,.25)" stroke="#fff" stroke-width="7"/><polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="none" stroke="#16a34a" stroke-width="3.5"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" fill="#fff" stroke="#16a34a" stroke-width="3"/>`).join('')}`;
+  }
+  drawLayer.addEventListener('click', (e) => {
+    const v = mapView();
+    if (!v || !drawPts) return;
+    const [cx, cy] = proj(v.lat, v.lng, v.z);
+    drawPts.push(unproj(cx + e.clientX - v.r.left - v.r.width / 2, cy + e.clientY - v.r.top - v.r.height / 2, v.z));
+    drawUi();
+  });
+  drawBar.addEventListener('click', async (e) => {
+    const k = e.target.closest('[data-d]')?.dataset.d;
+    if (!k) return;
+    if (k === 'undo') drawPts.pop();
+    if (k === 'x') drawPts = null;
+    if (k === 'ok' && drawPts.length >= 3) {
+      const id = `${Date.now().toString(36)}`;
+      const me = (await kvGet('me').catch(() => ({})))?.name || '';
+      const p = { name: drawName, rings: [drawPts.map(([a, b]) => [Number(a.toFixed(6)), Number(b.toFixed(6))])], by: me, at: Date.now() };
+      await kvMerge('kcnCustom', { [id]: p });
+      kcnCustom[id] = p;
+      kcnData.set(`c/${id}`, { ...p, custom: true });
+      drawPts = null;
+      msg = `✅ Đã lưu viền “${p.name}” (đồng bộ cho mọi máy).`;
+      draw();
+      kcnDraw();
+    }
+    drawUi();
+  });
+  addEventListener('keydown', (e) => {
+    if (drawPts && e.key === 'Escape') {
+      drawPts = null;
+      drawUi();
+    }
+  });
   function kcnDraw() {
+    if (drawPts) drawUi();
     if (!kcnOn) {
       kcnSvg.innerHTML = '';
       return;
@@ -313,10 +400,10 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       const PAL = ['#f43f5e', '#f59e0b', '#22c55e', '#06b6d4', '#a855f7', '#3b82f6', '#ec4899', '#84cc16', '#ef4444', '#14b8a6'];
       let hsh = 0;
       for (const ch of p.name || '') hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
-      const col = PAL[hsh % PAL.length];
+      const col = p.custom ? '#16a34a' : PAL[hsh % PAL.length];
       html += `<path d="${paths}" fill="${col}" fill-opacity=".22" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-opacity=".9"/><path d="${paths}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linejoin="round"/>`;
       if (p.name && v.z >= 12) {
-        const t = `🏭 ${p.name.replace(/^Khu công nghiệp\s*/i, 'KCN ')}`;
+        const t = `${p.custom ? '✏️' : '🏭'} ${p.name.replace(/^Khu công nghiệp\s*/i, 'KCN ').replace(/^Cụm công nghiệp\s*/i, 'CCN ')}`;
         const fs = v.z >= 14 ? 14 : 12;
         const tw = Math.round(t.length * fs * 0.56) + 16;
         const X = (lx / cnt).toFixed(1);
