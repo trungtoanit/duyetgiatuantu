@@ -19858,7 +19858,22 @@ ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table class="mp-tb" style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:5px 6px"><input type="checkbox" data-mp="selall"></th><th style="padding:5px 6px">STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
 <tbody>${tr || '<tr><td colspan="10" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
-<div style="display:flex;gap:6px;justify-content:center;margin-top:8px">${mpUi.page > 0 ? `<button data-mp="prev" style="${b}">‹ Trước</button>` : ''}${mpUi.page < pages - 1 ? `<button data-mp="next" style="${b}">Sau ›</button>` : ''}</div>
+<div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:8px">${(() => {
+      // phân trang: « Đầu · ‹ Trước · các số trang quanh trang hiện tại · Sau › · Cuối » · ô chọn trang
+      const cur = mpUi.page;
+      const nums = [...new Set([0, cur - 2, cur - 1, cur, cur + 1, cur + 2, pages - 1])].filter((x) => x >= 0 && x < pages).sort((a, c) => a - c);
+      const dis = 'opacity:.4;cursor:default';
+      let out = `<button data-mp="first" ${cur === 0 ? 'disabled' : ''} style="${b};${cur === 0 ? dis : ''}">« Đầu</button><button data-mp="prev" ${cur === 0 ? 'disabled' : ''} style="${b};${cur === 0 ? dis : ''}">‹ Trước</button>`;
+      let last = -1;
+      for (const x of nums) {
+        if (x - last > 1) out += '<span style="color:#94a3b8;padding:0 2px">…</span>';
+        out += `<button data-mp="pg" data-p="${x}" style="${b};${x === cur ? 'background:#2563eb;border-color:#2563eb;color:#fff' : ''}">${x + 1}</button>`;
+        last = x;
+      }
+      out += `<button data-mp="next" ${cur >= pages - 1 ? 'disabled' : ''} style="${b};${cur >= pages - 1 ? dis : ''}">Sau ›</button><button data-mp="last" ${cur >= pages - 1 ? 'disabled' : ''} style="${b};${cur >= pages - 1 ? dis : ''}">Cuối »</button>`;
+      out += `<select data-mp-f="page" style="${sel};margin-left:6px">${Array.from({ length: pages }, (_, x) => `<option value="${x}" ${x === cur ? 'selected' : ''}>Trang ${x + 1}/${pages}</option>`).join('')}</select>`;
+      return out;
+    })()}</div>
 ${linkBox}</div>`;
   }
   function mpLinkResults() {
@@ -19928,6 +19943,9 @@ ${linkBox}</div>`;
       await mpSave({ [id]: { ...c, erpId: null, erpNo: true, erpLinkAt: Date.now(), erpLinkBy: meName || '' } });
     } else if (k === 'prev') mpUi.page = Math.max(0, mpUi.page - 1);
     else if (k === 'next') mpUi.page++;
+    else if (k === 'first') mpUi.page = 0;
+    else if (k === 'last') mpUi.page = 1e9; // mapsTab tự kẹp về trang cuối
+    else if (k === 'pg') mpUi.page = Number(t.dataset.p) || 0;
     else if (k === 'reload') await mpLoad(true);
     else return;
     render();
@@ -19957,6 +19975,10 @@ ${linkBox}</div>`;
   function mpChange(e) {
     const f = e.target.dataset?.mpF;
     if (!f) return;
+    if (f === 'page') {
+      mpUi.page = Number(e.target.value) || 0;
+      return render();
+    }
     mpUi[f] = e.target.value;
     mpUi.page = 0;
     mpUi.sel.clear();
