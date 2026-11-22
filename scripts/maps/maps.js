@@ -292,6 +292,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     const ox = v.r.left + v.r.width / 2 - cx;
     const oy = v.r.top + v.r.height / 2 - cy;
     let html = '';
+    let labels = '';
     for (const [, p] of kcnData) {
       let lx = 0;
       let ly = 0;
@@ -308,9 +309,22 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
         return `${i ? 'L' : 'M'}${X.toFixed(1)},${Y.toFixed(1)}`;
       }).join('') + 'Z').join('');
       if (!on) continue;
-      html += `<path d="${paths}" fill="rgba(249,115,22,.14)" stroke="#ea580c" stroke-width="2.5" stroke-dasharray="7 4" stroke-linejoin="round"/>`;
-      if (p.name && v.z >= 12) html += `<text x="${(lx / cnt).toFixed(1)}" y="${(ly / cnt).toFixed(1)}" text-anchor="middle" font-size="${v.z >= 14 ? 13 : 11}" font-weight="800" fill="#9a3412" stroke="#fff" stroke-width="3" paint-order="stroke" font-family="-apple-system,Segoe UI,Roboto,Arial,sans-serif">🏭 ${esc(p.name)}</text>`;
+      // mỗi KCN 1 màu sáng (theo tên) – viền lót trắng dày + viền màu, nền màu nhạt → nổi trên ảnh vệ tinh
+      const PAL = ['#f43f5e', '#f59e0b', '#22c55e', '#06b6d4', '#a855f7', '#3b82f6', '#ec4899', '#84cc16', '#ef4444', '#14b8a6'];
+      let hsh = 0;
+      for (const ch of p.name || '') hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+      const col = PAL[hsh % PAL.length];
+      html += `<path d="${paths}" fill="${col}" fill-opacity=".22" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-opacity=".9"/><path d="${paths}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linejoin="round"/>`;
+      if (p.name && v.z >= 12) {
+        const t = `🏭 ${p.name.replace(/^Khu công nghiệp\s*/i, 'KCN ')}`;
+        const fs = v.z >= 14 ? 14 : 12;
+        const tw = Math.round(t.length * fs * 0.56) + 16;
+        const X = (lx / cnt).toFixed(1);
+        const Y = (ly / cnt).toFixed(1);
+        labels += `<g transform="translate(${X},${Y})"><rect x="${-tw / 2}" y="${-(fs + 12) / 2}" width="${tw}" height="${fs + 12}" rx="${(fs + 12) / 2}" fill="#fff" stroke="${col}" stroke-width="2.5" filter="url(#dgKcnSh)"/><text x="0" y="${Math.round(fs * 0.36)}" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#0f172a" font-family="-apple-system,Segoe UI,Roboto,Arial,sans-serif">${esc(t)}</text></g>`;
+      }
     }
+    html = `<defs><filter id="dgKcnSh" x="-20%" y="-50%" width="140%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity=".45"/></filter></defs>${html}${labels}`;
     kcnSvg.innerHTML = html;
   }
   // đang kéo / cuộn bản đồ → ẩn lớp viền (URL chỉ cập nhật khi dừng), dừng lại thì vẽ theo vị trí mới
