@@ -91,6 +91,8 @@
   const isRealEstate = (c) => {
     if (c?.hidden) return true; // 🙈 người dùng đã ẩn công ty này
     if (c?.ind && IND_DROP.has(c.ind)) return true; // 🏷 ngành bị loại (AI gắn nhãn)
+    // tên chỉ có mỗi chữ "Công ty" (± TNHH / CP / MTV / dấu câu) – không có tên riêng
+    if (c?.name && !String(c.name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\b(cong\s*ty|cty|tnhh|co\s*phan|cp|mtv|mot\s*thanh\s*vien|company|co|ltd|limited)\b/g, '').replace(/[^a-z0-9]/g, '')) return true;
     const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
     const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
     return RE_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha|bao\s*ve\b|security/.test(u); // + xây lắp, xây dựng, phát triển nhà, bảo vệ
