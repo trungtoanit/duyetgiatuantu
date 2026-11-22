@@ -11328,7 +11328,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     uiSaved = uiSnapshot();
     if (uiSaved !== before) {
       state.filter = lsGet('dgFilter') || '';
-      if (lsGet('dgPanelOpen') === '1') root.querySelector('.panel').hidden = false;
+      if (lsGet('dgPanelOpen') === '1' && !noAutoPanel()) root.querySelector('.panel').hidden = false;
       layoutPanel();
       render();
     }
@@ -11340,6 +11340,18 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     }, 1500);
   }
 
+  // Tab mở từ link "khách ERP" (tab Công ty Maps / Google Maps / PDF, có ?dgNoPanel=1) → KHÔNG tự bật bảng Trợ lý ERP trong tab đó
+  // (vẫn bấm nút 📊 để mở). Nhớ theo tab (sessionStorage) để CRM đổi trang trong tab vẫn giữ.
+  try {
+    if (new URLSearchParams(location.search).has('dgNoPanel')) sessionStorage.setItem('dgNoPanel', '1');
+  } catch {}
+  const noAutoPanel = () => {
+    try {
+      return sessionStorage.getItem('dgNoPanel') === '1';
+    } catch {
+      return false;
+    }
+  };
   function mount() {
     if (host) return;
     host = document.createElement('div');
@@ -11359,7 +11371,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     wireScroll(root.querySelector('.panel'));
     if (IS_TOP) watchHandoverDom();
     // Giữ trạng thái bung / thu gọn của bảng qua F5
-    if (lsGet('dgPanelOpen') === '1') {
+    if (lsGet('dgPanelOpen') === '1' && !noAutoPanel()) {
       root.querySelector('.panel').hidden = false;
       render();
     }
@@ -19811,7 +19823,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${esc(c.legalAddr || c.addr || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : esc(c.phone || '')}</td>
-<td style="padding:4px 6px;white-space:nowrap">${e ? `<a href="/khach-hang/view/${e.id}" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` <span style="font-size:11px;color:#64748b">· ${esc(e.staff.name)}</span>` : ''}<div style="font-size:11px;color:#64748b">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-mp="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : `<button data-mp="link" data-id="${esc(c.id)}" style="${b};border-color:#86efac;color:#166534;background:#f0fdf4">🔗 Kết nối ERP</button>${c.erpNo ? '<div style="font-size:11px;color:#94a3b8">đã bỏ kết nối</div>' : ''}`}</td>
+<td style="padding:4px 6px;white-space:nowrap">${e ? `<a href="/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` <span style="font-size:11px;color:#64748b">· ${esc(e.staff.name)}</span>` : ''}<div style="font-size:11px;color:#64748b">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-mp="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : `<button data-mp="link" data-id="${esc(c.id)}" style="${b};border-color:#86efac;color:#166534;background:#f0fdf4">🔗 Kết nối ERP</button>${c.erpNo ? '<div style="font-size:11px;color:#94a3b8">đã bỏ kết nối</div>' : ''}`}</td>
 <td style="padding:4px 6px;white-space:nowrap"><a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a> ${c.hidden ? `<button data-mp="restore" data-id="${esc(c.id)}" style="${b}">↩ Khôi phục</button>` : mpDropWhy(c) ? `<span style="font-size:11px;color:#94a3b8" title="Bị bộ lọc loại tự động (giống Google Maps)">🚫 ${esc(mpDropWhy(c))}</span>` : `<button data-mp="del" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">🗑 Xoá</button>`}</td></tr>`;
     }).join('');
     const linkBox = mpUi.link ? (() => {
