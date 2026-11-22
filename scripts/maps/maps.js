@@ -731,7 +731,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
 
   // 🧾 Chuẩn hoá tên + MST từ masothue.com: NGẦM, mỗi 15 giây 1 công ty chưa có MST (qua background – không CORS, không lag).
   // Chọn kết quả khớp nhất (tên đã bỏ loại hình / dấu, đường / KCN trong địa chỉ, tỉnh mới sau sáp nhập); đủ chắc (≥ 0,75) mới lưu.
-  // Không khớp → ghi lần thử, 30 ngày sau mới thử lại. Bị chặn / lỗi → nghỉ 10 phút.
+  // Không khớp → đánh dấu mstSkip, KHÔNG tra lại. Bị chặn / lỗi → nghỉ 10 phút.
   const MST_STOP = new Set(['cong', 'ty', 'tnhh', 'co', 'phan', 'cp', 'mtv', 'mot', 'thanh', 'vien', 'viet', 'nam', 'vn', 'company', 'limited', 'ltd', 'chi', 'nhanh', 'san', 'xuat', 'thuong', 'mai', 'dich', 'vu', 'va', 'xuat', 'nhap', 'khau', 'tm', 'dv', 'sx']);
   const words = (t) => unacc(t).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 1 && !MST_STOP.has(w));
   function mstScore(c, r) {
