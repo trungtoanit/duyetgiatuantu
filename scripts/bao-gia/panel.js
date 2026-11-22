@@ -14156,12 +14156,16 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     debt: { on: false, amount: 20e6, days: 7, cap: 5 },
     maint: { on: false, days: 3, cap: 3 },
     order: { on: false, days: 2, cap: 5, doneSt: [] },
-    stale: { on: true, over: 14, cap: 10, who: 'boss' },
+    stale: { on: false, over: 14, cap: 10, who: 'boss' }, // đã bỏ quy tắc "Hoàn thành đơn" – luôn tắt (xem tkAutoCfg)
     dn: { on: true, cap: 10 },
     dg: { on: true, cap: 20 },
     tp: { on: true, cap: 1 },
   };
-  const tkAutoCfg = (c) => Object.fromEntries(Object.keys(TK_AUTO).map((k) => [k, { ...TK_AUTO[k], ...(c?.[k] || {}) }]));
+  const tkAutoCfg = (c) => {
+    const o = Object.fromEntries(Object.keys(TK_AUTO).map((k) => [k, { ...TK_AUTO[k], ...(c?.[k] || {}) }]));
+    o.stale.on = false; // 🐢 bỏ hẳn việc "Hoàn thành đơn …" (đơn tồn tab Mới) – không tạo nữa dù cấu hình cũ đang bật
+    return o;
+  };
   const tkSec = (x) => (x > 1e11 ? x / 1000 : x || 0);
   // Hết ngày hôm nay (23:59 giờ VN) – việc Đơn gửi chờ lên đơn luôn là việc của hôm nay, sang ngày mới tự dời hạn, không thành quá hạn
   const tkTodayEnd = (now = Date.now()) => {
@@ -14343,6 +14347,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const goneLog = {};
       for (const t of Object.values(tasks)) {
         if (!t?.src || t.status === 'done' || t.status === 'cancel') continue;
+        // việc "Hoàn thành đơn …" (quy tắc stale) đã bỏ → xoá hết việc còn mở
+        if (t.src.rule === 'stale') {
+          gone[t.id] = null;
+          goneLog[`${t.id}-${now}-${Math.random().toString(36).slice(2, 6)}`] = { t: t.id, at: now, by: meName, what: '⚡ Xoá việc: đã bỏ việc tự tạo “Hoàn thành đơn”' };
+          changed = true;
+          continue;
+        }
         const why = tkSrcDone(t, ac, data);
         if (!why) continue;
         // đề nghị không còn chờ duyệt, báo giá đã thành công / thất bại / có đơn → xoá hẳn việc, chỉ giữ lại dòng trong nhật ký
@@ -19275,7 +19286,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
         ${card('quote', '🎯', 'Báo giá chờ Duyệt lên đơn quá lâu', `Giao cho ${esc(cfg.boss)}. Thành công, thất bại hoặc có đơn thì việc tự xoá (đọc tab Duyệt lên đơn 15 phút / lần).`, num('quote', 'hours', 'Chờ từ (giờ)', ac.quote.hours))}
         ${card('debt', '💰', 'Công nợ quá hạn', `Giao cho NVKD của khách, mỗi khách 1 việc / tháng. ${debtAge ? `Dữ liệu cập nhật ${esc(tkTime(debtAge))}.` : 'Chưa có dữ liệu – mở trang Công nợ của CRM.'}`, num('debt', 'amount', 'Nợ quá hạn từ (đ)', ac.debt.amount) + num('debt', 'days', 'Quá hạn từ (ngày)', ac.debt.days))}
         ${card('maint', '🔧', 'Lỗi bảo trì Khẩn cấp / Cao để lâu', `Giao cho ${esc(data.maintCfg?.main?.to || '(chưa cài người nhận bảo trì)')}. Chỉ lấy báo cáo chưa xử lý (tab Mới, Đang xử lý, Đã có đề nghị), đọc 15 phút / lần${data.maintOpen._src ? `, lần gần nhất ${esc(tkTime(data.maintOpen._src.at))}: ${data.maintOpen._src.n} báo cáo` : ''}. Tự đóng khi báo cáo đã xử lý.`, num('maint', 'days', 'Để từ (ngày)', ac.maint.days))}
-        ${card('stale', '🐢', 'Đơn quá hạn giao, chưa giao', `Đơn còn ở tab Mới và đã quá ngày giao; đơn chưa có ngày giao thì tính từ ngày lên đơn. Đọc từ Danh sách đơn, tab Mới, 30 phút / lần. ${data.ordersNew._src ? `Lần đọc gần nhất ${esc(tkTime(data.ordersNew._src.at))}: ${data.ordersNew._src.n} đơn${data.ordersNew._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Tự đóng khi đơn không còn ở tab Mới.`, num('stale', 'over', 'Quá hạn từ (ngày)', ac.stale.over) + `<label style="font-size:12px;color:#475569">Giao cho<select data-r="stale" data-n="who" style="${TK_IN};width:170px"><option value="boss"${ac.stale.who === 'boss' ? ' selected' : ''}>${esc(cfg.boss)}</option><option value="staff"${ac.stale.who === 'staff' ? ' selected' : ''}>NVKD của đơn</option></select></label>`)}
+        ${'' /* 🐢 Đơn quá hạn giao: đã bỏ */}
         ${card('dn', '📝', 'Đề nghị cần tôi duyệt', `Đọc từ trang Đề nghị với công tắc Cần tôi duyệt, chỉ tab Đang duyệt, 30 phút / lần, theo tài khoản của máy đang đọc. Giao cho ${esc(cfg.boss)}, tiền lớn trước. ${data.dnPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.dnPending._src.at))}: ${data.dnPending._src.n} đề nghị${data.dnPending._src.complete ? '' : ' (chưa đủ mọi trang)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đề nghị không còn chờ duyệt thì việc tự xoá.`, '')}
         ${card('dg', '📮', 'Đơn gửi chờ lên đơn', `Đơn có Số BG TT mà chưa có ĐH Misa ở trang Đơn gửi, đọc đủ các tab 15 phút / lần. Giao cho ${esc(cfg.boss)}. ${data.donGuiPending._src ? `Lần đọc gần nhất ${esc(tkTime(data.donGuiPending._src.at))}: <b>${data.donGuiPending._src.n} đơn</b>${Object.keys(data.donGuiPending._src.count || {}).length ? ` (${Object.entries(data.donGuiPending._src.count).map(([k, n]) => `${esc(k)} ${n}`).join(' · ')})` : ''}${data.donGuiPending._src.complete ? '' : ' (chưa đủ mọi tab)'}.` : 'Chưa đọc lần nào, chờ khoảng 1 phút rồi mở lại khung này.'} Đơn đã có mã thì việc tự xoá.`, '')}
         ${card('tp', '🏭', 'Báo cáo thành phẩm yếu', `Đọc Dashboard KH thứ 2–7 từ 8 giờ, 1 lần / ngày. Thành phẩm thấp hơn kinh doanh hoặc ngày làm việc gần nhất dưới trung bình thì tạo việc giao cho nhóm Zalo “${esc(TP_GROUP)}” và gửi 1 tin vào nhóm. Sang ngày mới việc tự xoá, xét lại theo số liệu mới.`, '')}
