@@ -160,7 +160,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       cache = (await kvGet(KEY).catch(() => ({}))) || {};
       const rows = Object.values(cache).filter((x) => x?.name && !isRealEstate(x));
       const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-      const csv = '﻿' + [['Tên', 'Tên pháp lý (masothue)', 'MST', 'Địa chỉ đăng ký', 'KCN', 'Loại hình', 'Địa chỉ', 'SĐT', 'Website', 'Plus code', 'Vĩ độ', 'Kinh độ', 'Google Maps'].map(q).join(',')].concat(rows.map((x) => [x.name, x.legalName, x.mst, x.legalAddr, x.kcn, x.cat, x.addr, x.phone, x.web, x.plus, x.lat, x.lng, x.href || x.url].map(q).join(','))).join('\n');
+      const csv = '﻿' + [['Tên', 'Ngành (AI)', 'Tên pháp lý (masothue)', 'MST', 'Địa chỉ đăng ký', 'KCN', 'Loại hình', 'Địa chỉ', 'SĐT', 'Website', 'Plus code', 'Vĩ độ', 'Kinh độ', 'Google Maps'].map(q).join(',')].concat(rows.map((x) => [x.name, x.ind, x.legalName, x.mst, x.legalAddr, x.kcn, x.cat, x.addr, x.phone, x.web, x.plus, x.lat, x.lng, x.href || x.url].map(q).join(','))).join('\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       a.download = `dia-chi-cong-ty-google-maps-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -895,7 +895,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const sec = Math.round((Date.now() - mstSt.at) / 1000);
     const ph = Date.now() < mstPause && mstSt.phase !== 'blocked' ? `⏸ Tạm nghỉ (masothue lỗi / bận) – thử lại sau ${Math.ceil((mstPause - Date.now()) / 60e3)} phút`
       : { search: `🔎 Đang tra masothue: <b>${esc(mstSt.name)}</b> (${sec}s)`, tab: `⏳ Đã gửi tab masothue: <b>${esc(mstSt.name)}</b> – chờ tới lượt (${sec}s)`, tabwork: `🔎 Tab masothue đang tra: <b>${esc(mstSt.name)}</b> (${sec}s)`, blocked: '⚠️ masothue cần xác minh (Cloudflare) – mở tab masothue để tự xác minh', notab: `🧾 Chưa có tab tra MST – bấm <a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:800">Mở tab tra MST</a>`, wait: '⏱ Chờ 15 giây rồi tra công ty kế tiếp…', done: '✅ Đã tra hết các công ty đang có', idle: '⏱ Chuẩn bị tra MST…' }[mstSt.phase] || '';
-    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}`;
+    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div>`;
   }
   setInterval(mstBarDraw, 1000);
 
@@ -905,6 +905,53 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     : c.mstTry || c.mstSkip
       ? ` <span title="MST không rõ – masothue không có kết quả đủ chắc, không tra lại${(c.mstCands || []).length ? `\nGần nhất: ${esc(c.mstCands.map((x) => `${x.name} (${x.mst})`).join(' · '))}` : ''}" style="display:inline-block;padding:0 5px;border-radius:6px;background:#f1f5f9;color:#94a3b8;font-size:10.5px;font-weight:900;white-space:nowrap">❓ MST</span>`
       : ` <span title="Chưa tra MST – đang chờ lượt" style="color:#cbd5e1;font-size:10.5px">⏳</span>`;
+
+  // 🏷 AI gắn nhãn ngành nghề: mỗi phút 1 lô ≤ 25 công ty chưa có nhãn → Claude (qua background, key trong popup extension)
+  // chọn 1 ngành trong danh sách cố định theo tên / tên pháp lý / loại hình Google → c.ind (lưu kv, đồng bộ). Lỗi → nghỉ 10 phút.
+  const INDS = ['Thực phẩm – đồ uống', 'Nông sản – chăn nuôi – thức ăn CN', 'Dệt may – may mặc', 'Giày da – túi xách', 'Gỗ – nội thất', 'Giấy – bao bì – in ấn', 'Nhựa – cao su', 'Hoá chất – sơn – mực', 'Dược – mỹ phẩm – y tế', 'Điện – điện tử', 'Cơ khí – kim loại – thép', 'Ô tô – xe máy – phụ tùng', 'Vật liệu xây dựng – gốm sứ – kính', 'Logistics – kho vận – vận tải', 'Thương mại – XNK', 'Thiết bị – máy móc công nghiệp', 'Đồ chơi – quà tặng – văn phòng phẩm', 'Năng lượng – môi trường', 'Dịch vụ – tư vấn – phần mềm', 'Khác'];
+  const IND_COL = { 'Thực phẩm – đồ uống': '#ea580c', 'Nông sản – chăn nuôi – thức ăn CN': '#65a30d', 'Dệt may – may mặc': '#db2777', 'Giày da – túi xách': '#9a3412', 'Gỗ – nội thất': '#a16207', 'Giấy – bao bì – in ấn': '#0891b2', 'Nhựa – cao su': '#7c3aed', 'Hoá chất – sơn – mực': '#dc2626', 'Dược – mỹ phẩm – y tế': '#e11d48', 'Điện – điện tử': '#2563eb', 'Cơ khí – kim loại – thép': '#475569', 'Ô tô – xe máy – phụ tùng': '#334155', 'Vật liệu xây dựng – gốm sứ – kính': '#78716c', 'Logistics – kho vận – vận tải': '#0d9488', 'Thương mại – XNK': '#4f46e5', 'Thiết bị – máy móc công nghiệp': '#52525b', 'Đồ chơi – quà tặng – văn phòng phẩm': '#c026d3', 'Năng lượng – môi trường': '#16a34a', 'Dịch vụ – tư vấn – phần mềm': '#64748b', Khác: '#94a3b8' };
+  const indTag = (c) => (c.ind ? ` <span title="Ngành (AI gắn nhãn)" style="display:inline-block;padding:0 6px;border-radius:6px;background:${IND_COL[c.ind] || '#94a3b8'}1a;border:1px solid ${IND_COL[c.ind] || '#94a3b8'}55;color:${IND_COL[c.ind] || '#64748b'};font-size:10.5px;font-weight:800;white-space:nowrap">🏷 ${esc(c.ind)}</span>` : '');
+  let indPause = 0;
+  let indBusy = false;
+  const indSt = { phase: 'idle', n: 0, last: '' };
+  async function indTick() {
+    if (indBusy || Date.now() < indPause || !cache) return;
+    const todo = Object.values(cache).filter((x) => x?.name && !isRealEstate(x) && !x.ind && !(x.indTry && Date.now() - x.indTry < 86400e3)).slice(0, 25);
+    if (!todo.length) return (indSt.phase = 'done');
+    indBusy = true;
+    indSt.phase = 'run';
+    indSt.n = todo.length;
+    try {
+      const lines = todo.map((c, i) => `${i + 1}. ${c.legalName || c.name}${c.legalName && c.legalName !== c.name ? ` (Google: ${c.name})` : ''}${c.cat ? ` | loại hình Google: ${c.cat}` : ''}`).join('\n');
+      const text = await call({
+        type: 'claude',
+        maxTokens: 2000,
+        system: 'Bạn phân loại ngành nghề doanh nghiệp Việt Nam (khu công nghiệp miền Nam) cho đội bán hàng thùng carton. Chỉ trả JSON, không giải thích.',
+        prompt: `Gắn đúng 1 ngành cho mỗi công ty, CHỈ chọn trong danh sách:\n${INDS.map((x) => `- ${x}`).join('\n')}\nĐoán theo tên công ty, tên pháp lý và loại hình Google; không chắc thì chọn "Khác".\nTrả về JSON mảng: [{"i":1,"nganh":"…"}, …]\n\nCông ty:\n${lines}`,
+      });
+      const arr = JSON.parse((text.match(/\[[\s\S]*\]/) || ['[]'])[0]);
+      const patch = {};
+      for (const [i, c] of todo.entries()) {
+        const r = arr.find((x) => Number(x.i) === i + 1);
+        const ind = INDS.includes(r?.nganh) ? r.nganh : '';
+        const v = ind ? { ...c, ind, indAt: Date.now() } : { ...c, indTry: Date.now() };
+        cache[c.id] = v;
+        patch[c.id] = v;
+      }
+      await kvMerge(KEY, patch);
+      indSt.last = `🏷 Đã gắn ngành ${Object.values(patch).filter((x) => x.ind).length}/${todo.length} công ty`;
+      indSt.phase = 'wait';
+      sideCalcKey = '';
+    } catch (e) {
+      indSt.phase = 'err';
+      indSt.last = `⚠️ AI gắn ngành lỗi: ${String(e.message || e).slice(0, 80)} – thử lại sau 10 phút`;
+      indPause = Date.now() + 10 * 60e3;
+    } finally {
+      indBusy = false;
+    }
+  }
+  setTimeout(() => indTick().catch(() => {}), 20e3);
+  setInterval(() => indTick().catch(() => {}), 60e3);
 
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
   const side = document.createElement('div');
@@ -968,7 +1015,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const body = order.map(([k, g]) => {
       const items = g.list.sort((a, b) => a.name.localeCompare(b.name, 'vi')).filter(() => shown++ < 250);
       if (!items.length) return '';
-      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${mstIcon(c)}${erpBadge(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${mstIcon(c)}${erpBadge(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">⏳ Chưa có công ty nào trong khung này – đang tự quét ngầm (dừng bản đồ vài giây, zoom gần)…</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
