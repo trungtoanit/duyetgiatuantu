@@ -155,9 +155,42 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       return;
     }
     if (k === 'scan') {
-      const c = location.href.match(/@(-?\d+\.\d+),(-?\d+\.\d+),(\d+(?:\.\d+)?)z/);
-      sessionStorage.setItem('dgMapsAuto', '1');
-      location.href = `https://www.google.com/maps/search/c%C3%B4ng+ty/${c ? `@${c[1]},${c[2]},${Math.max(13, Math.round(Number(c[3])))}z` : ''}`;
+      // quét đúng màn hình đang xem (vị trí vừa kéo tới):
+      // 1) có nút "Search this area" → bấm; 2) gõ "công ty" vào ô tìm kiếm (Maps tìm trong khung đang xem, không tải lại);
+      // 3) cuối cùng mới tải lại theo toạ độ + zoom hiện tại (URL dạng …z hoặc …m)
+      busy = true;
+      try {
+        const before = document.querySelector('div[role="feed"] div[role="article"] a[href*="/maps/place/"]')?.href || '';
+        const sta = [...document.querySelectorAll('button')].find((b) => /^(Search this area|Tìm kiếm khu vực này|Tìm khu vực này)$/i.test(b.innerText.trim()) && b.getClientRects().length);
+        const inp = document.querySelector('input#searchboxinput, input[name="q"]');
+        const go = document.querySelector('button#searchbox-searchbutton, button[aria-label="Search"], button[aria-label="Tìm kiếm"]');
+        msg = '🔍 Đang tìm công ty trong màn hình này…';
+        draw();
+        if (sta) sta.click();
+        else if (inp && go) {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, 'công ty');
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+          go.click();
+        } else {
+          const v = mapView();
+          sessionStorage.setItem('dgMapsAuto', '1');
+          location.href = `https://www.google.com/maps/search/c%C3%B4ng+ty/${v ? `@${v.lat},${v.lng},${Math.max(13, Math.round(v.z))}z` : ''}`;
+          return;
+        }
+        for (let i = 0; i < 24; i++) {
+          await sleep(500);
+          const first = document.querySelector('div[role="feed"] div[role="article"] a[href*="/maps/place/"]')?.href || '';
+          if (first && first !== before) break;
+        }
+      } finally {
+        busy = false;
+      }
+      if (document.querySelector('div[role="feed"] div[role="article"]')) await saveFeedAll();
+      else {
+        msg = 'Không thấy danh sách công ty trong màn hình này.';
+        draw();
+      }
+      sideCalcKey = '';
       return;
     }
     if (k === 'csv') {
