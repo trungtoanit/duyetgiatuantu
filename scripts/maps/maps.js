@@ -143,7 +143,7 @@
     const n = Object.keys(cache).length;
     const feedN = document.querySelectorAll('div[role="feed"] div[role="article"]').length;
     box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:900;color:#1e3a8a">📍 Trợ lý ERP · địa chỉ công ty <span title="Đã chuẩn hoá tên + MST từ masothue.com (tra ngầm 15 giây / công ty)" style="margin-left:auto;background:#f3e8ff;color:#6d28d9;border-radius:99px;padding:0 8px">🧾 ${Object.values(cache).filter((x) => x?.mst).length}</span><span style="background:#dbeafe;border-radius:99px;padding:0 8px">${n}</span><span data-m="min" title="Thu nhỏ" style="cursor:pointer;color:#94a3b8">–</span></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty màn hình này</button><button data-m="crawl" title="Tự dời bản đồ qua từng ô ~5 km trong 7 tỉnh, tìm “công ty”, lưu lên cloud (20–35 giây / ô). Ô đã chạy được đánh dấu – F5 hay máy khác chỉ chạy tiếp ô chưa quét." style="${btn};${crawlOn ? 'background:#fee2e2;border-color:#fca5a5;color:#b91c1c' : 'background:#e0f2fe;border-color:#7dd3fc;color:#0369a1'}">🛰 ${crawlOn ? 'Dừng tự chạy' : 'Tự chạy 7 tỉnh'} · ${crawlCells.length - crawlLeft().length}/${crawlCells.length} ô</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button>${Object.values(cache).some((x) => x?.hidden) ? `<button data-m="hidden" title="Xem / hiện lại công ty đã ẩn" style="${btn}">🙈 Đã ẩn (${Object.values(cache).filter((x) => x?.hidden).length})</button>` : ''}${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty màn hình này</button><button data-m="kcnscan" title="Tự đi vào từng KCN / CCN trong 7 tỉnh (chia điểm ~2 km), tìm “công ty”, lưu lên cloud. Điểm đã quét được đánh dấu – F5 / máy khác chạy tiếp phần còn lại." style="${btn};${crawlOn && crawlMode === 'kcn' ? 'background:#fee2e2;border-color:#fca5a5;color:#b91c1c' : 'background:#ffedd5;border-color:#fdba74;color:#9a3412'}">🏭 ${crawlOn && crawlMode === 'kcn' ? 'Dừng quét KCN' : 'Tự quét KCN'}${kcnIndex ? (() => { const pr = kcnProgress(); return ` · ${pr.kcnDone}/${pr.kcn} KCN`; })() : ''}</button><button data-m="crawl" title="Tự dời bản đồ qua từng ô ~5 km trong 7 tỉnh, tìm “công ty”, lưu lên cloud (20–35 giây / ô). Ô đã chạy được đánh dấu – F5 hay máy khác chỉ chạy tiếp ô chưa quét." style="${btn};${crawlOn && crawlMode === 'grid' ? 'background:#fee2e2;border-color:#fca5a5;color:#b91c1c' : 'background:#e0f2fe;border-color:#7dd3fc;color:#0369a1'}">🛰 ${crawlOn && crawlMode === 'grid' ? 'Dừng tự chạy' : 'Tự chạy 7 tỉnh'} · ${crawlCells.filter(([k]) => crawlDone?.[k] && Date.now() - crawlDone[k] < 30 * 86400e3).length}/${crawlCells.length} ô</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button>${Object.values(cache).some((x) => x?.hidden) ? `<button data-m="hidden" title="Xem / hiện lại công ty đã ẩn" style="${btn}">🙈 Đã ẩn (${Object.values(cache).filter((x) => x?.hidden).length})</button>` : ''}${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
 ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</div>` : ''}`;
   }
   box.addEventListener('click', async (e) => {
@@ -204,12 +204,18 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       a.click();
       return;
     }
-    if (k === 'crawl') {
-      crawlOn = !crawlOn;
+    if (k === 'kcnscan' || k === 'crawl') {
+      const mode = k === 'kcnscan' ? 'kcn' : 'grid';
+      // đang chạy chế độ khác → chuyển sang chế độ vừa bấm; bấm lại đúng chế độ đang chạy → dừng
+      crawlOn = !(crawlOn && crawlMode === mode);
+      crawlMode = mode;
+      localStorage.setItem('dgMapsCrawlMode', mode);
+      sessionStorage.removeItem('dgCrawlNext');
+      if (mode === 'kcn' && crawlOn) kcnIndexLoad().then(() => draw()).catch(() => {});
       localStorage.setItem('dgMapsCrawl', crawlOn ? '1' : '0');
       if (!crawlOn) sessionStorage.removeItem('dgCrawlCell');
       else crawlDone = (await kvGet('mapsCrawl').catch(() => ({}))) || {};
-      msg = crawlOn ? '🛰 Bắt đầu tự chạy 7 tỉnh – để tab Google Maps này mở.' : '⏹ Đã dừng tự chạy (ô đã quét vẫn được nhớ).';
+      msg = crawlOn ? (mode === 'kcn' ? '🏭 Bắt đầu tự quét các KCN – để tab Google Maps này mở.' : '🛰 Bắt đầu tự chạy 7 tỉnh – để tab Google Maps này mở.') : '⏹ Đã dừng (chỗ đã quét vẫn được nhớ).';
       draw();
       return;
     }
@@ -668,7 +674,63 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   let crawlDone = null; // kv mapsCrawl
   const crawlSt = { phase: '', cell: '' };
   const crawlBlocked = () => /\/sorry\//.test(location.pathname) || /unusual traffic|lưu lượng truy cập bất thường|not a robot|không phải là người máy/i.test(document.body?.innerText?.slice(0, 3000) || '') || !!document.querySelector('iframe[src*="recaptcha"]');
-  const crawlLeft = () => crawlCells.filter(([k]) => !(crawlDone?.[k] && Date.now() - crawlDone[k] < 30 * 86400e3));
+  // 🏭 Tự quét KCN: danh sách KCN / CCN trong 7 tỉnh (Overpass "out bb", lưu kv kcnIndex 30 ngày – đồng bộ) + KCN tự vẽ.
+  // Mỗi KCN chia điểm dừng ~2 km (zoom 16) → tìm "công ty" từng điểm; điểm xong đánh dấu chung kv mapsCrawl ("k:<kcn>:<i>").
+  let crawlMode = localStorage.getItem('dgMapsCrawlMode') || 'grid'; // 'grid' (cả 7 tỉnh) | 'kcn'
+  let kcnIndex = null;
+  async function kcnIndexLoad(force = false) {
+    if (kcnIndex && !force) return kcnIndex;
+    const cur = (await kvGet('kcnIndex').catch(() => ({})))?.all;
+    if (cur?.list?.length && Date.now() - cur.at < 30 * 86400e3 && !force) return (kcnIndex = cur.list);
+    const bb = '10.3,105.8,12.3,107.6';
+    const q = `[out:json][timeout:90];(way["landuse"="industrial"]["name"~"${KCN_RE}",i](${bb});relation["landuse"="industrial"]["name"~"${KCN_RE}",i](${bb});way["industrial"="industrial_park"](${bb});relation["industrial"="industrial_park"](${bb}););out tags bb;`;
+    for (const host of KCN_HOSTS) {
+      const res = await fetch(host, { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' } }).catch(() => null);
+      const j = res?.ok ? await res.json().catch(() => null) : null;
+      if (!j) continue;
+      const list = (j.elements || []).filter((e) => e.bounds && (e.tags?.name || e.tags?.['name:vi'])).map((e) => ({ id: `${e.type}/${e.id}`, name: e.tags.name || e.tags['name:vi'], bb: [e.bounds.minlat, e.bounds.minlon, e.bounds.maxlat, e.bounds.maxlon] }))
+        .filter((k) => inRegion((k.bb[0] + k.bb[2]) / 2, (k.bb[1] + k.bb[3]) / 2));
+      if (list.length) {
+        await kvMerge('kcnIndex', { all: { at: Date.now(), list } });
+        return (kcnIndex = list);
+      }
+    }
+    return (kcnIndex = cur?.list || []);
+  }
+  // điểm dừng của các KCN (gần Bình Dương – TP.HCM trước; KCN tự vẽ cũng quét)
+  function kcnStops() {
+    const ks = [...(kcnIndex || [])];
+    for (const [id, p] of Object.entries(kcnCustom || {})) {
+      if (!p?.rings?.length || p.deleted) continue;
+      const all = p.rings.flat();
+      ks.push({ id: `c/${id}`, name: p.name, bb: [Math.min(...all.map((x) => x[0])), Math.min(...all.map((x) => x[1])), Math.max(...all.map((x) => x[0])), Math.max(...all.map((x) => x[1]))] });
+    }
+    const out = [];
+    const ST = 0.02;
+    for (const k of ks) {
+      const [s1, w1, n1, e1] = k.bb;
+      const ny = Math.max(1, Math.round((n1 - s1) / ST));
+      const nx = Math.max(1, Math.round((e1 - w1) / ST));
+      let i = 0;
+      for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) out.push([`k:${k.id}:${i++}`, [Number((s1 + ((y + 0.5) * (n1 - s1)) / ny).toFixed(5)), Number((w1 + ((x + 0.5) * (e1 - w1)) / nx).toFixed(5)), 16], k.name]);
+    }
+    return out.sort((a, b) => Math.hypot(a[1][0] - CRAWL_CENTER[0], a[1][1] - CRAWL_CENTER[1]) - Math.hypot(b[1][0] - CRAWL_CENTER[0], b[1][1] - CRAWL_CENTER[1]));
+  }
+  const crawlList = () => (crawlMode === 'kcn' ? kcnStops() : crawlCells);
+  const crawlLeft = () => crawlList().filter(([k]) => !(crawlDone?.[k] && Date.now() - crawlDone[k] < 30 * 86400e3));
+  const kcnProgress = () => {
+    const st = kcnStops();
+    const byK = new Map();
+    for (const [k, , name] of st) {
+      const id = k.split(':').slice(1, -1).join(':');
+      const g = byK.get(id) || { name, n: 0, done: 0 };
+      g.n++;
+      if (crawlDone?.[k] && Date.now() - crawlDone[k] < 30 * 86400e3) g.done++;
+      byK.set(id, g);
+    }
+    const all = [...byK.values()];
+    return { kcn: all.length, kcnDone: all.filter((g) => g.done === g.n).length, stops: st.length };
+  };
   let crawlBusy = false;
   async function crawlTick() {
     if (!crawlOn || crawlBusy) return;
@@ -707,20 +769,29 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
         crawlSt.phase = 'wait';
         return;
       }
+      if (crawlMode === 'kcn' && !kcnIndex) {
+        msg = '🏭 Đang lấy danh sách KCN trong 7 tỉnh…';
+        draw();
+        await kcnIndexLoad();
+      }
       const left = crawlLeft();
       if (!left.length) {
         crawlOn = false;
         localStorage.setItem('dgMapsCrawl', '0');
-        msg = '✅ Đã chạy hết các ô trong 7 tỉnh.';
+        msg = crawlMode === 'kcn' ? (kcnIndex?.length ? '✅ Đã quét hết các KCN.' : '⚠️ Chưa lấy được danh sách KCN (máy chủ OSM bận) – thử lại sau.') : '✅ Đã chạy hết các ô trong 7 tỉnh.';
         draw();
         return;
       }
-      const [k, [la, ln]] = left[0];
+      const [k, [la, ln, zz], kname] = left[0];
+      if (kname) {
+        msg = `🏭 Đang quét ${kname}…`;
+        draw();
+      }
       sessionStorage.setItem('dgCrawlCell', k);
       sessionStorage.setItem('dgCrawlAt', String(Date.now()));
       crawlSt.phase = 'go';
       crawlSt.cell = k;
-      location.href = `https://www.google.com/maps/search/c%C3%B4ng+ty/@${la},${ln},15z`;
+      location.href = `https://www.google.com/maps/search/c%C3%B4ng+ty/@${la},${ln},${zz || 15}z`;
     } catch {
     } finally {
       crawlBusy = false;
