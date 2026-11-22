@@ -19798,7 +19798,21 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
       return true;
     }).sort((a, b) => (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
   }
+  // Lưu trang đang xem + ô tìm + bộ lọc của tab lên cloud (kv mapsTabUi, theo từng người) – F5 / máy khác mở lại đúng chỗ
+  let mpUiLoaded = false;
+  let mpUiT = 0;
+  const mpPersist = () => {
+    clearTimeout(mpUiT);
+    mpUiT = setTimeout(() => {
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, ind: mpUi.ind, show: mpUi.show, page: mpUi.page, at: Date.now() } }).catch(() => {});
+    }, 800);
+  };
   async function mapsTab() {
+    if (!mpUiLoaded) {
+      mpUiLoaded = true;
+      const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', ind: v.ind || '', show: v.show || 'on', page: Number(v.page) || 0 });
+    }
     await mpLoad();
     if (root && !root.__mp) {
       root.__mp = 1;
@@ -19948,6 +19962,7 @@ ${linkBox}</div>`;
     else if (k === 'pg') mpUi.page = Number(t.dataset.p) || 0;
     else if (k === 'reload') await mpLoad(true);
     else return;
+    mpPersist();
     render();
   }
   let mpQT = 0;
@@ -19955,6 +19970,7 @@ ${linkBox}</div>`;
     if (e.target.matches?.('[data-mp-q]')) {
       mpUi.q = e.target.value;
       mpUi.page = 0;
+      mpPersist();
       clearTimeout(mpQT);
       // gõ xong 0,4 giây mới lọc lại (vẽ lại cả bảng) – giữ con trỏ trong ô tìm
       mpQT = setTimeout(async () => {
@@ -19977,10 +19993,12 @@ ${linkBox}</div>`;
     if (!f) return;
     if (f === 'page') {
       mpUi.page = Number(e.target.value) || 0;
+      mpPersist();
       return render();
     }
     mpUi[f] = e.target.value;
     mpUi.page = 0;
+    mpPersist();
     mpUi.sel.clear();
     render();
   }
