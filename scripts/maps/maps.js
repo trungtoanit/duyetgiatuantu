@@ -184,7 +184,6 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   let kcnData = new Map(); // id → { name, rings: [[ [lat,lng]… ]] }
   const tileKey = (s, w) => `${Math.floor(s * 4) / 4},${Math.floor(w * 4) / 4}`; // ô 0,25°
   const kcnLoaded = new Set();
-  const kcnLoading = new Set();
   function mapView() {
     const m = decodeURIComponent(location.href).match(/@(-?\d+\.\d+),(-?\d+\.\d+),(\d+(?:\.\d+)?)(z|m)/);
     if (!m) return null;
@@ -207,50 +206,74 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     const n = Math.PI - (2 * Math.PI * y) / s;
     return [(180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))), lng];
   };
+  // 1 lượt Overpass cho cả khung đang xem (làm tròn ra ô 0,25°, tối đa ~1,5° mỗi chiều); ô đã có thì bỏ qua.
+  // Máy chủ báo bận (429 / 504) → nghỉ 60 giây, thử máy chủ dự phòng.
+  const KCN_HOSTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  let kcnBusy = false;
+  let kcnWait = 0;
   async function kcnFetch(v) {
+    if (kcnBusy || Date.now() < kcnWait) return;
     const [cx, cy] = proj(v.lat, v.lng, v.z);
     const [n, w] = unproj(cx - v.r.width / 2, cy - v.r.height / 2, v.z);
     const [s, e] = unproj(cx + v.r.width / 2, cy + v.r.height / 2, v.z);
+    const S = Math.floor(s * 4) / 4;
+    const W = Math.floor(w * 4) / 4;
+    const N = Math.ceil(n * 4) / 4;
+    const E = Math.ceil(e * 4) / 4;
+    if (N - S > 1.5 || E - W > 1.5) return; // zoom quá xa → không tải
     const tiles = [];
-    for (let a = Math.floor(s * 4) / 4; a <= n; a += 0.25) for (let b = Math.floor(w * 4) / 4; b <= e; b += 0.25) tiles.push([a, b]);
-    if (tiles.length > 12) return; // vùng quá rộng (zoom quá xa) → không tải
-    for (const [a, b] of tiles) {
-      const k = tileKey(a, b);
-      if (kcnLoaded.has(k) || kcnLoading.has(k)) continue;
-      let cached = null;
+    for (let a = S; a < N; a += 0.25) for (let b = W; b < E; b += 0.25) tiles.push(tileKey(a, b));
+    const need = tiles.filter((k) => {
+      if (kcnLoaded.has(k)) return false;
       try {
-        cached = JSON.parse(localStorage.getItem(`dgKcn:${k}`) || 'null');
-      } catch {}
-      if (cached && Date.now() - cached.at < 7 * 86400e3) {
-        for (const [id, p] of cached.list) kcnData.set(id, p);
-        kcnLoaded.add(k);
-        continue;
-      }
-      kcnLoading.add(k);
-      const bb = `${a},${b},${(a + 0.25).toFixed(2)},${(b + 0.25).toFixed(2)}`;
-      const q = `[out:json][timeout:25];(way["landuse"="industrial"]["name"~"${KCN_RE}",i](${bb});relation["landuse"="industrial"]["name"~"${KCN_RE}",i](${bb});way["industrial"="industrial_park"](${bb});relation["industrial"="industrial_park"](${bb}););out geom;`;
-      try {
-        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' } });
-        if (!res.ok) throw new Error(`Overpass ${res.status}`);
-        const j = await res.json();
-        const list = [];
-        for (const el of j.elements || []) {
-          const name = el.tags?.name || el.tags?.['name:vi'] || '';
-          let rings = [];
-          if (el.type === 'way' && el.geometry) rings = [el.geometry.map((g) => [g.lat, g.lon])];
-          else if (el.type === 'relation') rings = (el.members || []).filter((m) => m.role !== 'inner' && m.geometry).map((m) => m.geometry.map((g) => [g.lat, g.lon]));
-          if (rings.length) list.push([`${el.type}/${el.id}`, { name, rings }]);
+        const c = JSON.parse(localStorage.getItem(`dgKcn:${k}`) || 'null');
+        if (c && Date.now() - c.at < 7 * 86400e3) {
+          for (const [id, p] of c.list) kcnData.set(id, p);
+          kcnLoaded.add(k);
+          return false;
         }
-        for (const [id, p] of list) kcnData.set(id, p);
-        try {
-          localStorage.setItem(`dgKcn:${k}`, JSON.stringify({ at: Date.now(), list }));
-        } catch {}
-        kcnLoaded.add(k);
-      } catch {
-        // lỗi mạng / quá tải → lần sau thử lại
-      } finally {
-        kcnLoading.delete(k);
+      } catch {}
+      return true;
+    });
+    if (!need.length) return kcnDraw();
+    kcnBusy = true;
+    const bb = `${S},${W},${N},${E}`;
+    const q = `[out:json][timeout:40];(way["landuse"="industrial"]["name"~"${KCN_RE}",i](${bb});relation["landuse"="industrial"]["name"~"${KCN_RE}",i](${bb});way["industrial"="industrial_park"](${bb});relation["industrial"="industrial_park"](${bb}););out geom;`;
+    try {
+      let j = null;
+      for (const host of KCN_HOSTS) {
+        const res = await fetch(host, { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' } }).catch(() => null);
+        if (res?.ok) {
+          j = await res.json().catch(() => null);
+          if (j) break;
+        }
       }
+      if (!j) {
+        kcnWait = Date.now() + 60e3;
+        return;
+      }
+      // chia phần tử về từng ô theo điểm đầu tiên → lưu cache theo ô
+      const byTile = Object.fromEntries(tiles.map((k) => [k, []]));
+      for (const el of j.elements || []) {
+        const name = el.tags?.name || el.tags?.['name:vi'] || '';
+        let rings = [];
+        if (el.type === 'way' && el.geometry) rings = [el.geometry.map((g) => [g.lat, g.lon])];
+        else if (el.type === 'relation') rings = (el.members || []).filter((m) => m.role !== 'inner' && m.geometry).map((m) => m.geometry.map((g) => [g.lat, g.lon]));
+        if (!rings.length) continue;
+        const id = `${el.type}/${el.id}`;
+        const p = { name, rings };
+        kcnData.set(id, p);
+        const k = tileKey(rings[0][0][0], rings[0][0][1]);
+        (byTile[k] ||= []).push([id, p]);
+      }
+      for (const k of tiles) {
+        kcnLoaded.add(k);
+        try {
+          localStorage.setItem(`dgKcn:${k}`, JSON.stringify({ at: Date.now(), list: byTile[k] || [] }));
+        } catch {}
+      }
+    } finally {
+      kcnBusy = false;
     }
     kcnDraw();
   }
