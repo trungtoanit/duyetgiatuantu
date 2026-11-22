@@ -565,6 +565,48 @@
       } catch {}
       return;
     }
+    // Danh sách khách hàng (trang /khach-hang): GET /v1/admin/customer?page=&limit= → rút gọn từng khách, gửi panel.js lưu kv customersAll (đồng bộ cloud)
+    if (/\/v1\/admin\/customer\?/.test(url) && Array.isArray(d.customers)) {
+      const page = Number(url.match(/[?&]page=(\d+)/)?.[1] || 1);
+      const limit = Number(url.match(/[?&]limit=(\d+)/)?.[1] || d.customers.length || 100);
+      const nm = (x) => (x && typeof x === 'object' ? x.name || '' : '');
+      const list = d.customers.map((c) => ({
+        id: c.id,
+        code: c.code || '',
+        name: c.name || '',
+        type: c.type || '',
+        address: c.address || '',
+        deliveryAddress: c.deliveryAddress || '',
+        phone: c.phone || '',
+        deliveryPhone: c.deliveryPhone || '',
+        email: c.email || c.companyEmail || '',
+        taxCode: String(c.companyTaxCode || '').trim(),
+        contactName: c.contactName || '',
+        zalo: c.zalo || '',
+        staff: c.staff ? { id: c.staff.id, name: c.staff.name || '', code: c.staff.code || '' } : null,
+        city: nm(c.city),
+        source: nm(c.customerSource),
+        categories: (c.categories || []).map(nm).filter(Boolean),
+        tags: (c.customerTags || []).map((t) => nm(t) || t?.tag?.name || '').filter(Boolean),
+        lat: c.lat || null,
+        lng: c.lng || null,
+        distance: c.distance || 0,
+        totalOrder: c.totalOrder || 0,
+        totalOrderMoney: c.totalOrderMoney || 0,
+        avgMoney: c.avgMoney || 0,
+        lastOrderAt: c.lastOrderAt || 0,
+        lastInteractAt: c.lastInteractAt || 0,
+        cycleBuy: c.calcCycleBuy || c.cycleBuy || 0,
+        allowDebtDay: c.allowDebtDay || 0,
+        totalPendingQuote: c.totalPendingQuote || 0,
+        isAgency: !!c.isAgency,
+        isBlocked: !!c.isBlocked,
+        createdAt: c.createdAt || 0,
+        updatedAt: c.updatedAt || 0,
+      }));
+      emit('customersAll', { page, limit, total: Number(d.total) || 0, list });
+      return;
+    }
     // Danh sách báo giá (trang /bao-gia)
     if (/\/opportunity\?/.test(url) && /[?&]type=2\b/.test(url) && Array.isArray(d.opportunities)) {
       // Vị trí trên danh sách ERP (để sắp xếp y như ERP)

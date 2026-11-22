@@ -351,6 +351,14 @@
     m?.offVer !== OFF_VER ||
     (!!q?.amount && (!m?.amountAt || Math.abs(m.amountAt - q.amount) / q.amount > 0.005));
   async function save({ kind, data }) {
+    if (kind === 'customersAll') {
+      // ☁️ Danh sách khách hàng: lưu theo id (kv customersAll – đồng bộ cloud), ghi tiến độ đồng bộ (custSync)
+      const now = Date.now();
+      await kvMerge('customersAll', Object.fromEntries(data.list.map((c) => [c.id, { ...c, seenAt: now }])));
+      const cs = (await kvGet('custSync').catch(() => ({}))) || {};
+      await call({ type: 'kv.set', key: 'custSync', value: { ...cs, total: data.total || cs.total || 0, lastPageAt: now, pages: { ...(cs.pages || {}), [data.page]: now } } }).catch(() => {});
+      return;
+    }
     if (kind === 'debtUrl') {
       const k = String(data.url).replace(/^https?:\/\/[^/]+/, '').replace(/[?#].*$/, '').slice(0, 150) || 'x';
       await kvMerge('debtMeta', { [`url:${k}`]: { url: data.url, keys: data.keys, at: Date.now() } });
@@ -1220,6 +1228,102 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       f.remove();
     }
   }
+
+  // ☁️ Đồng bộ TOÀN BỘ danh sách khách hàng lên cloud: mở /khach-hang trong khung ẩn (chỉ đọc), bấm "trang sau" tới hết
+  // (~156 trang × 100 khách); hook.js đọc từng trang CRM tự tải → kv customersAll. Chỉ 1 tab chạy (khoá dgCustSyncLock).
+  const custSyncSt = { running: false, page: 0, pages: 0, msg: '' };
+  async function custSyncAll(onStep = () => {}) {
+    if (custSyncSt.running) return;
+    const lock = Number(lsGet('dgCustSyncLock')) || 0;
+    if (Date.now() - lock < 90e3) throw new Error('Đang đồng bộ ở tab khác.');
+    custSyncSt.running = true;
+    const f = document.createElement('iframe');
+    f.name = 'dg-collector';
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden;pointer-events:none';
+    f.src = '/khach-hang/';
+    document.documentElement.append(f);
+    const loaded = (page) => {
+      try {
+        return f.contentWindow.performance.getEntriesByType('resource').some((e) => /\/v1\/admin\/customer\?/.test(e.name) && new RegExp(`[?&]page=${page}&`).test(e.name));
+      } catch {
+        return false;
+      }
+    };
+    const until = async (cond, ms) => {
+      for (const t = Date.now(); Date.now() - t < ms; ) {
+        if (cond()) return true;
+        await sleep(300);
+      }
+      return false;
+    };
+    try {
+      lsSet('dgCustSyncLock', String(Date.now()));
+      custSyncSt.page = 1;
+      onStep();
+      if (!(await until(() => loaded(1), 30000))) throw new Error('Không tải được danh sách khách hàng.');
+      const totalTxt = await until(() => /Tổng\s*[\d.,]+\s*dòng/.test(f.contentDocument?.body?.innerText || ''), 8000);
+      const total = totalTxt ? Number((f.contentDocument.body.innerText.match(/Tổng\s*([\d.,]+)\s*dòng/) || [])[1].replace(/[.,]/g, '')) : 0;
+      custSyncSt.pages = total ? Math.ceil(total / 100) : 0;
+      await sleep(1200);
+      for (let page = 2; !custSyncSt.pages || page <= custSyncSt.pages; page++) {
+        custSyncSt.page = page;
+        lsSet('dgCustSyncLock', String(Date.now()));
+        onStep();
+        const next = f.contentDocument?.querySelector('.ant-pagination-next:not(.ant-pagination-disabled) button, .ant-pagination-next:not(.ant-pagination-disabled)');
+        if (!next) break;
+        next.click();
+        if (!(await until(() => loaded(page), 25000))) {
+          // tải chậm → bấm lại 1 lần
+          f.contentDocument?.querySelector(`.ant-pagination-item-${page}`)?.click();
+          if (!(await until(() => loaded(page), 25000))) throw new Error(`Trang ${page} không tải được – bấm đồng bộ lại để tiếp tục.`);
+        }
+        await sleep(900); // chờ panel.js trong khung lưu xong
+      }
+      await call({ type: 'kv.set', key: 'custSyncDone', value: { at: Date.now(), by: meName || '', pages: custSyncSt.page, total } }).catch(() => {});
+      custSyncSt.msg = `✅ Đã đồng bộ ${total ? total.toLocaleString('vi-VN') : ''} khách hàng lên cloud.`;
+    } catch (e) {
+      custSyncSt.msg = `⚠️ ${e.message || e}`;
+    } finally {
+      f.remove();
+      lsSet('dgCustSyncLock', '0');
+      custSyncSt.running = false;
+      onStep();
+    }
+  }
+  // Nút trên trang Khách hàng (/khach-hang) – cạnh tiêu đề "Khách hàng"
+  async function injectCustSyncBtn() {
+    if (!IS_TOP || !/^\/khach-hang\/?$/.test(location.pathname)) return document.getElementById('dg-cust-sync')?.remove();
+    const h = [...document.querySelectorAll('h1,h2,h3,h4,.title-h2')].find((e) => e.textContent.trim() === 'Khách hàng');
+    if (!h) return;
+    let b = document.getElementById('dg-cust-sync');
+    if (!b) {
+      b = document.createElement('span');
+      b.id = 'dg-cust-sync';
+      b.setAttribute('style', 'display:inline-flex;align-items:center;gap:8px;margin-left:14px;vertical-align:middle;font:600 12.5px/1.3 -apple-system,"Segoe UI",Roboto,Arial,sans-serif');
+      h.style.display = 'inline-block';
+      h.after(b);
+      b.addEventListener('click', (e) => {
+        if (!e.target.closest('[data-cs]') || custSyncSt.running) return;
+        custSyncSt.msg = '';
+        custSyncAll(() => injectCustSyncBtn()).catch((err) => {
+          custSyncSt.msg = `⚠️ ${err.message || err}`;
+          injectCustSyncBtn();
+        });
+        injectCustSyncBtn();
+      });
+    }
+    const all = await kvGet('customersAll').catch(() => ({}));
+    const n = Object.keys(all || {}).length;
+    const done = await kvGet('custSyncDone').catch(() => ({}));
+    const pct = custSyncSt.pages ? Math.round((custSyncSt.page / custSyncSt.pages) * 100) : 0;
+    const html = `<button data-cs="go" ${custSyncSt.running ? 'disabled' : ''} style="cursor:pointer;border:0;border-radius:8px;padding:5px 12px;font:inherit;font-weight:800;color:#fff;background:${custSyncSt.running ? '#94a3b8' : 'linear-gradient(90deg,#0ea5e9,#2563eb)'}">${custSyncSt.running ? `⏳ Đang đồng bộ trang ${custSyncSt.page}${custSyncSt.pages ? `/${custSyncSt.pages} (${pct}%)` : ''}…` : '☁️ Đồng bộ khách hàng lên cloud'}</button><span style="color:#475569">☁️ <b>${n.toLocaleString('vi-VN')}</b> khách trên cloud${done?.at ? ` · lần đủ gần nhất ${new Date(done.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}` : ''}</span>${custSyncSt.msg ? `<span style="color:${/⚠️/.test(custSyncSt.msg) ? '#dc2626' : '#15803d'}">${esc(custSyncSt.msg)}</span>` : ''}`;
+    if (b.dataset.h !== html) {
+      b.dataset.h = html;
+      b.innerHTML = html;
+    }
+  }
+  if (IS_TOP) setInterval(() => injectCustSyncBtn().catch(() => {}), 2000);
 
   // Đọc trang Đơn hàng Misa (/misa-order/list) trong khung ẩn: trang 1, 2, 3… tới khi gặp đơn cũ hơn ~6 tháng (hoặc hết trang)
   async function collectMisaOrders(maxPages = 40) {
