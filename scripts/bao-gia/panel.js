@@ -19892,8 +19892,24 @@ ${linkBox}</div>`;
       const ids = [...root.querySelectorAll('[data-mp="sel"]')].map((x) => x.dataset.id);
       const on = !ids.every((x) => mpUi.sel.has(x));
       ids.forEach((x) => (on ? mpUi.sel.add(x) : mpUi.sel.delete(x)));
-    } else if (k === 'del' && c) await mpSave({ [id]: { ...c, hidden: true, hiddenAt: Date.now() } });
-    else if (k === 'restore' && c) await mpSave({ [id]: { ...c, hidden: false } });
+    } else if ((k === 'del' || k === 'restore') && c) {
+      // ẩn dòng NGAY, lưu (đồng bộ cloud) chạy ngầm – không vẽ lại cả bảng (giữ chỗ đang cuộn)
+      const v = k === 'del' ? { ...c, hidden: true, hiddenAt: Date.now() } : { ...c, hidden: false };
+      mpData.places[id] = v;
+      mpUi.sel.delete(id);
+      const row = t.closest('tr');
+      if (row) {
+        row.style.transition = 'opacity .15s';
+        row.style.opacity = '0';
+        setTimeout(() => row.remove(), 150);
+      }
+      kvMerge('mapsPlaces', { [id]: v }).catch((err) => {
+        mpData.places[id] = c;
+        alert(`Không lưu được: ${err.message || err}`);
+        render();
+      });
+      return;
+    }
     else if (k === 'bulk') {
       const hide = mpUi.show === 'on';
       if (hide && !confirm(`Xoá ${mpUi.sel.size} công ty khỏi danh sách? (Google Maps cũng ẩn, không quét lại – khôi phục được ở “Đã xoá”)`)) return;
