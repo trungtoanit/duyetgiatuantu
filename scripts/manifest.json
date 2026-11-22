@@ -1,5 +1,5 @@
 {
-  "version": "1.2.711",
+  "version": "1.2.712",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -36,6 +36,18 @@
       "matches": [
         "https://chat.zalo.me/*",
         "https://id.zalo.me/*"
+      ],
+      "runAt": "document_idle",
+      "world": "USER_SCRIPT",
+      "allFrames": false
+    },
+    {
+      "id": "maps",
+      "files": [
+        "maps/maps.js"
+      ],
+      "matches": [
+        "https://www.google.com/maps*"
       ],
       "runAt": "document_idle",
       "world": "USER_SCRIPT",
@@ -141,6 +153,7 @@
     "dd.gtDone",
     "gtPoDiff",
     "dd.gtPoDiff",
-    "gtAngryImg"
+    "gtAngryImg",
+    "mapsPlaces"
   ]
 }
