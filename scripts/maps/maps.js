@@ -237,7 +237,8 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   };
   // 1 lượt Overpass cho cả khung đang xem (làm tròn ra ô 0,25°, tối đa ~1,5° mỗi chiều); ô đã có thì bỏ qua.
   // Máy chủ báo bận (429 / 504) → nghỉ 60 giây, thử máy chủ dự phòng.
-  const KCN_HOSTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  const KCN_HOSTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  let kcnFail = 0;
   let kcnBusy = false;
   let kcnWait = 0;
   async function kcnFetch(v) {
@@ -256,6 +257,9 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       if (kcnLoaded.has(k)) return false;
       try {
         const c = JSON.parse(localStorage.getItem(`dgKcn2:${k}`) || 'null');
+        // bản lưu cũ (trước khi đổi bộ lọc tên) → vẽ tạm trong lúc chờ tải bản mới
+        const old = JSON.parse(localStorage.getItem(`dgKcn:${k}`) || 'null');
+        if (old?.list) for (const [id, p] of old.list) if (!kcnData.has(id)) kcnData.set(id, p);
         if (c && Date.now() - c.at < 7 * 86400e3) {
           for (const [id, p] of c.list) kcnData.set(id, p);
           kcnLoaded.add(k);
@@ -271,16 +275,27 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     try {
       let j = null;
       for (const host of KCN_HOSTS) {
-        const res = await fetch(host, { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' } }).catch(() => null);
+        const ac = new AbortController();
+        const to = setTimeout(() => ac.abort(), 45e3);
+        const res = await fetch(host, { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: ac.signal }).catch(() => null);
+        clearTimeout(to);
         if (res?.ok) {
           j = await res.json().catch(() => null);
           if (j) break;
         }
       }
       if (!j) {
-        kcnWait = Date.now() + 60e3;
+        // mọi máy chủ Overpass đang bận → tự thử lại (30 giây, 1, 2, 4 … tối đa 8 phút), không chờ người dùng kéo bản đồ
+        kcnFail++;
+        const wait = Math.min(480e3, 30e3 * 2 ** (kcnFail - 1));
+        kcnWait = Date.now() + wait;
+        setTimeout(() => {
+          const v2 = mapView();
+          if (v2 && v2.z >= 10 && kcnOn) kcnFetch(v2).catch(() => {});
+        }, wait + 500);
         return;
       }
+      kcnFail = 0;
       // chia phần tử về từng ô theo điểm đầu tiên → lưu cache theo ô
       const byTile = Object.fromEntries(tiles.map((k) => [k, []]));
       for (const el of j.elements || []) {

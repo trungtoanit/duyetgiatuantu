@@ -1266,7 +1266,24 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const total = totalTxt ? Number((f.contentDocument.body.innerText.match(/Tổng\s*([\d.,]+)\s*dòng/) || [])[1].replace(/[.,]/g, '')) : 0;
       custSyncSt.pages = total ? Math.ceil(total / 100) : 0;
       await sleep(1200);
-      for (let page = 2; !custSyncSt.pages || page <= custSyncSt.pages; page++) {
+      // lần trước dừng giữa chừng (tab tải lại / đóng) trong 1 ngày → nhảy thẳng tới trang đang dở bằng ô "Go to" của CRM
+      let start = 2;
+      try {
+        const rs = JSON.parse(lsGet('dgCustSyncResume') || 'null');
+        if (rs && Date.now() - rs.at < 86400e3 && rs.page > 2 && (!custSyncSt.pages || rs.page <= custSyncSt.pages)) {
+          const jump = f.contentDocument.querySelector('.ant-pagination-options-quick-jumper input');
+          if (jump) {
+            Object.getOwnPropertyDescriptor(f.contentWindow.HTMLInputElement.prototype, 'value').set.call(jump, String(rs.page));
+            jump.dispatchEvent(new f.contentWindow.Event('input', { bubbles: true }));
+            jump.dispatchEvent(new f.contentWindow.KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+            jump.dispatchEvent(new f.contentWindow.KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+            if (await until(() => loaded(rs.page), 25000)) start = rs.page + 1;
+            await sleep(900);
+          }
+        }
+      } catch {}
+      for (let page = start; !custSyncSt.pages || page <= custSyncSt.pages; page++) {
+        lsSet('dgCustSyncResume', JSON.stringify({ page: page - 1, at: Date.now() }));
         custSyncSt.page = page;
         lsSet('dgCustSyncLock', String(Date.now()));
         onStep();
@@ -1280,7 +1297,8 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
         await sleep(900); // chờ panel.js trong khung lưu xong
       }
-      await call({ type: 'kv.set', key: 'custSyncDone', value: { at: Date.now(), by: meName || '', pages: custSyncSt.page, total } }).catch(() => {});
+      await kvMerge('custSyncDone', { last: { at: Date.now(), by: meName || '', pages: custSyncSt.page, total } }).catch(() => {});
+      lsSet('dgCustSyncResume', '');
       custSyncSt.msg = `✅ Đã đồng bộ ${total ? total.toLocaleString('vi-VN') : ''} khách hàng lên cloud.`;
     } catch (e) {
       custSyncSt.msg = `⚠️ ${e.message || e}`;
@@ -1315,7 +1333,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const all = await kvGet('customersAll').catch(() => ({}));
     const n = Object.keys(all || {}).length;
-    const done = await kvGet('custSyncDone').catch(() => ({}));
+    const done = (await kvGet('custSyncDone').catch(() => ({})))?.last || {};
     const pct = custSyncSt.pages ? Math.round((custSyncSt.page / custSyncSt.pages) * 100) : 0;
     const html = `<button data-cs="go" ${custSyncSt.running ? 'disabled' : ''} style="cursor:pointer;border:0;border-radius:8px;padding:5px 12px;font:inherit;font-weight:800;color:#fff;background:${custSyncSt.running ? '#94a3b8' : 'linear-gradient(90deg,#0ea5e9,#2563eb)'}">${custSyncSt.running ? `⏳ Đang đồng bộ trang ${custSyncSt.page}${custSyncSt.pages ? `/${custSyncSt.pages} (${pct}%)` : ''}…` : '☁️ Đồng bộ khách hàng lên cloud'}</button><span style="color:#475569">☁️ <b>${n.toLocaleString('vi-VN')}</b> khách trên cloud${done?.at ? ` · lần đủ gần nhất ${new Date(done.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}` : ''}</span>${custSyncSt.msg ? `<span style="color:${/⚠️/.test(custSyncSt.msg) ? '#dc2626' : '#15803d'}">${esc(custSyncSt.msg)}</span>` : ''}`;
     if (b.dataset.h !== html) {
