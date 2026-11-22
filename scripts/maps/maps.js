@@ -240,6 +240,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   const KCN_HOSTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
   let kcnFail = 0;
   let kcnBusy = false;
+  let kcnCloud = null; // kv kcnOsm { ô: { at, list } } – ranh giới KCN đã tải, đồng bộ mọi máy
   let kcnWait = 0;
   async function kcnFetch(v) {
     if (kcnBusy || Date.now() < kcnWait) return;
@@ -253,6 +254,15 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     if (N - S > 1.5 || E - W > 1.5) return; // zoom quá xa → không tải
     const tiles = [];
     for (let a = S; a < N; a += 0.25) for (let b = W; b < E; b += 0.25) tiles.push(tileKey(a, b));
+    // ô đã có trên cloud (máy khác tải rồi) → dùng luôn, khỏi gọi Overpass
+    if (!kcnCloud) kcnCloud = (await kvGet('kcnOsm').catch(() => ({}))) || {};
+    for (const k of tiles) {
+      const c = kcnCloud[k];
+      if (!kcnLoaded.has(k) && c?.list && Date.now() - c.at < 30 * 86400e3) {
+        for (const [id, p] of c.list) kcnData.set(id, p);
+        kcnLoaded.add(k);
+      }
+    }
     const need = tiles.filter((k) => {
       if (kcnLoaded.has(k)) return false;
       try {
@@ -310,12 +320,17 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
         const k = tileKey(rings[0][0][0], rings[0][0][1]);
         (byTile[k] ||= []).push([id, p]);
       }
+      const cloudPatch = {};
       for (const k of tiles) {
         kcnLoaded.add(k);
+        const val = { at: Date.now(), list: byTile[k] || [] };
+        cloudPatch[k] = val;
         try {
-          localStorage.setItem(`dgKcn2:${k}`, JSON.stringify({ at: Date.now(), list: byTile[k] || [] }));
+          localStorage.setItem(`dgKcn2:${k}`, JSON.stringify(val));
         } catch {}
       }
+      kcnCloud = { ...(kcnCloud || {}), ...cloudPatch };
+      kvMerge('kcnOsm', cloudPatch).catch(() => {});
     } finally {
       kcnBusy = false;
     }
@@ -551,7 +566,28 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       urlAt = Date.now();
       return;
     }
-    if (!userMoved || Date.now() - urlAt < 4000) return;
+    if (!userMoved || Date.now() - urlAt < 2500) return;
+    // 🔄 Đang có danh sách tìm kiếm mà vừa kéo / zoom sang chỗ khác → Google hiện nút "Search this area" (không tự tìm lại):
+    // tự bấm rồi lưu danh sách mới – quét ngầm đúng các công ty trong khung đang xem
+    const sta = [...document.querySelectorAll('button')].find((b) => /^(Search this area|Tìm kiếm khu vực này|Tìm khu vực này)$/i.test(b.innerText.trim()) && b.getClientRects().length);
+    if (sta) {
+      userMoved = false;
+      msg = '🔄 Tự tìm lại công ty trong khung đang xem…';
+      draw();
+      const before = document.querySelector('div[role="feed"] div[role="article"] a[href*="/maps/place/"]')?.href || '';
+      sta.click();
+      for (let i = 0; i < 24; i++) {
+        await sleep(500);
+        const first = document.querySelector('div[role="feed"] div[role="article"] a[href*="/maps/place/"]')?.href || '';
+        if (first && first !== before) break;
+      }
+      if (document.querySelector('div[role="feed"] div[role="article"]')) await saveFeedAll();
+      urlNow = location.href;
+      urlAt = Date.now();
+      sideCalcKey = '';
+      return;
+    }
+    if (Date.now() - urlAt < 4000) return;
     const v = mapView();
     if (!v || v.z < 14 || !inRegion(v.lat, v.lng)) return;
     const cell = `${Math.round(v.lat / 0.03)},${Math.round(v.lng / 0.03)}`;

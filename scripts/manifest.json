@@ -1,5 +1,5 @@
 {
-  "version": "1.2.720",
+  "version": "1.2.721",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -159,6 +159,7 @@
     "dd.customersAll",
     "custSyncDone",
     "dd.custSyncDone",
-    "kcnCustom"
+    "kcnCustom",
+    "kcnOsm"
   ]
 }
