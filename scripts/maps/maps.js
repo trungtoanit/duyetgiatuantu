@@ -1121,18 +1121,20 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     let stt = 0;
     const body = order.map(([k, list2]) => `<tr class="g"><td colspan="7">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k)} · ${list2.length} công ty</td></tr>${list2.sort((a, b) => dispName(a).localeCompare(dispName(b), 'vi')).map((c) => {
       const e = erpOf(c);
-      return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td><b>${esc(dispName(c))}</b>${dispName(c) !== c.name ? `<div class="m">Google: ${esc(c.name)}</div>` : ''}</td><td>${esc(c.mst || '')}</td><td>${esc(c.ind || '')}</td><td>${esc(c.legalAddr || c.addr || '')}</td><td>${e ? '<span class="m">– (khách ERP)</span>' : esc(c.phone || '')}</td><td>${e ? `<b>✅ ${esc(e.staff?.name || 'Chưa gán NVKD')}</b><div class="m">${esc(e.code || '')}</div>` : ''}</td></tr>`;
+      return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(dispName(c))}"><b>${esc(dispName(c))}</b></td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.legalAddr || c.addr || '')}">${esc(c.legalAddr || c.addr || '')}</td><td>${e ? '<span class="m">– khách ERP</span>' : esc(c.phone || '')}</td><td title="${e ? esc(`${e.staff?.name || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staff?.name || 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
     }).join('')}`).join('');
     const now = new Date();
     const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)} – ${now.toLocaleDateString('vi-VN')}</title><style>
 @page{size:A4 landscape;margin:10mm}body{font:11px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;margin:0}
 h1{font-size:17px;margin:0 0 2px;color:#1e3a8a}.sub{color:#475569;margin-bottom:8px}
-table{width:100%;border-collapse:collapse}th{background:#1e3a8a;color:#fff;text-align:left;padding:5px 6px;font-size:10.5px}td{border-bottom:1px solid #e2e8f0;padding:4px 6px;vertical-align:top}
-tr.g td{background:#fff7ed;color:#9a3412;font-weight:800;padding:5px 6px;border-top:2px solid #fdba74}tr.erp td{background:#f0fdf4}.c{text-align:center;color:#64748b;width:28px}.m{color:#64748b;font-size:10px}
+table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#1e3a8a;color:#fff;text-align:left;padding:5px 6px;font-size:10.5px;white-space:nowrap;overflow:hidden}
+td{border-bottom:1px solid #e2e8f0;padding:3px 6px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+col.c1{width:34px}col.c2{width:31%}col.c3{width:88px}col.c4{width:12%}col.c5{width:auto}col.c6{width:112px}col.c7{width:15%}
+tr.g td{background:#fff7ed;color:#9a3412;font-weight:800;padding:4px 6px;border-top:2px solid #fdba74;white-space:nowrap}tr.erp td{background:#f0fdf4}.c{text-align:center;color:#64748b;width:28px}.m{color:#64748b;font-size:10px}
 thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body>
 <h1>CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ – ${esc(title)}</h1>
 <div class="sub">Xuất lúc ${now.toLocaleString('vi-VN')} · ${rows.length} công ty · ✅ ${nErp} đã có trong ERP (hiện NVKD phụ trách, ẩn SĐT) · nguồn: Google Maps + masothue.com</div>
-<table><thead><tr><th>STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>Địa chỉ</th><th>SĐT</th><th>ERP – NVKD phụ trách</th></tr></thead><tbody>${body}</tbody></table>
+<table><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"><col class="c6"><col class="c7"></colgroup><thead><tr><th>STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>Địa chỉ</th><th>SĐT</th><th>ERP – NVKD phụ trách</th></tr></thead><tbody>${body}</tbody></table>
 </body></html>`;
     const w = pre || window.open('', '_blank');
     if (!w) return alert('Trình duyệt chặn cửa sổ in – cho phép pop-up của google.com rồi bấm lại.');
