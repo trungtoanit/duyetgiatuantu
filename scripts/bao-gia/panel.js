@@ -19717,7 +19717,190 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   };
   // ---------- Phân quyền (kv 'perms', đồng bộ): ai được dùng extension, vào được tab nào ----------
   // perms = { enforced: bool, users: { <tên chuẩn hoá>: { name, enabled, role: 'admin'|'sale', tabs: [...] } } }
-  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['dec', '⚖️ Quyết định'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['qa', '💬 Bộ câu hỏi'], ['gt', '📄 Giấy tấm'], ['set', '⚙️ Cài đặt']];
+  // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
+  // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
+  // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
+  const mpUi = { q: '', erp: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '' };
+  let mpData = null;
+  const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
+  const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+  async function mpLoad(force = false) {
+    if (mpData && !force && Date.now() - mpData.at < 30e3) return mpData;
+    const [places, custs] = await Promise.all([kvGet('mapsPlaces'), kvGet('customersAll')]);
+    const byId = new Map();
+    const byName = new Map();
+    for (const c of Object.values(custs || {})) {
+      if (!c?.id) continue;
+      byId.set(String(c.id), c);
+      const k = mpKey(c.name);
+      if (k) byName.set(k, c);
+    }
+    mpData = { at: Date.now(), places: places || {}, custs: Object.values(custs || {}).filter((c) => c?.id), byId, byName };
+    return mpData;
+  }
+  // khách ERP của 1 công ty: bỏ kết nối → không; kết nối tay → theo id; còn lại tên giống 100% (không phân biệt hoa thường)
+  const mpErp = (c) => (c.erpNo ? null : (c.erpId && mpData.byId.get(String(c.erpId))) || mpData.byName.get(mpKey(c.name)) || (c.legalName && mpData.byName.get(mpKey(c.legalName))) || null);
+  function mpRows() {
+    const q = mpUn(mpUi.q).trim();
+    return Object.values(mpData.places).filter((c) => {
+      if (!c?.name) return false;
+      if (mpUi.show === 'on' ? c.hidden : !c.hidden) return false;
+      const e = mpErp(c);
+      if (mpUi.erp === 'in' && !e) return false;
+      if (mpUi.erp === 'out' && e) return false;
+      if (mpUi.ind && (c.ind || '—') !== mpUi.ind) return false;
+      if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
+      return true;
+    }).sort((a, b) => (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
+  }
+  async function mapsTab() {
+    await mpLoad();
+    if (root && !root.__mp) {
+      root.__mp = 1;
+      root.addEventListener('click', (e) => mpClick(e).catch((err) => alert(err.message || err)));
+      root.addEventListener('input', mpInput);
+      root.addEventListener('change', mpChange);
+    }
+    const rows = mpRows();
+    const PER = 100;
+    const pages = Math.max(1, Math.ceil(rows.length / PER));
+    mpUi.page = Math.min(mpUi.page, pages - 1);
+    const view = rows.slice(mpUi.page * PER, mpUi.page * PER + PER);
+    const all = Object.values(mpData.places).filter((c) => c?.name);
+    const nOn = all.filter((c) => !c.hidden).length;
+    const inds = [...new Set(all.map((c) => c.ind || '—'))].sort((a, b) => a.localeCompare(b, 'vi'));
+    const nErp = all.filter((c) => !c.hidden && mpErp(c)).length;
+    const sel = 'font:inherit;font-size:12.5px;padding:3px 6px;border-radius:7px;border:1px solid #cbd5e1;background:#fff';
+    const b = 'cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 8px;font:inherit;font-size:12px;font-weight:700';
+    const stt0 = mpUi.page * PER;
+    const tr = view.map((c, i) => {
+      const e = mpErp(c);
+      const manual = !!c.erpId && !c.erpNo;
+      return `<tr style="border-top:1px solid #f1f5f9;${e ? 'background:#f0fdf4' : ''}">
+<td style="padding:4px 6px"><input type="checkbox" data-mp="sel" data-id="${esc(c.id)}" ${mpUi.sel.has(c.id) ? 'checked' : ''}></td>
+<td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
+<td style="padding:4px 6px;max-width:300px"><b>${esc(e?.name || c.legalName || c.name)}</b>${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
+<td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>` : '<span style="color:#cbd5e1">—</span>'}</td>
+<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}</td>
+<td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
+<td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${esc(c.legalAddr || c.addr || '')}</td>
+<td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : esc(c.phone || '')}</td>
+<td style="padding:4px 6px;white-space:nowrap">${e ? `<a href="/khach-hang/view/${e.id}" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` <span style="font-size:11px;color:#64748b">· ${esc(e.staff.name)}</span>` : ''}<div style="font-size:11px;color:#64748b">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-mp="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : `<button data-mp="link" data-id="${esc(c.id)}" style="${b};border-color:#86efac;color:#166534;background:#f0fdf4">🔗 Kết nối ERP</button>${c.erpNo ? '<div style="font-size:11px;color:#94a3b8">đã bỏ kết nối</div>' : ''}`}</td>
+<td style="padding:4px 6px;white-space:nowrap"><a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a> ${c.hidden ? `<button data-mp="restore" data-id="${esc(c.id)}" style="${b}">↩ Khôi phục</button>` : `<button data-mp="del" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">🗑 Xoá</button>`}</td></tr>`;
+    }).join('');
+    const linkBox = mpUi.link ? (() => {
+      const c = mpData.places[mpUi.link];
+      return `<div data-mp-modal style="position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.4);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px">
+<div style="background:#fff;border-radius:12px;box-shadow:0 18px 44px rgba(15,23,42,.35);width:min(560px,100%);padding:12px 14px">
+<div style="display:flex;align-items:center;margin-bottom:6px"><b style="flex:1">🔗 Kết nối “${esc(c?.legalName || c?.name || '')}” với khách hàng ERP</b><span data-mp="lclose" style="cursor:pointer;color:#64748b;font-weight:900">✕</span></div>
+<input class="gt-edit" data-mp-lq placeholder="Gõ tên / mã KH / SĐT khách hàng ERP…" value="${esc(mpUi.lq)}" style="width:100%;box-sizing:border-box;font:inherit;padding:6px 8px;border-radius:8px;border:1px solid #93c5fd">
+<div data-mp-res style="margin-top:6px;max-height:50vh;overflow:auto">${mpLinkResults()}</div>
+<div style="font-size:11.5px;color:#64748b;margin-top:6px">Dữ liệu khách ERP: ${mpData.custs.length.toLocaleString('vi-VN')} khách đã đồng bộ (thiếu thì đồng bộ ở trang Khách hàng).</div></div></div>`;
+    })() : '';
+    return `<div style="padding:10px 12px">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+<b style="font-size:15px">📍 Công ty từ Google Maps</b><span class="muted">${nOn.toLocaleString('vi-VN')} công ty · ✅ ${nErp} đã kết nối ERP · ${all.length - nOn} đã xoá</span>
+<span style="flex:1"></span><button data-mp="reload" style="${b}">⟳ Tải lại</button></div>
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+<input class="gt-edit" data-mp-q placeholder="🔍 Tìm tên, MST, địa chỉ, SĐT, KCN, mã KH…" value="${esc(mpUi.q)}" style="${sel};min-width:280px;flex:1">
+<select data-mp-f="erp" style="${sel}"><option value="">ERP: tất cả</option><option value="in" ${mpUi.erp === 'in' ? 'selected' : ''}>✅ Đã kết nối ERP</option><option value="out" ${mpUi.erp === 'out' ? 'selected' : ''}>Chưa kết nối ERP</option></select>
+<select data-mp-f="ind" style="${sel};max-width:220px"><option value="">Ngành: tất cả</option>${inds.map((x) => `<option value="${esc(x)}" ${mpUi.ind === x ? 'selected' : ''}>${x === '—' ? 'Chưa gắn ngành' : esc(x)}</option>`).join('')}</select>
+<select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
+${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
+</div>
+<div class="muted" style="margin-bottom:4px">${rows.length.toLocaleString('vi-VN')} công ty khớp · trang ${mpUi.page + 1}/${pages}</div>
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+<thead><tr style="background:#f8fafc;text-align:left"><th style="padding:5px 6px"><input type="checkbox" data-mp="selall"></th><th style="padding:5px 6px">STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
+<tbody>${tr || '<tr><td colspan="10" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
+<div style="display:flex;gap:6px;justify-content:center;margin-top:8px">${mpUi.page > 0 ? `<button data-mp="prev" style="${b}">‹ Trước</button>` : ''}${mpUi.page < pages - 1 ? `<button data-mp="next" style="${b}">Sau ›</button>` : ''}</div>
+${linkBox}</div>`;
+  }
+  function mpLinkResults() {
+    const q = mpUn(mpUi.lq).trim();
+    const qd = mpUi.lq.replace(/\D/g, '');
+    if (!q) {
+      // gợi ý theo tên công ty đang kết nối
+      const c = mpData.places[mpUi.link];
+      const words = mpUn(c?.legalName || c?.name).replace(/\b(cong ty|tnhh|co phan|mtv|viet nam|chi nhanh)\b/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+      if (!words.length) return '<div class="muted">Gõ để tìm khách hàng ERP.</div>';
+      const sc = mpData.custs.map((x) => ({ x, s: words.filter((w) => mpUn(x.name).includes(w)).length })).filter((r) => r.s > 0).sort((a, b) => b.s - a.s).slice(0, 8);
+      return sc.length ? `<div class="muted" style="font-size:11.5px">Gợi ý theo tên:</div>${sc.map(({ x }) => mpLinkItem(x)).join('')}` : '<div class="muted">Không có gợi ý – gõ để tìm.</div>';
+    }
+    const list = mpData.custs.filter((x) => mpUn(`${x.name} ${x.code}`).includes(q) || (qd.length >= 6 && String(x.phone || '').replace(/\D/g, '').includes(qd))).slice(0, 12);
+    return list.length ? list.map(mpLinkItem).join('') : '<div class="muted">Không tìm thấy khách hàng ERP.</div>';
+  }
+  const mpLinkItem = (x) => `<div data-mp="pick" data-cid="${esc(String(x.id))}" style="cursor:pointer;padding:6px 8px;border-radius:8px;border:1px solid #e2e8f0;margin-top:4px"><b>${esc(x.name)}</b> <span style="color:#15803d;font-weight:800">${esc(x.code || '')}</span><div style="font-size:11.5px;color:#64748b">${esc(x.address || '')}${x.staff?.name ? ` · NVKD ${esc(x.staff.name)}` : ''}</div></div>`;
+  async function mpSave(patch) {
+    await kvMerge('mapsPlaces', patch);
+    for (const [id, v] of Object.entries(patch)) mpData.places[id] = v;
+  }
+  async function mpClick(e) {
+    const t = e.target.closest?.('[data-mp]');
+    if (!t || !root.querySelector('[data-mp-q]')) return;
+    const k = t.dataset.mp;
+    const id = t.dataset.id;
+    const c = id ? mpData.places[id] : null;
+    if (k === 'sel') return t.checked ? mpUi.sel.add(id) : mpUi.sel.delete(id);
+    e.preventDefault();
+    if (k === 'selall') {
+      const ids = [...root.querySelectorAll('[data-mp="sel"]')].map((x) => x.dataset.id);
+      const on = !ids.every((x) => mpUi.sel.has(x));
+      ids.forEach((x) => (on ? mpUi.sel.add(x) : mpUi.sel.delete(x)));
+    } else if (k === 'del' && c) await mpSave({ [id]: { ...c, hidden: true, hiddenAt: Date.now() } });
+    else if (k === 'restore' && c) await mpSave({ [id]: { ...c, hidden: false } });
+    else if (k === 'bulk') {
+      const hide = mpUi.show === 'on';
+      if (hide && !confirm(`Xoá ${mpUi.sel.size} công ty khỏi danh sách? (Google Maps cũng ẩn, không quét lại – khôi phục được ở “Đã xoá”)`)) return;
+      await mpSave(Object.fromEntries([...mpUi.sel].filter((x) => mpData.places[x]).map((x) => [x, { ...mpData.places[x], hidden: hide, ...(hide ? { hiddenAt: Date.now() } : {}) }])));
+      mpUi.sel.clear();
+    } else if (k === 'link') {
+      mpUi.link = id;
+      mpUi.lq = '';
+    } else if (k === 'lclose') mpUi.link = null;
+    else if (k === 'pick') {
+      const pc = mpData.places[mpUi.link];
+      if (pc) await mpSave({ [mpUi.link]: { ...pc, erpId: t.dataset.cid, erpNo: false, erpLinkAt: Date.now(), erpLinkBy: meName || '' } });
+      mpUi.link = null;
+    } else if (k === 'unlink' && c) {
+      if (!confirm('Bỏ kết nối công ty này với khách hàng ERP?')) return;
+      await mpSave({ [id]: { ...c, erpId: null, erpNo: true, erpLinkAt: Date.now(), erpLinkBy: meName || '' } });
+    } else if (k === 'prev') mpUi.page = Math.max(0, mpUi.page - 1);
+    else if (k === 'next') mpUi.page++;
+    else if (k === 'reload') await mpLoad(true);
+    else return;
+    render();
+  }
+  let mpQT = 0;
+  function mpInput(e) {
+    if (e.target.matches?.('[data-mp-q]')) {
+      mpUi.q = e.target.value;
+      mpUi.page = 0;
+      clearTimeout(mpQT);
+      // gõ xong 0,4 giây mới lọc lại (vẽ lại cả bảng) – giữ con trỏ trong ô tìm
+      mpQT = setTimeout(async () => {
+        e.target.blur(); // đang gõ trong ô có lớp gt-edit thì bảng không vẽ lại → bỏ chọn ô rồi vẽ, xong đặt lại con trỏ
+        await render();
+        const inp = root.querySelector('[data-mp-q]');
+        if (inp) {
+          inp.focus();
+          inp.setSelectionRange(inp.value.length, inp.value.length);
+        }
+      }, 400);
+    } else if (e.target.matches?.('[data-mp-lq]')) {
+      mpUi.lq = e.target.value;
+      const box = root.querySelector('[data-mp-res]');
+      if (box) box.innerHTML = mpLinkResults();
+    }
+  }
+  function mpChange(e) {
+    const f = e.target.dataset?.mpF;
+    if (!f) return;
+    mpUi[f] = e.target.value;
+    mpUi.page = 0;
+    mpUi.sel.clear();
+    render();
+  }
+  const TABS = [['quotes', '🎯 Báo giá'], ['hot', '🔥 Gợi ý chốt đơn'], ['deal', '🧠 Phân tích deal'], ['dec', '⚖️ Quyết định'], ['cust', '👥 Khách hàng'], ['week', '📅 Báo cáo tuần'], ['debt', '💰 Công nợ'], ['qa', '💬 Bộ câu hỏi'], ['gt', '📄 Giấy tấm'], ['maps', '📍 Công ty Maps'], ['set', '⚙️ Cài đặt']];
   // Ngoài các tab: quyền xem thẻ báo giá bên phải (lợi nhuận, câu hỏi gợi ý, đánh giá NVKD, bàn giao)
   const PERM_ITEMS = [...TABS, ['side', '📌 Thẻ báo giá (bên phải)']];
   const SALE_TABS = ['hot', 'deal', 'dec', 'week']; // mặc định cho NVKD khi mới cấp quyền
@@ -20844,7 +21027,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
         if (TASK_ON) allowed.push('task'); // 📋 Công việc: ai có extension cũng cần để nhận và cập nhật việc
         const tkAll = TASK_ON ? await kvGet('tasks') : {};
         const tkN = TASK_ON ? tkMyCount(tkAll) : 0;
-        let tab = ['cust', 'week', 'hot', 'deal', 'dec', 'set', 'debt', 'qa', 'gt', 'gap', 'task'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
+        let tab = ['cust', 'week', 'hot', 'deal', 'dec', 'set', 'debt', 'qa', 'gt', 'maps', 'gap', 'task'].includes(lsGet('dgTab')) ? lsGet('dgTab') : 'quotes';
         if (!allowed.includes(tab)) tab = allowed[0];
         const hotData = (await kvGet('aiHot')).latest;
         const hotDone = await kvGet('aiHotDone');
@@ -20862,6 +21045,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
           <button class="bigtab task${tab === 'task' ? ' on' : ''}${tkN ? ' has' : ''}" data-act="tab" data-tab="task">📋 Công việc${tkN ? ` <b>${tkN}</b>` : ''}</button>
           <button class="bigtab qa${tab === 'qa' ? ' on' : ''}" data-act="tab" data-tab="qa">💬 Bộ câu hỏi</button>
           <button class="bigtab${tab === 'gt' ? ' on' : ''}" data-act="tab" data-tab="gt">📄 Giấy tấm</button>
+          <button class="bigtab${tab === 'maps' ? ' on' : ''}" data-act="tab" data-tab="maps">📍 Công ty Maps</button>
           <button class="bigtab gap${tab === 'gap' ? ' on' : ''}" data-act="tab" data-tab="gap">📈 Chênh lệch 2 hệ thống</button>
           <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
         // Chỉ hiện các tab được phân quyền
@@ -20878,6 +21062,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
           return bar + qaTab(perm.admin);
         }
         if (tab === 'gt') return bar + gtTab();
+        if (tab === 'maps') return bar + (await mapsTab());
         if (tab === 'set') return bar + (await settingsTab(quotes, await kvGet('me')));
         if (tab === 'gap') return bar + (await gapTab());
         if (tab === 'dec') return bar + decTab(quotes, await kvGet('me'), hotData, hotDone, await kvGet('dealAi'));

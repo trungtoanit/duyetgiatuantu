@@ -896,7 +896,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       const tx = String(c.taxCode || '').replace(/[^\d-]/g, '');
       if (tx.length >= 10) byTax.set(tx.slice(0, 10), c);
     }
-    erpIdx = { byPhone, byName, byTax, byCode, n: Object.keys(all).length };
+    erpIdx = { byPhone, byName, byTax, byCode, byId: new Map(Object.values(all).filter((c) => c?.id).map((c) => [String(c.id), c])), n: Object.keys(all).length };
     sideKey = '';
     return erpIdx;
   }
@@ -904,6 +904,8 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   setInterval(() => erpLoad().catch(() => {}), 60e3);
   const erpOf = (c) => {
     if (!erpIdx || !c) return null;
+    if (c.erpNo) return null; // đã bỏ kết nối ở tab 📍 Công ty Maps (ERP)
+    if (c.erpId && erpIdx.byId?.has(String(c.erpId))) return erpIdx.byId.get(String(c.erpId)); // kết nối tay
     // tên giống 100% (chỉ không phân biệt HOA / thường, khoảng trắng thừa) – không bỏ "Công ty TNHH…", không bỏ dấu, không so mã KH
     const byKey = (t) => {
       const k = exactKey(t);
