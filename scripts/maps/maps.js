@@ -90,8 +90,20 @@
   const isRealEstate = (c) => {
     const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
     const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
-    return RE_RE.test(t) || /dia\s*oc|bat\s*dong\s*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha/.test(u); // + xây lắp, xây dựng, phát triển nhà
+    return RE_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha/.test(u); // + xây lắp, xây dựng, phát triển nhà
   };
+  // Ẩn luôn các công ty bị loại (BĐS / địa ốc / xây dựng…) trong danh sách kết quả của chính Google Maps (cột trái)
+  setInterval(() => {
+    for (const a of document.querySelectorAll('div[role="feed"] div[role="article"]:not([data-dg-re])')) {
+      const name = a.querySelector('.qBF1Pd')?.innerText || a.getAttribute('aria-label') || a.innerText.split('\n')[0] || '';
+      const cat = (a.innerText.split('\n').find((x) => x.includes('·')) || '').split('·')[0];
+      a.dataset.dgRe = isRealEstate({ name, cat }) ? '1' : '0';
+      if (a.dataset.dgRe === '1') {
+        const box = a.parentElement;
+        (box && box.children.length <= 2 ? box : a).style.display = 'none';
+      }
+    }
+  }, 1000);
   // Lưu: bản chi tiết (full) không bị bản danh sách (địa chỉ rút gọn) ghi đè
   let cache = null;
   async function save(list) {
