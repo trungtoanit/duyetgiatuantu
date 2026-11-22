@@ -609,7 +609,9 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       urlAt = Date.now();
       return;
     }
-    if (!userMoved || Date.now() - urlAt < 2500) return;
+    // khung đang xem chưa có công ty nào đã lưu → tự quét ngầm luôn, không cần người dùng kéo bản đồ / bấm quét
+    const emptyHere = sideInView === 0;
+    if ((!userMoved && !emptyHere) || Date.now() - urlAt < 2500) return;
     // 🔄 Đang có danh sách tìm kiếm mà vừa kéo / zoom sang chỗ khác → Google hiện nút "Search this area" (không tự tìm lại):
     // tự bấm rồi lưu danh sách mới – quét ngầm đúng các công ty trong khung đang xem
     const sta = [...document.querySelectorAll('button')].find((b) => /^(Search this area|Tìm kiếm khu vực này|Tìm khu vực này)$/i.test(b.innerText.trim()) && b.getClientRects().length);
@@ -632,10 +634,11 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }
     if (Date.now() - urlAt < 4000) return;
     const v = mapView();
-    if (!v || v.z < 14 || !inRegion(v.lat, v.lng)) return;
+    if (!v || v.z < (emptyHere ? 13 : 14) || !inRegion(v.lat, v.lng)) return;
     const cell = `${Math.round(v.lat / 0.03)},${Math.round(v.lng / 0.03)}`;
     const sc = scanned();
-    if (sc[cell] && Date.now() - sc[cell] < 30 * 86400e3) return;
+    // ô đã quét: bình thường 30 ngày mới quét lại; khung trống thì 1 ngày (tránh quét lặp khi chỗ đó thật sự không có công ty)
+    if (sc[cell] && Date.now() - sc[cell] < (emptyHere ? 86400e3 : 30 * 86400e3)) return;
     userMoved = false;
     sc[cell] = Date.now();
     try {
@@ -919,6 +922,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
   });
   let sideCalcKey = '';
+  let sideInView = -1; // số công ty đã lưu trong khung đang xem (0 → tự quét ngầm)
   function sideDraw() {
     const v = mapView();
     // không đổi khung bản đồ, số công ty đã lưu, số KCN, dữ liệu ERP → bỏ qua (khỏi lọc lại hàng nghìn công ty mỗi 1,5 giây)
@@ -940,6 +944,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const [n, w] = unproj(cx - v.r.width / 2, cy - v.r.height / 2, v.z);
     const [s2, e] = unproj(cx + v.r.width / 2, cy + v.r.height / 2, v.z);
     const inView = Object.values(cache || {}).filter((c) => c?.lat && !isRealEstate(c) && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
+    sideInView = inView.length;
     const groups = new Map();
     for (const c of inView) {
       const hit = [...kcnData.entries()].find(([, p]) => inKcn(c.lat, c.lng, p));
@@ -959,7 +964,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${erpBadge(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : c.mstTry || c.mstSkip ? `<div style="font-size:10.5px;color:#94a3b8" title="masothue không có kết quả đủ chắc – đã đánh dấu, không tra lại${(c.mstCands || []).length ? `\nGần nhất: ${esc(c.mstCands.map((x) => `${x.name} (${x.mst})`).join(' · '))}` : ''}">🧾 MST không rõ (không tra lại)</div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
-    sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
+    sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">⏳ Chưa có công ty nào trong khung này – đang tự quét ngầm (dừng bản đồ vài giây, zoom gần)…</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
     const sc = side.querySelector('[data-scroll]');
     if (sc && keepTop) sc.scrollTop = keepTop; // giữ chỗ đang xem trong danh sách
   }
