@@ -91,7 +91,7 @@
     if (c?.hidden) return true; // 🙈 người dùng đã ẩn công ty này
     const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
     const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
-    return RE_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha/.test(u); // + xây lắp, xây dựng, phát triển nhà
+    return RE_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha|bao\s*ve\b|security/.test(u); // + xây lắp, xây dựng, phát triển nhà, bảo vệ
   };
   // Ẩn luôn các công ty bị loại (BĐS / địa ốc / xây dựng…) trong danh sách kết quả của chính Google Maps (cột trái)
   setInterval(() => {
