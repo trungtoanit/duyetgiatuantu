@@ -19820,7 +19820,8 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
 </div>
 <div class="muted" style="margin-bottom:4px">${rows.length.toLocaleString('vi-VN')} công ty khớp · trang ${mpUi.page + 1}/${pages}</div>
-<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+<style>.mp-tb tbody tr{transition:background .12s}.mp-tb tbody tr:hover td{background:#e0f2fe!important}.mp-tb tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #0284c7}</style>
+<div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table class="mp-tb" style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:5px 6px"><input type="checkbox" data-mp="selall"></th><th style="padding:5px 6px">STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
 <tbody>${tr || '<tr><td colspan="10" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
 <div style="display:flex;gap:6px;justify-content:center;margin-top:8px">${mpUi.page > 0 ? `<button data-mp="prev" style="${b}">‹ Trước</button>` : ''}${mpUi.page < pages - 1 ? `<button data-mp="next" style="${b}">Sau ›</button>` : ''}</div>
