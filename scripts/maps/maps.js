@@ -1217,6 +1217,14 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     w.document.open();
     w.document.write(html);
     w.document.close();
+    // link tên công ty (khách ERP): trang about:blank mở từ Maps không tự mở tab mới → bắt bấm, mở bằng cửa sổ in (giữ thao tác bấm)
+    w.document.addEventListener('click', (ev) => {
+      const a = ev.target.closest?.('a[href]');
+      if (!a) return;
+      ev.preventDefault();
+      const t = w.open(a.href, '_blank', 'noopener');
+      if (!t) w.location.assign(a.href);
+    });
     // trang trống kế thừa CSP của Google Maps (chặn <script> trong trang) → gọi in từ đây
     setTimeout(() => {
       try {
