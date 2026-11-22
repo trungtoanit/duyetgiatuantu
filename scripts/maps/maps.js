@@ -106,7 +106,7 @@
     const n = Object.keys(cache).length;
     const feedN = document.querySelectorAll('div[role="feed"] div[role="article"]').length;
     box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:900;color:#1e3a8a">📍 Trợ lý ERP · địa chỉ công ty <span title="Đã chuẩn hoá tên + MST từ masothue.com (tra ngầm 15 giây / công ty)" style="margin-left:auto;background:#f3e8ff;color:#6d28d9;border-radius:99px;padding:0 8px">🧾 ${Object.values(cache).filter((x) => x?.mst).length}</span><span style="background:#dbeafe;border-radius:99px;padding:0 8px">${n}</span><span data-m="min" title="Thu nhỏ" style="cursor:pointer;color:#94a3b8">–</span></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button><button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button>${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
 ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</div>` : ''}`;
   }
   box.addEventListener('click', async (e) => {
@@ -635,6 +635,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const byPhone = new Map();
     const byName = new Map();
     const byTax = new Map();
+    const byCode = new Map(); // mã KH ERP (vd. "NOA", "HÀ KHANG") – thường là tên ngắn của công ty
     for (const c of Object.values(all)) {
       if (!c?.id) continue;
       for (const ph of [c.phone, c.deliveryPhone]) {
@@ -642,11 +643,13 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
         if (k.length === 9) byPhone.set(k, c);
       }
       const nk = coKey(c.name);
-      if (nk.length >= 6) byName.set(nk, c);
+      if (nk.length >= 3) byName.set(nk, c);
+      const ck = coKey(c.code);
+      if (ck.length >= 3 && !byCode.has(ck)) byCode.set(ck, c);
       const tx = String(c.taxCode || '').replace(/[^\d-]/g, '');
       if (tx.length >= 10) byTax.set(tx.slice(0, 10), c);
     }
-    erpIdx = { byPhone, byName, byTax, n: Object.keys(all).length };
+    erpIdx = { byPhone, byName, byTax, byCode, n: Object.keys(all).length };
     sideKey = '';
     return erpIdx;
   }
@@ -655,14 +658,14 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   const erpOf = (c) => {
     if (!erpIdx || !c) return null;
     if (c.mst && erpIdx.byTax?.has(String(c.mst).slice(0, 10))) return erpIdx.byTax.get(String(c.mst).slice(0, 10));
-    if (c.legalName) {
-      const lk = coKey(c.legalName);
-      if (lk.length >= 6 && erpIdx.byName.has(lk)) return erpIdx.byName.get(lk);
-    }
+    // tên đã bỏ "Công ty TNHH / CP / Việt Nam…" trùng hẳn (≥ 3 ký tự, vd. "noa") → tên ERP hoặc mã KH ERP
+    const byKey = (t) => {
+      const k = coKey(t);
+      return k.length >= 3 ? erpIdx.byName.get(k) || erpIdx.byCode?.get(k) || null : null;
+    };
     const ph = phoneKey(c.phone);
     if (ph.length === 9 && erpIdx.byPhone.has(ph)) return erpIdx.byPhone.get(ph);
-    const nk = coKey(c.name);
-    return nk.length >= 6 ? erpIdx.byName.get(nk) || null : null;
+    return (c.legalName && byKey(c.legalName)) || byKey(c.name);
   };
   const erpBadge = (c) => {
     const e = erpOf(c);
@@ -736,6 +739,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }).filter((r) => r.name && r.mst);
   }
   let mstPause = 0;
+  let mstTabAlive = false;
   let mstBusy = false;
   async function mstTick() {
     if (mstBusy || Date.now() < mstPause || !cache) return;
@@ -744,19 +748,45 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     mstBusy = true;
     try {
       const q = c.name.replace(/\s*[-–|(].*$/, '').trim() || c.name;
-      const r = await call({ type: 'http', url: `https://masothue.com/Search/?q=${encodeURIComponent(q)}&type=auto&force-search=1` });
-      if (!r?.ok) {
-        mstPause = Date.now() + 10 * 60e3;
-        return;
+      let list = null;
+      // 1) thử gọi thẳng qua background; masothue (Cloudflare) chặn → chuyển hẳn sang "tab tra MST" (kv mstJobs)
+      if (localStorage.getItem('dgMstMode') !== 'tab') {
+        const r = await call({ type: 'http', url: `https://masothue.com/Search/?q=${encodeURIComponent(q)}&type=auto&force-search=1` }).catch(() => null);
+        if (r?.ok && !/Attention Required|Just a moment/i.test(r.text.slice(0, 3000))) {
+          list = mstParse(r.text);
+          if (!list.length) {
+            const d = new DOMParser().parseFromString(r.text, 'text/html');
+            const nm = d.querySelector('table.table-taxinfo thead th, h1')?.textContent.trim() || '';
+            const mm = (d.querySelector('td[itemprop="taxID"]')?.textContent || '').trim();
+            const ad = (d.querySelector('td[itemprop="address"]')?.textContent || '').trim();
+            if (nm && mm) list.push({ name: nm.replace(/^Mã số thuế\s*[\d-]+\s*-\s*/i, ''), mst: mm, addr: ad, href: '' });
+          }
+        } else localStorage.setItem('dgMstMode', 'tab');
       }
-      const list = mstParse(r.text);
-      // trang chi tiết (chỉ 1 kết quả → masothue chuyển thẳng tới trang công ty)
-      if (!list.length) {
-        const d = new DOMParser().parseFromString(r.text, 'text/html');
-        const nm = d.querySelector('table.table-taxinfo thead th, h1')?.textContent.trim() || '';
-        const mm = (d.querySelector('td[itemprop="taxID"]')?.textContent || '').trim();
-        const ad = (d.querySelector('td[itemprop="address"]')?.textContent || '').trim();
-        if (nm && mm) list.push({ name: nm.replace(/^Mã số thuế\s*[\d-]+\s*-\s*/i, ''), mst: mm, addr: ad, href: '' });
+      if (!list) {
+        // 2) tab tra MST: cần 1 tab masothue.com mở bằng đường dẫn #dgmst (khung 📍 có nút mở)
+        const alive = await kvGet('mstAlive').catch(() => ({}));
+        mstTabAlive = Date.now() - (alive?.at || 0) < 20e3;
+        if (!mstTabAlive) return;
+        const jid = `${Date.now().toString(36)}-${c.id.slice(-6)}`;
+        const old = await kvGet('mstJobs').catch(() => ({}));
+        const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 6 * 3600e3).map(([k, j]) => [k, j]));
+        await call({ type: 'kv.set', key: 'mstJobs', value: { ...keep, [jid]: { q, at: Date.now(), status: 'pending', place: c.id } } });
+        for (let i = 0; i < 60; i++) {
+          await sleep(1500);
+          const j = (await kvGet('mstJobs').catch(() => ({})))[jid];
+          if (j?.status === 'done') {
+            list = j.list || [];
+            break;
+          }
+          if (j?.status === 'blocked') {
+            mstPause = Date.now() + 60e3;
+            msg = '⚠️ masothue cần xác minh – mở tab masothue để tự xác minh.';
+            draw();
+            return;
+          }
+        }
+        if (!list) return;
       }
       const ranked = list.map((x) => ({ ...x, score: mstScore(c, x) })).sort((a, b) => b.score - a.score);
       const best = ranked[0];

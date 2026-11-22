@@ -1,5 +1,5 @@
 {
-  "version": "1.2.723",
+  "version": "1.2.725",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -48,6 +48,18 @@
       ],
       "matches": [
         "https://www.google.com/maps*"
+      ],
+      "runAt": "document_idle",
+      "world": "USER_SCRIPT",
+      "allFrames": false
+    },
+    {
+      "id": "masothue",
+      "files": [
+        "masothue/mst.js"
+      ],
+      "matches": [
+        "https://masothue.com/*"
       ],
       "runAt": "document_idle",
       "world": "USER_SCRIPT",
