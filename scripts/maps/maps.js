@@ -755,13 +755,20 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }).filter((r) => r.name && r.mst);
   }
   let mstPause = 0;
+  const mstSt = { phase: 'idle', name: '', at: 0, last: '' }; // tiến trình tra masothue – hiện ở cuối panel phải
   let mstTabAlive = false;
   let mstBusy = false;
   async function mstTick() {
     if (mstBusy || Date.now() < mstPause || !cache) return;
     const c = Object.values(cache).find((x) => x?.name && !isRealEstate(x) && !x.mst && (!x.mstTry || Date.now() - x.mstTry > 30 * 86400e3) && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name));
-    if (!c) return;
+    if (!c) {
+      mstSt.phase = 'done';
+      return;
+    }
     mstBusy = true;
+    mstSt.phase = 'search';
+    mstSt.name = c.name;
+    mstSt.at = Date.now();
     try {
       const q = c.name.replace(/\s*[-–|(].*$/, '').trim() || c.name;
       let list = null;
@@ -783,7 +790,11 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
         // 2) tab tra MST: cần 1 tab masothue.com mở bằng đường dẫn #dgmst (khung 📍 có nút mở)
         const alive = await kvGet('mstAlive').catch(() => ({}));
         mstTabAlive = Date.now() - (alive?.at || 0) < 20e3;
-        if (!mstTabAlive) return;
+        if (!mstTabAlive) {
+          mstSt.phase = 'notab';
+          return;
+        }
+        mstSt.phase = 'tab';
         const jid = `${Date.now().toString(36)}-${c.id.slice(-6)}`;
         const old = await kvGet('mstJobs').catch(() => ({}));
         const keep = Object.fromEntries(Object.entries(old).filter(([, j]) => Date.now() - (j?.at || 0) < 6 * 3600e3).map(([k, j]) => [k, j]));
@@ -795,7 +806,9 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
             list = j.list || [];
             break;
           }
+          if (j?.status === 'working') mstSt.phase = 'tabwork';
           if (j?.status === 'blocked') {
+            mstSt.phase = 'blocked';
             mstPause = Date.now() + 60e3;
             msg = '⚠️ masothue cần xác minh – mở tab masothue để tự xác minh.';
             draw();
@@ -813,6 +826,8 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
         : { ...c, mstTry: Date.now(), mstCands: ranked.slice(0, 3).map((x) => ({ name: x.name, mst: x.mst, score: x.score })) };
       cache[c.id] = patch;
       await kvMerge(KEY, { [c.id]: patch });
+      mstSt.last = patch.mst ? `✅ ${c.name} → MST ${patch.mst}` : `➖ ${c.name}: không chắc chắn, bỏ qua`;
+      mstSt.phase = 'wait';
       sideCalcKey = '';
     } catch {
       mstPause = Date.now() + 10 * 60e3;
@@ -821,11 +836,31 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }
   }
   setInterval(() => mstTick().catch(() => {}), 15e3);
+  function mstBarDraw() {
+    if (!side.isConnected || sideMin) return (mstBar.style.display = 'none');
+    mstBar.style.display = '';
+    const all = Object.values(cache || {}).filter((x) => x?.name && !isRealEstate(x));
+    const done = all.filter((x) => x.mst).length;
+    const skip = all.filter((x) => !x.mst && x.mstTry && Date.now() - x.mstTry < 30 * 86400e3).length;
+    const left = all.filter((x) => !x.mst && (!x.mstTry || Date.now() - x.mstTry > 30 * 86400e3) && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name)).length;
+    const pct = all.length ? Math.round(((done + skip) / Math.max(1, done + skip + left)) * 100) : 0;
+    const sec = Math.round((Date.now() - mstSt.at) / 1000);
+    const ph = Date.now() < mstPause && mstSt.phase !== 'blocked' ? `⏸ Tạm nghỉ (masothue lỗi / bận) – thử lại sau ${Math.ceil((mstPause - Date.now()) / 60e3)} phút`
+      : { search: `🔎 Đang tra masothue: <b>${esc(mstSt.name)}</b> (${sec}s)`, tab: `⏳ Đã gửi tab masothue: <b>${esc(mstSt.name)}</b> – chờ tới lượt (${sec}s)`, tabwork: `🔎 Tab masothue đang tra: <b>${esc(mstSt.name)}</b> (${sec}s)`, blocked: '⚠️ masothue cần xác minh (Cloudflare) – mở tab masothue để tự xác minh', notab: `🧾 Chưa có tab tra MST – bấm <a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:800">Mở tab tra MST</a>`, wait: '⏱ Chờ 15 giây rồi tra công ty kế tiếp…', done: '✅ Đã tra hết các công ty đang có', idle: '⏱ Chuẩn bị tra MST…' }[mstSt.phase] || '';
+    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}`;
+  }
+  setInterval(mstBarDraw, 1000);
 
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
   const side = document.createElement('div');
   side.id = 'dg-maps-side';
   side.setAttribute('style', 'position:fixed;right:64px;top:120px;z-index:2147482500;width:340px;max-height:calc(100vh - 220px);display:flex;flex-direction:column;background:#fff;border-radius:14px;border:2px solid #2563eb;box-shadow:0 14px 36px rgba(15,23,42,.28);font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;overflow:hidden');
+  // thân panel (vẽ lại theo khung bản đồ) + thanh tiến trình tra MST (cập nhật riêng mỗi giây, không vẽ lại cả danh sách)
+  const sideBody = document.createElement('div');
+  sideBody.setAttribute('style', 'display:flex;flex-direction:column;min-height:0;flex:1');
+  const mstBar = document.createElement('div');
+  mstBar.setAttribute('style', 'padding:5px 10px;background:#faf5ff;border-top:1px solid #e9d5ff;font-size:11.5px;color:#5b21b6;line-height:1.35');
+  side.append(sideBody, mstBar);
   let sideMin = localStorage.getItem('dgMapsSideMin') === '1';
   let sideKey = '';
   side.addEventListener('click', (e) => {
@@ -852,7 +887,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       const k = 'far';
       if (sideKey !== k) {
         sideKey = k;
-        side.innerHTML = head('') + (sideMin ? '' : '<div style="padding:10px;color:#64748b;font-size:12.5px">🔍 Zoom gần hơn để xem danh sách công ty (zoom xa ẩn cho đỡ lag).</div>');
+        sideBody.innerHTML = head('') + (sideMin ? '' : '<div style="padding:10px;color:#64748b;font-size:12.5px">🔍 Zoom gần hơn để xem danh sách công ty (zoom xa ẩn cho đỡ lag).</div>');
       }
       return;
     }
@@ -879,7 +914,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${erpBadge(c)}${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
-    side.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
+    sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
     const sc = side.querySelector('[data-scroll]');
     if (sc && keepTop) sc.scrollTop = keepTop; // giữ chỗ đang xem trong danh sách
   }
