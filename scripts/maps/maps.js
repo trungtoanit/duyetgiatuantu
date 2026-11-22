@@ -87,8 +87,10 @@
   // 🚫 Bỏ công ty bất động sản / xây lắp (tên / loại hình): BĐS, BDS, bất động sản, địa ốc, xây lắp, real estate, realty, property, land…
   const RE_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
   // so cả bản bỏ dấu (tên viết "Dia Oc", "BAT DONG SAN", chữ tổ hợp NFD…) để không sót "địa ốc"
+  const IND_DROP = new Set(['Dịch vụ – tư vấn – phần mềm']); // ngành không cần (xoá khỏi danh sách)
   const isRealEstate = (c) => {
     if (c?.hidden) return true; // 🙈 người dùng đã ẩn công ty này
+    if (c?.ind && IND_DROP.has(c.ind)) return true; // 🏷 ngành bị loại (AI gắn nhãn)
     const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
     const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
     return RE_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha|bao\s*ve\b|security/.test(u); // + xây lắp, xây dựng, phát triển nhà, bảo vệ
@@ -99,7 +101,7 @@
       const name = a.querySelector('.qBF1Pd')?.innerText || a.getAttribute('aria-label') || a.innerText.split('\n')[0] || '';
       const cat = (a.innerText.split('\n').find((x) => x.includes('·')) || '').split('·')[0];
       const pid = fromUrl(a.querySelector('a[href*="/maps/place/"]')?.href).id;
-      a.dataset.dgRe = isRealEstate({ name, cat, hidden: !!(pid && cache?.[pid]?.hidden) }) ? '1' : '0';
+      a.dataset.dgRe = isRealEstate({ name, cat, hidden: !!(pid && cache?.[pid]?.hidden), ind: pid ? cache?.[pid]?.ind : '' }) ? '1' : '0';
       if (a.dataset.dgRe === '1') {
         const box = a.parentElement;
         (box && box.children.length <= 2 ? box : a).style.display = 'none';
@@ -1034,6 +1036,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       indSt.last = `🏷 Đã gắn ngành ${Object.values(patch).filter((x) => x.ind).length}/${todo.length} công ty`;
       indSt.phase = 'wait';
       sideCalcKey = '';
+      document.querySelectorAll('div[role="feed"] div[role="article"][data-dg-re="0"]').forEach((x) => x.removeAttribute('data-dg-re'));
     } catch (e) {
       indSt.phase = 'err';
       indSt.last = `⚠️ AI gắn ngành lỗi: ${String(e.message || e).slice(0, 80)} – thử lại sau 10 phút`;
