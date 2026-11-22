@@ -1133,12 +1133,19 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
 <h1>CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ – ${esc(title)}</h1>
 <div class="sub">Xuất lúc ${now.toLocaleString('vi-VN')} · ${rows.length} công ty · ✅ ${nErp} đã có trong ERP (hiện NVKD phụ trách, ẩn SĐT) · nguồn: Google Maps + masothue.com</div>
 <table><thead><tr><th>STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>Địa chỉ</th><th>SĐT</th><th>ERP – NVKD phụ trách</th></tr></thead><tbody>${body}</tbody></table>
-<script>setTimeout(()=>print(),400)<\/script></body></html>`;
+</body></html>`;
     const w = window.open('', '_blank');
     if (!w) return alert('Trình duyệt chặn cửa sổ in – cho phép pop-up của google.com rồi bấm lại.');
     w.document.open();
     w.document.write(html);
     w.document.close();
+    // trang trống kế thừa CSP của Google Maps (chặn <script> trong trang) → gọi in từ đây
+    setTimeout(() => {
+      try {
+        w.focus();
+        w.print();
+      } catch {}
+    }, 500);
   }
 
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
