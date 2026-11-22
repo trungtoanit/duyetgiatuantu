@@ -86,7 +86,12 @@
   }
   // 🚫 Bỏ công ty bất động sản (tên / loại hình): BĐS, BDS, bất động sản, địa ốc, real estate, realty, property, land…
   const RE_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
-  const isRealEstate = (c) => RE_RE.test(`${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`);
+  // so cả bản bỏ dấu (tên viết "Dia Oc", "BAT DONG SAN", chữ tổ hợp NFD…) để không sót "địa ốc"
+  const isRealEstate = (c) => {
+    const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
+    const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+    return RE_RE.test(t) || /dia\s*oc|bat\s*dong\s*san|\bbds\b|real\s*estate/.test(u);
+  };
   // Lưu: bản chi tiết (full) không bị bản danh sách (địa chỉ rút gọn) ghi đè
   let cache = null;
   async function save(list) {
