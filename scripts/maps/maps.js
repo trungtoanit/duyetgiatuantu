@@ -627,7 +627,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   }
   setInterval(() => autoScanTick().catch(() => {}), 1000);
 
-  // ✅ Đối chiếu khách hàng ERP (kv customersAll – đồng bộ từ trang Khách hàng): trùng SĐT (9 số cuối) hoặc trùng tên đã bỏ
+  // ✅ Đối chiếu khách hàng ERP (kv customersAll – đồng bộ từ trang Khách hàng): CHỈ theo tên công ty – trùng tên đã bỏ
   // "Công ty TNHH / Cổ phần / MTV…", dấu, ký tự đặc biệt (tên ≥ 6 ký tự) → đánh dấu "tồn tại trong ERP"
   const ERP_HOST = 'https://sale.tuantu.com.vn';
   const unacc = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
@@ -666,15 +666,13 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   setInterval(() => erpLoad().catch(() => {}), 60e3);
   const erpOf = (c) => {
     if (!erpIdx || !c) return null;
-    if (c.mst && erpIdx.byTax?.has(String(c.mst).slice(0, 10))) return erpIdx.byTax.get(String(c.mst).slice(0, 10));
     // tên đã bỏ "Công ty TNHH / CP / Việt Nam…" trùng hẳn (≥ 3 ký tự, vd. "noa") → tên ERP hoặc mã KH ERP
     const byKey = (t) => {
       const k = coKey(t);
       return k.length >= 3 ? erpIdx.byName.get(k) || erpIdx.byCode?.get(k) || null : null;
     };
-    const ph = phoneKey(c.phone);
-    if (ph.length === 9 && erpIdx.byPhone.has(ph)) return erpIdx.byPhone.get(ph);
-    return (c.legalName && byKey(c.legalName)) || byKey(c.name);
+    // đối chiếu theo TÊN công ty (tên trên Google Maps + tên chuẩn từ masothue), không dùng MST / SĐT
+    return byKey(c.name) || (c.legalName && byKey(c.legalName)) || null;
   };
   const erpBadge = (c) => {
     const e = erpOf(c);
