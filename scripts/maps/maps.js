@@ -441,7 +441,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     el.setAttribute('style', 'position:fixed;right:70px;top:80px;z-index:2147483000;width:min(440px,90vw);max-height:72vh;overflow:auto;background:#fff;border-radius:14px;border:2px solid #f59e0b;box-shadow:0 18px 44px rgba(15,23,42,.3);padding:10px 12px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a');
     el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="flex:1;font-size:14.5px">🏭 ${esc(p.name)}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:900">✕</span></div>
 <div style="font-size:12px;color:#475569;margin-bottom:6px"><b>${list.length}</b> công ty đã lưu nằm trong KCN${list.length ? '' : ' – bấm “🔍 Quét công ty quanh đây” khi đang xem KCN để lưu thêm'}</div>
-${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><div><b>${i + 1}. <a href="${esc(c.href || c.url)}" style="color:#1d4ed8;text-decoration:none">${esc(c.name)}</a></b>${erpBadge(c)}${c.cat ? ` <span style="color:#64748b;font-size:11.5px">· ${esc(c.cat)}</span>` : ''}</div><div style="font-size:12px;color:#334155">${esc(c.addr || '')}${c.phone ? ` · 📞 ${esc(c.phone)}` : ''}</div></div>`).join('')}`;
+${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><div><b>${i + 1}. <a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="color:#1d4ed8;text-decoration:none">${esc(c.name)}</a></b>${erpBadge(c)}${c.cat ? ` <span style="color:#64748b;font-size:11.5px">· ${esc(c.cat)}</span>` : ''}</div><div style="font-size:12px;color:#334155">${esc(c.addr || '')}${c.phone ? ` · 📞 ${esc(c.phone)}` : ''}</div></div>`).join('')}`;
     el.querySelector('[data-x]').onclick = () => el.remove();
     document.body.append(el);
   }
@@ -661,6 +661,35 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     return e ? ` <a href="${ERP_HOST}/khach-hang/view/${e.id}" target="_blank" rel="noopener" title="Tồn tại trong ERP: ${esc(e.name)}${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}${e.totalOrder ? ` · ${e.totalOrder} đơn` : ''}" style="display:inline-block;padding:0 6px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-size:10.5px;font-weight:900;text-decoration:none;white-space:nowrap">✅ ERP${e.code ? ` · ${esc(e.code)}` : ''}</a>` : '';
   };
 
+  // Bấm tên công ty (panel phải / danh sách KCN) → mở trong Google Maps KHÔNG tải lại trang: gõ "tên + địa chỉ" vào ô tìm kiếm
+  // của Maps (ứng dụng tự dời bản đồ tới công ty và mở bảng chi tiết). Giữ Cmd/Ctrl khi bấm → mở tab mới như link thường.
+  function goPlace(c) {
+    const inp = document.querySelector('input#searchboxinput, input[name="q"]');
+    const go = document.querySelector('button#searchbox-searchbutton, button[aria-label="Search"], button[aria-label="Tìm kiếm"]');
+    if (!inp || !go) return false;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, `${c.name}${c.addr && !/^[A-Z0-9]{4}\+[A-Z0-9]{2,3}$/.test(c.addr) ? `, ${c.addr}` : ''}`);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    go.click();
+    return true;
+  }
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest?.('a[data-go]');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    const c = cache?.[a.dataset.go];
+    if (!c) return;
+    if (goPlace(c)) {
+      e.preventDefault();
+      e.stopPropagation();
+      side.querySelectorAll('[data-sel]').forEach((x) => x.removeAttribute('data-sel'));
+      const row = a.closest('div');
+      if (row) {
+        row.dataset.sel = '1';
+        row.style.outline = '2px solid #2563eb';
+        setTimeout(() => (row.style.outline = ''), 2500);
+      }
+    }
+  }, true);
+
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
   const side = document.createElement('div');
   side.id = 'dg-maps-side';
@@ -715,7 +744,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const body = order.map(([k, g]) => {
       const items = g.list.sort((a, b) => a.name.localeCompare(b.name, 'vi')).filter(() => shown++ < 250);
       if (!items.length) return '';
-      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" style="text-decoration:none;color:#0f172a"><b style="font-size:12.5px">${esc(c.name)}</b></a>${erpBadge(c)}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${esc(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a"><b style="font-size:12.5px">${esc(c.name)}</b></a>${erpBadge(c)}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${esc(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     side.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
