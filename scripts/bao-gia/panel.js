@@ -19749,13 +19749,28 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     mpData = { at: Date.now(), places: places || {}, custs: Object.values(custs || {}).filter((c) => c?.id), byId, byName };
     return mpData;
   }
+  // Bộ lọc loại GIỐNG script Google Maps (scripts/maps/maps.js – isRealEstate): trả lý do bị loại, '' = giữ.
+  // Sửa danh sách loại thì sửa cả 2 nơi.
+  const MP_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
+  function mpDropWhy(c) {
+    if (c?.ind === 'Dịch vụ – tư vấn – phần mềm') return 'ngành dịch vụ – tư vấn – phần mềm';
+    if (c?.name && !mpUn(c.name).replace(/\b(cong\s*ty|cty|tnhh|co\s*phan|cp|mtv|mot\s*thanh\s*vien|company|co|ltd|limited)\b/g, '').replace(/[^a-z0-9]/g, '')) return 'tên chỉ có “Công ty”';
+    const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
+    const u = mpUn(t);
+    if (MP_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate/.test(u)) return 'bất động sản / địa ốc';
+    if (/xay\s*lap|xay\s*dung|construction/.test(u)) return 'xây dựng / xây lắp';
+    if (/phat\s*trien\s*nha/.test(u)) return 'phát triển nhà';
+    if (/bao\s*ve\b|security/.test(u)) return 'bảo vệ';
+    return '';
+  }
+  const mpOff = (c) => !!c.hidden || !!mpDropWhy(c); // đã xoá tay hoặc bị bộ lọc loại
   // khách ERP của 1 công ty: bỏ kết nối → không; kết nối tay → theo id; còn lại tên giống 100% (không phân biệt hoa thường)
   const mpErp = (c) => (c.erpNo ? null : (c.erpId && mpData.byId.get(String(c.erpId))) || mpData.byName.get(mpKey(c.name)) || (c.legalName && mpData.byName.get(mpKey(c.legalName))) || null);
   function mpRows() {
     const q = mpUn(mpUi.q).trim();
     return Object.values(mpData.places).filter((c) => {
       if (!c?.name) return false;
-      if (mpUi.show === 'on' ? c.hidden : !c.hidden) return false;
+      if (mpUi.show === 'on' ? mpOff(c) : !mpOff(c)) return false;
       const e = mpErp(c);
       if (mpUi.erp === 'in' && !e) return false;
       if (mpUi.erp === 'out' && e) return false;
@@ -19778,9 +19793,9 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     mpUi.page = Math.min(mpUi.page, pages - 1);
     const view = rows.slice(mpUi.page * PER, mpUi.page * PER + PER);
     const all = Object.values(mpData.places).filter((c) => c?.name);
-    const nOn = all.filter((c) => !c.hidden).length;
+    const nOn = all.filter((c) => !mpOff(c)).length;
     const inds = [...new Set(all.map((c) => c.ind || '—'))].sort((a, b) => a.localeCompare(b, 'vi'));
-    const nErp = all.filter((c) => !c.hidden && mpErp(c)).length;
+    const nErp = all.filter((c) => !mpOff(c) && mpErp(c)).length;
     const sel = 'font:inherit;font-size:12.5px;padding:3px 6px;border-radius:7px;border:1px solid #cbd5e1;background:#fff';
     const b = 'cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 8px;font:inherit;font-size:12px;font-weight:700';
     const stt0 = mpUi.page * PER;
@@ -19797,7 +19812,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${esc(c.legalAddr || c.addr || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : esc(c.phone || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap">${e ? `<a href="/khach-hang/view/${e.id}" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` <span style="font-size:11px;color:#64748b">· ${esc(e.staff.name)}</span>` : ''}<div style="font-size:11px;color:#64748b">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-mp="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : `<button data-mp="link" data-id="${esc(c.id)}" style="${b};border-color:#86efac;color:#166534;background:#f0fdf4">🔗 Kết nối ERP</button>${c.erpNo ? '<div style="font-size:11px;color:#94a3b8">đã bỏ kết nối</div>' : ''}`}</td>
-<td style="padding:4px 6px;white-space:nowrap"><a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a> ${c.hidden ? `<button data-mp="restore" data-id="${esc(c.id)}" style="${b}">↩ Khôi phục</button>` : `<button data-mp="del" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">🗑 Xoá</button>`}</td></tr>`;
+<td style="padding:4px 6px;white-space:nowrap"><a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a> ${c.hidden ? `<button data-mp="restore" data-id="${esc(c.id)}" style="${b}">↩ Khôi phục</button>` : mpDropWhy(c) ? `<span style="font-size:11px;color:#94a3b8" title="Bị bộ lọc loại tự động (giống Google Maps)">🚫 ${esc(mpDropWhy(c))}</span>` : `<button data-mp="del" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">🗑 Xoá</button>`}</td></tr>`;
     }).join('');
     const linkBox = mpUi.link ? (() => {
       const c = mpData.places[mpUi.link];
@@ -19810,7 +19825,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     })() : '';
     return `<div style="padding:10px 12px">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-<b style="font-size:15px">📍 Công ty từ Google Maps</b><span class="muted">${nOn.toLocaleString('vi-VN')} công ty · ✅ ${nErp} đã kết nối ERP · ${all.length - nOn} đã xoá</span>
+<b style="font-size:15px">📍 Công ty từ Google Maps</b><span class="muted">${nOn.toLocaleString('vi-VN')} công ty · ✅ ${nErp} đã kết nối ERP · ${all.length - nOn} đã xoá / bị loại (BĐS, địa ốc, xây dựng, bảo vệ…)</span>
 <span style="flex:1"></span><button data-mp="reload" style="${b}">⟳ Tải lại</button></div>
 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
 <input class="gt-edit" data-mp-q placeholder="🔍 Tìm tên, MST, địa chỉ, SĐT, KCN, mã KH…" value="${esc(mpUi.q)}" style="${sel};min-width:280px;flex:1">
