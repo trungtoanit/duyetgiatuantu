@@ -90,7 +90,7 @@
   const isRealEstate = (c) => {
     const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
     const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
-    return RE_RE.test(t) || /dia\s*oc|bat\s*dong\s*san|\bbds\b|real\s*estate|xay\s*lap/.test(u); // + xây lắp
+    return RE_RE.test(t) || /dia\s*oc|bat\s*dong\s*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction/.test(u); // + xây lắp, xây dựng
   };
   // Lưu: bản chi tiết (full) không bị bản danh sách (địa chỉ rút gọn) ghi đè
   let cache = null;
