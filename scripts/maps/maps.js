@@ -88,6 +88,7 @@
   const RE_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
   // so cả bản bỏ dấu (tên viết "Dia Oc", "BAT DONG SAN", chữ tổ hợp NFD…) để không sót "địa ốc"
   const isRealEstate = (c) => {
+    if (c?.hidden) return true; // 🙈 người dùng đã ẩn công ty này
     const t = `${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`.normalize('NFC');
     const u = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
     return RE_RE.test(t) || /dia[\s.\-_]*oc|bat[\s.\-_]*dong[\s.\-_]*san|\bbds\b|real\s*estate|xay\s*lap|xay\s*dung|construction|phat\s*trien\s*nha/.test(u); // + xây lắp, xây dựng, phát triển nhà
@@ -97,7 +98,8 @@
     for (const a of document.querySelectorAll('div[role="feed"] div[role="article"]:not([data-dg-re])')) {
       const name = a.querySelector('.qBF1Pd')?.innerText || a.getAttribute('aria-label') || a.innerText.split('\n')[0] || '';
       const cat = (a.innerText.split('\n').find((x) => x.includes('·')) || '').split('·')[0];
-      a.dataset.dgRe = isRealEstate({ name, cat }) ? '1' : '0';
+      const pid = fromUrl(a.querySelector('a[href*="/maps/place/"]')?.href).id;
+      a.dataset.dgRe = isRealEstate({ name, cat, hidden: !!(pid && cache?.[pid]?.hidden) }) ? '1' : '0';
       if (a.dataset.dgRe === '1') {
         const box = a.parentElement;
         (box && box.children.length <= 2 ? box : a).style.display = 'none';
@@ -115,6 +117,7 @@
       const k = typeof kcnOf === 'function' ? kcnOf(p0) : '';
       const p = k ? { ...p0, kcn: k } : p0;
       const old = cache[p.id];
+      if (old?.hidden) continue; // 🙈 đã ẩn → không lưu / cập nhật lại
       const v = old?.full && !p.full ? { ...p, ...old, lat: old.lat ?? p.lat, lng: old.lng ?? p.lng, phone: old.phone || p.phone, seenAt: Date.now() } : { ...(old || {}), ...p, at: Date.now(), seenAt: Date.now() };
       if (JSON.stringify({ ...old, at: 0, seenAt: 0 }) === JSON.stringify({ ...v, at: 0, seenAt: 0 })) continue;
       patch[p.id] = v;
@@ -136,7 +139,7 @@
     const n = Object.keys(cache).length;
     const feedN = document.querySelectorAll('div[role="feed"] div[role="article"]').length;
     box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:900;color:#1e3a8a">📍 Trợ lý ERP · địa chỉ công ty <span title="Đã chuẩn hoá tên + MST từ masothue.com (tra ngầm 15 giây / công ty)" style="margin-left:auto;background:#f3e8ff;color:#6d28d9;border-radius:99px;padding:0 8px">🧾 ${Object.values(cache).filter((x) => x?.mst).length}</span><span style="background:#dbeafe;border-radius:99px;padding:0 8px">${n}</span><span data-m="min" title="Thu nhỏ" style="cursor:pointer;color:#94a3b8">–</span></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button>${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button>${Object.values(cache).some((x) => x?.hidden) ? `<button data-m="hidden" title="Xem / hiện lại công ty đã ẩn" style="${btn}">🙈 Đã ẩn (${Object.values(cache).filter((x) => x?.hidden).length})</button>` : ''}${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
 ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</div>` : ''}`;
   }
   box.addEventListener('click', async (e) => {
@@ -162,6 +165,16 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       a.download = `dia-chi-cong-ty-google-maps-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
+      return;
+    }
+    if (k === 'hidden') {
+      const list = Object.values(cache).filter((x) => x?.hidden).sort((a, b) => (b.hiddenAt || 0) - (a.hiddenAt || 0));
+      const pick = prompt(`Công ty đã ẩn – nhập số để HIỆN LẠI:\n${list.slice(0, 40).map((x, i) => `${i + 1}. ${x.legalName || x.name}`).join('\n')}`, '');
+      const it = list[Number(pick) - 1];
+      if (it) {
+        await hidePlace(it.id, false);
+        sideDraw();
+      }
       return;
     }
     if (k === 'auto') {
@@ -712,7 +725,26 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     go.click();
     return true;
   }
+  // 🙈 Ẩn 1 công ty: cờ hidden lưu kv (đồng bộ) → không hiện ở panel / danh sách KCN / danh sách Google, không lưu đè, không tra MST
+  async function hidePlace(id, on = true) {
+    const c = cache?.[id];
+    if (!c) return;
+    const v = { ...c, hidden: on, hiddenAt: Date.now() };
+    cache[id] = v;
+    await kvMerge(KEY, { [id]: v });
+    sideCalcKey = '';
+    document.querySelectorAll('div[role="feed"] div[role="article"][data-dg-re]').forEach((x) => x.removeAttribute('data-dg-re'));
+    draw();
+  }
   document.addEventListener('click', (e) => {
+    const h = e.target.closest?.('[data-hide]');
+    if (h) {
+      e.preventDefault();
+      e.stopPropagation();
+      h.closest('div')?.style.setProperty('opacity', '.3');
+      hidePlace(h.dataset.hide).then(() => sideDraw());
+      return;
+    }
     const a = e.target.closest?.('a[data-go]');
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
     const c = cache?.[a.dataset.go];
@@ -924,7 +956,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const body = order.map(([k, g]) => {
       const items = g.list.sort((a, b) => a.name.localeCompare(b.name, 'vi')).filter(() => shown++ < 250);
       if (!items.length) return '';
-      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${erpBadge(c)}${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : c.mstTry || c.mstSkip ? `<div style="font-size:10.5px;color:#94a3b8" title="masothue không có kết quả đủ chắc – đã đánh dấu, không tra lại${(c.mstCands || []).length ? `\nGần nhất: ${esc(c.mstCands.map((x) => `${x.name} (${x.mst})`).join(' · '))}` : ''}">🧾 MST không rõ (không tra lại)</div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${erpBadge(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : c.mstTry || c.mstSkip ? `<div style="font-size:10.5px;color:#94a3b8" title="masothue không có kết quả đủ chắc – đã đánh dấu, không tra lại${(c.mstCands || []).length ? `\nGần nhất: ${esc(c.mstCands.map((x) => `${x.name} (${x.mst})`).join(' · '))}` : ''}">🧾 MST không rõ (không tra lại)</div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
