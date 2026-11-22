@@ -964,6 +964,8 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   mstBar.setAttribute('style', 'padding:5px 10px;background:#faf5ff;border-top:1px solid #e9d5ff;font-size:11.5px;color:#5b21b6;line-height:1.35');
   side.append(sideBody, mstBar);
   let sideMin = localStorage.getItem('dgMapsSideMin') === '1';
+  let sideGroup = localStorage.getItem('dgMapsSideGroup') || 'kcn'; // 'kcn' | 'ind'
+  let indOnly = ''; // đang lọc 1 ngành
   let sideKey = '';
   side.addEventListener('click', (e) => {
     const t = e.target.closest('[data-s]');
@@ -974,18 +976,31 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       sideKey = '';
       sideDraw();
     } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
+    else if (t.dataset.s === 'grp') {
+      sideGroup = sideGroup === 'ind' ? 'kcn' : 'ind';
+      indOnly = '';
+      localStorage.setItem('dgMapsSideGroup', sideGroup);
+      sideKey = '';
+      sideCalcKey = '';
+      sideDraw();
+    } else if (t.dataset.s === 'ind') {
+      indOnly = indOnly ? '' : t.dataset.k;
+      sideKey = '';
+      sideCalcKey = '';
+      sideDraw();
+    }
   });
   let sideCalcKey = '';
   let sideInView = -1; // số công ty đã lưu trong khung đang xem (0 → tự quét ngầm)
   function sideDraw() {
     const v = mapView();
     // không đổi khung bản đồ, số công ty đã lưu, số KCN, dữ liệu ERP → bỏ qua (khỏi lọc lại hàng nghìn công ty mỗi 1,5 giây)
-    const ck = `${location.href}|${Object.keys(cache || {}).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}`;
+    const ck = `${location.href}|${Object.keys(cache || {}).length}|${Object.values(cache || {}).filter((x) => x?.ind).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}|${sideGroup}|${indOnly}`;
     if (ck === sideCalcKey && side.isConnected) return;
     sideCalcKey = ck;
     if (!document.body) return;
     if (!side.isConnected) document.body.append(side);
-    const head = (extra) => `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div>`;
+    const head = (extra) => `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a">🏢 Công ty trong khung bản đồ ${extra}<span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div>`;
     if (!v || v.z < 13) {
       const k = 'far';
       if (sideKey !== k) {
@@ -1000,7 +1015,16 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const inView = Object.values(cache || {}).filter((c) => c?.lat && !isRealEstate(c) && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
     sideInView = inView.length;
     const groups = new Map();
+    const byInd = sideGroup === 'ind';
     for (const c of inView) {
+      if (byInd) {
+        // 🏷 xem theo ngành nghề (AI gắn nhãn); bấm tiêu đề ngành → chỉ xem ngành đó
+        const k = c.ind ? `i:${c.ind}` : '';
+        if (indOnly && k !== indOnly) continue;
+        if (!groups.has(k)) groups.set(k, { name: c.ind || 'Chưa gắn ngành', list: [] });
+        groups.get(k).list.push(c);
+        continue;
+      }
       const hit = [...kcnData.entries()].find(([, p]) => inKcn(c.lat, c.lng, p));
       const k = hit ? hit[0] : '';
       if (!groups.has(k)) groups.set(k, { name: hit ? hit[1].name : 'Ngoài KCN', list: [] });
@@ -1008,14 +1032,18 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }
     const order = [...groups.entries()].sort((a, b) => (!a[0]) - (!b[0]) || b[1].list.length - a[1].list.length);
     const nErp = inView.filter((c) => erpOf(c)).length;
-    const key = `${sideMin}|${inView.length}|${nErp}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
+    const key = `${sideGroup}|${indOnly}|${sideMin}|${inView.length}|${nErp}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
     if (key === sideKey) return;
     sideKey = key;
     let shown = 0;
     const body = order.map(([k, g]) => {
       const items = g.list.sort((a, b) => a.name.localeCompare(b.name, 'vi')).filter(() => shown++ < 250);
       if (!items.length) return '';
-      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${mstIcon(c)}${erpBadge(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      const ic = IND_COL[g.name] || '#64748b';
+      const gh = byInd
+        ? `<div style="padding:5px 10px;background:${ic}14;font-weight:800;font-size:12px;color:${ic};border-top:1px solid #f1f5f9;cursor:pointer" data-s="ind" data-k="${esc(k)}" title="${indOnly ? 'Bấm để xem lại mọi ngành' : 'Bấm để chỉ xem ngành này'}">🏷 ${esc(g.name)} · ${g.list.length}${indOnly ? ' · ✕ bỏ lọc' : ''}</div>`
+        : `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>`;
+      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${mstIcon(c)}${erpBadge(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">⏳ Chưa có công ty nào trong khung này – đang tự quét ngầm (dừng bản đồ vài giây, zoom gần)…</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
