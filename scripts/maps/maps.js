@@ -194,8 +194,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       return;
     }
     if (k === 'pdf') {
-      cache = (await kvGet(KEY).catch(() => ({}))) || cache;
-      exportPdf(Object.values(cache), 'Danh sách công ty (Google Maps)');
+      exportAllPdf(b);
       return;
     }
     if (k === 'csv') {
@@ -1108,9 +1107,12 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
 
   // 🖨 Xuất PDF danh sách công ty (khổ A4 ngang): mở trang in rồi gọi hộp in → chọn "Lưu dạng PDF".
   // Công ty đã có trong ERP: hiện NVKD phụ trách + mã KH, KHÔNG hiện SĐT. Gom theo KCN (trong KCN trước), trong nhóm xếp theo tên.
-  function exportPdf(list, title) {
+  function exportPdf(list, title, pre = null) {
     const rows = (list || []).filter((c) => c?.name && !isRealEstate(c));
-    if (!rows.length) return alert('Không có công ty nào để xuất.');
+    if (!rows.length) {
+      pre?.close();
+      return alert('Không có công ty nào để xuất.');
+    }
     const kcnName = (c) => c.kcn || kcnOf(c) || '';
     const groups = new Map();
     for (const c of rows) {
@@ -1136,7 +1138,7 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
 <div class="sub">Xuất lúc ${now.toLocaleString('vi-VN')} · ${rows.length} công ty · ✅ ${nErp} đã có trong ERP (hiện NVKD phụ trách, ẩn SĐT) · nguồn: Google Maps + masothue.com</div>
 <table><thead><tr><th>STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>Địa chỉ</th><th>SĐT</th><th>ERP – NVKD phụ trách</th></tr></thead><tbody>${body}</tbody></table>
 </body></html>`;
-    const w = window.open('', '_blank');
+    const w = pre || window.open('', '_blank');
     if (!w) return alert('Trình duyệt chặn cửa sổ in – cho phép pop-up của google.com rồi bấm lại.');
     w.document.open();
     w.document.write(html);
@@ -1148,6 +1150,25 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
         w.print();
       } catch {}
     }, 500);
+  }
+
+  // In TẤT CẢ công ty trên cloud: mở trước cửa sổ in (giữ thao tác bấm, không bị chặn pop-up), đồng bộ cloud (≤ 20 giây) rồi in
+  async function exportAllPdf(btn) {
+    const label = btn?.textContent;
+    // mở cửa sổ NGAY lúc bấm (sau khi chờ đồng bộ, trình duyệt sẽ chặn pop-up)
+    const w = window.open('', '_blank');
+    if (!w) return alert('Trình duyệt chặn cửa sổ in – cho phép pop-up của google.com rồi bấm lại.');
+    w.document.write('<p style="font:14px sans-serif;padding:20px">⏳ Đang đồng bộ cloud và dựng danh sách công ty…</p>');
+    if (btn) btn.textContent = '⏳ Đang lấy dữ liệu cloud…';
+    try {
+      await Promise.race([call({ type: 'sync.all' }).catch(() => {}), sleep(20e3)]);
+      cache = (await kvGet(KEY).catch(() => ({}))) || cache;
+      erpAt = 0;
+      await erpLoad().catch(() => {});
+      exportPdf(Object.values(cache), 'Danh sách tất cả công ty (Google Maps – cloud)', w);
+    } finally {
+      if (btn) btn.textContent = label;
+    }
   }
 
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
@@ -1175,6 +1196,7 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
       sideDraw();
     } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
     else if (t.dataset.s === 'pdf') exportPdf(sideList, 'Công ty trong khung bản đồ');
+    else if (t.dataset.s === 'pdfall') exportAllPdf(t);
     else if (t.dataset.s === 'frn') {
       onlyForeign = !onlyForeign;
       localStorage.setItem('dgMapsForeign', onlyForeign ? '1' : '0');
@@ -1207,7 +1229,7 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     if (!document.body) return;
     if (!side.isConnected) document.body.append(side);
     let nForeign = null;
-    const head = (extra) => `<div style="padding:7px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a"><div style="display:flex;align-items:center;gap:6px;white-space:nowrap">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"><span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="pdf" title="Xuất PDF các công ty đang hiện trong panel (khung bản đồ + bộ lọc)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF khung này</span></div></div>`;
+    const head = (extra) => `<div style="padding:7px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a"><div style="display:flex;align-items:center;gap:6px;white-space:nowrap">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"><span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="pdf" title="Xuất PDF các công ty đang hiện trong panel (khung bản đồ + bộ lọc)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF khung này</span><span data-s="pdfall" title="Đồng bộ cloud rồi xuất PDF TẤT CẢ công ty (mọi máy đã quét)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF tất cả</span></div></div>`;
     if (!v || v.z < 13) {
       const k = 'far';
       if (sideKey !== k) {
