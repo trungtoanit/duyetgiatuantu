@@ -772,7 +772,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   let mstBusy = false;
   async function mstTick() {
     if (mstBusy || Date.now() < mstPause || !cache) return;
-    const c = Object.values(cache).find((x) => x?.name && !isRealEstate(x) && !x.mst && (!x.mstTry || Date.now() - x.mstTry > 30 * 86400e3) && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name));
+    const c = Object.values(cache).find((x) => x?.name && !isRealEstate(x) && !x.mst && !x.mstTry && !x.mstSkip && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name));
     if (!c) {
       mstSt.phase = 'done';
       return;
@@ -835,7 +835,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       const sure = best && best.score >= 0.75 && (!ranked[1] || best.score - ranked[1].score >= 0.1 || best.score >= 1.1);
       const patch = sure
         ? { ...c, legalName: best.name, mst: best.mst, legalAddr: best.addr, mstScore: best.score, mstUrl: best.href, mstAt: Date.now(), mstTry: Date.now() }
-        : { ...c, mstTry: Date.now(), mstCands: ranked.slice(0, 3).map((x) => ({ name: x.name, mst: x.mst, score: x.score })) };
+        : { ...c, mstTry: Date.now(), mstSkip: true, mstCands: ranked.slice(0, 3).map((x) => ({ name: x.name, mst: x.mst, score: x.score })) };
       cache[c.id] = patch;
       await kvMerge(KEY, { [c.id]: patch });
       mstSt.last = patch.mst ? `✅ ${c.name} → MST ${patch.mst}` : `➖ ${c.name}: không chắc chắn, bỏ qua`;
@@ -853,8 +853,8 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     mstBar.style.display = '';
     const all = Object.values(cache || {}).filter((x) => x?.name && !isRealEstate(x));
     const done = all.filter((x) => x.mst).length;
-    const skip = all.filter((x) => !x.mst && x.mstTry && Date.now() - x.mstTry < 30 * 86400e3).length;
-    const left = all.filter((x) => !x.mst && (!x.mstTry || Date.now() - x.mstTry > 30 * 86400e3) && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name)).length;
+    const skip = all.filter((x) => !x.mst && (x.mstTry || x.mstSkip)).length;
+    const left = all.filter((x) => !x.mst && !x.mstTry && !x.mstSkip && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name)).length;
     const pct = all.length ? Math.round(((done + skip) / Math.max(1, done + skip + left)) * 100) : 0;
     const sec = Math.round((Date.now() - mstSt.at) / 1000);
     const ph = Date.now() < mstPause && mstSt.phase !== 'blocked' ? `⏸ Tạm nghỉ (masothue lỗi / bận) – thử lại sau ${Math.ceil((mstPause - Date.now()) / 60e3)} phút`
@@ -923,7 +923,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const body = order.map(([k, g]) => {
       const items = g.list.sort((a, b) => a.name.localeCompare(b.name, 'vi')).filter(() => shown++ < 250);
       if (!items.length) return '';
-      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${erpBadge(c)}${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${c.legalName ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(c.legalName || c.name)}</b></a>${erpBadge(c)}${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : c.mstTry || c.mstSkip ? `<div style="font-size:10.5px;color:#94a3b8" title="masothue không có kết quả đủ chắc – đã đánh dấu, không tra lại${(c.mstCands || []).length ? `\nGần nhất: ${esc(c.mstCands.map((x) => `${x.name} (${x.mst})`).join(' · '))}` : ''}">🧾 MST không rõ (không tra lại)</div>` : ''}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
