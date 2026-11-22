@@ -143,7 +143,7 @@
     const n = Object.keys(cache).length;
     const feedN = document.querySelectorAll('div[role="feed"] div[role="article"]').length;
     box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:900;color:#1e3a8a">📍 Trợ lý ERP · địa chỉ công ty <span title="Đã chuẩn hoá tên + MST từ masothue.com (tra ngầm 15 giây / công ty)" style="margin-left:auto;background:#f3e8ff;color:#6d28d9;border-radius:99px;padding:0 8px">🧾 ${Object.values(cache).filter((x) => x?.mst).length}</span><span style="background:#dbeafe;border-radius:99px;padding:0 8px">${n}</span><span data-m="min" title="Thu nhỏ" style="cursor:pointer;color:#94a3b8">–</span></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty màn hình này</button><button data-m="crawl" title="Tự dời bản đồ qua từng ô ~5 km trong 7 tỉnh, tìm “công ty”, lưu lên cloud (20–35 giây / ô). Ô đã chạy được đánh dấu – F5 hay máy khác chỉ chạy tiếp ô chưa quét." style="${btn};${crawlOn ? 'background:#fee2e2;border-color:#fca5a5;color:#b91c1c' : 'background:#e0f2fe;border-color:#7dd3fc;color:#0369a1'}">🛰 ${crawlOn ? 'Dừng tự chạy' : 'Tự chạy 7 tỉnh'} · ${crawlCells.length - crawlLeft().length}/${crawlCells.length} ô</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button><button data-m="pdf" title="Xuất PDF TẤT CẢ công ty đã lưu (khách ERP hiện NVKD phụ trách, ẩn SĐT)" style="${btn}">🖨 Xuất PDF</button>${Object.values(cache).some((x) => x?.hidden) ? `<button data-m="hidden" title="Xem / hiện lại công ty đã ẩn" style="${btn}">🙈 Đã ẩn (${Object.values(cache).filter((x) => x?.hidden).length})</button>` : ''}${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty màn hình này</button><button data-m="crawl" title="Tự dời bản đồ qua từng ô ~5 km trong 7 tỉnh, tìm “công ty”, lưu lên cloud (20–35 giây / ô). Ô đã chạy được đánh dấu – F5 hay máy khác chỉ chạy tiếp ô chưa quét." style="${btn};${crawlOn ? 'background:#fee2e2;border-color:#fca5a5;color:#b91c1c' : 'background:#e0f2fe;border-color:#7dd3fc;color:#0369a1'}">🛰 ${crawlOn ? 'Dừng tự chạy' : 'Tự chạy 7 tỉnh'} · ${crawlCells.length - crawlLeft().length}/${crawlCells.length} ô</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button>${Object.values(cache).some((x) => x?.hidden) ? `<button data-m="hidden" title="Xem / hiện lại công ty đã ẩn" style="${btn}">🙈 Đã ẩn (${Object.values(cache).filter((x) => x?.hidden).length})</button>` : ''}${localStorage.getItem('dgMstMode') === 'tab' && !mstTabAlive ? `<a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" title="masothue.com chặn tra ngầm – mở 1 tab masothue (để chạy nền) để tự tra tên + MST, 15 giây / công ty" style="${btn};text-decoration:none;background:#f3e8ff;border-color:#c4b5fd;color:#6d28d9">🧾 Mở tab tra MST</a>` : ''}<button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
 ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</div>` : ''}`;
   }
   box.addEventListener('click', async (e) => {
@@ -191,10 +191,6 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
         draw();
       }
       sideCalcKey = '';
-      return;
-    }
-    if (k === 'pdf') {
-      exportAllPdf(b);
       return;
     }
     if (k === 'csv') {
@@ -1171,6 +1167,91 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     }
   }
 
+  // 🖨 Hộp chọn điều kiện lọc trước khi in PDF
+  function pdfDialog() {
+    document.getElementById('dg-pdf-dlg')?.remove();
+    const all = Object.values(cache || {}).filter((c) => c?.name && !isRealEstate(c));
+    const kcns = [...new Set(all.map((c) => c.kcn || kcnOf(c)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+    const inds = [...new Set(all.map((c) => c.ind).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+    const d = document.createElement('div');
+    d.id = 'dg-pdf-dlg';
+    d.setAttribute('style', 'position:fixed;inset:0;z-index:2147483200;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a');
+    const row = 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0';
+    const lab = 'min-width:110px;font-weight:800;color:#334155';
+    d.innerHTML = `<div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.35);width:min(620px,100%);max-height:86vh;overflow:auto;padding:14px 16px">
+<div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:16px;flex:1">🖨 In PDF – chọn điều kiện lọc</b><span data-x style="cursor:pointer;color:#64748b;font-weight:900;font-size:18px">✕</span></div>
+<div style="${row}"><span style="${lab}">Phạm vi</span><label><input type="radio" name="sc" value="all" checked> Tất cả trên cloud (${all.length})</label><label><input type="radio" name="sc" value="view"> Khung bản đồ đang xem (${sideList.length})</label></div>
+<div style="${row}"><span style="${lab}">Khu công nghiệp</span><select data-f="kcn" style="font:inherit;padding:3px 6px;border-radius:7px;border:1px solid #cbd5e1;max-width:360px"><option value="">Tất cả</option><option value="__in">Chỉ trong KCN</option><option value="__out">Chỉ ngoài KCN</option>${kcns.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div>
+<div style="${row}"><span style="${lab}">ERP</span><label><input type="radio" name="erp" value="" checked> Tất cả</label><label><input type="radio" name="erp" value="in"> Chỉ đã có trong ERP</label><label><input type="radio" name="erp" value="out"> Chỉ CHƯA có trong ERP</label></div>
+<div style="${row}"><span style="${lab}">Khác</span><label><input type="checkbox" data-f="frn"> 🌏 Chỉ tên nước ngoài</label><label><input type="checkbox" data-f="mst"> 🧾 Chỉ có MST</label><label><input type="checkbox" data-f="mob"> 📱 Chỉ có SĐT di động</label></div>
+<div style="margin:8px 0 4px;font-weight:800;color:#334155">🏷 Ngành <span style="font-weight:500;color:#64748b">(bỏ chọn để loại)</span> <a href="#" data-all style="font-size:12px">chọn hết</a> · <a href="#" data-none style="font-size:12px">bỏ hết</a></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 10px">${[...inds, ''].map((x) => `<label style="font-size:12.5px"><input type="checkbox" data-ind value="${esc(x)}" checked> ${x ? esc(x) : '<i style="color:#64748b">Chưa gắn ngành</i>'} <span style="color:#94a3b8">(${all.filter((c) => (c.ind || '') === x).length})</span></label>`).join('')}</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px;border-top:1px solid #e2e8f0;padding-top:10px"><span data-n style="flex:1;color:#475569"></span><button data-go style="cursor:pointer;border:0;border-radius:9px;padding:8px 16px;font:inherit;font-weight:900;color:#fff;background:linear-gradient(90deg,#2563eb,#1d4ed8)">🖨 In PDF</button></div></div>`;
+    document.body.append(d);
+    const val = () => {
+      const sc = d.querySelector('input[name="sc"]:checked').value;
+      const kc = d.querySelector('[data-f="kcn"]').value;
+      const erp = d.querySelector('input[name="erp"]:checked').value;
+      const frn = d.querySelector('[data-f="frn"]').checked;
+      const mst = d.querySelector('[data-f="mst"]').checked;
+      const mob = d.querySelector('[data-f="mob"]').checked;
+      const okInd = new Set([...d.querySelectorAll('[data-ind]:checked')].map((x) => x.value));
+      const isMob = (p) => {
+        let x = String(p || '').replace(/\D/g, '');
+        if (x.startsWith('84')) x = `0${x.slice(2)}`;
+        return /^0[35789]\d{8}$/.test(x);
+      };
+      const base = sc === 'view' ? sideList : Object.values(cache || {});
+      const list = base.filter((c) => {
+        if (!c?.name || isRealEstate(c)) return false;
+        const k = c.kcn || kcnOf(c);
+        if (kc === '__in' && !k) return false;
+        if (kc === '__out' && k) return false;
+        if (kc && !kc.startsWith('__') && k !== kc) return false;
+        const e = !!erpOf(c);
+        if (erp === 'in' && !e) return false;
+        if (erp === 'out' && e) return false;
+        if (frn && !foreignName(c)) return false;
+        if (mst && !c.mst) return false;
+        if (mob && !isMob(c.phone)) return false;
+        return okInd.has(c.ind || '');
+      });
+      const parts = [sc === 'view' ? 'Khung bản đồ' : 'Tất cả', kc === '__in' ? 'Trong KCN' : kc === '__out' ? 'Ngoài KCN' : kc, erp === 'in' ? 'Đã có ERP' : erp === 'out' ? 'Chưa có ERP' : '', frn ? 'Tên nước ngoài' : '', mst ? 'Có MST' : '', mob ? 'Có di động' : '', okInd.size < inds.length + 1 ? `${okInd.size} ngành` : ''].filter(Boolean);
+      return { list, sc, title: `Danh sách công ty – ${parts.join(' · ')}` };
+    };
+    const upd = () => (d.querySelector('[data-n]').textContent = `→ ${val().list.length} công ty sẽ được in`);
+    upd();
+    d.addEventListener('change', upd);
+    d.addEventListener('click', async (e) => {
+      if (e.target === d || e.target.closest('[data-x]')) return d.remove();
+      if (e.target.closest('[data-all],[data-none]')) {
+        e.preventDefault();
+        const on = !!e.target.closest('[data-all]');
+        d.querySelectorAll('[data-ind]').forEach((x) => (x.checked = on));
+        return upd();
+      }
+      const go = e.target.closest('[data-go]');
+      if (!go) return;
+      const v0 = val();
+      if (!v0.list.length) return alert('Không có công ty nào khớp điều kiện.');
+      // mở cửa sổ in ngay lúc bấm (tránh chặn pop-up); "Tất cả" → đồng bộ cloud trước rồi lọc lại
+      const w = window.open('', '_blank');
+      if (!w) return alert('Trình duyệt chặn cửa sổ in – cho phép pop-up của google.com rồi bấm lại.');
+      w.document.write('<p style="font:14px sans-serif;padding:20px">⏳ Đang đồng bộ cloud và dựng danh sách công ty…</p>');
+      go.disabled = true;
+      go.textContent = '⏳ Đang chuẩn bị…';
+      if (v0.sc === 'all') {
+        await Promise.race([call({ type: 'sync.all' }).catch(() => {}), sleep(20e3)]);
+        cache = (await kvGet(KEY).catch(() => ({}))) || cache;
+        erpAt = 0;
+        await erpLoad().catch(() => {});
+      }
+      const v = val();
+      d.remove();
+      exportPdf(v.list, v.title, w);
+    });
+  }
+
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
   const side = document.createElement('div');
   side.id = 'dg-maps-side';
@@ -1195,8 +1276,7 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
       sideKey = '';
       sideDraw();
     } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
-    else if (t.dataset.s === 'pdf') exportPdf(sideList, 'Công ty trong khung bản đồ');
-    else if (t.dataset.s === 'pdfall') exportAllPdf(t);
+    else if (t.dataset.s === 'pdfdlg') pdfDialog();
     else if (t.dataset.s === 'frn') {
       onlyForeign = !onlyForeign;
       localStorage.setItem('dgMapsForeign', onlyForeign ? '1' : '0');
@@ -1229,7 +1309,7 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     if (!document.body) return;
     if (!side.isConnected) document.body.append(side);
     let nForeign = null;
-    const head = (extra) => `<div style="padding:7px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a"><div style="display:flex;align-items:center;gap:6px;white-space:nowrap">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"><span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="pdf" title="Xuất PDF các công ty đang hiện trong panel (khung bản đồ + bộ lọc)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF khung này</span><span data-s="pdfall" title="Đồng bộ cloud rồi xuất PDF TẤT CẢ công ty (mọi máy đã quét)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF tất cả</span></div></div>`;
+    const head = (extra) => `<div style="padding:7px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a"><div style="display:flex;align-items:center;gap:6px;white-space:nowrap">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"><span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="pdfdlg" title="In PDF – chọn điều kiện lọc trước khi in" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF</span></div></div>`;
     if (!v || v.z < 13) {
       const k = 'far';
       if (sideKey !== k) {
