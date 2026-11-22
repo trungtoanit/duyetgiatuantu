@@ -648,13 +648,14 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   }
   setInterval(() => autoScanTick().catch(() => {}), 1000);
 
-  // ✅ Đối chiếu khách hàng ERP (kv customersAll – đồng bộ từ trang Khách hàng): CHỈ theo tên công ty – trùng tên đã bỏ
+  // ✅ Đối chiếu khách hàng ERP (kv customersAll – đồng bộ từ trang Khách hàng): CHỈ theo tên công ty, giống 100% (không phân biệt hoa thường)
   // "Công ty TNHH / Cổ phần / MTV…", dấu, ký tự đặc biệt (tên ≥ 6 ký tự) → đánh dấu "tồn tại trong ERP"
   const ERP_HOST = 'https://sale.tuantu.com.vn';
   const unacc = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const coKey = (t) => unacc(t)
     .replace(/\b(cong ty|cty|ct|tnhh|co phan|cp|mtv|mot thanh vien|hai thanh vien|trach nhiem huu han|san xuat|thuong mai|dich vu|xuat nhap khau|xnk|tm|dv|sx|viet nam|vn|company|co\.?|ltd\.?|limited|corp\.?|corporation|jsc|vietnam|inc\.?)\b/g, ' ')
     .replace(/[^a-z0-9]/g, '');
+  const exactKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const phoneKey = (t) => String(t || '').replace(/\D/g, '').slice(-9);
   let erpIdx = null;
   let erpAt = 0;
@@ -672,8 +673,8 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
         const k = phoneKey(ph);
         if (k.length === 9) byPhone.set(k, c);
       }
-      const nk = coKey(c.name);
-      if (nk.length >= 3) byName.set(nk, c);
+      const nk = exactKey(c.name);
+      if (nk) byName.set(nk, c);
       const ck = coKey(c.code);
       if (ck.length >= 3 && !byCode.has(ck)) byCode.set(ck, c);
       const tx = String(c.taxCode || '').replace(/[^\d-]/g, '');
@@ -687,10 +688,10 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   setInterval(() => erpLoad().catch(() => {}), 60e3);
   const erpOf = (c) => {
     if (!erpIdx || !c) return null;
-    // tên đã bỏ "Công ty TNHH / CP / Việt Nam…" trùng hẳn (≥ 3 ký tự, vd. "noa") → tên ERP hoặc mã KH ERP
+    // tên giống 100% (chỉ không phân biệt HOA / thường, khoảng trắng thừa) – không bỏ "Công ty TNHH…", không bỏ dấu, không so mã KH
     const byKey = (t) => {
-      const k = coKey(t);
-      return k.length >= 3 ? erpIdx.byName.get(k) || erpIdx.byCode?.get(k) || null : null;
+      const k = exactKey(t);
+      return k ? erpIdx.byName.get(k) || null : null;
     };
     // đối chiếu theo TÊN công ty (tên trên Google Maps + tên chuẩn từ masothue), không dùng MST / SĐT
     return byKey(c.name) || (c.legalName && byKey(c.legalName)) || null;
