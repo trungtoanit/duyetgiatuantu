@@ -84,9 +84,13 @@
     }
     return out;
   }
+  // 🚫 Bỏ công ty bất động sản (tên / loại hình): BĐS, BDS, bất động sản, địa ốc, real estate, realty, property, land…
+  const RE_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
+  const isRealEstate = (c) => RE_RE.test(`${c?.name || ''} | ${c?.legalName || ''} | ${c?.cat || ''}`);
   // Lưu: bản chi tiết (full) không bị bản danh sách (địa chỉ rút gọn) ghi đè
   let cache = null;
   async function save(list) {
+    list = list.filter((p) => !isRealEstate(p));
     if (!list.length) return 0;
     cache = cache || (await kvGet(KEY).catch(() => ({}))) || {};
     const patch = {};
@@ -134,7 +138,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     }
     if (k === 'csv') {
       cache = (await kvGet(KEY).catch(() => ({}))) || {};
-      const rows = Object.values(cache).filter((x) => x?.name);
+      const rows = Object.values(cache).filter((x) => x?.name && !isRealEstate(x));
       const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const csv = '﻿' + [['Tên', 'Tên pháp lý (masothue)', 'MST', 'Địa chỉ đăng ký', 'KCN', 'Loại hình', 'Địa chỉ', 'SĐT', 'Website', 'Plus code', 'Vĩ độ', 'Kinh độ', 'Google Maps'].map(q).join(',')].concat(rows.map((x) => [x.name, x.legalName, x.mst, x.legalAddr, x.kcn, x.cat, x.addr, x.phone, x.web, x.plus, x.lat, x.lng, x.href || x.url].map(q).join(','))).join('\n');
       const a = document.createElement('a');
@@ -429,7 +433,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       p._bb = [Math.min(...all.map((x) => x[0])), Math.max(...all.map((x) => x[0])), Math.min(...all.map((x) => x[1])), Math.max(...all.map((x) => x[1]))];
     }
     const [s1, n1, w1, e1] = p._bb;
-    return Object.values(cache).filter((c) => c?.lat && c.lat >= s1 && c.lat <= n1 && c.lng >= w1 && c.lng <= e1 && inKcn(c.lat, c.lng, p));
+    return Object.values(cache).filter((c) => c?.lat && !isRealEstate(c) && c.lat >= s1 && c.lat <= n1 && c.lng >= w1 && c.lng <= e1 && inKcn(c.lat, c.lng, p));
   }
   // KCN chứa 1 công ty (tên) – dùng cho bảng chi tiết / danh sách
   const kcnOf = (c) => (c?.lat ? [...kcnData.values()].find((p) => inKcn(c.lat, c.lng, p))?.name || '' : '');
@@ -750,7 +754,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   let mstBusy = false;
   async function mstTick() {
     if (mstBusy || Date.now() < mstPause || !cache) return;
-    const c = Object.values(cache).find((x) => x?.name && !x.mst && (!x.mstTry || Date.now() - x.mstTry > 30 * 86400e3) && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name));
+    const c = Object.values(cache).find((x) => x?.name && !isRealEstate(x) && !x.mst && (!x.mstTry || Date.now() - x.mstTry > 30 * 86400e3) && /c[oô]ng ty|cty|company|co\.,? ?ltd|tnhh|cổ phần|jsc|corp/i.test(x.name));
     if (!c) return;
     mstBusy = true;
     try {
@@ -850,7 +854,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const [cx, cy] = proj(v.lat, v.lng, v.z);
     const [n, w] = unproj(cx - v.r.width / 2, cy - v.r.height / 2, v.z);
     const [s2, e] = unproj(cx + v.r.width / 2, cy + v.r.height / 2, v.z);
-    const inView = Object.values(cache || {}).filter((c) => c?.lat && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
+    const inView = Object.values(cache || {}).filter((c) => c?.lat && !isRealEstate(c) && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
     const groups = new Map();
     for (const c of inView) {
       const hit = [...kcnData.entries()].find(([, p]) => inKcn(c.lat, c.lng, p));
