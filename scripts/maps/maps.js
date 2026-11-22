@@ -484,13 +484,22 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   }
   // đang kéo / cuộn bản đồ → ẩn lớp viền (URL chỉ cập nhật khi dừng), dừng lại thì vẽ theo vị trí mới
   let kcnUrl = '';
+  let kcnDrawnUrl = '';
   let kcnMoving = 0;
   const kcnHide = () => {
     kcnSvg.style.visibility = 'hidden';
     kcnMoving = Date.now();
   };
-  addEventListener('wheel', kcnHide, { passive: true, capture: true });
-  addEventListener('pointerdown', (e) => !e.target.closest?.('#dg-maps') && kcnHide(), true);
+  // chỉ thao tác TRÊN BẢN ĐỒ mới tính (cuộn danh sách kết quả / panel của mình / ô tìm kiếm thì bỏ qua → không vẽ lại, đỡ lag)
+  const OFF_MAP = '#dg-maps,#dg-maps-side,#dg-kcn-list,div[role="feed"],div[role="main"],#searchbox,[role="navigation"],[role="dialog"],input,button';
+  const onMap = (e) => {
+    const t = e.target;
+    if (!t?.closest) return false;
+    if (t.closest(OFF_MAP)) return false;
+    return t.tagName === 'CANVAS' || !!t.closest('#scene, [aria-label="Map"], .widget-scene');
+  };
+  addEventListener('wheel', (e) => onMap(e) && kcnHide(), { passive: true, capture: true });
+  addEventListener('pointerdown', (e) => onMap(e) && kcnHide(), true);
   addEventListener('resize', () => kcnDraw());
   setInterval(() => {
     if (!kcnOn) return;
@@ -501,7 +510,10 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       return;
     }
     if (kcnSvg.style.visibility === 'hidden' && Date.now() - kcnMoving > 600) {
-      kcnDraw();
+      if (kcnDrawnUrl !== location.href) {
+        kcnDrawnUrl = location.href;
+        kcnDraw();
+      }
       kcnSvg.style.visibility = 'visible';
       const v = mapView();
       if (v && v.z >= 10) kcnFetch(v).catch(() => {});
@@ -523,8 +535,8 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   let userMoved = false;
   let urlAt = Date.now();
   let urlNow = location.href;
-  addEventListener('wheel', () => (userMoved = true), { passive: true, capture: true });
-  addEventListener('pointerdown', (e) => !e.target.closest?.('#dg-maps,#dg-kcn-list') && (userMoved = true), true);
+  addEventListener('wheel', (e) => onMap(e) && (userMoved = true), { passive: true, capture: true });
+  addEventListener('pointerdown', (e) => onMap(e) && (userMoved = true), true);
   const scanned = () => {
     try {
       return JSON.parse(localStorage.getItem('dgMapsScanned') || '{}');
@@ -629,8 +641,13 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       sideDraw();
     } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
   });
+  let sideCalcKey = '';
   function sideDraw() {
     const v = mapView();
+    // không đổi khung bản đồ, số công ty đã lưu, số KCN, dữ liệu ERP → bỏ qua (khỏi lọc lại hàng nghìn công ty mỗi 1,5 giây)
+    const ck = `${location.href}|${Object.keys(cache || {}).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}`;
+    if (ck === sideCalcKey && side.isConnected) return;
+    sideCalcKey = ck;
     if (!document.body) return;
     if (!side.isConnected) document.body.append(side);
     const head = (extra) => `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div>`;
@@ -664,7 +681,10 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       if (!items.length) return '';
       return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><a href="${esc(c.href || c.url)}" style="text-decoration:none;color:#0f172a"><b style="font-size:12.5px">${esc(c.name)}</b></a>${erpBadge(c)}<div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${esc(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
-    side.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
+    const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
+    side.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
+    const sc = side.querySelector('[data-scroll]');
+    if (sc && keepTop) sc.scrollTop = keepTop; // giữ chỗ đang xem trong danh sách
   }
   setInterval(() => {
     if (kcnSvg.style.visibility !== 'hidden') sideDraw();
