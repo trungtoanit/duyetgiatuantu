@@ -1050,6 +1050,22 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   setTimeout(() => indTick().catch(() => {}), 20e3);
   setInterval(() => indTick().catch(() => {}), 60e3);
 
+  // 🌏 Tên có từ KHÔNG phải tiếng Việt (thường là công ty FDI): bỏ các từ chung (công ty, TNHH, Việt Nam…), từ nào không dấu và
+  // không đúng cấu trúc âm tiết tiếng Việt (phụ âm đầu + vần + âm cuối) → từ nước ngoài (vd. Win, Graphics, Stanley, Vina, Sehwa)
+  const VN_SYL = /^(ngh|ch|gh|gi|kh|ng|nh|ph|qu|th|tr|[bcdghklmnpqrstvx])?(uye|uya|ieu|yeu|uoi|uou|oai|oay|uay|uya|ai|ao|au|ay|eo|eu|ia|ie|iu|oa|oe|oi|ua|ue|ui|uo|uy|ye|ya|a|e|i|o|u|y)(ch|ng|nh|c|m|n|p|t)?$/;
+  const GENERIC = /\b(cong|ty|cty|tnhh|mtv|cp|co|phan|chi|nhanh|viet|nam|vietnam|vn|company|limited|ltd|jsc|corp|corporation|inc|group)\b/g;
+  const foreignName = (c) => {
+    const raw = String(c.legalName || c.name || '');
+    const words = raw.replace(/\(.*?\)/g, ' ').split(/[^\p{L}0-9]+/u).filter((w) => w.length >= 3 && !/\d/.test(w));
+    return words.some((w) => {
+      if (/[^\x00-\x7F]/.test(w)) return false; // có dấu tiếng Việt → từ Việt
+      const u = w.toLowerCase();
+      if (GENERIC.test(` ${u} `)) return (GENERIC.lastIndex = 0), false;
+      GENERIC.lastIndex = 0;
+      return !VN_SYL.test(u);
+    });
+  };
+
   // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
   const side = document.createElement('div');
   side.id = 'dg-maps-side';
@@ -1063,6 +1079,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   let sideMin = localStorage.getItem('dgMapsSideMin') === '1';
   let sideGroup = localStorage.getItem('dgMapsSideGroup') || 'kcn'; // 'kcn' | 'ind'
   let indOnly = ''; // đang lọc 1 ngành
+  let onlyForeign = localStorage.getItem('dgMapsForeign') === '1'; // 🌏 chỉ tên nước ngoài
   let sideKey = '';
   side.addEventListener('click', (e) => {
     const t = e.target.closest('[data-s]');
@@ -1073,7 +1090,13 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       sideKey = '';
       sideDraw();
     } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
-    else if (t.dataset.s === 'grp') {
+    else if (t.dataset.s === 'frn') {
+      onlyForeign = !onlyForeign;
+      localStorage.setItem('dgMapsForeign', onlyForeign ? '1' : '0');
+      sideKey = '';
+      sideCalcKey = '';
+      sideDraw();
+    } else if (t.dataset.s === 'grp') {
       sideGroup = sideGroup === 'ind' ? 'kcn' : 'ind';
       indOnly = '';
       localStorage.setItem('dgMapsSideGroup', sideGroup);
@@ -1092,12 +1115,13 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   function sideDraw() {
     const v = mapView();
     // không đổi khung bản đồ, số công ty đã lưu, số KCN, dữ liệu ERP → bỏ qua (khỏi lọc lại hàng nghìn công ty mỗi 1,5 giây)
-    const ck = `${location.href}|${Object.keys(cache || {}).length}|${Object.values(cache || {}).filter((x) => x?.ind).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}|${sideGroup}|${indOnly}`;
+    const ck = `${location.href}|${Object.keys(cache || {}).length}|${Object.values(cache || {}).filter((x) => x?.ind).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}|${sideGroup}|${indOnly}|${onlyForeign}`;
     if (ck === sideCalcKey && side.isConnected) return;
     sideCalcKey = ck;
     if (!document.body) return;
     if (!side.isConnected) document.body.append(side);
-    const head = (extra) => `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a">🏢 Công ty trong khung bản đồ ${extra}<span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div>`;
+    let nForeign = null;
+    const head = (extra) => `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a">🏢 Công ty trong khung bản đồ ${extra}<span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div>`;
     if (!v || v.z < 13) {
       const k = 'far';
       if (sideKey !== k) {
@@ -1109,8 +1133,10 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const [cx, cy] = proj(v.lat, v.lng, v.z);
     const [n, w] = unproj(cx - v.r.width / 2, cy - v.r.height / 2, v.z);
     const [s2, e] = unproj(cx + v.r.width / 2, cy + v.r.height / 2, v.z);
-    const inView = Object.values(cache || {}).filter((c) => c?.lat && !isRealEstate(c) && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
-    sideInView = inView.length;
+    const inView0 = Object.values(cache || {}).filter((c) => c?.lat && !isRealEstate(c) && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
+    sideInView = inView0.length;
+    nForeign = inView0.filter(foreignName).length;
+    const inView = onlyForeign ? inView0.filter(foreignName) : inView0;
     const groups = new Map();
     const byInd = sideGroup === 'ind';
     for (const c of inView) {
@@ -1129,7 +1155,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }
     const order = [...groups.entries()].sort((a, b) => (!a[0]) - (!b[0]) || b[1].list.length - a[1].list.length);
     const nErp = inView.filter((c) => erpOf(c)).length;
-    const key = `${sideGroup}|${indOnly}|${sideMin}|${inView.length}|${nErp}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
+    const key = `${onlyForeign}|${sideGroup}|${indOnly}|${sideMin}|${inView.length}|${nErp}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
     if (key === sideKey) return;
     sideKey = key;
     let shown = 0;
