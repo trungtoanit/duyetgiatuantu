@@ -81,7 +81,9 @@
     if (!list.length) return 0;
     cache = cache || (await kvGet(KEY).catch(() => ({}))) || {};
     const patch = {};
-    for (const p of list) {
+    for (const p0 of list) {
+      const k = typeof kcnOf === 'function' ? kcnOf(p0) : '';
+      const p = k ? { ...p0, kcn: k } : p0;
       const old = cache[p.id];
       const v = old?.full && !p.full ? { ...p, ...old, lat: old.lat ?? p.lat, lng: old.lng ?? p.lng, phone: old.phone || p.phone, seenAt: Date.now() } : { ...(old || {}), ...p, at: Date.now(), seenAt: Date.now() };
       if (JSON.stringify({ ...old, at: 0, seenAt: 0 }) === JSON.stringify({ ...v, at: 0, seenAt: 0 })) continue;
@@ -104,7 +106,7 @@
     const n = Object.keys(cache).length;
     const feedN = document.querySelectorAll('div[role="feed"] div[role="article"]').length;
     box.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:900;color:#1e3a8a">📍 Trợ lý ERP · địa chỉ công ty <span style="margin-left:auto;background:#dbeafe;border-radius:99px;padding:0 8px">${n}</span><span data-m="min" title="Thu nhỏ" style="cursor:pointer;color:#94a3b8">–</span></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button><button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${feedN ? `<button data-m="feed" style="${btn}">⬇️ Lưu danh sách (${feedN}+)</button>` : ''}<button data-m="scan" style="${btn}">🔍 Quét công ty quanh đây</button><button data-m="auto" title="Tự quét khi dừng bản đồ (zoom gần) ở Long An, Bình Dương, TP.HCM, Đồng Nai, Vũng Tàu, Bình Phước, Tây Ninh" style="${btn};${autoScan ? 'background:#dcfce7;border-color:#86efac;color:#166534' : ''}">🤖 Tự quét 7 tỉnh: ${autoScan ? 'Bật' : 'Tắt'}</button><button data-m="csv" style="${btn}">📄 Xuất CSV</button><button data-m="kcn" style="${btn};${kcnOn ? 'background:#ffedd5;border-color:#fb923c;color:#9a3412' : ''}">🏭 Viền KCN: ${kcnOn ? 'Bật' : 'Tắt'}</button>${kcnOn ? `<button data-m="kdraw" style="${btn};background:#dcfce7;border-color:#86efac;color:#166534">✏️ Vẽ viền KCN</button>${Object.values(kcnCustom).some((x) => x && !x.deleted) ? `<button data-m="klist" style="${btn}">🗂 KCN tự vẽ (${Object.values(kcnCustom).filter((x) => x && !x.deleted).length})</button>` : ''}` : ''}</div>
 ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</div>` : ''}`;
   }
   box.addEventListener('click', async (e) => {
@@ -130,6 +132,12 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       a.download = `dia-chi-cong-ty-google-maps-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
+      return;
+    }
+    if (k === 'auto') {
+      autoScan = !autoScan;
+      localStorage.setItem('dgMapsAutoScan', autoScan ? '1' : '0');
+      draw();
       return;
     }
     if (k === 'kdraw') {
@@ -363,6 +371,50 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       drawUi();
     }
   });
+  // Điểm (lat,lng) nằm trong đa giác (vòng ngoài) – tia ngang
+  const inRing = (la, ln, ring) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [ai, bi] = ring[i];
+      const [aj, bj] = ring[j];
+      if (ai > la !== aj > la && ln < ((bj - bi) * (la - ai)) / (aj - ai) + bi) inside = !inside;
+    }
+    return inside;
+  };
+  const inKcn = (la, ln, p) => p.rings.some((r) => inRing(la, ln, r));
+  // Công ty đã lưu (mapsPlaces) nằm trong 1 KCN
+  function kcnCompanies(p) {
+    if (!cache) return [];
+    if (!p._bb) {
+      const all = p.rings.flat();
+      p._bb = [Math.min(...all.map((x) => x[0])), Math.max(...all.map((x) => x[0])), Math.min(...all.map((x) => x[1])), Math.max(...all.map((x) => x[1]))];
+    }
+    const [s1, n1, w1, e1] = p._bb;
+    return Object.values(cache).filter((c) => c?.lat && c.lat >= s1 && c.lat <= n1 && c.lng >= w1 && c.lng <= e1 && inKcn(c.lat, c.lng, p));
+  }
+  // KCN chứa 1 công ty (tên) – dùng cho bảng chi tiết / danh sách
+  const kcnOf = (c) => (c?.lat ? [...kcnData.values()].find((p) => inKcn(c.lat, c.lng, p))?.name || '' : '');
+  // Bấm nhãn KCN → bảng danh sách công ty trong KCN đó
+  kcnSvg.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-kcn]');
+    if (!g) return;
+    e.stopPropagation();
+    kcnListShow(g.dataset.kcn);
+  });
+  function kcnListShow(kid) {
+    const p = kcnData.get(kid);
+    if (!p) return;
+    document.getElementById('dg-kcn-list')?.remove();
+    const list = kcnCompanies(p).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    const el = document.createElement('div');
+    el.id = 'dg-kcn-list';
+    el.setAttribute('style', 'position:fixed;right:70px;top:80px;z-index:2147483000;width:min(440px,90vw);max-height:72vh;overflow:auto;background:#fff;border-radius:14px;border:2px solid #f59e0b;box-shadow:0 18px 44px rgba(15,23,42,.3);padding:10px 12px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a');
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="flex:1;font-size:14.5px">🏭 ${esc(p.name)}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:900">✕</span></div>
+<div style="font-size:12px;color:#475569;margin-bottom:6px"><b>${list.length}</b> công ty đã lưu nằm trong KCN${list.length ? '' : ' – bấm “🔍 Quét công ty quanh đây” khi đang xem KCN để lưu thêm'}</div>
+${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><div><b>${i + 1}. <a href="${esc(c.href || c.url)}" style="color:#1d4ed8;text-decoration:none">${esc(c.name)}</a></b>${c.cat ? ` <span style="color:#64748b;font-size:11.5px">· ${esc(c.cat)}</span>` : ''}</div><div style="font-size:12px;color:#334155">${esc(c.addr || '')}${c.phone ? ` · 📞 ${esc(c.phone)}` : ''}</div></div>`).join('')}`;
+    el.querySelector('[data-x]').onclick = () => el.remove();
+    document.body.append(el);
+  }
   function kcnDraw() {
     if (drawPts) drawUi();
     if (!kcnOn) {
@@ -380,7 +432,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     const oy = v.r.top + v.r.height / 2 - cy;
     let html = '';
     let labels = '';
-    for (const [, p] of kcnData) {
+    for (const [kid, p] of kcnData) {
       let lx = 0;
       let ly = 0;
       let cnt = 0;
@@ -403,12 +455,13 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       const col = p.custom ? '#16a34a' : PAL[hsh % PAL.length];
       html += `<path d="${paths}" fill="${col}" fill-opacity=".22" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-opacity=".9"/><path d="${paths}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linejoin="round"/>`;
       if (p.name && v.z >= 12) {
-        const t = `${p.custom ? '✏️' : '🏭'} ${p.name.replace(/^Khu công nghiệp\s*/i, 'KCN ').replace(/^Cụm công nghiệp\s*/i, 'CCN ')}`;
+        const nIn = kcnCompanies(p).length;
+        const t = `${p.custom ? '✏️' : '🏭'}${nIn ? ` ${nIn} cty ·` : ''} ${p.name.replace(/^Khu công nghiệp\s*/i, 'KCN ').replace(/^Cụm công nghiệp\s*/i, 'CCN ')}`;
         const fs = v.z >= 14 ? 14 : 12;
         const tw = Math.round(t.length * fs * 0.56) + 16;
         const X = (lx / cnt).toFixed(1);
         const Y = (ly / cnt).toFixed(1);
-        labels += `<g transform="translate(${X},${Y})"><rect x="${-tw / 2}" y="${-(fs + 12) / 2}" width="${tw}" height="${fs + 12}" rx="${(fs + 12) / 2}" fill="#fff" stroke="${col}" stroke-width="2.5" filter="url(#dgKcnSh)"/><text x="0" y="${Math.round(fs * 0.36)}" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#0f172a" font-family="-apple-system,Segoe UI,Roboto,Arial,sans-serif">${esc(t)}</text></g>`;
+        labels += `<g transform="translate(${X},${Y})" data-kcn="${esc(kid)}" style="pointer-events:auto;cursor:pointer"><rect x="${-tw / 2}" y="${-(fs + 12) / 2}" width="${tw}" height="${fs + 12}" rx="${(fs + 12) / 2}" fill="#fff" stroke="${col}" stroke-width="2.5" filter="url(#dgKcnSh)"/><text x="0" y="${Math.round(fs * 0.36)}" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#0f172a" font-family="-apple-system,Segoe UI,Roboto,Arial,sans-serif">${esc(t)}</text></g>`;
       }
     }
     html = `<defs><filter id="dgKcnSh" x="-20%" y="-50%" width="140%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity=".45"/></filter></defs>${html}${labels}`;
@@ -439,6 +492,124 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       if (v && v.z >= 10) kcnFetch(v).catch(() => {});
     }
   }, 250);
+  // 🤖 Tự quét công ty khi đi ngang Long An, Bình Dương, TP.HCM, Đồng Nai, Bà Rịa – Vũng Tàu, Bình Phước, Tây Ninh:
+  // bản đồ dừng ≥ 4 giây ở zoom ≥ 14 trong vùng, ô ~3 km chưa quét 30 ngày → tìm "công ty" tại chỗ (ô tìm kiếm) và lưu danh sách.
+  // Chỉ chạy sau khi NGƯỜI DÙNG kéo / cuộn bản đồ (không tự quét dây chuyền khi kết quả làm bản đồ dời đi).
+  const REGION = [
+    [10.35, 106.0, 11.15, 106.95], // Long An – TP.HCM
+    [10.75, 106.3, 11.85, 106.95], // Tây Ninh – Bình Dương
+    [10.55, 106.75, 11.65, 107.55], // Đồng Nai
+    [10.3, 106.95, 10.85, 107.6], // Bà Rịa – Vũng Tàu
+    [11.25, 106.4, 12.3, 107.45], // Bình Phước
+    [10.95, 105.8, 11.8, 106.5], // Tây Ninh
+  ];
+  const inRegion = (la, ln) => REGION.some(([s1, w1, n1, e1]) => la >= s1 && la <= n1 && ln >= w1 && ln <= e1);
+  let autoScan = localStorage.getItem('dgMapsAutoScan') !== '0';
+  let userMoved = false;
+  let urlAt = Date.now();
+  let urlNow = location.href;
+  addEventListener('wheel', () => (userMoved = true), { passive: true, capture: true });
+  addEventListener('pointerdown', (e) => !e.target.closest?.('#dg-maps,#dg-kcn-list') && (userMoved = true), true);
+  const scanned = () => {
+    try {
+      return JSON.parse(localStorage.getItem('dgMapsScanned') || '{}');
+    } catch {
+      return {};
+    }
+  };
+  async function autoScanTick() {
+    if (!autoScan || busy || drawPts) return;
+    if (location.href !== urlNow) {
+      urlNow = location.href;
+      urlAt = Date.now();
+      return;
+    }
+    if (!userMoved || Date.now() - urlAt < 4000) return;
+    const v = mapView();
+    if (!v || v.z < 14 || !inRegion(v.lat, v.lng)) return;
+    const cell = `${Math.round(v.lat / 0.03)},${Math.round(v.lng / 0.03)}`;
+    const sc = scanned();
+    if (sc[cell] && Date.now() - sc[cell] < 30 * 86400e3) return;
+    userMoved = false;
+    sc[cell] = Date.now();
+    try {
+      localStorage.setItem('dgMapsScanned', JSON.stringify(sc));
+    } catch {}
+    const inp = document.querySelector('input#searchboxinput, input[name="q"]');
+    const go = document.querySelector('button#searchbox-searchbutton, button[aria-label="Search"], button[aria-label="Tìm kiếm"]');
+    if (!inp || !go) return;
+    msg = '🤖 Tự quét công ty khu vực này…';
+    draw();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, 'công ty');
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    go.click();
+    for (let i = 0; i < 20 && !document.querySelector('div[role="feed"] div[role="article"]'); i++) await sleep(500);
+    if (document.querySelector('div[role="feed"] div[role="article"]')) {
+      await saveFeedAll();
+      urlNow = location.href;
+      urlAt = Date.now();
+    } else {
+      msg = '';
+      draw();
+    }
+  }
+  setInterval(() => autoScanTick().catch(() => {}), 1000);
+
+  // 📋 Panel góc phải: công ty đã lưu nằm trong khung bản đồ đang xem, gom theo KCN. Zoom xa (< 13) → ẩn danh sách cho đỡ lag.
+  const side = document.createElement('div');
+  side.id = 'dg-maps-side';
+  side.setAttribute('style', 'position:fixed;right:64px;top:120px;z-index:2147482500;width:340px;max-height:calc(100vh - 220px);display:flex;flex-direction:column;background:#fff;border-radius:14px;border:2px solid #2563eb;box-shadow:0 14px 36px rgba(15,23,42,.28);font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;overflow:hidden');
+  let sideMin = localStorage.getItem('dgMapsSideMin') === '1';
+  let sideKey = '';
+  side.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-s]');
+    if (!t) return;
+    if (t.dataset.s === 'min') {
+      sideMin = !sideMin;
+      localStorage.setItem('dgMapsSideMin', sideMin ? '1' : '0');
+      sideKey = '';
+      sideDraw();
+    } else if (t.dataset.s === 'kcn') kcnListShow(t.dataset.k);
+  });
+  function sideDraw() {
+    const v = mapView();
+    if (!document.body) return;
+    if (!side.isConnected) document.body.append(side);
+    const head = (extra) => `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div>`;
+    if (!v || v.z < 13) {
+      const k = 'far';
+      if (sideKey !== k) {
+        sideKey = k;
+        side.innerHTML = head('') + (sideMin ? '' : '<div style="padding:10px;color:#64748b;font-size:12.5px">🔍 Zoom gần hơn để xem danh sách công ty (zoom xa ẩn cho đỡ lag).</div>');
+      }
+      return;
+    }
+    const [cx, cy] = proj(v.lat, v.lng, v.z);
+    const [n, w] = unproj(cx - v.r.width / 2, cy - v.r.height / 2, v.z);
+    const [s2, e] = unproj(cx + v.r.width / 2, cy + v.r.height / 2, v.z);
+    const inView = Object.values(cache || {}).filter((c) => c?.lat && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
+    const groups = new Map();
+    for (const c of inView) {
+      const hit = [...kcnData.entries()].find(([, p]) => inKcn(c.lat, c.lng, p));
+      const k = hit ? hit[0] : '';
+      if (!groups.has(k)) groups.set(k, { name: hit ? hit[1].name : 'Ngoài KCN', list: [] });
+      groups.get(k).list.push(c);
+    }
+    const order = [...groups.entries()].sort((a, b) => (!a[0]) - (!b[0]) || b[1].list.length - a[1].list.length);
+    const key = `${sideMin}|${inView.length}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
+    if (key === sideKey) return;
+    sideKey = key;
+    let shown = 0;
+    const body = order.map(([k, g]) => {
+      const items = g.list.sort((a, b) => a.name.localeCompare(b.name, 'vi')).filter(() => shown++ < 250);
+      if (!items.length) return '';
+      return `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>${items.map((c) => `<a href="${esc(c.href || c.url)}" style="display:block;padding:4px 10px 4px 16px;text-decoration:none;color:#0f172a;border-top:1px solid #f8fafc"><b style="font-size:12.5px">${esc(c.name)}</b><div style="font-size:11.5px;color:#64748b">${esc(c.addr || c.cat || '')}${c.phone ? ` · ${esc(c.phone)}` : ''}</div></a>`).join('')}`;
+    }).join('');
+    side.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>`) + (sideMin ? '' : `<div style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">Chưa có công ty nào đã lưu trong khung này – bấm “🔍 Quét công ty quanh đây”.</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
+  }
+  setInterval(() => {
+    if (kcnSvg.style.visibility !== 'hidden') sideDraw();
+  }, 1500);
   let lastUrl = '';
   async function tick() {
     if (!document.body) return;
@@ -453,7 +624,8 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
         lastUrl = location.href;
         const n = await save([d]).catch(() => 0);
         if (n) {
-          msg = `✅ Đã lưu: ${d.name} – ${d.addr}`;
+          const kk = kcnOf(d);
+          msg = `✅ Đã lưu: ${d.name} – ${d.addr}${kk ? ` · 🏭 ${kk}` : ''}`;
           draw();
         }
       }
