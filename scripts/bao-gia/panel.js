@@ -19743,7 +19743,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { q: '', erp: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '' };
+  const mpUi = { q: '', erp: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -19794,6 +19794,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
       if (mpUi.erp === 'in' && !e) return false;
       if (mpUi.erp === 'out' && e) return false;
       if (mpUi.ind && (c.ind || '—') !== mpUi.ind) return false;
+      if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
       if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
       return true;
     }).sort((a, b) => (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
@@ -19804,14 +19805,14 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   const mpPersist = () => {
     clearTimeout(mpUiT);
     mpUiT = setTimeout(() => {
-      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, ind: mpUi.ind, show: mpUi.show, page: mpUi.page, at: Date.now() } }).catch(() => {});
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, ind: mpUi.ind, show: mpUi.show, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
     }, 800);
   };
   async function mapsTab() {
     if (!mpUiLoaded) {
       mpUiLoaded = true;
       const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
-      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', ind: v.ind || '', show: v.show || 'on', page: Number(v.page) || 0 });
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', ind: v.ind || '', show: v.show || 'on', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
     }
     await mpLoad();
     if (root && !root.__mp) {
@@ -19864,6 +19865,17 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <input class="gt-edit" data-mp-q placeholder="🔍 Tìm tên, MST, địa chỉ, SĐT, KCN, mã KH…" value="${esc(mpUi.q)}" style="${sel};min-width:280px;flex:1">
 <select data-mp-f="erp" style="${sel}"><option value="">ERP: tất cả</option><option value="in" ${mpUi.erp === 'in' ? 'selected' : ''}>✅ Đã kết nối ERP</option><option value="out" ${mpUi.erp === 'out' ? 'selected' : ''}>Chưa kết nối ERP</option></select>
 <select data-mp-f="ind" style="${sel};max-width:220px"><option value="">Ngành: tất cả</option>${inds.map((x) => `<option value="${esc(x)}" ${mpUi.ind === x ? 'selected' : ''}>${x === '—' ? 'Chưa gắn ngành' : esc(x)}</option>`).join('')}</select>
+<span style="position:relative"><button data-mp="kcnbtn" style="${sel};cursor:pointer;font-weight:700;${mpUi.kcns.size ? 'border-color:#f59e0b;background:#fff7ed;color:#9a3412' : ''}">🏭 KCN: ${mpUi.kcns.size ? `${mpUi.kcns.size} đã chọn` : 'tất cả'} ▾</button>${mpUi.kcnOpen ? (() => {
+      const cnt = new Map();
+      for (const c of all) if (!mpOff(c)) cnt.set(c.kcn || '', (cnt.get(c.kcn || '') || 0) + 1);
+      const ks = [...cnt.keys()].filter((k) => k).sort((a, c) => cnt.get(c) - cnt.get(a) || a.localeCompare(c, 'vi'));
+      const kq = mpUn(mpUi.kq);
+      const opt = (k, label) => (kq && !mpUn(label).includes(kq) ? '' : `<label style="display:flex;gap:6px;align-items:center;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:12.5px;${mpUi.kcns.has(k) ? 'background:#fff7ed' : ''}"><input type="checkbox" data-mp-kcn="${esc(k)}" ${mpUi.kcns.has(k) ? 'checked' : ''}><span style="flex:1">${esc(label)}</span><span style="color:#94a3b8">${cnt.get(k) || 0}</span></label>`);
+      return `<div data-mp-kpop style="position:absolute;left:0;top:calc(100% + 4px);z-index:40;width:380px;max-height:60vh;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.22);padding:6px">
+<input class="gt-edit" data-mp-kq placeholder="Tìm KCN…" value="${esc(mpUi.kq)}" style="${sel};width:100%;box-sizing:border-box;margin-bottom:4px">
+<div style="display:flex;gap:6px;margin:2px 0 4px"><a href="#" data-mp="kall" style="font-size:12px">chọn hết</a><a href="#" data-mp="knone" style="font-size:12px">bỏ chọn (tất cả)</a><span style="flex:1"></span><a href="#" data-mp="kclose" style="font-size:12px;font-weight:800">Xong ✓</a></div>
+${opt('', 'Ngoài KCN')}${ks.map((k) => opt(k, k)).join('')}</div>`;
+    })() : ''}</span>
 <select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
 </div>
@@ -19957,7 +19969,17 @@ ${linkBox}</div>`;
       await mpSave({ [id]: { ...c, erpId: null, erpNo: true, erpLinkAt: Date.now(), erpLinkBy: meName || '' } });
     } else if (k === 'prev') mpUi.page = Math.max(0, mpUi.page - 1);
     else if (k === 'next') mpUi.page++;
-    else if (k === 'first') mpUi.page = 0;
+    else if (k === 'kcnbtn') {
+      mpUi.kcnOpen = !mpUi.kcnOpen;
+      mpUi.kq = '';
+    } else if (k === 'kclose') mpUi.kcnOpen = false;
+    else if (k === 'knone') {
+      mpUi.kcns.clear();
+      mpUi.page = 0;
+    } else if (k === 'kall') {
+      [...root.querySelectorAll('[data-mp-kcn]')].forEach((x) => mpUi.kcns.add(x.dataset.mpKcn));
+      mpUi.page = 0;
+    } else if (k === 'first') mpUi.page = 0;
     else if (k === 'last') mpUi.page = 1e9; // mapsTab tự kẹp về trang cuối
     else if (k === 'pg') mpUi.page = Number(t.dataset.p) || 0;
     else if (k === 'reload') await mpLoad(true);
@@ -19982,6 +20004,11 @@ ${linkBox}</div>`;
           inp.setSelectionRange(inp.value.length, inp.value.length);
         }
       }, 400);
+    } else if (e.target.matches?.('[data-mp-kq]')) {
+      // lọc danh sách KCN trong bảng chọn (không vẽ lại cả bảng)
+      mpUi.kq = e.target.value;
+      const q = mpUn(mpUi.kq);
+      root.querySelectorAll('[data-mp-kpop] label').forEach((l) => (l.style.display = !q || mpUn(l.textContent).includes(q) ? '' : 'none'));
     } else if (e.target.matches?.('[data-mp-lq]')) {
       mpUi.lq = e.target.value;
       const box = root.querySelector('[data-mp-res]');
@@ -19989,6 +20016,13 @@ ${linkBox}</div>`;
     }
   }
   function mpChange(e) {
+    if (e.target.dataset?.mpKcn != null) {
+      const k = e.target.dataset.mpKcn;
+      e.target.checked ? mpUi.kcns.add(k) : mpUi.kcns.delete(k);
+      mpUi.page = 0;
+      mpPersist();
+      return render();
+    }
     const f = e.target.dataset?.mpF;
     if (!f) return;
     if (f === 'page') {
