@@ -51,7 +51,7 @@
         try {
           await call({ type: 'kv.set', key: 'mstPick', value: { ...job, status: 'done', mst, pickName: name, doneAt: Date.now() } });
           b.textContent = `✅ Đã gửi MST ${mst} về tab Công ty Maps – có thể đóng tab này`;
-          b.style.background = '#16a34a';
+          b.style.setProperty('background', '#16a34a');
           job = null;
           bar();
         } catch (err) {
@@ -59,7 +59,14 @@
           b.textContent = `⚠️ ${err.message || err} – bấm lại`;
         }
       });
-      (h3.closest('a') || h3).insertAdjacentElement('afterend', b);
+      // đặt nút trong shadow DOM riêng, nằm TRƯỚC khối kết quả – không bị CSS của Google (lật chữ / chồng chữ) ảnh hưởng
+      const host = document.createElement('div');
+      host.setAttribute('style', 'display:block;position:relative;transform:none;margin:6px 0 2px;clear:both');
+      const sh = host.attachShadow({ mode: 'open' });
+      sh.innerHTML = '<style>:host{all:initial;display:block}button{all:initial;display:inline-block;box-sizing:border-box;cursor:pointer;border-radius:8px;padding:5px 12px;font:700 13px/1.3 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#fff;background:linear-gradient(90deg,#7c3aed,#6d28d9);box-shadow:0 3px 10px rgba(109,40,217,.35);direction:ltr;writing-mode:horizontal-tb;transform:none}button:disabled{cursor:default}</style>';
+      b.removeAttribute('style');
+      sh.append(b);
+      box.insertAdjacentElement('beforebegin', host);
     }
   }
   function bar() {
