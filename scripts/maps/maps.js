@@ -50,8 +50,8 @@
     if (d.startsWith('84')) d = `0${d.slice(2)}`;
     const mobile = /^0[35789]\d{8}$/.test(d);
     return mobile
-      ? `<span title="Di động" style="display:inline-block;padding:0 6px;border-radius:6px;background:#dcfce7;color:#15803d;font-weight:900">📱 ${esc(p)}</span>`
-      : `<span title="Số bàn" style="color:#94a3b8">☎ ${esc(p)}</span>`;
+      ? `<a href="https://zalo.me/${d}" target="_blank" rel="noopener" title="Di động – bấm để mở Zalo ${d}" style="display:inline-block;padding:0 6px;border-radius:6px;background:#dcfce7;color:#15803d;font-weight:900;text-decoration:none">📱 ${esc(String(p).trim().replace(/^\+?84[\s.-]*/, '0'))} <span style="font-size:10px;color:#0068ff">Zalo ↗</span></a>`
+      : `<span title="Số bàn" style="color:#94a3b8">☎ ${esc(String(p).trim().replace(/^\+?84[\s.-]*/, '0'))}</span>`;
   }
   const cleanPhone = (p) => String(p || '').replace(/^phone:tel:/, '').replace(/\s+/g, ' ').trim();
   const stripLabel = (t) => String(t || '').replace(/^[^:]{2,20}:\s*/, '').trim(); // "Address: …" / "Địa chỉ: …"

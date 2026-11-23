@@ -200,7 +200,7 @@ button{font:inherit}`;
     if (!p) return '';
     let d = String(p).replace(/\D/g, '');
     if (d.startsWith('84')) d = `0${d.slice(2)}`;
-    return /^0[35789]\d{8}$/.test(d) ? `<span title="Di động" style="color:#15803d;font-weight:800">📱 ${esc(p)}</span>` : `<span title="Số bàn" style="color:#64748b">☎ ${esc(p)}</span>`;
+    return /^0[35789]\d{8}$/.test(d) ? `<a href="https://zalo.me/${d}" target="_blank" rel="noopener" title="Di động – bấm để mở Zalo ${d}" style="color:#15803d;font-weight:800;text-decoration:none">📱 ${esc(String(p).trim().replace(/^\+?84[\s.-]*/, '0'))} <span style="font-size:10.5px;color:#0068ff">Zalo ↗</span></a>` : `<span title="Số bàn" style="color:#64748b">☎ ${esc(String(p).trim().replace(/^\+?84[\s.-]*/, '0'))}</span>`;
   }
   const mpOff = (c) => !!c.hidden || !!mpDropWhy(c); // đã xoá tay hoặc bị bộ lọc loại
   // khách ERP của 1 công ty: bỏ kết nối → không; kết nối tay → theo id; còn lại tên giống 100% (không phân biệt hoa thường)
