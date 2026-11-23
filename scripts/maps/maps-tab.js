@@ -84,7 +84,7 @@ button{font:inherit}`;
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
+  const mpUi = { tel: '', amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -231,6 +231,16 @@ button{font:inherit}`;
       if (mpUi.ind && (c.ind || '—') !== mpUi.ind) return false;
       if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
       if (mpUi.amin && !((c.area || 0) >= Number(mpUi.amin))) return false;
+      if (mpUi.tel) {
+        // 📞 lọc SĐT: có SĐT / chỉ di động (03/05/07/08/09) / chỉ số bàn (02…)
+        let d = String(c.phone || '').replace(/\D/g, '');
+        if (d.startsWith('84')) d = `0${d.slice(2)}`;
+        const mob = /^0[35789]\d{8}$/.test(d);
+        if (mpUi.tel === 'any' && d.length < 8) return false;
+        if (mpUi.tel === 'mob' && !mob) return false;
+        if (mpUi.tel === 'tel' && (mob || d.length < 8)) return false;
+        if (mpUi.tel === 'none' && d.length >= 8) return false;
+      }
       if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
       return true;
     }).sort((a, b) => (mpUi.sort === 'near' ? (mpDist(a) ?? 1e9) - (mpDist(b) ?? 1e9) : 0) || (mpUi.sort === 'area' ? (b.area || 0) - (a.area || 0) : 0) || (mpUi.sort === 'rate' ? (b.rateN || 0) - (a.rateN || 0) || (b.rate || 0) - (a.rate || 0) : 0) || (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
@@ -256,14 +266,14 @@ button{font:inherit}`;
   const mpPersist = () => {
     clearTimeout(mpUiT);
     mpUiT = setTimeout(() => {
-      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, amin: mpUi.amin, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, amin: mpUi.amin, tel: mpUi.tel, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
     }, 800);
   };
   async function mapsTab() {
     if (!mpUiLoaded) {
       mpUiLoaded = true;
       const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
-      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', amin: v.amin || '', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', amin: v.amin || '', tel: v.tel || '', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
     }
     await mpLoad();
     if (root && !root.__mp) {
@@ -349,6 +359,7 @@ button{font:inherit}`;
 ${opt('', 'Ngoài KCN')}${PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<div style="margin:6px 0 2px;padding:2px 6px;font-size:11.5px;font-weight:900;color:#1e3a8a;background:#eff6ff;border-radius:6px">📍 ${pv} · ${byP.get(pv).length} KCN</div>${byP.get(pv).sort((a, c) => a.localeCompare(c, 'vi')).map((k) => opt(k, k)).join('')}`).join('')}</div>`;
     })() : ''}</span>
 <select data-mp-f="sort" title="Sắp xếp" style="${sel}"><option value="name">↕ Theo KCN, tên</option><option value="near" ${mpUi.sort === 'near' ? 'selected' : ''}>📍 Gần → xa (từ Tuấn Tú)</option><option value="rate" ${mpUi.sort === 'rate' ? 'selected' : ''}>⭐ Nhiều đánh giá → ít</option><option value="area" ${mpUi.sort === 'area' ? 'selected' : ''}>📐 Xưởng lớn → nhỏ</option></select>
+<select data-mp-f="tel" title="Lọc theo số điện thoại" style="${sel};${mpUi.tel ? 'border-color:#16a34a;background:#dcfce7;color:#166534;font-weight:700' : ''}"><option value="">📞 SĐT: tất cả</option><option value="any" ${mpUi.tel === 'any' ? 'selected' : ''}>📞 Có SĐT</option><option value="mob" ${mpUi.tel === 'mob' ? 'selected' : ''}>📱 Chỉ di động</option><option value="tel" ${mpUi.tel === 'tel' ? 'selected' : ''}>☎ Chỉ số bàn</option><option value="none" ${mpUi.tel === 'none' ? 'selected' : ''}>Không có SĐT</option></select>
 <select data-mp-f="amin" title="Lọc theo diện tích mái nhà xưởng (OpenStreetMap, gần đúng)" style="${sel}"><option value="">📐 Diện tích: tất cả</option>${[[1000, '≥ 1.000 m²'], [3000, '≥ 3.000 m²'], [5000, '≥ 5.000 m²'], [10000, '≥ 10.000 m²'], [20000, '≥ 20.000 m²']].map(([v, t]) => `<option value="${v}" ${String(mpUi.amin) === String(v) ? 'selected' : ''}>📐 ${t}</option>`).join('')}</select>
 <select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
