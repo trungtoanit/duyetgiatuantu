@@ -1,5 +1,5 @@
 {
-  "version": "1.2.774",
+  "version": "1.2.775",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -17,6 +17,7 @@
     {
       "id": "bao-gia-panel",
       "files": [
+        "shared/company-pdf.js",
         "bao-gia/signature.js",
         "bao-gia/panel.js"
       ],
@@ -44,6 +45,7 @@
     {
       "id": "maps",
       "files": [
+        "shared/company-pdf.js",
         "maps/maps.js"
       ],
       "matches": [

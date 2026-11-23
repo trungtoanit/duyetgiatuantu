@@ -19929,7 +19929,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     return `<div style="padding:10px 12px">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
 <b style="font-size:15px">📍 Công ty từ Google Maps</b><span class="muted">${nOn.toLocaleString('vi-VN')} công ty · ✅ ${nErp} đã kết nối ERP · ${all.length - nOn} đã xoá / bị loại (BĐS, địa ốc, xây dựng, bảo vệ…)</span>
-<span style="flex:1"></span><span class="muted" style="font-size:11.5px" title="Danh sách đọc từ bản lưu trên máy (JSON) cho nhanh – bấm Tải lại để lấy mới từ cloud">💾 lưu máy lúc ${new Date(mpData.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span><button data-mp="reload" style="${b}">⟳ Tải lại từ cloud</button></div>
+<span style="flex:1"></span><span class="muted" style="font-size:11.5px" title="Danh sách đọc từ bản lưu trên máy (JSON) cho nhanh – bấm Tải lại để lấy mới từ cloud">💾 lưu máy lúc ${new Date(mpData.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span><button data-mp="pdf" title="In PDF các công ty đang lọc (cùng định dạng với nút In PDF bên Google Maps)" style="${b};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">🖨 In PDF (${rows.length.toLocaleString('vi-VN')})</button><button data-mp="reload" style="${b}">⟳ Tải lại từ cloud</button></div>
 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
 <input class="gt-edit" data-mp-q placeholder="🔍 Tìm tên, MST, địa chỉ, SĐT, KCN, mã KH…" value="${esc(mpUi.q)}" style="${sel};min-width:280px;flex:1">
 <select data-mp-f="erp" style="${sel}"><option value="">ERP: tất cả</option><option value="in" ${mpUi.erp === 'in' ? 'selected' : ''}>✅ Đã kết nối ERP</option><option value="out" ${mpUi.erp === 'out' ? 'selected' : ''}>Chưa kết nối ERP</option></select>
@@ -20074,6 +20074,19 @@ ${linkBox}</div>`;
     } else if (k === 'first') mpUi.page = 0;
     else if (k === 'last') mpUi.page = 1e9; // mapsTab tự kẹp về trang cuối
     else if (k === 'pg') mpUi.page = Number(t.dataset.p) || 0;
+    else if (k === 'pdf') {
+      // cùng bản in với Google Maps (scripts/shared/company-pdf.js); in đúng danh sách đang lọc
+      const f = [mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
+      dgCompanyPdf({
+        title: `Danh sách công ty – ${f.length ? f.join(' · ') : 'Tất cả'}`,
+        rows: mpRows().map((c) => {
+          const e = mpErp(c);
+          return { name: e?.name || c.legalName || c.name, mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, kcn: c.kcn || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
+        }),
+        erpHost: location.origin,
+      });
+      return;
+    }
     else if (k === 'reload') {
       t.disabled = true;
       t.textContent = '⏳ Đang tải từ cloud…';
