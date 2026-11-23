@@ -127,8 +127,22 @@
   const RE_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
   // so cả bản bỏ dấu (tên viết "Dia Oc", "BAT DONG SAN", chữ tổ hợp NFD…) để không sót "địa ốc"
   const IND_DROP = new Set(['Dịch vụ – tư vấn – phần mềm']); // ngành không cần (xoá khỏi danh sách)
+  // 🗺 Ngoài 7 tỉnh (ranh giới cũ: Long An, Bình Dương, TP.HCM, Đồng Nai, BR-VT, Bình Phước, Tây Ninh) → loại.
+  // Theo chữ trong địa chỉ / tên / KCN (tỉnh khác, kể cả tên tỉnh mới sau sáp nhập: Đồng Tháp gồm Tiền Giang, Lâm Đồng gồm Bình Thuận…)
+  // và theo toạ độ (ngoài khung 7 tỉnh, hoặc phía nam sông Vàm Cỏ – vùng Tiền Giang). Sửa thì sửa cả maps.js và maps-tab.js.
+  const OUT7_RE = /\b(tien giang|dong thap|ben tre|tra vinh|soc trang|hau giang|bac lieu|ca mau|lam dong|ninh thuan|dak lak|dak nong|my tho|go cong|cai lay|cai be|sa dec|cao lanh|phan thiet|bao loc|long giang|tan my chanh|(?:tinh|thanh pho|tp\.?) (?:vinh long|can tho|an giang|kien giang|binh thuan|khanh hoa|gia lai|kon tum|phu yen|binh dinh|quang ngai|quang nam|da nang|ha noi|hai phong|da lat))\b/;
+  const out7Why = (c) => {
+    const u = String(`${c?.addr || ''} | ${c?.legalAddr || ''} | ${c?.kcn || ''} | ${c?.name || ''} | ${c?.legalName || ''}`).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+    const m = u.match(OUT7_RE);
+    if (m) return `ngoài 7 tỉnh (${m[1]})`;
+    const la = Number(c?.lat);
+    const ln = Number(c?.lng);
+    if (la && ln && (la < 10.3 || la > 12.35 || ln < 105.8 || ln > 107.65 || (la < 10.42 && ln < 106.8))) return 'ngoài 7 tỉnh (toạ độ)';
+    return '';
+  };
   const isRealEstate = (c) => {
     if (c?.hidden) return true; // 🙈 người dùng đã ẩn công ty này
+    if (out7Why(c)) return true; // 🗺 ngoài 7 tỉnh
     if (c?.ind && IND_DROP.has(c.ind)) return true; // 🏷 ngành bị loại (AI gắn nhãn)
     // tên chỉ có mỗi chữ "Công ty" (± TNHH / CP / MTV / dấu câu) – không có tên riêng
     if (c?.name && !String(c.name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\b(cong\s*ty|cty|tnhh|co\s*phan|cp|mtv|mot\s*thanh\s*vien|company|co|ltd|limited)\b/g, '').replace(/[^a-z0-9]/g, '')) return true;
