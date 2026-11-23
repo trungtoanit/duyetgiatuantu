@@ -13436,7 +13436,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
 
   // Tab Chrome đang ẩn (không xem) → không tải / vẽ bảng Trợ lý; khi tab được xem lại mới vẽ (dữ liệu mới nhất lúc đó)
-  var renderHiddenPending = false; // var: render() có thể được gọi trước dòng này
+  var renderHiddenPending; // var, không gán lại: render() có thể được gọi trước dòng này
   if (IS_TOP) document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && renderHiddenPending) {
       renderHiddenPending = false;
