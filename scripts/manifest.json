@@ -1,5 +1,5 @@
 {
-  "version": "1.2.786",
+  "version": "1.2.787",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -46,7 +46,8 @@
       "id": "maps",
       "files": [
         "shared/company-pdf.js",
-        "maps/maps.js"
+        "maps/maps.js",
+        "maps/maps-tab.js"
       ],
       "matches": [
         "https://www.google.com/maps*"
