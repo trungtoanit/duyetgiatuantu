@@ -20880,7 +20880,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
       ${await (async () => {
         // 3 tab lớn: Báo giá | Khách hàng 6 tháng | Báo cáo tuần (nhớ qua F5: dgTab)
         const allowed = perm.tabs.filter((t) => TABS.some((x) => x[0] === t));
-        if (IS_OWNER()) allowed.push('gap'); // tab riêng của Nguyễn Trung Toán
+        // tab 📈 Chênh lệch 2 hệ thống: đã bỏ
         if (TASK_ON) allowed.push('task'); // 📋 Công việc: ai có extension cũng cần để nhận và cập nhật việc
         const tkAll = TASK_ON ? await kvGet('tasks') : {};
         const tkN = TASK_ON ? tkMyCount(tkAll) : 0;
@@ -20902,7 +20902,6 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
           <button class="bigtab task${tab === 'task' ? ' on' : ''}${tkN ? ' has' : ''}" data-act="tab" data-tab="task">📋 Công việc${tkN ? ` <b>${tkN}</b>` : ''}</button>
           <button class="bigtab qa${tab === 'qa' ? ' on' : ''}" data-act="tab" data-tab="qa">💬 Bộ câu hỏi</button>
           <button class="bigtab${tab === 'gt' ? ' on' : ''}" data-act="tab" data-tab="gt">📄 Giấy tấm</button>
-          <button class="bigtab gap${tab === 'gap' ? ' on' : ''}" data-act="tab" data-tab="gap">📈 Chênh lệch 2 hệ thống</button>
           <button class="bigtab set${tab === 'set' ? ' on' : ''}" data-act="tab" data-tab="set">⚙️ Cài đặt</button></div>`;
         // Chỉ hiện các tab được phân quyền
         const bar = barRaw.replace(/<button class="bigtab[^"]*" data-act="tab" data-tab="(\w+)">[\s\S]*?<\/button>/g, (m, t) => (allowed.includes(t) ? m : ''));
