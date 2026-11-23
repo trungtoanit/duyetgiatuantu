@@ -20013,12 +20013,26 @@ ${linkBox}</div>`;
     const c = mpData.places[id];
     if (!c) return;
     const nm = c.legalName || c.name;
-    const v0 = prompt(`MST của “${nm}”\n(gõ MST; để trống → mở Google tìm “${nm} mã số thuế”)`, c.mst || '');
+    const v0 = prompt(`MST của “${nm}”\n(gõ MST; để trống → mở Google tìm, bấm “📥 Lấy MST này” ở kết quả đúng)`, c.mst || '');
     if (v0 == null) return;
-    const v = v0.replace(/[^\d-]/g, '');
+    let v = v0.replace(/[^\d-]/g, '');
     if (!v) {
-      window.open(`https://www.google.com/search?q=${encodeURIComponent(`${nm} mã số thuế`)}`, '_blank', 'noopener');
-      return;
+      // mở Google: script trên trang kết quả gắn nút 📥 cạnh mỗi kết quả có MST → ghi kv mstPick; chờ ≤ 15 phút
+      const at = Date.now();
+      await call({ type: 'kv.set', key: 'mstPick', value: { status: 'pending', id, name: nm, at } });
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(`${nm} mã số thuế`)}`, '_blank');
+      mpMstMsg[id] = '🔎 Chọn “📥 Lấy MST này” ở trang Google…';
+      render();
+      for (let i = 0; i < 450 && !v; i++) {
+        await sleep(2000);
+        const pk = await kvGet('mstPick').catch(() => null);
+        if (!pk || pk.at !== at) break; // đã bắt đầu tìm cho công ty khác
+        if (pk.status === 'done' && pk.id === id) v = String(pk.mst || '').replace(/[^\d-]/g, '');
+      }
+      if (!v) {
+        delete mpMstMsg[id];
+        return render();
+      }
     }
     if (!/^\d{10}(-\d{3})?$/.test(v)) return alert('MST phải là 10 số (chi nhánh: 10 số-3 số).');
     await mpSave({ [id]: { ...c, mst: v, mstUrl: `https://masothue.com/Search/?q=${v}`, mstManual: true, mstSkip: false, mstAt: Date.now(), mstBy: meName || '' } });

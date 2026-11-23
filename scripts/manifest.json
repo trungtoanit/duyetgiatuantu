@@ -1,5 +1,5 @@
 {
-  "version": "1.2.776",
+  "version": "1.2.777",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -62,6 +62,19 @@
       ],
       "matches": [
         "https://masothue.com/*"
+      ],
+      "runAt": "document_idle",
+      "world": "USER_SCRIPT",
+      "allFrames": false
+    },
+    {
+      "id": "gsearch",
+      "files": [
+        "gsearch/mst-pick.js"
+      ],
+      "matches": [
+        "https://www.google.com/search*",
+        "https://www.google.com.vn/search*"
       ],
       "runAt": "document_idle",
       "world": "USER_SCRIPT",
