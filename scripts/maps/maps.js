@@ -112,10 +112,15 @@
   }, 1000);
   // Lưu: bản chi tiết (full) không bị bản danh sách (địa chỉ rút gọn) ghi đè
   let cache = null;
+  let cacheAt = 0;
   async function save(list) {
     list = list.filter((p) => !isRealEstate(p));
     if (!list.length) return 0;
-    cache = cache || (await kvGet(KEY).catch(() => ({}))) || {};
+    // đọc lại kho nếu bản trong tab cũ hơn 1 phút – tránh ghi đè MST nhập tay / xoá / kết nối ERP vừa làm ở tab 📍 Công ty Maps (CRM)
+    if (!cache || Date.now() - cacheAt > 60e3) {
+      cache = (await kvGet(KEY).catch(() => null)) || cache || {};
+      cacheAt = Date.now();
+    }
     const patch = {};
     for (const p0 of list) {
       const k = typeof kcnOf === 'function' ? kcnOf(p0) : '';

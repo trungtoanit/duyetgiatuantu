@@ -19909,7 +19909,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <td style="padding:4px 6px"><input type="checkbox" data-mp="sel" data-id="${esc(c.id)}" ${mpUi.sel.has(c.id) ? 'checked' : ''}></td>
 <td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
 <td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
-<td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>` : '<span style="color:#cbd5e1">—</span>'}</td>
+<td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''} <a href="#" data-mp="mst" data-id="${esc(c.id)}" title="Sửa MST / lấy lại tên chuẩn từ masothue" style="text-decoration:none;font-size:11px">✎</a>` : `<button data-mp="mst" data-id="${esc(c.id)}" title="Nhập MST (vd. tìm trên Google / masothue) → lấy tên + địa chỉ chuẩn từ masothue, lưu cloud" style="${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff">🧾 Chuẩn hoá MST</button>`}${mpMstMsg[c.id] ? `<div style="font-size:10.5px;color:#7c3aed;white-space:normal">${esc(mpMstMsg[c.id])}</div>` : ''}</td>
 <td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${esc(c.legalAddr || c.addr || '')}</td>
@@ -20006,6 +20006,50 @@ ${linkBox}</div>`;
     return list.length ? list.map(mpLinkItem).join('') : '<div class="muted">Không tìm thấy khách hàng ERP.</div>';
   }
   const mpLinkItem = (x) => `<div data-mp="pick" data-cid="${esc(String(x.id))}" style="cursor:pointer;padding:6px 8px;border-radius:8px;border:1px solid #e2e8f0;margin-top:4px"><b>${esc(x.name)}</b> <span style="color:#15803d;font-weight:800">${esc(x.code || '')}</span><div style="font-size:11.5px;color:#64748b">${esc(x.address || '')}${x.staff?.name ? ` · NVKD ${esc(x.staff.name)}` : ''}</div></div>`;
+  // 🧾 Chuẩn hoá MST tay: nhập MST → lưu ngay (cloud + máy, đánh dấu mstManual) → xếp việc cho tab tra MST (masothue.com/#dgmst)
+  // lấy tên pháp lý + địa chỉ đăng ký, xong tự cập nhật. masothue chặn gọi ngầm nên phải qua tab đó (như Google Maps).
+  const mpMstMsg = {};
+  async function mpMstFix(id) {
+    const c = mpData.places[id];
+    if (!c) return;
+    const nm = c.legalName || c.name;
+    const v0 = prompt(`MST của “${nm}”\n(gõ MST; để trống → mở Google tìm “${nm} mã số thuế”)`, c.mst || '');
+    if (v0 == null) return;
+    const v = v0.replace(/[^\d-]/g, '');
+    if (!v) {
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(`${nm} mã số thuế`)}`, '_blank', 'noopener');
+      return;
+    }
+    if (!/^\d{10}(-\d{3})?$/.test(v)) return alert('MST phải là 10 số (chi nhánh: 10 số-3 số).');
+    await mpSave({ [id]: { ...c, mst: v, mstUrl: `https://masothue.com/Search/?q=${v}`, mstManual: true, mstSkip: false, mstAt: Date.now(), mstBy: meName || '' } });
+    mpMstMsg[id] = '⏳ Đang lấy tên chuẩn từ masothue…';
+    render();
+    const alive = await kvGet('mstAlive').catch(() => ({}));
+    if (Date.now() - (alive?.at || 0) > 20e3) {
+      mpMstMsg[id] = 'Đã lưu MST. Mở tab masothue.com/#dgmst để tự lấy tên chuẩn.';
+      window.open('https://masothue.com/#dgmst', '_blank');
+    }
+    const jid = `${Date.now().toString(36)}-m${String(id).slice(-6)}`;
+    const old = await kvGet('mstJobs').catch(() => ({}));
+    const keep = Object.fromEntries(Object.entries(old || {}).filter(([, j]) => Date.now() - (j?.at || 0) < 6 * 3600e3));
+    await call({ type: 'kv.set', key: 'mstJobs', value: { ...keep, [jid]: { q: v, at: Date.now(), status: 'pending', place: id, manual: true } } });
+    for (let i = 0; i < 80; i++) {
+      await sleep(1500);
+      const j = (await kvGet('mstJobs').catch(() => ({})))?.[jid];
+      if (j?.status === 'blocked') {
+        mpMstMsg[id] = '⚠️ masothue cần xác minh – mở tab masothue để tự xác minh.';
+        return render();
+      }
+      if (j?.status !== 'done') continue;
+      const r = (j.list || []).find((x) => String(x.mst).replace(/\D/g, '') === v.replace(/\D/g, '')) || j.list?.[0];
+      if (r) {
+        const cur = mpData.places[id];
+        await mpSave({ [id]: { ...cur, legalName: r.name, legalAddr: r.addr || cur.legalAddr, mstUrl: r.href || cur.mstUrl } });
+        mpMstMsg[id] = `✅ ${r.name}`;
+      } else mpMstMsg[id] = 'masothue không có kết quả cho MST này.';
+      return render();
+    }
+  }
   async function mpSave(patch) {
     for (const [id, v] of Object.entries(patch)) mpData.places[id] = v;
     mpIdbSave();
@@ -20074,6 +20118,10 @@ ${linkBox}</div>`;
     } else if (k === 'first') mpUi.page = 0;
     else if (k === 'last') mpUi.page = 1e9; // mapsTab tự kẹp về trang cuối
     else if (k === 'pg') mpUi.page = Number(t.dataset.p) || 0;
+    else if (k === 'mst') {
+      mpMstFix(id).catch((err) => alert(err.message || err));
+      return;
+    }
     else if (k === 'pdf') {
       // cùng bản in với Google Maps (scripts/shared/company-pdf.js); in đúng danh sách đang lọc
       const f = [mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
