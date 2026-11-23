@@ -17616,7 +17616,7 @@ ${ov?.bottom || ''}<div style="margin-top:8px;font-size:10.5px;color:#64748b">�
       if (!r.me) return '';
       const me = r.myP;
       const ls = [...r.peerList].sort((a, b) => a.price - b.price || a.id - b.id);
-      return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#fff"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:3px 6px">ID | Chất liệu giấy</th><th style="padding:3px 6px">NCC</th><th style="padding:3px 6px;text-align:right">Đơn giá</th><th style="padding:3px 6px;text-align:right">So với đang dùng</th><th style="padding:3px 6px">Cập nhật</th></tr></thead><tbody>${ls.map((x) => {
+      return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;white-space:nowrap"><thead><tr style="background:#f8fafc;text-align:left"><th style="padding:3px 6px">ID | Chất liệu giấy</th><th style="padding:3px 6px">NCC</th><th style="padding:3px 6px;text-align:right">Đơn giá</th><th style="padding:3px 6px;text-align:right">So với đang dùng</th><th style="padding:3px 6px">Cập nhật</th></tr></thead><tbody>${ls.map((x) => {
         const dd = x.price - me;
         const mine = String(x.id) === String(r.me.id);
         const c = mine ? '#1d4ed8' : dd < 0 ? '#15803d' : dd > 0 ? '#dc2626' : '#334155';
@@ -18069,9 +18069,10 @@ ${(() => {
       const pop = document.createElement('div');
       pop.id = 'dg-gtpeer-pop';
       const br = b.getBoundingClientRect();
-      pop.setAttribute('style', `position:fixed;z-index:2147483647;top:${Math.max(8, Math.min(br.bottom + 6, window.innerHeight - 340))}px;left:${Math.max(8, Math.min(br.left - 40, window.innerWidth - 680))}px;width:660px;max-height:330px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
+      pop.setAttribute('style', `position:fixed;z-index:2147483647;top:${Math.max(8, Math.min(br.bottom + 6, window.innerHeight - 340))}px;left:${Math.max(8, Math.min(br.left - 40, window.innerWidth - 680))}px;width:max-content;max-width:${window.innerWidth - 16}px;max-height:330px;overflow:auto;white-space:nowrap;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.25);padding:10px 12px;font:13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a`);
       pop.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><b style="flex:1">${r.peers} giấy cùng nhóm ${esc(r.g?.name || r.code)} · sóng ${esc(r.w)} <span style="font-weight:500;color:#64748b;font-size:12px">– giá thấp → cao</span></b><span data-x style="cursor:pointer;color:#64748b;font-weight:800">✕</span></div>${gtUi.oPeerHtml(r)}<div style="margin-top:6px;font-size:11px;color:#94a3b8">🟦 đang dùng · 🟩 rẻ hơn · 🟥 đắt hơn · chỉ NCC đang lọc, giá cập nhật trong ${GT_FRESH_D} ngày</div>`;
       host.append(pop); // trong khung bảng (bảng extension nằm trên cùng – gắn vào body sẽ bị che)
+      pop.style.left = `${Math.max(8, Math.min(br.left - 40, window.innerWidth - pop.offsetWidth - 8))}px`; // rộng theo nội dung (không rớt dòng) → đặt lại cho khỏi tràn mép phải
       pop.querySelector('[data-x]').onclick = () => pop.remove();
       setTimeout(() => {
         const off = (ev) => { if (!ev.composedPath().includes(pop)) { pop.remove(); document.removeEventListener('mousedown', off, true); } };
