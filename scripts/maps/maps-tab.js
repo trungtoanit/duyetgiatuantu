@@ -84,7 +84,7 @@ button{font:inherit}`;
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
+  const mpUi = { amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -230,9 +230,10 @@ button{font:inherit}`;
       if (mpUi.box && !mpUi.box.includes(c.box || '-')) return false; // 📦 AI: khả năng dùng thùng carton / offset số lượng lớn
       if (mpUi.ind && (c.ind || '—') !== mpUi.ind) return false;
       if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
+      if (mpUi.amin && !((c.area || 0) >= Number(mpUi.amin))) return false;
       if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
       return true;
-    }).sort((a, b) => (mpUi.sort === 'near' ? (mpDist(a) ?? 1e9) - (mpDist(b) ?? 1e9) : 0) || (mpUi.sort === 'rate' ? (b.rateN || 0) - (a.rateN || 0) || (b.rate || 0) - (a.rate || 0) : 0) || (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
+    }).sort((a, b) => (mpUi.sort === 'near' ? (mpDist(a) ?? 1e9) - (mpDist(b) ?? 1e9) : 0) || (mpUi.sort === 'area' ? (b.area || 0) - (a.area || 0) : 0) || (mpUi.sort === 'rate' ? (b.rateN || 0) - (a.rateN || 0) || (b.rate || 0) - (a.rate || 0) : 0) || (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
   }
   // 📍 Khoảng cách (km, đường chim bay) từ xưởng Tuấn Tú (48/13 KP Bình Phước B, An Phú): lấy toạ độ chính công ty Tuấn Tú
   // trong danh sách Google Maps; không có thì dùng toạ độ gần đúng
@@ -255,14 +256,14 @@ button{font:inherit}`;
   const mpPersist = () => {
     clearTimeout(mpUiT);
     mpUiT = setTimeout(() => {
-      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, amin: mpUi.amin, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
     }, 800);
   };
   async function mapsTab() {
     if (!mpUiLoaded) {
       mpUiLoaded = true;
       const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
-      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', amin: v.amin || '', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
     }
     await mpLoad();
     if (root && !root.__mp) {
@@ -291,7 +292,7 @@ button{font:inherit}`;
 <td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
 <td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${c.rate ? ` <span title="Đánh giá Google Maps: ${c.rate} sao · ${c.rateN || 0} lượt" style="color:#b45309;font-size:11.5px;font-weight:800;white-space:nowrap">⭐ ${String(c.rate).replace('.', ',')}${c.rateN ? ` <span style="color:#94a3b8;font-weight:600">(${Number(c.rateN).toLocaleString('vi-VN')})</span>` : ''}</span>` : ''}${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
 <td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''} <a href="#" data-mp="mst" data-id="${esc(c.id)}" title="Sửa MST / lấy lại tên chuẩn từ masothue" style="text-decoration:none;font-size:11px">✎</a>` : `<button data-mp="mst" data-id="${esc(c.id)}" title="Nhập MST (vd. tìm trên Google / masothue) → lấy tên + địa chỉ chuẩn từ masothue, lưu cloud" style="${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff">🧾 Chuẩn hoá MST</button>`}${mpMstMsg[c.id] ? `<div style="font-size:10.5px;color:#7c3aed;white-space:normal">${esc(mpMstMsg[c.id])}</div>` : ''}</td>
-<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
+<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}${c.area > 0 ? `<div title="Diện tích mái nhà xưởng (OpenStreetMap) – gần đúng" style="font-weight:900;color:${c.area >= 5000 ? '#b45309' : '#64748b'}">📐 ${c.area.toLocaleString('vi-VN')} m²</div>` : ''}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${mpDist(c) != null ? `<b style="color:#0369a1;white-space:nowrap" title="Khoảng cách đường chim bay từ xưởng Tuấn Tú">📍 ${mpDist(c).toFixed(1)} km</b> · ` : ''}${esc(c.legalAddr || c.addr || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)}</td>
@@ -347,7 +348,8 @@ button{font:inherit}`;
 <div style="display:flex;gap:6px;margin:2px 0 4px"><a href="#" data-mp="kall" style="font-size:12px">chọn hết</a><a href="#" data-mp="knone" style="font-size:12px">bỏ chọn (tất cả)</a><span style="flex:1"></span><a href="#" data-mp="kclose" style="font-size:12px;font-weight:800">Xong ✓</a></div>
 ${opt('', 'Ngoài KCN')}${PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<div style="margin:6px 0 2px;padding:2px 6px;font-size:11.5px;font-weight:900;color:#1e3a8a;background:#eff6ff;border-radius:6px">📍 ${pv} · ${byP.get(pv).length} KCN</div>${byP.get(pv).sort((a, c) => a.localeCompare(c, 'vi')).map((k) => opt(k, k)).join('')}`).join('')}</div>`;
     })() : ''}</span>
-<select data-mp-f="sort" title="Sắp xếp" style="${sel}"><option value="name">↕ Theo KCN, tên</option><option value="near" ${mpUi.sort === 'near' ? 'selected' : ''}>📍 Gần → xa (từ Tuấn Tú)</option><option value="rate" ${mpUi.sort === 'rate' ? 'selected' : ''}>⭐ Nhiều đánh giá → ít</option></select>
+<select data-mp-f="sort" title="Sắp xếp" style="${sel}"><option value="name">↕ Theo KCN, tên</option><option value="near" ${mpUi.sort === 'near' ? 'selected' : ''}>📍 Gần → xa (từ Tuấn Tú)</option><option value="rate" ${mpUi.sort === 'rate' ? 'selected' : ''}>⭐ Nhiều đánh giá → ít</option><option value="area" ${mpUi.sort === 'area' ? 'selected' : ''}>📐 Xưởng lớn → nhỏ</option></select>
+<select data-mp-f="amin" title="Lọc theo diện tích mái nhà xưởng (OpenStreetMap, gần đúng)" style="${sel}"><option value="">📐 Diện tích: tất cả</option>${[[1000, '≥ 1.000 m²'], [3000, '≥ 3.000 m²'], [5000, '≥ 5.000 m²'], [10000, '≥ 10.000 m²'], [20000, '≥ 20.000 m²']].map(([v, t]) => `<option value="${v}" ${String(mpUi.amin) === String(v) ? 'selected' : ''}>📐 ${t}</option>`).join('')}</select>
 <select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
 </div>

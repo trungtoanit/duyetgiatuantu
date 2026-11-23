@@ -1206,7 +1206,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const sec = Math.round((Date.now() - mstSt.at) / 1000);
     const ph = Date.now() < mstPause && mstSt.phase !== 'blocked' ? `⏸ Tạm nghỉ (masothue lỗi / bận) – thử lại sau ${Math.ceil((mstPause - Date.now()) / 60e3)} phút`
       : { search: `🔎 Đang tra masothue: <b>${esc(mstSt.name)}</b> (${sec}s)`, tab: `⏳ Đã gửi tab masothue: <b>${esc(mstSt.name)}</b> – chờ tới lượt (${sec}s)`, tabwork: `🔎 Tab masothue đang tra: <b>${esc(mstSt.name)}</b> (${sec}s)`, blocked: '⚠️ masothue cần xác minh (Cloudflare) – mở tab masothue để tự xác minh', notab: `🧾 Chưa có tab tra MST – bấm <a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:800">Mở tab tra MST</a>`, wait: '⏱ Chờ 15 giây rồi tra công ty kế tiếp…', done: '✅ Đã tra hết các công ty đang có', idle: '⏱ Chuẩn bị tra MST…' }[mstSt.phase] || '';
-    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div><div style="color:#15803d">📦 Tiềm năng thùng: ${all.filter((x) => x.box).length}/${all.length} đã chấm · <b>${all.filter((x) => x.box === 'A').length} cao</b> · ${all.filter((x) => x.box === 'B').length} vừa${boxSt.phase === 'run' ? ` · 🤖 AI đang chấm ${boxSt.n} công ty…` : boxSt.last ? ` · ${esc(boxSt.last)}` : ''}</div>`;
+    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div><div style="color:#15803d">📦 Tiềm năng thùng: ${all.filter((x) => x.box).length}/${all.length} đã chấm · <b>${all.filter((x) => x.box === 'A').length} cao</b> · ${all.filter((x) => x.box === 'B').length} vừa${boxSt.phase === 'run' ? ` · 🤖 AI đang chấm ${boxSt.n} công ty…` : boxSt.last ? ` · ${esc(boxSt.last)}` : ''}</div><div style="color:#92400e">📐 Diện tích xưởng: ${all.filter((x) => x.area != null).length}/${all.length} đã đo · <b>${all.filter((x) => x.area >= 5000).length} xưởng ≥ 5.000 m²</b>${areaSt.phase === 'run' ? ` · 🗺 đang đo ${areaSt.n} công ty…` : areaSt.last ? ` · ${esc(areaSt.last)}` : ''}</div>`;
   }
   setInterval(mstBarDraw, 1000);
 
@@ -1264,6 +1264,77 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   }
   setTimeout(() => indTick().catch(() => {}), 20e3);
   setInterval(() => indTick().catch(() => {}), 60e3);
+
+  // 📐 Diện tích nhà xưởng từ OpenStreetMap: mỗi 30 giây 1 lô ≤ 20 công ty chưa đo → 1 truy vấn Overpass (nhà quanh mỗi điểm 60 m)
+  // → nhà CHỨA điểm công ty; không có thì nhà lớn nhất trong 40 m. Lưu c.area (m², mái xưởng) + areaTry; OSM chưa vẽ → area 0.
+  // Gần đúng (chỉ là diện tích mái nhà OSM đã vẽ), dùng để lọc / sắp xưởng lớn trước.
+  const AREA_HOSTS = ['https://maps.mail.ru/osm/tools/overpass/api/interpreter', ...KCN_HOSTS];
+  const areaSt = { phase: '', n: 0, last: '' };
+  let areaBusy = false;
+  let areaPause = 0;
+  const polyArea = (ring) => {
+    const la0 = (ring[0][0] * Math.PI) / 180;
+    const R = 6371000;
+    const pts = ring.map(([la, ln]) => [((ln * Math.PI) / 180) * R * Math.cos(la0), ((la * Math.PI) / 180) * R]);
+    let a = 0;
+    for (let i = 0; i < pts.length - 1; i++) a += pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1];
+    return Math.abs(a) / 2;
+  };
+  const metersTo = (la, ln, ring) => {
+    const cy = ring.reduce((a, x) => a + x[0], 0) / ring.length;
+    const cx = ring.reduce((a, x) => a + x[1], 0) / ring.length;
+    return Math.hypot((cy - la) * 111320, (cx - ln) * 111320 * Math.cos((la * Math.PI) / 180));
+  };
+  async function areaTick() {
+    if (areaBusy || Date.now() < areaPause || !cache) return;
+    const todo = Object.values(cache).filter((x) => x?.lat && x.lng && !isRealEstate(x) && x.area == null && !(x.areaTry && Date.now() - x.areaTry < 7 * 86400e3)).slice(0, 20);
+    if (!todo.length) return (areaSt.phase = 'done');
+    areaBusy = true;
+    areaSt.phase = 'run';
+    areaSt.n = todo.length;
+    try {
+      const q = `[out:json][timeout:60];(${todo.map((c) => `way["building"](around:60,${c.lat},${c.lng});`).join('')});out geom;`;
+      let j = null;
+      for (const host of AREA_HOSTS) {
+        const ac = new AbortController();
+        const to = setTimeout(() => ac.abort(), 70e3);
+        const res = await fetch(host, { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: ac.signal }).catch(() => null);
+        clearTimeout(to);
+        if (res?.ok) j = await res.json().catch(() => null);
+        if (j) break;
+      }
+      if (!j) {
+        areaPause = Date.now() + 3 * 60e3;
+        areaSt.phase = 'err';
+        areaSt.last = '⚠️ Máy chủ OSM bận – thử lại sau 3 phút';
+        return;
+      }
+      const bs = (j.elements || []).filter((e) => e.geometry?.length > 3).map((e) => ({ ring: e.geometry.map((g) => [g.lat, g.lon]) }));
+      for (const b of bs) b.a = polyArea(b.ring);
+      const patch = {};
+      let got = 0;
+      for (const c of todo) {
+        const inside = bs.filter((b) => inRing(c.lat, c.lng, b.ring)).sort((a, b) => b.a - a.a)[0];
+        const near = inside || bs.filter((b) => metersTo(c.lat, c.lng, b.ring) <= 40).sort((a, b) => b.a - a.a)[0];
+        const area = near ? Math.round(near.a) : 0;
+        if (area) got++;
+        const v = { ...c, area, areaSrc: near ? (inside ? 'osm' : 'osm-near') : '', areaTry: Date.now() };
+        cache[c.id] = v;
+        patch[c.id] = v;
+      }
+      await kvMerge(KEY, patch);
+      areaSt.phase = 'wait';
+      areaSt.last = `📐 Đo được ${got}/${todo.length} công ty`;
+      sideCalcKey = '';
+    } catch {
+      areaPause = Date.now() + 3 * 60e3;
+    } finally {
+      areaBusy = false;
+    }
+  }
+  setTimeout(() => areaTick().catch(() => {}), 30e3);
+  setInterval(() => areaTick().catch(() => {}), 30e3);
+  const areaTag = (c) => (c.area > 0 ? ` <span title="Diện tích mái nhà xưởng (OpenStreetMap${c.areaSrc === 'osm-near' ? ', nhà gần nhất' : ''}) – gần đúng" style="display:inline-block;padding:0 6px;border-radius:6px;background:${c.area >= 5000 ? '#fef3c7' : '#f1f5f9'};border:1px solid ${c.area >= 5000 ? '#f59e0b' : '#e2e8f0'};color:${c.area >= 5000 ? '#92400e' : '#475569'};font-size:10.5px;font-weight:900;white-space:nowrap">📐 ${c.area.toLocaleString('vi-VN')} m²</span>` : '');
 
   // 📦 AI chấm khả năng dùng THÙNG CARTON / THÙNG OFFSET (in offset) số lượng lớn: A = cao · B = vừa · C = thấp (+ lý do ngắn)
   // mỗi phút 1 lô ≤ 25 công ty chưa chấm (chạy lệch 30 giây với gắn ngành) → c.box / c.boxWhy (lưu kv, đồng bộ). Lỗi → nghỉ 10 phút.
@@ -1597,7 +1668,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       const gh = byInd
         ? `<div style="padding:5px 10px;background:${ic}14;font-weight:800;font-size:12px;color:${ic};border-top:1px solid #f1f5f9;cursor:pointer" data-s="ind" data-k="${esc(k)}" title="${indOnly ? 'Bấm để xem lại mọi ngành' : 'Bấm để chỉ xem ngành này'}">🏷 ${esc(g.name)} · ${g.list.length}${indOnly ? ' · ✕ bỏ lọc' : ''}</div>`
         : `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>`;
-      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><span style="display:inline-block;min-width:22px;color:#94a3b8;font-size:11px;font-weight:800">${++stt}.</span><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${dispName(c) !== c.name ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(dispName(c))}</b></a>${rateTag(c)}${mstIcon(c)}${erpBadge(c)}${boxTag(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${kmTag(c)}${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><span style="display:inline-block;min-width:22px;color:#94a3b8;font-size:11px;font-weight:800">${++stt}.</span><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${dispName(c) !== c.name ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(dispName(c))}</b></a>${rateTag(c)}${mstIcon(c)}${erpBadge(c)}${boxTag(c)}${areaTag(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${kmTag(c)}${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">⏳ Chưa có công ty nào trong khung này – đang tự quét ngầm (dừng bản đồ vài giây, zoom gần)…</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
