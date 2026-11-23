@@ -19747,19 +19747,64 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
-  async function mpLoad(force = false) {
-    if (mpData && !force && Date.now() - mpData.at < 30e3) return mpData;
-    const [places, custs] = await Promise.all([kvGet('mapsPlaces'), kvGet('customersAll')]);
+  // 💾 Bản lưu trên máy (IndexedDB của trang CRM, dạng JSON): mở tab đọc từ máy cho nhanh; nút ⟳ Tải lại → đồng bộ cloud rồi lưu đè.
+  // Xoá / khôi phục / kết nối ERP: ghi cloud (kvMerge) + ghi đè bản lưu máy, chạy ngầm.
+  const mpIdb = () =>
+    new Promise((ok, bad) => {
+      const r = indexedDB.open('dgMapsTab', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => ok(r.result);
+      r.onerror = () => bad(r.error);
+    });
+  async function mpIdbGet(k) {
+    const db = await mpIdb();
+    return new Promise((ok) => {
+      const q = db.transaction('kv').objectStore('kv').get(k);
+      q.onsuccess = () => ok(q.result || null);
+      q.onerror = () => ok(null);
+    });
+  }
+  async function mpIdbSet(k, v) {
+    const db = await mpIdb();
+    return new Promise((ok, bad) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(v, k);
+      tx.oncomplete = () => ok();
+      tx.onerror = () => bad(tx.error);
+    });
+  }
+  let mpIdbT = 0;
+  const mpIdbSave = () => {
+    clearTimeout(mpIdbT);
+    mpIdbT = setTimeout(() => mpData && mpIdbSet('data', { at: mpData.at, places: mpData.places, custs: mpData.custs }).catch(() => {}), 600);
+  };
+  function mpIndex(raw) {
     const byId = new Map();
     const byName = new Map();
-    for (const c of Object.values(custs || {})) {
-      if (!c?.id) continue;
+    for (const c of raw.custs) {
       byId.set(String(c.id), c);
       const k = mpKey(c.name);
       if (k) byName.set(k, c);
     }
-    mpData = { at: Date.now(), places: places || {}, custs: Object.values(custs || {}).filter((c) => c?.id), byId, byName };
+    mpData = { at: raw.at, places: raw.places || {}, custs: raw.custs, byId, byName };
     return mpData;
+  }
+  async function mpLoad(force = false) {
+    if (mpData && !force) return mpData;
+    if (!force) {
+      const raw = await mpIdbGet('data').catch(() => null);
+      if (raw?.places) return mpIndex(raw);
+    }
+    // tải từ cloud: đồng bộ (≤ 20 giây) → đọc kho → lưu về máy
+    if (force) await Promise.race([call({ type: 'sync.all' }).catch(() => {}), sleep(20e3)]);
+    const [places, custs] = await Promise.all([kvGet('mapsPlaces'), kvGet('customersAll')]);
+    const raw = {
+      at: Date.now(),
+      places: places || {},
+      custs: Object.values(custs || {}).filter((c) => c?.id).map((c) => ({ id: c.id, name: c.name, code: c.code, phone: c.phone, address: c.address, staff: c.staff ? { name: c.staff.name } : null })),
+    };
+    await mpIdbSet('data', raw).catch(() => {});
+    return mpIndex(raw);
   }
   // Tỉnh (theo ranh giới cũ – 7 tỉnh) của 1 KCN: ưu tiên chữ trong tên KCN, không có thì đoán theo toạ độ tâm KCN
   const PROV_ORDER = ['Bình Dương', 'TP.HCM', 'Đồng Nai', 'Long An', 'Bà Rịa – Vũng Tàu', 'Bình Phước', 'Tây Ninh', 'Khác'];
@@ -19884,7 +19929,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     return `<div style="padding:10px 12px">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
 <b style="font-size:15px">📍 Công ty từ Google Maps</b><span class="muted">${nOn.toLocaleString('vi-VN')} công ty · ✅ ${nErp} đã kết nối ERP · ${all.length - nOn} đã xoá / bị loại (BĐS, địa ốc, xây dựng, bảo vệ…)</span>
-<span style="flex:1"></span><button data-mp="reload" style="${b}">⟳ Tải lại</button></div>
+<span style="flex:1"></span><span class="muted" style="font-size:11.5px" title="Danh sách đọc từ bản lưu trên máy (JSON) cho nhanh – bấm Tải lại để lấy mới từ cloud">💾 lưu máy lúc ${new Date(mpData.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span><button data-mp="reload" style="${b}">⟳ Tải lại từ cloud</button></div>
 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
 <input class="gt-edit" data-mp-q placeholder="🔍 Tìm tên, MST, địa chỉ, SĐT, KCN, mã KH…" value="${esc(mpUi.q)}" style="${sel};min-width:280px;flex:1">
 <select data-mp-f="erp" style="${sel}"><option value="">ERP: tất cả</option><option value="in" ${mpUi.erp === 'in' ? 'selected' : ''}>✅ Đã kết nối ERP</option><option value="out" ${mpUi.erp === 'out' ? 'selected' : ''}>Chưa kết nối ERP</option></select>
@@ -19962,8 +20007,9 @@ ${linkBox}</div>`;
   }
   const mpLinkItem = (x) => `<div data-mp="pick" data-cid="${esc(String(x.id))}" style="cursor:pointer;padding:6px 8px;border-radius:8px;border:1px solid #e2e8f0;margin-top:4px"><b>${esc(x.name)}</b> <span style="color:#15803d;font-weight:800">${esc(x.code || '')}</span><div style="font-size:11.5px;color:#64748b">${esc(x.address || '')}${x.staff?.name ? ` · NVKD ${esc(x.staff.name)}` : ''}</div></div>`;
   async function mpSave(patch) {
-    await kvMerge('mapsPlaces', patch);
     for (const [id, v] of Object.entries(patch)) mpData.places[id] = v;
+    mpIdbSave();
+    await kvMerge('mapsPlaces', patch);
   }
   async function mpClick(e) {
     const t = e.target.closest?.('[data-mp]');
@@ -19988,8 +20034,10 @@ ${linkBox}</div>`;
         row.style.opacity = '0';
         setTimeout(() => row.remove(), 150);
       }
+      mpIdbSave();
       kvMerge('mapsPlaces', { [id]: v }).catch((err) => {
         mpData.places[id] = c;
+        mpIdbSave();
         alert(`Không lưu được: ${err.message || err}`);
         render();
       });
@@ -20026,7 +20074,11 @@ ${linkBox}</div>`;
     } else if (k === 'first') mpUi.page = 0;
     else if (k === 'last') mpUi.page = 1e9; // mapsTab tự kẹp về trang cuối
     else if (k === 'pg') mpUi.page = Number(t.dataset.p) || 0;
-    else if (k === 'reload') await mpLoad(true);
+    else if (k === 'reload') {
+      t.disabled = true;
+      t.textContent = '⏳ Đang tải từ cloud…';
+      await mpLoad(true);
+    }
     else return;
     mpPersist();
     render();
