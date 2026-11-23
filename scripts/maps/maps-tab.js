@@ -84,7 +84,7 @@ button{font:inherit}`;
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { sort: 'name', q: '', erp: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
+  const mpUi = { sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -134,7 +134,17 @@ button{font:inherit}`;
     if (mpData && !force) return mpData;
     if (!force) {
       const raw = await mpIdbGet('data').catch(() => null);
-      if (raw?.places) return mpIndex(raw);
+      // bản công ty mới nhất trên máy do script Google Maps giữ (dgMapsLocal – có ngành / 📦 tiềm năng thùng AI vừa chấm) → dùng bản đó
+      const loc = await new Promise((ok) => {
+        const r = indexedDB.open('dgMapsLocal', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onerror = () => ok(null);
+        r.onsuccess = () => { try { const q = r.result.transaction('kv').objectStore('kv').get('places'); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); } catch { ok(null); } };
+      });
+      if (raw?.places) {
+        if (loc?.places && (loc.at || 0) > (raw.at || 0)) raw.places = loc.places;
+        return mpIndex(raw);
+      }
     }
     // tải từ cloud: đồng bộ (≤ 20 giây) → đọc kho → lưu về máy
     if (force) await Promise.race([call({ type: 'sync.all' }).catch(() => {}), sleep(20e3)]);
@@ -203,6 +213,7 @@ button{font:inherit}`;
       const e = mpErp(c);
       if (mpUi.erp === 'in' && !e) return false;
       if (mpUi.erp === 'out' && e) return false;
+      if (mpUi.box && !mpUi.box.includes(c.box || '-')) return false; // 📦 AI: khả năng dùng thùng carton / offset số lượng lớn
       if (mpUi.ind && (c.ind || '—') !== mpUi.ind) return false;
       if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
       if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
@@ -230,14 +241,14 @@ button{font:inherit}`;
   const mpPersist = () => {
     clearTimeout(mpUiT);
     mpUiT = setTimeout(() => {
-      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
     }, 800);
   };
   async function mapsTab() {
     if (!mpUiLoaded) {
       mpUiLoaded = true;
       const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
-      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
     }
     await mpLoad();
     if (root && !root.__mp) {
@@ -266,7 +277,7 @@ button{font:inherit}`;
 <td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
 <td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
 <td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''} <a href="#" data-mp="mst" data-id="${esc(c.id)}" title="Sửa MST / lấy lại tên chuẩn từ masothue" style="text-decoration:none;font-size:11px">✎</a>` : `<button data-mp="mst" data-id="${esc(c.id)}" title="Nhập MST (vd. tìm trên Google / masothue) → lấy tên + địa chỉ chuẩn từ masothue, lưu cloud" style="${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff">🧾 Chuẩn hoá MST</button>`}${mpMstMsg[c.id] ? `<div style="font-size:10.5px;color:#7c3aed;white-space:normal">${esc(mpMstMsg[c.id])}</div>` : ''}</td>
-<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}</td>
+<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${mpDist(c) != null ? `<b style="color:#0369a1;white-space:nowrap" title="Khoảng cách đường chim bay từ xưởng Tuấn Tú">📍 ${mpDist(c).toFixed(1)} km</b> · ` : ''}${esc(c.legalAddr || c.addr || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)}</td>
@@ -288,6 +299,7 @@ button{font:inherit}`;
 <span style="flex:1"></span><span class="muted" style="font-size:11.5px" title="Danh sách đọc từ bản lưu trên máy (JSON) cho nhanh – bấm Tải lại để lấy mới từ cloud">💾 lưu máy lúc ${new Date(mpData.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span><button data-mp="pdf" title="In PDF các công ty đang lọc (cùng định dạng với nút In PDF bên Google Maps)" style="${b};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">🖨 In PDF (${rows.length.toLocaleString('vi-VN')})</button><button data-mp="reload" style="${b}">⟳ Tải lại từ cloud</button></div>
 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
 <input class="gt-edit" data-mp-q placeholder="🔍 Tìm tên, MST, địa chỉ, SĐT, KCN, mã KH…" value="${esc(mpUi.q)}" style="${sel};min-width:280px;flex:1">
+<select data-mp-f="box" title="AI đánh giá khả năng dùng thùng carton / thùng offset số lượng lớn" style="${sel};${mpUi.box ? 'border-color:#16a34a;background:#dcfce7;color:#166534;font-weight:700' : ''}"><option value="">📦 Tiềm năng thùng: tất cả</option><option value="A" ${mpUi.box === 'A' ? 'selected' : ''}>📦 Chỉ tiềm năng cao (${all.filter((c) => !mpOff(c) && c.box === 'A').length})</option><option value="AB" ${mpUi.box === 'AB' ? 'selected' : ''}>📦 Cao + vừa (${all.filter((c) => !mpOff(c) && (c.box === 'A' || c.box === 'B')).length})</option></select>
 <select data-mp-f="erp" style="${sel}"><option value="">ERP: tất cả</option><option value="in" ${mpUi.erp === 'in' ? 'selected' : ''}>✅ Đã kết nối ERP</option><option value="out" ${mpUi.erp === 'out' ? 'selected' : ''}>Chưa kết nối ERP</option></select>
 <select data-mp-f="ind" style="${sel};max-width:220px"><option value="">Ngành: tất cả</option>${inds.map((x) => `<option value="${esc(x)}" ${mpUi.ind === x ? 'selected' : ''}>${x === '—' ? 'Chưa gắn ngành' : esc(x)}</option>`).join('')}</select>
 <span style="position:relative"><button data-mp="kcnbtn" style="${sel};cursor:pointer;font-weight:700;${mpUi.kcns.size ? 'border-color:#f59e0b;background:#fff7ed;color:#9a3412' : ''}">🏭 KCN: ${mpUi.kcns.size ? `${mpUi.kcns.size} đã chọn` : 'tất cả'} ▾</button>${mpUi.kcnOpen ? (() => {
@@ -502,7 +514,7 @@ ${linkBox}</div>`;
     }
     else if (k === 'pdf') {
       // cùng bản in với Google Maps (scripts/shared/company-pdf.js); in đúng danh sách đang lọc
-      const f = [mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
+      const f = [mpUi.box === 'A' ? 'Tiềm năng thùng cao' : mpUi.box === 'AB' ? 'Tiềm năng thùng cao + vừa' : '', mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
       dgCompanyPdf({
         title: `Danh sách công ty – ${f.length ? f.join(' · ') : 'Tất cả'}`,
         rows: mpRows().map((c) => {

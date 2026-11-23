@@ -1151,7 +1151,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const sec = Math.round((Date.now() - mstSt.at) / 1000);
     const ph = Date.now() < mstPause && mstSt.phase !== 'blocked' ? `⏸ Tạm nghỉ (masothue lỗi / bận) – thử lại sau ${Math.ceil((mstPause - Date.now()) / 60e3)} phút`
       : { search: `🔎 Đang tra masothue: <b>${esc(mstSt.name)}</b> (${sec}s)`, tab: `⏳ Đã gửi tab masothue: <b>${esc(mstSt.name)}</b> – chờ tới lượt (${sec}s)`, tabwork: `🔎 Tab masothue đang tra: <b>${esc(mstSt.name)}</b> (${sec}s)`, blocked: '⚠️ masothue cần xác minh (Cloudflare) – mở tab masothue để tự xác minh', notab: `🧾 Chưa có tab tra MST – bấm <a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:800">Mở tab tra MST</a>`, wait: '⏱ Chờ 15 giây rồi tra công ty kế tiếp…', done: '✅ Đã tra hết các công ty đang có', idle: '⏱ Chuẩn bị tra MST…' }[mstSt.phase] || '';
-    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div>`;
+    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div><div style="color:#15803d">📦 Tiềm năng thùng: ${all.filter((x) => x.box).length}/${all.length} đã chấm · <b>${all.filter((x) => x.box === 'A').length} cao</b> · ${all.filter((x) => x.box === 'B').length} vừa${boxSt.phase === 'run' ? ` · 🤖 AI đang chấm ${boxSt.n} công ty…` : boxSt.last ? ` · ${esc(boxSt.last)}` : ''}</div>`;
   }
   setInterval(mstBarDraw, 1000);
 
@@ -1210,6 +1210,55 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   }
   setTimeout(() => indTick().catch(() => {}), 20e3);
   setInterval(() => indTick().catch(() => {}), 60e3);
+
+  // 📦 AI chấm khả năng dùng THÙNG CARTON / THÙNG OFFSET (in offset) số lượng lớn: A = cao · B = vừa · C = thấp (+ lý do ngắn)
+  // mỗi phút 1 lô ≤ 25 công ty chưa chấm (chạy lệch 30 giây với gắn ngành) → c.box / c.boxWhy (lưu kv, đồng bộ). Lỗi → nghỉ 10 phút.
+  const BOX_LB = { A: '📦 Thùng: cao', B: '📦 Thùng: vừa', C: '📦 Thùng: thấp' };
+  const BOX_COL = { A: '#15803d', B: '#b45309', C: '#94a3b8' };
+  const boxTag = (c) => (c.box && c.box !== 'C' ? ` <span title="AI đánh giá khả năng dùng thùng carton / thùng offset số lượng lớn${c.boxWhy ? `: ${esc(c.boxWhy)}` : ''}" style="display:inline-block;padding:0 6px;border-radius:6px;background:${BOX_COL[c.box]}1a;border:1px solid ${BOX_COL[c.box]}66;color:${BOX_COL[c.box]};font-size:10.5px;font-weight:900;white-space:nowrap">${BOX_LB[c.box]}</span>` : '');
+  let boxPause = 0;
+  let boxBusy = false;
+  const boxSt = { phase: 'idle', n: 0, last: '' };
+  async function boxTick() {
+    if (boxBusy || Date.now() < boxPause || !cache || document.visibilityState !== 'visible') return;
+    const todo = Object.values(cache).filter((x) => x?.name && !x.hidden && !isRealEstate(x) && !x.box && !(x.boxTry && Date.now() - x.boxTry < 86400e3)).slice(0, 25);
+    if (!todo.length) return (boxSt.phase = 'done');
+    boxBusy = true;
+    boxSt.phase = 'run';
+    boxSt.n = todo.length;
+    try {
+      const lines = todo.map((c, i) => `${i + 1}. ${c.legalName || c.name}${c.legalName && c.legalName !== c.name ? ` (Google: ${c.name})` : ''}${c.cat ? ` | loại hình Google: ${c.cat}` : ''}${c.ind ? ` | ngành: ${c.ind}` : ''}${c.kcn ? ` | ${c.kcn}` : ''}`).join('\n');
+      const text = await call({
+        type: 'claude',
+        maxTokens: 3000,
+        system: 'Bạn là chuyên viên bán hàng của nhà máy sản xuất thùng carton sóng và thùng / hộp in offset tại Bình Dương. Đánh giá khách hàng tiềm năng. Chỉ trả JSON, không giải thích.',
+        prompt: `Với mỗi công ty, đánh giá khả năng công ty CẦN MUA THÙNG CARTON (đóng gói, vận chuyển thành phẩm) hoặc THÙNG / HỘP IN OFFSET với SỐ LƯỢNG LỚN, thường xuyên:\n- "A" = cao: nhà máy sản xuất hàng hoá đóng thùng xuất / bán số lượng lớn (thực phẩm, đồ uống, bánh kẹo, nông sản chế biến, thức ăn chăn nuôi, dệt may, giày dép, túi xách, đồ gỗ – nội thất, điện tử, linh kiện, đồ gia dụng, nhựa gia dụng, mỹ phẩm, dược phẩm, hoá phẩm tiêu dùng, đồ chơi, văn phòng phẩm, phụ tùng, thiết bị nhỏ…), công ty FDI sản xuất trong KCN.\n- "B" = vừa: sản xuất nhưng hàng cồng kềnh / đóng gói khác (bao, pallet, cuộn, phuy…), sản xuất nhỏ, xưởng gia công, thương mại – phân phối hàng đóng thùng, kho vận.\n- "C" = thấp: dịch vụ, tư vấn, phần mềm, xây dựng, vận tải, vật liệu rời (cát đá, thép cuộn, hoá chất bồn), văn phòng đại diện, nhà hàng – bán lẻ nhỏ, hoặc không rõ.\nĐoán theo tên công ty, tên pháp lý, loại hình Google, ngành.\nTrả về JSON mảng: [{"i":1,"m":"A","ly":"lý do ≤ 12 chữ"}, …]\n\nCông ty:\n${lines}`,
+      });
+      const arr = JSON.parse((text.match(/\[[\s\S]*\]/) || ['[]'])[0]);
+      const patch = {};
+      for (const [i, c] of todo.entries()) {
+        const r = arr.find((x) => Number(x.i) === i + 1);
+        const m = ['A', 'B', 'C'].includes(String(r?.m || '').toUpperCase()) ? String(r.m).toUpperCase() : '';
+        const v = m ? { ...c, box: m, boxWhy: String(r.ly || '').slice(0, 80), boxAt: Date.now() } : { ...c, boxTry: Date.now() };
+        cache[c.id] = v;
+        patch[c.id] = v;
+      }
+      await kvMerge(KEY, patch);
+      localSave();
+      const vals = Object.values(patch);
+      boxSt.last = `📦 Đã chấm ${vals.filter((x) => x.box).length}/${todo.length} công ty (${vals.filter((x) => x.box === 'A').length} cao)`;
+      boxSt.phase = 'wait';
+      sideCalcKey = '';
+    } catch (e) {
+      boxSt.phase = 'err';
+      boxSt.last = `⚠️ AI chấm thùng lỗi: ${String(e.message || e).slice(0, 80)} – thử lại sau 10 phút`;
+      boxPause = Date.now() + 10 * 60e3;
+    } finally {
+      boxBusy = false;
+    }
+  }
+  setTimeout(() => boxTick().catch(() => {}), 50e3);
+  setInterval(() => boxTick().catch(() => {}), 60e3);
 
   // 🌏 Tên có từ KHÔNG phải tiếng Việt (thường là công ty FDI): bỏ các từ chung (công ty, TNHH, Việt Nam…), từ nào không dấu và
   // không đúng cấu trúc âm tiết tiếng Việt (phụ âm đầu + vần + âm cuối) → từ nước ngoài (vd. Win, Graphics, Stanley, Vina, Sehwa)
@@ -1398,6 +1447,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   let sideGroup = localStorage.getItem('dgMapsSideGroup') || 'kcn'; // 'kcn' | 'ind'
   let indOnly = ''; // đang lọc 1 ngành
   let onlyForeign = localStorage.getItem('dgMapsForeign') === '1'; // 🌏 chỉ tên nước ngoài
+  let boxOnly = localStorage.getItem('dgMapsBox') || ''; // 📦 '' = tất cả · 'A' = chỉ tiềm năng cao · 'AB' = cao + vừa
   let sideKey = '';
   side.addEventListener('click', (e) => {
     const t = e.target.closest('[data-s]');
@@ -1412,6 +1462,12 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     else if (t.dataset.s === 'frn') {
       onlyForeign = !onlyForeign;
       localStorage.setItem('dgMapsForeign', onlyForeign ? '1' : '0');
+      sideKey = '';
+      sideCalcKey = '';
+      sideDraw();
+    } else if (t.dataset.s === 'box') {
+      boxOnly = boxOnly === '' ? 'A' : boxOnly === 'A' ? 'AB' : '';
+      localStorage.setItem('dgMapsBox', boxOnly);
       sideKey = '';
       sideCalcKey = '';
       sideDraw();
@@ -1435,13 +1491,13 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   function sideDraw() {
     const v = mapView();
     // không đổi khung bản đồ, số công ty đã lưu, số KCN, dữ liệu ERP → bỏ qua (khỏi lọc lại hàng nghìn công ty mỗi 1,5 giây)
-    const ck = `${location.href}|${Object.keys(cache || {}).length}|${Object.values(cache || {}).filter((x) => x?.ind).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}|${sideGroup}|${indOnly}|${onlyForeign}`;
+    const ck = `${location.href}|${Object.keys(cache || {}).length}|${Object.values(cache || {}).filter((x) => x?.ind).length}|${kcnData.size}|${erpIdx?.n || 0}|${sideMin}|${sideGroup}|${indOnly}|${onlyForeign}|${boxOnly}|${Object.values(cache || {}).filter((x) => x?.box).length}`;
     if (ck === sideCalcKey && side.isConnected) return;
     sideCalcKey = ck;
     if (!document.body) return;
     if (!side.isConnected) document.body.append(side);
     let nForeign = null;
-    const head = (extra) => `<div style="padding:7px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a"><div style="display:flex;align-items:center;gap:6px;white-space:nowrap">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"><span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="pdfdlg" title="In PDF – chọn điều kiện lọc trước khi in" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF</span></div></div>`;
+    const head = (extra) => `<div style="padding:7px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-weight:900;color:#1e3a8a"><div style="display:flex;align-items:center;gap:6px;white-space:nowrap">🏢 Công ty trong khung bản đồ ${extra}<span data-s="min" title="${sideMin ? 'Mở' : 'Thu gọn'}" style="margin-left:auto;cursor:pointer;color:#64748b">${sideMin ? '▾' : '▴'}</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"><span data-s="frn" title="Chỉ hiện công ty có từ không phải tiếng Việt trong tên (thường là công ty FDI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${onlyForeign ? '#7c3aed' : '#cbd5e1'};background:${onlyForeign ? '#ede9fe' : '#fff'};color:${onlyForeign ? '#6d28d9' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">🌏 ${onlyForeign ? 'Chỉ tên nước ngoài' : 'Tên nước ngoài'}${typeof nForeign === 'number' ? ` ${nForeign}` : ''}</span><span data-s="box" title="AI lọc công ty có khả năng dùng thùng carton / thùng offset số lượng lớn – bấm đổi: tất cả → chỉ tiềm năng cao → cao + vừa" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${boxOnly ? '#16a34a' : '#cbd5e1'};background:${boxOnly ? '#dcfce7' : '#fff'};color:${boxOnly ? '#166534' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">📦 ${boxOnly === 'A' ? 'Thùng: chỉ cao' : boxOnly === 'AB' ? 'Thùng: cao + vừa' : 'Tiềm năng thùng'}</span><span data-s="grp" title="Đổi cách xem: theo KCN / theo ngành nghề (AI)" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid ${sideGroup === 'ind' ? '#0d9488' : '#cbd5e1'};background:${sideGroup === 'ind' ? '#ccfbf1' : '#fff'};color:${sideGroup === 'ind' ? '#0f766e' : '#475569'};border-radius:99px;padding:0 8px;white-space:nowrap">${sideGroup === 'ind' ? '🏷 Theo ngành' : '🏭 Theo KCN'}</span><span data-s="pdfdlg" title="In PDF – chọn điều kiện lọc trước khi in" style="cursor:pointer;font-size:11px;font-weight:800;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:0 8px;white-space:nowrap">🖨 PDF</span></div></div>`;
     if (!v || v.z < 13) {
       const k = 'far';
       if (sideKey !== k) {
@@ -1456,7 +1512,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const inView0 = Object.values(cache || {}).filter((c) => c?.lat && !isRealEstate(c) && c.lat <= n && c.lat >= s2 && c.lng >= w && c.lng <= e);
     sideInView = inView0.length;
     nForeign = inView0.filter(foreignName).length;
-    const inView = onlyForeign ? inView0.filter(foreignName) : inView0;
+    const inView = (onlyForeign ? inView0.filter(foreignName) : inView0).filter((c) => !boxOnly || boxOnly.includes(c.box || '-'));
     sideList = inView;
     const groups = new Map();
     const byInd = sideGroup === 'ind';
@@ -1476,7 +1532,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }
     const order = [...groups.entries()].sort((a, b) => (!a[0]) - (!b[0]) || b[1].list.length - a[1].list.length);
     const nErp = inView.filter((c) => erpOf(c)).length;
-    const key = `${onlyForeign}|${sideGroup}|${indOnly}|${sideMin}|${inView.length}|${nErp}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
+    const key = `${onlyForeign}|${boxOnly}|${sideGroup}|${indOnly}|${sideMin}|${inView.length}|${nErp}|${order.map(([k, g]) => k + g.list.length).join(',')}|${Math.round(v.lat * 1e3)},${Math.round(v.lng * 1e3)}`;
     if (key === sideKey) return;
     sideKey = key;
     let shown = 0;
@@ -1488,7 +1544,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       const gh = byInd
         ? `<div style="padding:5px 10px;background:${ic}14;font-weight:800;font-size:12px;color:${ic};border-top:1px solid #f1f5f9;cursor:pointer" data-s="ind" data-k="${esc(k)}" title="${indOnly ? 'Bấm để xem lại mọi ngành' : 'Bấm để chỉ xem ngành này'}">🏷 ${esc(g.name)} · ${g.list.length}${indOnly ? ' · ✕ bỏ lọc' : ''}</div>`
         : `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>`;
-      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><span style="display:inline-block;min-width:22px;color:#94a3b8;font-size:11px;font-weight:800">${++stt}.</span><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${dispName(c) !== c.name ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(dispName(c))}</b></a>${mstIcon(c)}${erpBadge(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${kmTag(c)}${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><span style="display:inline-block;min-width:22px;color:#94a3b8;font-size:11px;font-weight:800">${++stt}.</span><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${dispName(c) !== c.name ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(dispName(c))}</b></a>${mstIcon(c)}${erpBadge(c)}${boxTag(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${kmTag(c)}${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">⏳ Chưa có công ty nào trong khung này – đang tự quét ngầm (dừng bản đồ vài giây, zoom gần)…</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
