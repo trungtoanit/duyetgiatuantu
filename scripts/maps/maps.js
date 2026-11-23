@@ -1260,6 +1260,40 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     }
   }
 
+  // Tỉnh (theo ranh giới cũ – 7 tỉnh) của 1 KCN: ưu tiên chữ trong tên KCN, không có thì đoán theo toạ độ tâm KCN
+  const PROV_ORDER = ['Bình Dương', 'TP.HCM', 'Đồng Nai', 'Long An', 'Bà Rịa – Vũng Tàu', 'Bình Phước', 'Tây Ninh', 'Khác'];
+  const PROV_KW = [
+    ['Bình Dương', /binh duong|vsip|my phuoc|bau bang|song than|dong an|tan uyen|ben cat|di an|thuan an|nam tan uyen|rach bap|kim huy|dai dang|viet huong|phu tan|ascendas|protrade|bac tan uyen|dat cuoc|an tay|tan dong hiep|binh an|mai trung|song than|viet nam - singapore/],
+    ['TP.HCM', /ho chi minh|hcm|cu chi|cat lai|tan thuan|hiep phuoc|tan binh|tan tao|vinh loc|le minh xuan|linh trung|cong nghe cao|binh chieu|tay bac cu chi|dong nam cu chi|phong phu|da phuoc|an ha|cat lai/],
+    ['Đồng Nai', /dong nai|bien hoa|nhon trach|long thanh|amata|loteco|ho nai|song may|tam phuoc|an phuoc|go dau|dinh quan|dau giay|xuan loc|long khanh|ong keo|bau xeo|tan phu|thanh phu|giang dien|long duc|loc an|tam phuoc|agtex|bien hoa/],
+    ['Long An', /long an|duc hoa|ben luc|can giuoc|can duoc|tan duc|hai son|xuyen a|thuan dao|phuc long|vinh loc 2|tan kim|long hau|cau tram|nam thuan|dong nam a|thinh phat|an nhut tan|thai hoa|tan do|loi binh nhon|dong ha|nam ha|trung thanh phat|tan my chanh/],
+    ['Bà Rịa – Vũng Tàu', /vung tau|ba ria|phu my|cai mep|chau duc|dat do|my xuan|long son|dong xuyen|tan thanh/],
+    ['Bình Phước', /binh phuoc|dong xoai|chon thanh|becamex binh phuoc|minh hung|bac dong phu|nam dong phu|tan khai|hon quan|chon thanh/],
+    ['Tây Ninh', /tay ninh|cha la|trang bang|phuoc dong|thanh thanh cong|chau thanh|go dau tay ninh|linh trung 3|hoa thanh/],
+  ];
+  const provUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+  function provOf(name, lat, lng) {
+    const u = provUn(name);
+    for (const [p, re] of PROV_KW) if (re.test(u)) return p;
+    if (lat == null || lng == null) return 'Khác';
+    if (lat >= 11.35) return lng >= 106.6 ? 'Bình Phước' : 'Tây Ninh';
+    if (lng < 106.47) return lat >= 10.98 ? 'Tây Ninh' : 'Long An';
+    if (lng >= 106.85) return lat < 10.68 ? 'Bà Rịa – Vũng Tàu' : 'Đồng Nai';
+    if (lat >= 11.15) return 'Bình Dương';
+    if (lat >= 10.9 && lng >= 106.6) return 'Bình Dương';
+    if (lat >= 10.88 && lng >= 106.7) return 'Bình Dương';
+    return 'TP.HCM';
+  }
+  // tâm 1 KCN theo tên: đa giác đã tải → trung bình toạ độ các công ty thuộc KCN đó
+  function kcnCenter(name, list) {
+    for (const p of kcnData.values()) {
+      if (p.name !== name) continue;
+      const all = p.rings.flat();
+      return [all.reduce((a, x) => a + x[0], 0) / all.length, all.reduce((a, x) => a + x[1], 0) / all.length];
+    }
+    const cs = list.filter((c) => c.lat && (c.kcn || kcnOf(c)) === name);
+    return cs.length ? [cs.reduce((a, c) => a + c.lat, 0) / cs.length, cs.reduce((a, c) => a + c.lng, 0) / cs.length] : [null, null];
+  }
   // 🖨 Hộp chọn điều kiện lọc trước khi in PDF
   function pdfDialog() {
     document.getElementById('dg-pdf-dlg')?.remove();
@@ -1274,7 +1308,17 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     d.innerHTML = `<div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.35);width:min(620px,100%);max-height:86vh;overflow:auto;padding:14px 16px">
 <div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:16px;flex:1">🖨 In PDF – chọn điều kiện lọc</b><span data-x style="cursor:pointer;color:#64748b;font-weight:900;font-size:18px">✕</span></div>
 <div style="${row}"><span style="${lab}">Phạm vi</span><label><input type="radio" name="sc" value="all" checked> Tất cả trên cloud (${all.length})</label><label><input type="radio" name="sc" value="view"> Khung bản đồ đang xem (${sideList.length})</label></div>
-<div style="${row}"><span style="${lab}">Khu công nghiệp</span><select data-f="kcn" style="font:inherit;padding:3px 6px;border-radius:7px;border:1px solid #cbd5e1;max-width:360px"><option value="">Tất cả</option><option value="__in">Chỉ trong KCN</option><option value="__out">Chỉ ngoài KCN</option>${kcns.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div>
+<div style="${row}"><span style="${lab}">Khu công nghiệp</span><select data-f="kcn" style="font:inherit;padding:3px 6px;border-radius:7px;border:1px solid #cbd5e1;max-width:360px"><option value="">Tất cả</option><option value="__in">Chỉ trong KCN</option><option value="__out">Chỉ ngoài KCN</option>${(() => {
+      // KCN gom theo tỉnh (sắp theo thứ tự tỉnh, trong tỉnh theo tên)
+      const byP = new Map();
+      for (const k of kcns) {
+        const [la, ln] = kcnCenter(k, all);
+        const pv = provOf(k, la, ln);
+        if (!byP.has(pv)) byP.set(pv, []);
+        byP.get(pv).push(k);
+      }
+      return PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<optgroup label="📍 ${pv} (${byP.get(pv).length})">${byP.get(pv).sort((a, b) => a.localeCompare(b, 'vi')).map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join('')}</optgroup>`).join('');
+    })()}</select></div>
 <div style="${row}"><span style="${lab}">ERP</span><label><input type="radio" name="erp" value="" checked> Tất cả</label><label><input type="radio" name="erp" value="in"> Chỉ đã có trong ERP</label><label><input type="radio" name="erp" value="out"> Chỉ CHƯA có trong ERP</label></div>
 <div style="${row}"><span style="${lab}">Khác</span><label><input type="checkbox" data-f="frn"> 🌏 Chỉ tên nước ngoài</label><label><input type="checkbox" data-f="mst"> 🧾 Chỉ có MST</label><label><input type="checkbox" data-f="mob"> 📱 Chỉ có SĐT di động</label></div>
 <div style="margin:8px 0 4px;font-weight:800;color:#334155">🏷 Ngành <span style="font-weight:500;color:#64748b">(bỏ chọn để loại)</span> <a href="#" data-all style="font-size:12px">chọn hết</a> · <a href="#" data-none style="font-size:12px">bỏ hết</a></div>

@@ -19761,6 +19761,30 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
     mpData = { at: Date.now(), places: places || {}, custs: Object.values(custs || {}).filter((c) => c?.id), byId, byName };
     return mpData;
   }
+  // Tỉnh (theo ranh giới cũ – 7 tỉnh) của 1 KCN: ưu tiên chữ trong tên KCN, không có thì đoán theo toạ độ tâm KCN
+  const PROV_ORDER = ['Bình Dương', 'TP.HCM', 'Đồng Nai', 'Long An', 'Bà Rịa – Vũng Tàu', 'Bình Phước', 'Tây Ninh', 'Khác'];
+  const PROV_KW = [
+    ['Bình Dương', /binh duong|vsip|my phuoc|bau bang|song than|dong an|tan uyen|ben cat|di an|thuan an|nam tan uyen|rach bap|kim huy|dai dang|viet huong|phu tan|ascendas|protrade|bac tan uyen|dat cuoc|an tay|tan dong hiep|binh an|mai trung|song than|viet nam - singapore/],
+    ['TP.HCM', /ho chi minh|hcm|cu chi|cat lai|tan thuan|hiep phuoc|tan binh|tan tao|vinh loc|le minh xuan|linh trung|cong nghe cao|binh chieu|tay bac cu chi|dong nam cu chi|phong phu|da phuoc|an ha|cat lai/],
+    ['Đồng Nai', /dong nai|bien hoa|nhon trach|long thanh|amata|loteco|ho nai|song may|tam phuoc|an phuoc|go dau|dinh quan|dau giay|xuan loc|long khanh|ong keo|bau xeo|tan phu|thanh phu|giang dien|long duc|loc an|tam phuoc|agtex|bien hoa/],
+    ['Long An', /long an|duc hoa|ben luc|can giuoc|can duoc|tan duc|hai son|xuyen a|thuan dao|phuc long|vinh loc 2|tan kim|long hau|cau tram|nam thuan|dong nam a|thinh phat|an nhut tan|thai hoa|tan do|loi binh nhon|dong ha|nam ha|trung thanh phat|tan my chanh/],
+    ['Bà Rịa – Vũng Tàu', /vung tau|ba ria|phu my|cai mep|chau duc|dat do|my xuan|long son|dong xuyen|tan thanh/],
+    ['Bình Phước', /binh phuoc|dong xoai|chon thanh|becamex binh phuoc|minh hung|bac dong phu|nam dong phu|tan khai|hon quan|chon thanh/],
+    ['Tây Ninh', /tay ninh|cha la|trang bang|phuoc dong|thanh thanh cong|chau thanh|go dau tay ninh|linh trung 3|hoa thanh/],
+  ];
+  const provUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+  function provOf(name, lat, lng) {
+    const u = provUn(name);
+    for (const [p, re] of PROV_KW) if (re.test(u)) return p;
+    if (lat == null || lng == null) return 'Khác';
+    if (lat >= 11.35) return lng >= 106.6 ? 'Bình Phước' : 'Tây Ninh';
+    if (lng < 106.47) return lat >= 10.98 ? 'Tây Ninh' : 'Long An';
+    if (lng >= 106.85) return lat < 10.68 ? 'Bà Rịa – Vũng Tàu' : 'Đồng Nai';
+    if (lat >= 11.15) return 'Bình Dương';
+    if (lat >= 10.9 && lng >= 106.6) return 'Bình Dương';
+    if (lat >= 10.88 && lng >= 106.7) return 'Bình Dương';
+    return 'TP.HCM';
+  }
   // Bộ lọc loại GIỐNG script Google Maps (scripts/maps/maps.js – isRealEstate): trả lý do bị loại, '' = giữ.
   // Sửa danh sách loại thì sửa cả 2 nơi.
   const MP_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
@@ -19868,13 +19892,33 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <span style="position:relative"><button data-mp="kcnbtn" style="${sel};cursor:pointer;font-weight:700;${mpUi.kcns.size ? 'border-color:#f59e0b;background:#fff7ed;color:#9a3412' : ''}">🏭 KCN: ${mpUi.kcns.size ? `${mpUi.kcns.size} đã chọn` : 'tất cả'} ▾</button>${mpUi.kcnOpen ? (() => {
       const cnt = new Map();
       for (const c of all) if (!mpOff(c)) cnt.set(c.kcn || '', (cnt.get(c.kcn || '') || 0) + 1);
-      const ks = [...cnt.keys()].filter((k) => k).sort((a, c) => cnt.get(c) - cnt.get(a) || a.localeCompare(c, 'vi'));
+      // tâm KCN = trung bình toạ độ các công ty thuộc KCN → đoán tỉnh; gom theo tỉnh, trong tỉnh xếp theo tên
+      const sum = new Map();
+      for (const c of all) {
+        if (!c.kcn || !c.lat) continue;
+        const v = sum.get(c.kcn) || [0, 0, 0];
+        v[0] += c.lat;
+        v[1] += c.lng;
+        v[2]++;
+        sum.set(c.kcn, v);
+      }
+      const pvOf = (k) => {
+        const v = sum.get(k);
+        return provOf(k, v ? v[0] / v[2] : null, v ? v[1] / v[2] : null);
+      };
+      const ks = [...cnt.keys()].filter((k) => k);
+      const byP = new Map();
+      for (const k of ks) {
+        const pv = pvOf(k);
+        if (!byP.has(pv)) byP.set(pv, []);
+        byP.get(pv).push(k);
+      }
       const kq = mpUn(mpUi.kq);
       const opt = (k, label) => (kq && !mpUn(label).includes(kq) ? '' : `<label style="display:flex;gap:6px;align-items:center;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:12.5px;${mpUi.kcns.has(k) ? 'background:#fff7ed' : ''}"><input type="checkbox" data-mp-kcn="${esc(k)}" ${mpUi.kcns.has(k) ? 'checked' : ''}><span style="flex:1">${esc(label)}</span><span style="color:#94a3b8">${cnt.get(k) || 0}</span></label>`);
       return `<div data-mp-kpop style="position:absolute;left:0;top:calc(100% + 4px);z-index:40;width:380px;max-height:60vh;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.22);padding:6px">
 <input class="gt-edit" data-mp-kq placeholder="Tìm KCN…" value="${esc(mpUi.kq)}" style="${sel};width:100%;box-sizing:border-box;margin-bottom:4px">
 <div style="display:flex;gap:6px;margin:2px 0 4px"><a href="#" data-mp="kall" style="font-size:12px">chọn hết</a><a href="#" data-mp="knone" style="font-size:12px">bỏ chọn (tất cả)</a><span style="flex:1"></span><a href="#" data-mp="kclose" style="font-size:12px;font-weight:800">Xong ✓</a></div>
-${opt('', 'Ngoài KCN')}${ks.map((k) => opt(k, k)).join('')}</div>`;
+${opt('', 'Ngoài KCN')}${PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<div style="margin:6px 0 2px;padding:2px 6px;font-size:11.5px;font-weight:900;color:#1e3a8a;background:#eff6ff;border-radius:6px">📍 ${pv} · ${byP.get(pv).length} KCN</div>${byP.get(pv).sort((a, c) => a.localeCompare(c, 'vi')).map((k) => opt(k, k)).join('')}`).join('')}</div>`;
     })() : ''}</span>
 <select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
