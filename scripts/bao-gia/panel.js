@@ -20013,14 +20013,13 @@ ${linkBox}</div>`;
     const c = mpData.places[id];
     if (!c) return;
     const nm = c.legalName || c.name;
-    const v0 = prompt(`MST của “${nm}”\n(gõ MST; để trống → mở Google tìm, bấm “📥 Lấy MST này” ở kết quả đúng)`, c.mst || '');
-    if (v0 == null) return;
-    let v = v0.replace(/[^\d-]/g, '');
-    if (!v) {
+    // bấm là mở thẳng tab Google tìm MST (không hỏi), chọn “📥 Lấy MST này” ở kết quả đúng
+    let v = '';
+    {
       // mở Google: script trên trang kết quả gắn nút 📥 cạnh mỗi kết quả có MST → ghi kv mstPick; chờ ≤ 15 phút
       const at = Date.now();
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(`${nm} mã số thuế`)}`, '_blank'); // mở ngay lúc bấm (không bị chặn pop-up)
       await call({ type: 'kv.set', key: 'mstPick', value: { status: 'pending', id, name: nm, at } });
-      window.open(`https://www.google.com/search?q=${encodeURIComponent(`${nm} mã số thuế`)}`, '_blank');
       mpMstMsg[id] = '🔎 Chọn “📥 Lấy MST này” ở trang Google…';
       render();
       for (let i = 0; i < 450 && !v; i++) {
