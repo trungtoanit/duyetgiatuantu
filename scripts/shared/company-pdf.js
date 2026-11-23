@@ -60,8 +60,11 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     const a = ev.target.closest?.('a[href]');
     if (!a) return;
     ev.preventDefault();
-    const t = w.open(a.href, '_blank', 'noopener');
-    if (!t) w.location.assign(a.href);
+    // không dùng 'noopener' (khi đó window.open luôn trả null → tưởng bị chặn, cửa sổ in bị chuyển trang)
+    const t = w.open(a.href, '_blank');
+    if (t) {
+      try { t.opener = null; } catch {}
+    } else w.location.assign(a.href);
   });
   // trang trống kế thừa CSP của trang gọi (chặn <script>) → gọi in từ đây
   setTimeout(() => {
