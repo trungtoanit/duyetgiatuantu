@@ -13435,8 +13435,20 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         ${/^\/login\b/.test(location.pathname) ? '' : `<a class="lr-btn" href="/login?redirect=${encodeURIComponent(location.pathname)}">Đăng nhập</a>`}</div>`;
   }
 
+  // Tab Chrome đang ẩn (không xem) → không tải / vẽ bảng Trợ lý; khi tab được xem lại mới vẽ (dữ liệu mới nhất lúc đó)
+  var renderHiddenPending = false; // var: render() có thể được gọi trước dòng này
+  if (IS_TOP) document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && renderHiddenPending) {
+      renderHiddenPending = false;
+      render();
+    }
+  });
   async function render() {
     if (!root) return;
+    if (IS_TOP && document.visibilityState === 'hidden') {
+      renderHiddenPending = true;
+      return;
+    }
     if (loggedOut && IS_TOP) return renderLoggedOut();
     try {
       await renderInner();
@@ -16125,6 +16137,7 @@ Quy tắc:
   async function gtFill(keepFocus) {
     const host = gtHost();
     if (!host || gtFillBusy) return;
+    if (IS_TOP && document.visibilityState === 'hidden') { renderHiddenPending = true; return; } // tab Chrome ẩn → để lúc xem lại mới vẽ
     if (keepFocus && root.activeElement?.classList?.contains('gt-edit')) return; // đang gõ – không vẽ lại
     gtFillBusy = true;
     try {
