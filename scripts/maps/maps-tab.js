@@ -218,7 +218,7 @@ button{font:inherit}`;
       if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
       if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
       return true;
-    }).sort((a, b) => (mpUi.sort === 'near' ? (mpDist(a) ?? 1e9) - (mpDist(b) ?? 1e9) : 0) || (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
+    }).sort((a, b) => (mpUi.sort === 'near' ? (mpDist(a) ?? 1e9) - (mpDist(b) ?? 1e9) : 0) || (mpUi.sort === 'rate' ? (b.rateN || 0) - (a.rateN || 0) || (b.rate || 0) - (a.rate || 0) : 0) || (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
   }
   // 📍 Khoảng cách (km, đường chim bay) từ xưởng Tuấn Tú (48/13 KP Bình Phước B, An Phú): lấy toạ độ chính công ty Tuấn Tú
   // trong danh sách Google Maps; không có thì dùng toạ độ gần đúng
@@ -275,7 +275,7 @@ button{font:inherit}`;
       return `<tr style="border-top:1px solid #f1f5f9;${e ? 'background:#f0fdf4' : ''}">
 <td style="padding:4px 6px"><input type="checkbox" data-mp="sel" data-id="${esc(c.id)}" ${mpUi.sel.has(c.id) ? 'checked' : ''}></td>
 <td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
-<td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
+<td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${c.rate ? ` <span title="Đánh giá Google Maps: ${c.rate} sao · ${c.rateN || 0} lượt" style="color:#b45309;font-size:11.5px;font-weight:800;white-space:nowrap">⭐ ${String(c.rate).replace('.', ',')}${c.rateN ? ` <span style="color:#94a3b8;font-weight:600">(${Number(c.rateN).toLocaleString('vi-VN')})</span>` : ''}</span>` : ''}${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
 <td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''} <a href="#" data-mp="mst" data-id="${esc(c.id)}" title="Sửa MST / lấy lại tên chuẩn từ masothue" style="text-decoration:none;font-size:11px">✎</a>` : `<button data-mp="mst" data-id="${esc(c.id)}" title="Nhập MST (vd. tìm trên Google / masothue) → lấy tên + địa chỉ chuẩn từ masothue, lưu cloud" style="${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff">🧾 Chuẩn hoá MST</button>`}${mpMstMsg[c.id] ? `<div style="font-size:10.5px;color:#7c3aed;white-space:normal">${esc(mpMstMsg[c.id])}</div>` : ''}</td>
 <td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
@@ -333,7 +333,7 @@ button{font:inherit}`;
 <div style="display:flex;gap:6px;margin:2px 0 4px"><a href="#" data-mp="kall" style="font-size:12px">chọn hết</a><a href="#" data-mp="knone" style="font-size:12px">bỏ chọn (tất cả)</a><span style="flex:1"></span><a href="#" data-mp="kclose" style="font-size:12px;font-weight:800">Xong ✓</a></div>
 ${opt('', 'Ngoài KCN')}${PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<div style="margin:6px 0 2px;padding:2px 6px;font-size:11.5px;font-weight:900;color:#1e3a8a;background:#eff6ff;border-radius:6px">📍 ${pv} · ${byP.get(pv).length} KCN</div>${byP.get(pv).sort((a, c) => a.localeCompare(c, 'vi')).map((k) => opt(k, k)).join('')}`).join('')}</div>`;
     })() : ''}</span>
-<select data-mp-f="sort" title="Sắp xếp" style="${sel}"><option value="name">↕ Theo KCN, tên</option><option value="near" ${mpUi.sort === 'near' ? 'selected' : ''}>📍 Gần → xa (từ Tuấn Tú)</option></select>
+<select data-mp-f="sort" title="Sắp xếp" style="${sel}"><option value="name">↕ Theo KCN, tên</option><option value="near" ${mpUi.sort === 'near' ? 'selected' : ''}>📍 Gần → xa (từ Tuấn Tú)</option><option value="rate" ${mpUi.sort === 'rate' ? 'selected' : ''}>⭐ Nhiều đánh giá → ít</option></select>
 <select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
 </div>

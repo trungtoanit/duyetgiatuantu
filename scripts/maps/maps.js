@@ -56,6 +56,33 @@
   const cleanPhone = (p) => String(p || '').replace(/^phone:tel:/, '').replace(/\s+/g, ' ').trim();
   const stripLabel = (t) => String(t || '').replace(/^[^:]{2,20}:\s*/, '').trim(); // "Address: …" / "Địa chỉ: …"
 
+  // ⭐ Số sao + số lượt đánh giá Google: aria-label "4.5 stars 123 Reviews" / "4,5 sao 123 bài đánh giá", hoặc chữ "4,5 (123)"
+  const numVn = (t) => Number(String(t).replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.'));
+  function rateOf(el) {
+    if (!el) return {};
+    let rate = null;
+    let n = null;
+    for (const x of el.querySelectorAll('[role="img"][aria-label], [aria-label]')) {
+      const l = x.getAttribute('aria-label') || '';
+      const m = l.match(/(\d[.,]\d)\s*(?:stars?|sao)/i);
+      if (m && rate == null) rate = numVn(m[1]);
+      const r = l.match(/([\d.,]+)\s*(?:reviews?|bài đánh giá|đánh giá|lượt đánh giá)/i);
+      if (r && n == null) n = numVn(r[1]);
+    }
+    if (rate == null) {
+      const box = el.querySelector('.F7nice, .MW4etd')?.closest('div') || el.querySelector('.F7nice');
+      const m = (box?.innerText || '').match(/(\d[.,]\d)\s*\(?\s*([\d.,]+)?\s*\)?/);
+      if (m) {
+        rate = numVn(m[1]);
+        if (m[2] && n == null) n = numVn(m[2]);
+      }
+    }
+    if (n == null) {
+      const u = el.querySelector('.UY7F9')?.innerText;
+      if (u) n = numVn(u.replace(/[()]/g, ''));
+    }
+    return rate != null && rate > 0 && rate <= 5 ? { rate, rateN: Number.isFinite(n) ? n : 0 } : {};
+  }
   // Bảng chi tiết 1 địa điểm đang mở
   function readDetail() {
     const u = fromUrl(location.href);
@@ -77,6 +104,7 @@
       url: `https://www.google.com/maps/place/?q=place_id:${u.id}`,
       href: location.href.split('?')[0],
       full: true,
+      ...rateOf(q('div[role="main"]') || document),
     };
   }
   // Các mục trong danh sách kết quả (div[role=feed])
@@ -91,7 +119,7 @@
       const catLine = lines.find((x) => x.includes('·') && !/^(Open|Closed|Đang mở|Đã đóng|Mở cửa|Đóng cửa)/i.test(x)) || '';
       const parts = catLine.split('·').map((x) => x.trim()).filter(Boolean);
       const phone = (lines.join(' ').match(PHONE_RE) || [''])[0];
-      out.push({ id: u.id, name, cat: parts[0] || '', addr: parts.slice(1).join(', '), phone: cleanPhone(phone), lat: u.lat, lng: u.lng, url: `https://www.google.com/maps/place/?q=place_id:${u.id}`, href: link.href.split('?')[0], full: false });
+      out.push({ id: u.id, name, cat: parts[0] || '', addr: parts.slice(1).join(', '), phone: cleanPhone(phone), lat: u.lat, lng: u.lng, url: `https://www.google.com/maps/place/?q=place_id:${u.id}`, href: link.href.split('?')[0], full: false, ...rateOf(a) });
     }
     return out;
   }
@@ -165,6 +193,7 @@
       const old = cache[p.id];
       if (old?.hidden) continue; // 🙈 đã ẩn → không lưu / cập nhật lại
       const v = old?.full && !p.full ? { ...p, ...old, lat: old.lat ?? p.lat, lng: old.lng ?? p.lng, phone: old.phone || p.phone, seenAt: Date.now() } : { ...(old || {}), ...p, at: Date.now(), seenAt: Date.now() };
+      if (p.rate != null) Object.assign(v, { rate: p.rate, rateN: p.rateN || 0 }); // ⭐ số sao mới nhất đọc được
       if (JSON.stringify({ ...old, at: 0, seenAt: 0 }) === JSON.stringify({ ...v, at: 0, seenAt: 0 })) continue;
       patch[p.id] = v;
       cache[p.id] = v;
@@ -976,6 +1005,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     return 12742 * Math.asin(Math.sqrt(x));
   };
   const kmTag = (c) => { const d = kmOf(c); return d == null ? '' : `<b title="Khoảng cách đường chim bay từ xưởng Tuấn Tú" style="color:#0369a1;white-space:nowrap">📍 ${d.toFixed(1)} km</b> · `; };
+  const rateTag = (c) => (c.rate ? ` <span title="Đánh giá Google Maps: ${c.rate} sao · ${c.rateN || 0} lượt" style="color:#b45309;font-size:11px;font-weight:800;white-space:nowrap">⭐ ${String(c.rate).replace('.', ',')}${c.rateN ? ` <span style="color:#94a3b8;font-weight:600">(${c.rateN.toLocaleString('vi-VN')})</span>` : ''}</span>` : '');
   const dispName = (c) => String(erpOf(c)?.name || c.legalName || c.name || '').toLocaleUpperCase('vi'); // tên công ty viết HOA toàn bộ
   const erpBadge = (c) => {
     const e = erpOf(c);
@@ -1553,7 +1583,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       const gh = byInd
         ? `<div style="padding:5px 10px;background:${ic}14;font-weight:800;font-size:12px;color:${ic};border-top:1px solid #f1f5f9;cursor:pointer" data-s="ind" data-k="${esc(k)}" title="${indOnly ? 'Bấm để xem lại mọi ngành' : 'Bấm để chỉ xem ngành này'}">🏷 ${esc(g.name)} · ${g.list.length}${indOnly ? ' · ✕ bỏ lọc' : ''}</div>`
         : `<div style="padding:5px 10px;background:${k ? '#fff7ed' : '#f8fafc'};font-weight:800;font-size:12px;color:${k ? '#9a3412' : '#475569'};border-top:1px solid #f1f5f9;${k ? 'cursor:pointer' : ''}" ${k ? `data-s="kcn" data-k="${esc(k)}" title="Xem danh sách công ty trong KCN"` : ''}>${k ? '🏭' : '📍'} ${esc(g.name)} · ${g.list.length}</div>`;
-      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><span style="display:inline-block;min-width:22px;color:#94a3b8;font-size:11px;font-weight:800">${++stt}.</span><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${dispName(c) !== c.name ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(dispName(c))}</b></a>${mstIcon(c)}${erpBadge(c)}${boxTag(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${kmTag(c)}${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
+      return `${gh}${items.map((c) => `<div style="padding:4px 10px 4px 16px;border-top:1px solid #f8fafc;${erpOf(c) ? 'background:#f0fdf4' : ''}"><span style="display:inline-block;min-width:22px;color:#94a3b8;font-size:11px;font-weight:800">${++stt}.</span><a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="text-decoration:none;color:#0f172a" title="${dispName(c) !== c.name ? `Tên trên Google Maps: ${esc(c.name)}` : ''}"><b style="font-size:12.5px">${esc(dispName(c))}</b></a>${rateTag(c)}${mstIcon(c)}${erpBadge(c)}${boxTag(c)}${indTag(c)}<span data-hide="${esc(c.id)}" title="Ẩn công ty này – không hiện và không quét / tra MST lại nữa" style="float:right;cursor:pointer;color:#cbd5e1;font-weight:900;padding:0 4px">✕</span>${c.mst ? `<div style="font-size:11px"><a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(c.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b">${kmTag(c)}${esc(c.addr || c.cat || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     }).join('');
     const keepTop = side.querySelector('[data-scroll]')?.scrollTop || 0;
     sideBody.innerHTML = head(`<span style="background:#dbeafe;border-radius:99px;padding:0 8px">${inView.length}</span>${nErp ? `<span title="Đã có trong danh sách khách hàng ERP" style="background:#dcfce7;color:#166534;border-radius:99px;padding:0 8px">✅ ${nErp} ERP</span>` : ''}`) + (sideMin ? '' : `<div data-scroll style="overflow:auto">${body || '<div style="padding:10px;color:#64748b;font-size:12.5px">⏳ Chưa có công ty nào trong khung này – đang tự quét ngầm (dừng bản đồ vài giây, zoom gần)…</div>'}${shown > 250 ? '<div style="padding:6px 10px;font-size:11.5px;color:#94a3b8">… zoom gần hơn để xem hết</div>' : ''}</div>`);
