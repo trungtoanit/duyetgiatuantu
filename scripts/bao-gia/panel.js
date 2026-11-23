@@ -8853,7 +8853,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     for (const ev of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup']) wrap.addEventListener(ev, (e) => e.stopPropagation());
     $('[data-x]').onclick = close;
     const paintProv = () =>
-      Promise.all([aiCfgGet(), call({ type: 'version.get' }).catch(() => ({}))]).then(([c, v]) => ($('[data-prov]').textContent = `${c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude (chưa có OpenAI key – không gửi được ảnh)'}${v?.version ? ` · bản ${v.version}` : ''}`));
+      Promise.all([aiCfgGet(), call({ type: 'version.get' }).catch(() => ({}))]).then(([c, v]) => ($('[data-prov]').textContent = `${c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : '⚠️ Chưa cài OpenAI key – bấm ⚙️'}${v?.version ? ` · bản ${v.version}` : ''}`));
     paintProv();
     $('[data-cfg]').onclick = async () => {
       await aiCfgEdit().catch((err) => alert(err.message));
@@ -8999,7 +8999,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
           out = out.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
           hist.push({ role: 'assistant', content: out });
         } else {
-          if (shots.length) throw new Error('Gửi ảnh cần OpenAI key – bấm ⚙️ ở góc hộp để cài.');
+          throw new Error('Chưa cài OpenAI API key – bấm ⚙️ ở góc hộp để cài (không dùng Claude nữa).');
           const prev = hist.map((m) => `${m.role === 'user' ? 'Người dùng' : 'AI'}: ${m.content}`).join('\n\n');
           out = await call({ type: 'claude', system: sys, prompt: prev ? `${prev}\n\nNgười dùng: ${prompt}` : prompt, maxTokens: 4000, what: `Hỏi AI: ${(q || '').slice(0, 50)}` });
           hist.push({ role: 'user', content: prompt }, { role: 'assistant', content: out });
@@ -9153,13 +9153,13 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
   }
   async function aiCfgEdit() {
     const cur = await aiCfgGet();
-    const key = prompt(`OpenAI API key cho nút 🧮 Tính tổng (chỉ lưu trên máy này)\n${cur.openaiKey ? `Đang dùng: …${cur.openaiKey.slice(-4)} · để trống rồi OK = xoá key, dùng lại Claude` : 'Chưa có key – đang dùng Claude'}`, '');
+    const key = prompt(`OpenAI API key cho nút 🧮 Tính tổng (chỉ lưu trên máy này)\n${cur.openaiKey ? `Đang dùng: …${cur.openaiKey.slice(-4)} · để trống rồi OK = xoá key` : 'Chưa có key – các tính năng AI sẽ báo lỗi cho tới khi nhập key'}`, '');
     if (key == null) return null;
     const k = key.trim();
     if (!k) {
       await call({ type: 'kv.set', key: 'aiCfg', value: { ...cur, openaiKey: '' } });
       aiCfgCache = null;
-      return alert('Đã xoá OpenAI key – nút Tính tổng dùng Claude.');
+      return alert('Đã xoá OpenAI key – các tính năng AI tạm ngưng cho tới khi nhập key mới.');
     }
     if (!/^sk-/.test(k)) return alert('Key OpenAI phải bắt đầu bằng "sk-".');
     const model = prompt('Model OpenAI:', cur.openaiModel || OAI_MODEL);
@@ -9205,10 +9205,12 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const c = aiCfgCache.v;
     const what = msg.what || String(msg.system || msg.prompt || '').replace(/\s+/g, ' ').slice(0, 60);
     const t0 = Date.now();
-    const prov = c.openaiKey ? 'OpenAI' : 'Claude';
+    const prov = 'OpenAI';
     try {
       aiLast = null;
-      const out = c.openaiKey ? await callOpenAI(c.openaiKey, c.openaiModel || OAI_MODEL, msg.system, msg.prompt, { json: !!msg.json, maxTokens: msg.maxTokens }) : await rawCall(msg);
+      // luôn dùng OpenAI (không dùng Claude API nữa) – chưa có key thì báo lỗi, không gọi Claude
+      if (!c.openaiKey) throw new Error('Chưa cài OpenAI API key – vào bảng Trợ lý ERP › ⚙️ Cài đặt › AI của dự án để nhập key (sk-…).');
+      const out = await callOpenAI(c.openaiKey, c.openaiModel || OAI_MODEL, msg.system, msg.prompt, { json: !!msg.json, maxTokens: msg.maxTokens });
       aiLogAdd({ at: t0, prov, model: aiLast?.model || (c.openaiKey ? c.openaiModel || OAI_MODEL : ''), what, ms: Date.now() - t0, tin: aiLast?.tin, tout: aiLast?.tout, page: location.pathname });
       return out;
     } catch (err) {
@@ -9227,7 +9229,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const els = document.querySelectorAll('[data-ai-now]');
       if (!els.length) return;
       const c = await aiCfgGet();
-      const t = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL} (key …${c.openaiKey.slice(-4)})` : 'Claude (chưa cài OpenAI key)';
+      const t = c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL} (key …${c.openaiKey.slice(-4)})` : '⚠️ Chưa cài OpenAI key – AI không chạy';
       els.forEach((el) => el.textContent !== t && (el.textContent = t));
       const log = aiLogGet();
       const sig = `${log[0]?.at || 0}|${log.length}`;
@@ -9452,7 +9454,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
         e.stopPropagation();
         aiCfgEdit().catch((err) => alert(err.message));
       });
-      aiCfgGet().then((c) => (btn.title = `Nhờ AI (${c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'Claude'}) đọc các khoản tiền trong bình luận này rồi cộng tổng`));
+      aiCfgGet().then((c) => (btn.title = `Nhờ AI (${c.openaiKey ? `OpenAI ${c.openaiModel || OAI_MODEL}` : 'chưa cài OpenAI key'}) đọc các khoản tiền trong bình luận này rồi cộng tổng`));
       wrap.append(btn, gear, send, out);
       detail.after(wrap);
     }

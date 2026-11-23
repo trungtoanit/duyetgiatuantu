@@ -19,6 +19,17 @@
     });
   const kvGet = async (key) => (await call({ type: 'kv.get', key })) || {};
   const kvMerge = (key, patch) => call({ type: 'kv.merge', key, patch });
+  // 🤖 AI luôn dùng OpenAI (không dùng Claude API nữa): key + model lấy từ kv 'aiCfg' (cài ở bảng Trợ lý ERP › ⚙️ Cài đặt)
+  async function aiAsk({ system, prompt, maxTokens }) {
+    const c = (await kvGet('aiCfg').catch(() => ({}))) || {};
+    if (!c.openaiKey) throw new Error('Chưa cài OpenAI API key (bảng Trợ lý ERP › ⚙️ Cài đặt › AI của dự án)');
+    const body = { model: c.openaiModel || 'gpt-4.1-mini', messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }] };
+    if (maxTokens) body.max_completion_tokens = maxTokens;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${c.openaiKey}` }, body: JSON.stringify(body) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`OpenAI: ${j.error?.message || `lỗi ${res.status}`}`);
+    return j.choices?.[0]?.message?.content || '';
+  }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const KEY = 'mapsPlaces';
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1162,7 +1173,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
       ? ` <span title="MST không rõ – masothue không có kết quả đủ chắc, không tra lại${(c.mstCands || []).length ? `\nGần nhất: ${esc(c.mstCands.map((x) => `${x.name} (${x.mst})`).join(' · '))}` : ''}" style="display:inline-block;padding:0 5px;border-radius:6px;background:#f1f5f9;color:#94a3b8;font-size:10.5px;font-weight:900;white-space:nowrap">❓ MST</span>`
       : ` <span title="Chưa tra MST – đang chờ lượt" style="color:#cbd5e1;font-size:10.5px">⏳</span>`;
 
-  // 🏷 AI gắn nhãn ngành nghề: mỗi phút 1 lô ≤ 25 công ty chưa có nhãn → Claude (qua background, key trong popup extension)
+  // 🏷 AI gắn nhãn ngành nghề: mỗi phút 1 lô ≤ 25 công ty chưa có nhãn → OpenAI (key ở ⚙️ Cài đặt)
   // chọn 1 ngành trong danh sách cố định theo tên / tên pháp lý / loại hình Google → c.ind (lưu kv, đồng bộ). Lỗi → nghỉ 10 phút.
   const INDS = ['Thực phẩm – đồ uống', 'Nông sản – chăn nuôi – thức ăn CN', 'Dệt may – may mặc', 'Giày da – túi xách', 'Gỗ – nội thất', 'Giấy – bao bì – in ấn', 'Nhựa – cao su', 'Hoá chất – sơn – mực', 'Dược – mỹ phẩm – y tế', 'Điện – điện tử', 'Cơ khí – kim loại – thép', 'Ô tô – xe máy – phụ tùng', 'Vật liệu xây dựng – gốm sứ – kính', 'Logistics – kho vận – vận tải', 'Thương mại – XNK', 'Thiết bị – máy móc công nghiệp', 'Đồ chơi – quà tặng – văn phòng phẩm', 'Năng lượng – môi trường', 'Dịch vụ – tư vấn – phần mềm', 'Khác'];
   const IND_COL = { 'Thực phẩm – đồ uống': '#ea580c', 'Nông sản – chăn nuôi – thức ăn CN': '#65a30d', 'Dệt may – may mặc': '#db2777', 'Giày da – túi xách': '#9a3412', 'Gỗ – nội thất': '#a16207', 'Giấy – bao bì – in ấn': '#0891b2', 'Nhựa – cao su': '#7c3aed', 'Hoá chất – sơn – mực': '#dc2626', 'Dược – mỹ phẩm – y tế': '#e11d48', 'Điện – điện tử': '#2563eb', 'Cơ khí – kim loại – thép': '#475569', 'Ô tô – xe máy – phụ tùng': '#334155', 'Vật liệu xây dựng – gốm sứ – kính': '#78716c', 'Logistics – kho vận – vận tải': '#0d9488', 'Thương mại – XNK': '#4f46e5', 'Thiết bị – máy móc công nghiệp': '#52525b', 'Đồ chơi – quà tặng – văn phòng phẩm': '#c026d3', 'Năng lượng – môi trường': '#16a34a', 'Dịch vụ – tư vấn – phần mềm': '#64748b', Khác: '#94a3b8' };
@@ -1179,8 +1190,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     indSt.n = todo.length;
     try {
       const lines = todo.map((c, i) => `${i + 1}. ${c.legalName || c.name}${c.legalName && c.legalName !== c.name ? ` (Google: ${c.name})` : ''}${c.cat ? ` | loại hình Google: ${c.cat}` : ''}`).join('\n');
-      const text = await call({
-        type: 'claude',
+      const text = await aiAsk({
         maxTokens: 2000,
         system: 'Bạn phân loại ngành nghề doanh nghiệp Việt Nam (khu công nghiệp miền Nam) cho đội bán hàng thùng carton. Chỉ trả JSON, không giải thích.',
         prompt: `Gắn đúng 1 ngành cho mỗi công ty, CHỈ chọn trong danh sách:\n${INDS.map((x) => `- ${x}`).join('\n')}\nĐoán theo tên công ty, tên pháp lý và loại hình Google; không chắc thì chọn "Khác".\nTrả về JSON mảng: [{"i":1,"nganh":"…"}, …]\n\nCông ty:\n${lines}`,
@@ -1228,8 +1238,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     boxSt.n = todo.length;
     try {
       const lines = todo.map((c, i) => `${i + 1}. ${c.legalName || c.name}${c.legalName && c.legalName !== c.name ? ` (Google: ${c.name})` : ''}${c.cat ? ` | loại hình Google: ${c.cat}` : ''}${c.ind ? ` | ngành: ${c.ind}` : ''}${c.kcn ? ` | ${c.kcn}` : ''}`).join('\n');
-      const text = await call({
-        type: 'claude',
+      const text = await aiAsk({
         maxTokens: 3000,
         system: 'Bạn là chuyên viên bán hàng của nhà máy sản xuất thùng carton sóng và thùng / hộp in offset tại Bình Dương. Đánh giá khách hàng tiềm năng. Chỉ trả JSON, không giải thích.',
         prompt: `Với mỗi công ty, đánh giá khả năng công ty CẦN MUA THÙNG CARTON (đóng gói, vận chuyển thành phẩm) hoặc THÙNG / HỘP IN OFFSET với SỐ LƯỢNG LỚN, thường xuyên:\n- "A" = cao: nhà máy sản xuất hàng hoá đóng thùng xuất / bán số lượng lớn (thực phẩm, đồ uống, bánh kẹo, nông sản chế biến, thức ăn chăn nuôi, dệt may, giày dép, túi xách, đồ gỗ – nội thất, điện tử, linh kiện, đồ gia dụng, nhựa gia dụng, mỹ phẩm, dược phẩm, hoá phẩm tiêu dùng, đồ chơi, văn phòng phẩm, phụ tùng, thiết bị nhỏ…), công ty FDI sản xuất trong KCN.\n- "B" = vừa: sản xuất nhưng hàng cồng kềnh / đóng gói khác (bao, pallet, cuộn, phuy…), sản xuất nhỏ, xưởng gia công, thương mại – phân phối hàng đóng thùng, kho vận.\n- "C" = thấp: dịch vụ, tư vấn, phần mềm, xây dựng, vận tải, vật liệu rời (cát đá, thép cuộn, hoá chất bồn), văn phòng đại diện, nhà hàng – bán lẻ nhỏ, hoặc không rõ.\nĐoán theo tên công ty, tên pháp lý, loại hình Google, ngành.\nTrả về JSON mảng: [{"i":1,"m":"A","ly":"lý do ≤ 12 chữ"}, …]\n\nCông ty:\n${lines}`,
