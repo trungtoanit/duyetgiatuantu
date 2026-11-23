@@ -19743,7 +19743,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { q: '', erp: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
+  const mpUi = { sort: 'name', q: '', erp: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -19866,7 +19866,22 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
       if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
       if (q && !mpUn(`${c.name} ${c.legalName || ''} ${c.mst || ''} ${c.addr || ''} ${c.phone || ''} ${c.kcn || ''} ${e?.name || ''} ${e?.code || ''}`).includes(q)) return false;
       return true;
-    }).sort((a, b) => (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
+    }).sort((a, b) => (mpUi.sort === 'near' ? (mpDist(a) ?? 1e9) - (mpDist(b) ?? 1e9) : 0) || (a.kcn || '~').localeCompare(b.kcn || '~', 'vi') || (a.legalName || a.name).localeCompare(b.legalName || b.name, 'vi'));
+  }
+  // 📍 Khoảng cách (km, đường chim bay) từ xưởng Tuấn Tú (48/13 KP Bình Phước B, An Phú): lấy toạ độ chính công ty Tuấn Tú
+  // trong danh sách Google Maps; không có thì dùng toạ độ gần đúng
+  let mpHome = null;
+  function mpHomeAt() {
+    if (mpHome) return mpHome;
+    const me = Object.values(mpData?.places || {}).find((c) => c?.lat && /tu[aấ]n\s*t[uú]/i.test(`${c.name} ${c.legalName || ''}`) && /48\/13|b[iì]nh ph[uư][oớ]c b/i.test(`${c.addr || ''} ${c.legalAddr || ''}`));
+    return (mpHome = me ? [me.lat, me.lng] : [10.9446, 106.7373]);
+  }
+  function mpDist(c) {
+    if (!c?.lat || !c?.lng) return null;
+    const [la, ln] = mpHomeAt();
+    const r = Math.PI / 180;
+    const x = Math.sin(((c.lat - la) * r) / 2) ** 2 + Math.cos(la * r) * Math.cos(c.lat * r) * Math.sin(((c.lng - ln) * r) / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(x));
   }
   // Lưu trang đang xem + ô tìm + bộ lọc của tab lên cloud (kv mapsTabUi, theo từng người) – F5 / máy khác mở lại đúng chỗ
   let mpUiLoaded = false;
@@ -19874,14 +19889,14 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
   const mpPersist = () => {
     clearTimeout(mpUiT);
     mpUiT = setTimeout(() => {
-      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, ind: mpUi.ind, show: mpUi.show, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
     }, 800);
   };
   async function mapsTab() {
     if (!mpUiLoaded) {
       mpUiLoaded = true;
       const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
-      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', ind: v.ind || '', show: v.show || 'on', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
     }
     await mpLoad();
     if (root && !root.__mp) {
@@ -19912,7 +19927,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''} <a href="#" data-mp="mst" data-id="${esc(c.id)}" title="Sửa MST / lấy lại tên chuẩn từ masothue" style="text-decoration:none;font-size:11px">✎</a>` : `<button data-mp="mst" data-id="${esc(c.id)}" title="Nhập MST (vd. tìm trên Google / masothue) → lấy tên + địa chỉ chuẩn từ masothue, lưu cloud" style="${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff">🧾 Chuẩn hoá MST</button>`}${mpMstMsg[c.id] ? `<div style="font-size:10.5px;color:#7c3aed;white-space:normal">${esc(mpMstMsg[c.id])}</div>` : ''}</td>
 <td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
-<td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${esc(c.legalAddr || c.addr || '')}</td>
+<td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${mpDist(c) != null ? `<b style="color:#0369a1;white-space:nowrap" title="Khoảng cách đường chim bay từ xưởng Tuấn Tú">📍 ${mpDist(c).toFixed(1)} km</b> · ` : ''}${esc(c.legalAddr || c.addr || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)}</td>
 <td style="padding:4px 6px;white-space:nowrap">${e ? `<a href="/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` <span style="font-size:11px;color:#64748b">· ${esc(e.staff.name)}</span>` : ''}<div style="font-size:11px;color:#64748b">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-mp="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : `<button data-mp="link" data-id="${esc(c.id)}" style="${b};border-color:#86efac;color:#166534;background:#f0fdf4">🔗 Kết nối ERP</button>${c.erpNo ? '<div style="font-size:11px;color:#94a3b8">đã bỏ kết nối</div>' : ''}`}</td>
 <td style="padding:4px 6px;white-space:nowrap"><a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a> ${c.hidden ? `<button data-mp="restore" data-id="${esc(c.id)}" style="${b}">↩ Khôi phục</button>` : mpDropWhy(c) ? `<span style="font-size:11px;color:#94a3b8" title="Bị bộ lọc loại tự động (giống Google Maps)">🚫 ${esc(mpDropWhy(c))}</span>` : `<button data-mp="del" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">🗑 Xoá</button>`}</td></tr>`;
@@ -19965,6 +19980,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
 <div style="display:flex;gap:6px;margin:2px 0 4px"><a href="#" data-mp="kall" style="font-size:12px">chọn hết</a><a href="#" data-mp="knone" style="font-size:12px">bỏ chọn (tất cả)</a><span style="flex:1"></span><a href="#" data-mp="kclose" style="font-size:12px;font-weight:800">Xong ✓</a></div>
 ${opt('', 'Ngoài KCN')}${PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<div style="margin:6px 0 2px;padding:2px 6px;font-size:11.5px;font-weight:900;color:#1e3a8a;background:#eff6ff;border-radius:6px">📍 ${pv} · ${byP.get(pv).length} KCN</div>${byP.get(pv).sort((a, c) => a.localeCompare(c, 'vi')).map((k) => opt(k, k)).join('')}`).join('')}</div>`;
     })() : ''}</span>
+<select data-mp-f="sort" title="Sắp xếp" style="${sel}"><option value="name">↕ Theo KCN, tên</option><option value="near" ${mpUi.sort === 'near' ? 'selected' : ''}>📍 Gần → xa (từ Tuấn Tú)</option></select>
 <select data-mp-f="show" style="${sel}"><option value="on">Đang dùng</option><option value="off" ${mpUi.show === 'off' ? 'selected' : ''}>🗑 Đã xoá</option></select>
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
 </div>
