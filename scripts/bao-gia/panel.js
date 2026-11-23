@@ -20031,6 +20031,7 @@ ${linkBox}</div>`;
     const nm = c.legalName || c.name;
     // bấm là mở thẳng tab Google tìm MST (không hỏi), chọn “📥 Lấy MST này” ở kết quả đúng
     let v = '';
+    let pickName = '';
     {
       // mở Google: script trên trang kết quả gắn nút 📥 cạnh mỗi kết quả có MST → ghi kv mstPick; chờ ≤ 15 phút
       const at = Date.now();
@@ -20042,7 +20043,10 @@ ${linkBox}</div>`;
         await sleep(2000);
         const pk = await kvGet('mstPick').catch(() => null);
         if (!pk || pk.at !== at) break; // đã bắt đầu tìm cho công ty khác
-        if (pk.status === 'done' && pk.id === id) v = String(pk.mst || '').replace(/[^\d-]/g, '');
+        if (pk.status === 'done' && pk.id === id) {
+          v = String(pk.mst || '').replace(/[^\d-]/g, '');
+          pickName = String(pk.pickName || '').trim();
+        }
       }
       if (!v) {
         delete mpMstMsg[id];
@@ -20050,7 +20054,10 @@ ${linkBox}</div>`;
       }
     }
     if (!/^\d{10}(-\d{3})?$/.test(v)) return alert('MST phải là 10 số (chi nhánh: 10 số-3 số).');
-    await mpSave({ [id]: { ...c, mst: v, mstUrl: `https://masothue.com/Search/?q=${v}`, mstManual: true, mstSkip: false, mstAt: Date.now(), mstBy: meName || '' } });
+    // tên chuẩn: lấy ngay tên trên kết quả Google đã chọn (nếu là tên công ty) – thay tên chuẩn cũ (có thể sai) của công ty này
+    const okName = /^(CÔNG TY|CHI NHÁNH|DOANH NGHIỆP|HỢP TÁC XÃ|CTY)\b/i.test(pickName) ? pickName.toUpperCase() : '';
+    const legal = okName ? { legalName: okName, legalAddr: '' } : { legalName: '', legalAddr: '' };
+    await mpSave({ [id]: { ...c, ...legal, mst: v, mstUrl: `https://masothue.com/Search/?q=${v}`, mstManual: true, mstSkip: false, mstAt: Date.now(), mstBy: meName || '' } });
     mpMstMsg[id] = '⏳ Đang lấy tên chuẩn từ masothue…';
     render();
     const alive = await kvGet('mstAlive').catch(() => ({}));
@@ -20070,12 +20077,13 @@ ${linkBox}</div>`;
         return render();
       }
       if (j?.status !== 'done') continue;
-      const r = (j.list || []).find((x) => String(x.mst).replace(/\D/g, '') === v.replace(/\D/g, '')) || j.list?.[0];
+      // chỉ nhận kết quả đúng MST đã chọn (không lấy đại kết quả đầu – dễ ra công ty khác)
+      const r = (j.list || []).find((x) => String(x.mst).replace(/\D/g, '') === v.replace(/\D/g, ''));
       if (r) {
         const cur = mpData.places[id];
         await mpSave({ [id]: { ...cur, legalName: r.name, legalAddr: r.addr || cur.legalAddr, mstUrl: r.href || cur.mstUrl } });
         mpMstMsg[id] = `✅ ${r.name}`;
-      } else mpMstMsg[id] = 'masothue không có kết quả cho MST này.';
+      } else mpMstMsg[id] = okName ? `✅ ${okName} (tên theo kết quả Google – masothue không có đúng MST này)` : 'masothue không có kết quả đúng MST này.';
       return render();
     }
   }
