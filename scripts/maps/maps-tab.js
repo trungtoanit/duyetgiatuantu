@@ -130,6 +130,15 @@ button{font:inherit}`;
     mpData = { at: raw.at, places: raw.places || {}, custs: raw.custs, byId, byName };
     return mpData;
   }
+  // 📐 script Google Maps vừa lưu diện tích đo tay → cập nhật bản lưu máy + bảng
+  window.addEventListener('dg:areaSaved', async (e) => {
+    const { id, place } = e.detail || {};
+    if (!id || !place) return;
+    await mpLoad().catch(() => null);
+    if (!mpData) return;
+    mpData.places[id] = place;
+    mpIdbSave();
+  });
   async function mpLoad(force = false) {
     if (mpData && !force) return mpData;
     if (!force) {
@@ -390,7 +399,7 @@ ${linkBox}${mpDetailBox()}</div>`;
   }
   // 📐 Ô diện tích xưởng: số m² (đo OSM / nhập tay), "chưa đo" (đang chờ lượt đo), "OSM chưa vẽ" (đo rồi mà không có nhà) – ✎ để nhập tay
   function mpAreaCell(c) {
-    const ed = `<a href="#" data-mp="area" data-id="${esc(c.id)}" title="Nhập / sửa diện tích tay" style="text-decoration:none;font-size:11px">✎</a>`;
+    const ed = `${c.lat ? `<a href="#" data-mp="areadraw" data-id="${esc(c.id)}" title="Đo tay: mở ảnh vệ tinh tại công ty, bấm từng góc mái xưởng → tự tính m²" style="text-decoration:none;font-size:11px;font-weight:800;color:#b45309;margin-left:4px">✏️ Đo tay</a>` : ''} <a href="#" data-mp="area" data-id="${esc(c.id)}" title="Gõ số diện tích" style="text-decoration:none;font-size:11px">✎</a>`;
     if (c.area > 0) {
       const big = c.area >= 5000;
       const src = c.areaSrc === 'tay' ? '✋ nhập tay' : c.areaSrc === 'osm-near' ? 'OSM · nhà gần nhất' : 'OSM';
@@ -610,6 +619,11 @@ ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (�
     else if (k === 'dclose') mpUi.detail = null;
     else if (k === 'mstinfo' && c?.mst) {
       mpMstFetch(id, c.mst);
+      return;
+    }
+    else if (k === 'areadraw' && c?.lat) {
+      // ✏️ đo tay trên ảnh vệ tinh (script Google Maps mở bản đồ tới công ty, bấm các góc mái → m²)
+      window.dispatchEvent(new CustomEvent('dg:areaDraw', { detail: { id, name: c.legalName || c.name, lat: c.lat, lng: c.lng } }));
       return;
     }
     else if (k === 'area' && c) {

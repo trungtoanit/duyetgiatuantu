@@ -531,19 +531,42 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   setInterval(() => loadCustom().then(() => kcnDraw()).catch(() => {}), 60e3);
   let drawPts = null; // đang vẽ: [[lat,lng]…]
   let drawName = '';
+  let drawFor = null; // ✏️ đo diện tích tay cho 1 công ty: { id, name } (thay vì vẽ viền KCN)
   const drawLayer = document.createElement('div');
   drawLayer.setAttribute('style', 'position:fixed;inset:0;z-index:2147482000;cursor:crosshair;display:none');
   const drawBar = document.createElement('div');
   drawBar.setAttribute('style', 'position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:2147482001;background:#0f172a;color:#fff;border-radius:12px;padding:8px 12px;font:700 13px -apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:none;gap:8px;align-items:center;box-shadow:0 10px 28px rgba(0,0,0,.35)');
   const drawPreview = document.createElementNS(svgNS, 'svg');
   drawPreview.setAttribute('style', 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147481999');
+  // 📐 bảng 📋 Danh sách công ty bấm “✏️ Đo tay” → chuyển bản đồ vệ tinh tới công ty (zoom 19) rồi bật chế độ đo
+  window.addEventListener('dg:areaDraw', (e) => {
+    const d = e.detail || {};
+    if (!d.id || !d.lat) return;
+    try {
+      sessionStorage.setItem('dgAreaDraw', JSON.stringify({ ...d, at: Date.now() }));
+    } catch {}
+    location.href = `https://www.google.com/maps/@${d.lat},${d.lng},19z/data=!3m1!1e3`;
+  });
+  setTimeout(function startAreaDraw() {
+    let d = null;
+    try {
+      d = JSON.parse(sessionStorage.getItem('dgAreaDraw') || 'null');
+    } catch {}
+    if (!d || Date.now() - d.at > 120e3) return;
+    if (!mapView()) return setTimeout(startAreaDraw, 800);
+    sessionStorage.removeItem('dgAreaDraw');
+    drawFor = { id: d.id, name: d.name };
+    drawName = d.name;
+    drawPts = [];
+    drawUi();
+  }, 2500);
   function drawUi() {
     const on = !!drawPts;
     drawLayer.style.display = on ? 'block' : 'none';
     drawBar.style.display = on ? 'flex' : 'none';
     if (!on) return (drawPreview.innerHTML = '');
     if (!drawLayer.isConnected) document.body.append(drawPreview, drawLayer, drawBar);
-    drawBar.innerHTML = `✏️ Vẽ viền “${esc(drawName)}”: bấm từng góc trên bản đồ (${drawPts.length} điểm) <button data-d="undo" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit">↶ Bỏ điểm</button><button data-d="ok" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;background:#22c55e;color:#fff" ${drawPts.length < 3 ? 'disabled' : ''}>✔ Xong</button><button data-d="x" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;background:#ef4444;color:#fff">✕ Huỷ</button>`;
+    drawBar.innerHTML = `${drawFor ? `📐 Đo mái xưởng “${esc(drawFor.name)}”: bấm từng góc mái nhà (${drawPts.length} điểm)${drawPts.length >= 3 ? ` · <b style="color:#fde68a">${Math.round(polyArea([...drawPts, drawPts[0]])).toLocaleString('vi-VN')} m²</b>` : ''}` : `✏️ Vẽ viền “${esc(drawName)}”: bấm từng góc trên bản đồ (${drawPts.length} điểm)`} <button data-d="undo" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit">↶ Bỏ điểm</button><button data-d="ok" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;background:#22c55e;color:#fff" ${drawPts.length < 3 ? 'disabled' : ''}>✔ Xong</button><button data-d="x" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;background:#ef4444;color:#fff">✕ Huỷ</button>`;
     const v = mapView();
     if (!v) return;
     const [cx, cy] = proj(v.lat, v.lng, v.z);
@@ -564,8 +587,28 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     const k = e.target.closest('[data-d]')?.dataset.d;
     if (!k) return;
     if (k === 'undo') drawPts.pop();
-    if (k === 'x') drawPts = null;
-    if (k === 'ok' && drawPts.length >= 3) {
+    if (k === 'x') {
+      drawPts = null;
+      drawFor = null;
+    }
+    if (k === 'ok' && drawPts.length >= 3 && drawFor) {
+      // 📐 lưu diện tích đo tay (m²) + đa giác mái vào công ty, đồng bộ cloud; báo bảng 📋 Danh sách công ty cập nhật
+      const ring = [...drawPts, drawPts[0]].map(([a, b]) => [Number(a.toFixed(6)), Number(b.toFixed(6))]);
+      const area = Math.round(polyArea(ring));
+      const all = (await kvGet(KEY).catch(() => ({}))) || {};
+      const c = all[drawFor.id] || cache?.[drawFor.id];
+      if (c) {
+        const v = { ...c, area, areaSrc: 'tay', areaPoly: ring, areaTry: Date.now() };
+        await kvMerge(KEY, { [drawFor.id]: v });
+        if (cache) cache[drawFor.id] = v;
+        window.dispatchEvent(new CustomEvent('dg:areaSaved', { detail: { id: drawFor.id, place: v } }));
+        msg = `📐 Đã lưu ${area.toLocaleString('vi-VN')} m² cho “${drawFor.name}”.`;
+      }
+      drawPts = null;
+      drawFor = null;
+      sideCalcKey = '';
+      draw();
+    } else if (k === 'ok' && drawPts.length >= 3) {
       const id = `${Date.now().toString(36)}`;
       const me = (await kvGet('me').catch(() => ({})))?.name || '';
       const p = { name: drawName, rings: [drawPts.map(([a, b]) => [Number(a.toFixed(6)), Number(b.toFixed(6))])], by: me, at: Date.now() };
@@ -582,6 +625,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   addEventListener('keydown', (e) => {
     if (drawPts && e.key === 'Escape') {
       drawPts = null;
+      drawFor = null;
       drawUi();
     }
   });
