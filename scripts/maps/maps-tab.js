@@ -408,6 +408,49 @@ ${linkBox}${mpDetailBox()}</div>`;
     if (c.area === 0) return `<span style="font-size:11.5px;color:#94a3b8" title="Đã đo: OpenStreetMap chưa vẽ nhà xưởng ở vị trí này">OSM chưa vẽ</span> ${ed}`;
     return `<span style="font-size:11.5px;color:#94a3b8" title="Chờ lượt đo tự động từ OpenStreetMap (≤ 20 công ty / 30 giây khi đang mở Google Maps)">⏳ chưa đo</span> ${ed}`;
   }
+  // 📐 Bản đồ vệ tinh tự dựng (ô ảnh vệ tinh Google, cỡ cố định) + vẽ lại các phân xưởng đã đo tay (c.areaPoly) lên trên.
+  // Chỉ dùng khi công ty có nét vẽ tay; không có thì giữ khung Google Maps nhúng như cũ.
+  function mpPolyMap(c) {
+    let rings = c.areaPoly;
+    if (!Array.isArray(rings) || !rings.length) return '';
+    if (typeof rings[0]?.[0] === 'number') rings = [rings]; // bản cũ: 1 đa giác
+    const pts = rings.flat().filter((p) => Array.isArray(p) && p.length === 2);
+    if (!pts.length) return '';
+    const W = 1000;
+    const H = 640;
+    const px = (la, ln, z) => {
+      const sc = 256 * 2 ** z;
+      const sn = Math.sin((la * Math.PI) / 180);
+      return [((ln + 180) / 360) * sc, (0.5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI)) * sc];
+    };
+    // zoom lớn nhất mà các xưởng vẫn nằm gọn (chừa lề), tối đa 19
+    let z = 19;
+    for (; z > 12; z--) {
+      const xs = pts.map(([a, b]) => px(a, b, z));
+      const w = Math.max(...xs.map((x) => x[0])) - Math.min(...xs.map((x) => x[0]));
+      const h = Math.max(...xs.map((x) => x[1])) - Math.min(...xs.map((x) => x[1]));
+      if (w < W * 0.7 && h < H * 0.7) break;
+    }
+    const xs = pts.map(([a, b]) => px(a, b, z));
+    const cx = (Math.max(...xs.map((x) => x[0])) + Math.min(...xs.map((x) => x[0]))) / 2;
+    const cy = (Math.max(...xs.map((x) => x[1])) + Math.min(...xs.map((x) => x[1]))) / 2;
+    const x0 = cx - W / 2;
+    const y0 = cy - H / 2;
+    let tiles = '';
+    for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++)
+      for (let ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + H) / 256); ty++)
+        tiles += `<img src="https://mt${(tx + ty) & 3}.google.com/vt/lyrs=y&hl=vi&x=${tx}&y=${ty}&z=${z}" alt="" style="position:absolute;left:${Math.round(tx * 256 - x0)}px;top:${Math.round(ty * 256 - y0)}px;width:256px;height:256px">`;
+    const poly = rings.map((r, i) => {
+      const p2 = r.map(([a, b]) => px(a, b, z)).map(([x, y]) => `${(x - x0).toFixed(1)},${(y - y0).toFixed(1)}`).join(' ');
+      const m = r.map(([a, b]) => px(a, b, z)).reduce((acc, [x, y]) => [acc[0] + x - x0, acc[1] + y - y0], [0, 0]).map((v) => v / r.length);
+      return `<polygon points="${p2}" fill="rgba(245,158,11,.28)" stroke="#fff" stroke-width="6"/><polygon points="${p2}" fill="none" stroke="#d97706" stroke-width="3"/><text x="${m[0].toFixed(0)}" y="${m[1].toFixed(0)}" text-anchor="middle" font-size="15" font-weight="900" fill="#fff" stroke="#92400e" stroke-width="3" paint-order="stroke">X${i + 1}</text>`;
+    }).join('');
+    const mk = c.lat ? px(c.lat, c.lng, z) : null;
+    return `<div style="position:relative;overflow:hidden;min-height:560px;background:#1e293b">
+<div style="position:absolute;left:50%;top:50%;width:${W}px;height:${H}px;transform:translate(-50%,-50%)">${tiles}
+<svg width="${W}" height="${H}" style="position:absolute;left:0;top:0">${poly}${mk ? `<circle cx="${(mk[0] - x0).toFixed(1)}" cy="${(mk[1] - y0).toFixed(1)}" r="7" fill="#ef4444" stroke="#fff" stroke-width="3"/>` : ''}</svg></div>
+<div style="position:absolute;left:10px;top:10px;background:rgba(15,23,42,.85);color:#fff;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12.5px">📐 ${rings.length} phân xưởng đo tay · ${Number(c.area || 0).toLocaleString('vi-VN')} m²</div></div>`;
+  }
   // Popup chi tiết công ty: thông tin pháp lý, liên hệ, KCN, diện tích, ERP + bản đồ vệ tinh + trang Google Maps (ảnh, đánh giá)
   function mpDetailBox() {
     const c = mpUi.detail && mpData.places[mpUi.detail];
@@ -439,7 +482,7 @@ ${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
 </div>
 <div style="position:relative;display:grid;grid-template-rows:1fr;min-height:560px;background:#f8fafc">
-${sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:560px;border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>'}
+${mpPolyMap(c) || (sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:560px;border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>')}
 ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (ẩn – chỉ để đọc ảnh)" aria-hidden="true" tabindex="-1" style="position:absolute;left:-10000px;top:0;width:1100px;height:800px;border:0;visibility:hidden;pointer-events:none"></iframe>` : ''}
 </div></div></div></div>`;
   }
