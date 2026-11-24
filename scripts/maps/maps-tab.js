@@ -534,7 +534,7 @@ ${linkBox}${mpDetailBox()}</div>`;
     const cy = (Math.max(...xs.map((x) => x[1])) + Math.min(...xs.map((x) => x[1]))) / 2;
     const mk = c.lat ? [c.lat, c.lng] : null;
     const bt = 'display:block;width:34px;height:34px;border:0;background:#fff;color:#334155;font-size:20px;font-weight:900;cursor:pointer;line-height:34px';
-    return `<div data-mp-pmap data-rings="${esc(JSON.stringify(rings))}" data-mk="${mk ? mk.join(',') : ''}" data-z="${z}" data-cx="${cx}" data-cy="${cy}" data-z0="${z}" data-cx0="${cx}" data-cy0="${cy}" style="position:relative;overflow:hidden;min-height:560px;height:100%;background:#1e293b;cursor:grab;touch-action:none">
+    return `<div data-mp-pmap data-rings="${esc(JSON.stringify(rings))}" data-mk="${mk ? mk.join(',') : ''}" data-z="${z}" data-cx="${cx}" data-cy="${cy}" data-z0="${z}" data-cx0="${cx}" data-cy0="${cy}" style="position:relative;overflow:hidden;min-height:max(560px,calc(96vh - 120px));height:100%;background:#1e293b;cursor:grab;touch-action:none">
 <div data-pm-in style="position:absolute;left:50%;top:50%;width:${PM_W}px;height:${PM_H}px;transform:translate(-50%,-50%)">${pmapInner(rings, mk, z, cx, cy)}</div>
 <div style="position:absolute;left:10px;top:10px;background:rgba(15,23,42,.85);color:#fff;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12.5px;pointer-events:none">📐 ${rings.length} phân xưởng đo tay · ${Number(c.area || 0).toLocaleString('vi-VN')} m²</div>
 <div style="position:absolute;right:10px;bottom:16px;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.35)"><button data-pm="in" title="Phóng to" style="${bt};border-bottom:1px solid #e2e8f0">+</button><button data-pm="out" title="Thu nhỏ" style="${bt};border-bottom:1px solid #e2e8f0">−</button><button data-pm="fit" title="Về khung các phân xưởng" style="${bt};font-size:15px">⤢</button></div>
@@ -572,8 +572,8 @@ ${linkBox}${mpDetailBox()}</div>`;
     const ll = c.lat && c.lng ? `${c.lat},${c.lng}` : '';
     const gm = c.href || c.url;
     const sat = ll ? `https://www.google.com/maps?q=${ll}&t=k&z=17&hl=vi&output=embed` : '';
-    return `<div data-mp-modal style="position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto">
-<div style="background:#fff;border-radius:14px;box-shadow:0 18px 44px rgba(15,23,42,.35);width:min(1100px,100%);overflow:hidden">
+    return `<div data-mp-modal style="position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:2vh 1vw;overflow:auto">
+<div style="background:#fff;border-radius:14px;box-shadow:0 18px 44px rgba(15,23,42,.35);width:min(1900px,98vw);overflow:hidden">
 <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 16px;background:linear-gradient(90deg,#eff6ff,#f8fafc);border-bottom:1px solid #e2e8f0">
 <div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:900;color:#0f172a">${esc(name)}</div>
 ${c.legalName && c.name !== c.legalName ? `<div style="font-size:12px;color:#64748b">Tên trên Google: ${esc(c.name)}</div>` : ''}
@@ -588,11 +588,11 @@ ${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn
 ${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
 </div>
-<div style="position:relative;display:grid;grid-template-rows:1fr;min-height:560px;background:#f8fafc">
-${mpPolyMap(c) || (sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:560px;border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>')}
+<div style="position:relative;display:grid;grid-template-rows:1fr;min-height:max(560px,calc(96vh - 120px));background:#f8fafc">
+${mpPolyMap(c) || (sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:max(560px,calc(96vh - 120px));border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>')}
 ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (ẩn – chỉ để đọc ảnh)" aria-hidden="true" tabindex="-1" style="position:absolute;left:-10000px;top:0;width:1100px;height:800px;border:0;visibility:hidden;pointer-events:none"></iframe>` : ''}
 </div>
-<div style="display:flex;flex-direction:column;min-height:0;max-height:calc(92vh - 110px);border-left:1px solid #e2e8f0">${mpNearHtml(c)}</div></div></div></div>`;
+<div style="display:flex;flex-direction:column;min-height:0;max-height:calc(96vh - 120px);border-left:1px solid #e2e8f0">${mpNearHtml(c)}</div></div></div></div>`;
   }
   // 📸 Ảnh công ty: đọc ảnh trong khung trang Google Maps của popup (cùng tên miền google.com nên đọc được), lưu đường dẫn ảnh lên cloud (c.photos)
   const MP_PHOTO_MAX = 12;
