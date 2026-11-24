@@ -38,6 +38,14 @@
   const blocked = () => /Just a moment|Attention Required|Cloudflare/i.test(document.title) || !!document.querySelector('#challenge-form, .cf-turnstile, iframe[src*="challenges.cloudflare.com"]');
 
   function parse() {
+    // Trang chi tiết 1 công ty (tìm theo MST → masothue mở thẳng trang công ty): ĐỌC TRANG CHI TIẾT TRƯỚC –
+    // trang này còn có danh sách công ty khác (div[data-prefetch]) ở cột bên, đọc nhầm sẽ không ra đúng MST
+    const mm0 = (document.querySelector('td[itemprop="taxID"]')?.textContent || '').trim();
+    if (mm0) {
+      const nm0 = (document.querySelector('table.table-taxinfo thead th, th[itemprop="name"], h1')?.textContent || '').replace(/\s+/g, ' ').trim();
+      const ad0 = (document.querySelector('td[itemprop="address"]')?.textContent || '').trim();
+      if (nm0) return [{ name: nm0.replace(/^\d[\d-]*\s*-\s*/, ''), mst: mm0, addr: ad0, href: location.href.split('?')[0], info: taxInfo() }];
+    }
     const list = [...document.querySelectorAll('div[data-prefetch]')].map((d) => {
       const a = d.querySelector('h3 a');
       const href = a?.getAttribute('href') || '';
