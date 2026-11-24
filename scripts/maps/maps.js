@@ -1404,7 +1404,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   const BOX_COL = { A: '#15803d', B: '#b45309', C: '#94a3b8' };
   const boxTag = (c) => (c.box && c.box !== 'C' ? ` <span title="AI đánh giá khả năng dùng thùng carton / thùng offset số lượng lớn${c.boxWhy ? `: ${esc(c.boxWhy)}` : ''}" style="display:inline-block;padding:0 6px;border-radius:6px;background:${BOX_COL[c.box]}1a;border:1px solid ${BOX_COL[c.box]}66;color:${BOX_COL[c.box]};font-size:10.5px;font-weight:900;white-space:nowrap">${BOX_LB[c.box]}</span>` : '');
   // dùng chung nhãn với bảng 📋 Danh sách công ty (maps-tab.js – cùng world): cột 🏭 Công ty gần đấy hiện y như panel phải
-  window.dgTags = { rateTag, mstIcon, indTag, areaTag, boxTag, phoneHtml };
+  window.dgTags = { rateTag, mstIcon, indTag, areaTag, boxTag, phoneHtml, aiAsk };
   let boxPause = 0;
   let boxBusy = false;
   const boxSt = { phase: 'idle', n: 0, last: '' };

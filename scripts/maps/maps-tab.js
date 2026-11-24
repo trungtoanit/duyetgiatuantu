@@ -602,7 +602,50 @@ ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (�
   const mpIsPhoto = (u) => /^https:\/\/lh\d\.googleusercontent\.com\/(gps-cs-s|gps-proxy|p)\//.test(u);
   // ⭐ Đánh giá: bấm sao → mở tab “Đánh giá” trong khung Google Maps ẩn của popup (cùng google.com), đọc tối đa 10 đánh giá
   // (người, số sao, thời gian, nội dung) → lưu cloud (c.reviews) và hiện ở mục Đánh giá. Không đọc được → mở Google Maps tab mới.
+  // 🤖 OpenAI tóm tắt + đánh giá các đánh giá Google (góc nhìn bán thùng carton): tóm tắt, điểm tốt / xấu, quy mô – sản xuất,
+  // nhận định khách hàng tiềm năng. Lưu c.revAi (cloud). Bấm “Tóm tắt lại” để chạy lại.
+  async function mpReviewAi(id) {
+    const c = mpData.places[id];
+    const ask = window.dgTags?.aiAsk;
+    if (!c?.reviews?.length || !ask) return;
+    mpUi.revAiBusy = id;
+    render();
+    try {
+      const txt = c.reviews.map((r, i) => `${i + 1}. ${r.star}★ (${r.when || ''}) ${r.who || ''}: ${r.text || '(không có chữ)'}`).join('\n');
+      const out = await ask({
+        system: 'Bạn là trợ lý bán hàng của công ty sản xuất thùng carton / bao bì Tuấn Tú. Đọc các đánh giá Google Maps của 1 công ty và nhận xét ngắn gọn bằng tiếng Việt. Chỉ trả JSON.',
+        prompt: `Công ty: ${c.legalName || c.name}${c.ind ? ` (ngành: ${c.ind})` : ''}${c.rate ? `, điểm Google ${c.rate}★ / ${c.rateN || 0} đánh giá` : ''}.\nCác đánh giá:\n${txt}\n\nTrả JSON: {"tom_tat":"2-3 câu tóm tắt chung","tot":["điểm tốt"],"xau":["điểm xấu"],"quy_mo":"quy mô / hoạt động sản xuất suy ra từ đánh giá (vd. xưởng lớn, nhiều công nhân, xuất khẩu) hoặc 'không rõ'","danh_gia":"Tốt|Trung bình|Kém","tiem_nang":"cao|vừa|thấp","ly_do":"1 câu: vì sao là khách tiềm năng mua thùng carton (hoặc không)"}`,
+        maxTokens: 800,
+      });
+      const j = JSON.parse((out.match(/\{[\s\S]*\}/) || ['{}'])[0]);
+      const cur = mpData.places[id];
+      await mpSave({ [id]: { ...cur, revAi: { ...j, at: Date.now(), n: c.reviews.length } } });
+    } catch (e) {
+      alert(`🤖 Tóm tắt đánh giá lỗi: ${e.message || e}`);
+    } finally {
+      mpUi.revAiBusy = null;
+      render();
+    }
+  }
+  function mpRevAiHtml(c) {
+    const a = c.revAi;
+    const busy = mpUi.revAiBusy === c.id;
+    const btn = `<button data-mp="revai" data-id="${esc(c.id)}" ${busy ? 'disabled' : ''} style="cursor:pointer;border:1px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:7px;padding:2px 9px;font:inherit;font-size:11.5px;font-weight:800">${busy ? '⏳ AI đang đọc…' : a ? '🤖 Tóm tắt lại' : '🤖 AI tóm tắt & đánh giá'}</button>`;
+    if (!a) return `<div style="margin:2px 0 6px">${btn}</div>`;
+    const col = a.danh_gia === 'Tốt' ? '#15803d' : a.danh_gia === 'Kém' ? '#b91c1c' : '#b45309';
+    const tn = { cao: ['#15803d', '#dcfce7'], 'vừa': ['#b45309', '#fef3c7'], 'thấp': ['#64748b', '#f1f5f9'] }[a.tiem_nang] || ['#64748b', '#f1f5f9'];
+    const li = (arr, ic) => (Array.isArray(arr) && arr.length ? arr.slice(0, 4).map((x) => `<div>${ic} ${esc(x)}</div>`).join('') : '');
+    return `<div style="margin:2px 0 8px;padding:8px 10px;border-radius:10px;background:#faf5ff;border:1px solid #e9d5ff;font-size:12.5px;line-height:1.5">
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px"><b style="color:#6d28d9">🤖 AI nhận xét</b><span style="font-weight:900;color:${col}">${esc(a.danh_gia || '')}</span>${a.tiem_nang ? `<span style="font-weight:900;color:${tn[0]};background:${tn[1]};border-radius:6px;padding:0 6px">📦 Tiềm năng ${esc(a.tiem_nang)}</span>` : ''}<span style="flex:1"></span>${btn}</div>
+${a.tom_tat ? `<div style="color:#1e293b">${esc(a.tom_tat)}</div>` : ''}${li(a.tot, '👍')}${li(a.xau, '👎')}${a.quy_mo ? `<div>🏭 ${esc(a.quy_mo)}</div>` : ''}${a.ly_do ? `<div style="color:#475569;font-style:italic">💡 ${esc(a.ly_do)}</div>` : ''}
+<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">dựa trên ${a.n || ''} đánh giá · ${a.at ? new Date(a.at).toLocaleDateString('vi-VN') : ''}</div></div>`;
+  }
   function mpReviewsHtml(c) {
+    const rv = c.reviews || [];
+    if (rv.length) return mpRevAiHtml(c) + mpReviewsList(c);
+    return mpReviewsList(c);
+  }
+  function mpReviewsList(c) {
     const rv = c.reviews || [];
     if (!rv.length) return `<span style="color:#94a3b8;font-size:12px">${mpUi.revBusy === c.id ? '⏳ Đang đọc đánh giá từ Google Maps…' : 'Chưa đọc được đánh giá.'}</span>`;
     return rv.map((r) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9;font-size:12.5px"><div><b>${esc(r.who || 'Ẩn danh')}</b> <span style="color:#f59e0b">${'★'.repeat(r.star || 0)}${'☆'.repeat(5 - (r.star || 0))}</span> <span style="color:#94a3b8;font-size:11px">${esc(r.when || '')}</span></div>${r.text ? `<div style="color:#334155;white-space:pre-wrap">${esc(r.text)}</div>` : ''}</div>`).join('') + `<div style="font-size:10.5px;color:#94a3b8;margin-top:3px">☁️ ${rv.length} đánh giá đã lưu${c.reviewsAt ? ` · ${new Date(c.reviewsAt).toLocaleDateString('vi-VN')}` : ''}</div>`;
@@ -652,6 +695,7 @@ ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (�
     if (out.length) {
       const cur = mpData.places[id] || c0;
       await mpSave({ [id]: { ...cur, reviews: out, reviewsAt: Date.now() } });
+      setTimeout(() => mpReviewAi(id).catch(() => {}), 50);
     } else {
       const href = c0?.href || c0?.url;
       if (href) window.open(href, '_blank', 'noopener');
@@ -812,6 +856,10 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
         alert(`Không lưu được: ${err.message || err}`);
         render();
       });
+      return;
+    }
+    if (k === 'revai' && c) {
+      mpReviewAi(id).catch(() => {});
       return;
     }
     if (k === 'reviews' && c) {
