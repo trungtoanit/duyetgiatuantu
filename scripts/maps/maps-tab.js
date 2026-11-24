@@ -290,6 +290,19 @@ button{font:inherit}`;
       root.addEventListener('click', (e) => mpClick(e).catch((err) => alert(err.message || err)));
       root.addEventListener('input', mpInput);
       root.addEventListener('change', mpChange);
+      // 🖼 slider ảnh: cuộn / vuốt xong → cập nhật số thứ tự + viền ảnh nhỏ đang xem
+      root.addEventListener('scroll', (e) => {
+        const tr = e.target;
+        if (!tr?.matches?.('[data-mp-track]')) return;
+        const i = Math.round(tr.scrollLeft / Math.max(1, tr.clientWidth));
+        const sl = tr.closest('[data-mp-slider]');
+        const cnt = sl?.querySelector('[data-mp-cnt]');
+        if (cnt) cnt.textContent = `${i + 1}/${tr.children.length}`;
+        sl?.nextElementSibling?.querySelectorAll('[data-mp="slg"]').forEach((im, k) => {
+          im.style.borderColor = k === i ? '#2563eb' : 'transparent';
+          im.style.opacity = k === i ? '1' : '.7';
+        });
+      }, true);
     }
     const rows = mpRows();
     const PER = 100;
@@ -494,7 +507,13 @@ ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (�
   function mpPhotosHtml(c) {
     const ps = c?.photos || [];
     if (!ps.length) return '<span style="color:#94a3b8;font-size:12px">Chưa có ảnh – để popup mở vài giây, ảnh trong khung Google Maps bên phải sẽ tự lưu lên cloud.</span>';
-    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px">${ps.map((u) => `<a href="${esc(mpPhotoBase(u))}=w1600" target="_blank" rel="noopener" title="Mở ảnh lớn"><img src="${esc(u)}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block"></a>`).join('')}</div><div style="font-size:10.5px;color:#94a3b8;margin-top:3px">☁️ ${ps.length} ảnh đã lưu${c.photosAt ? ` · ${new Date(c.photosAt).toLocaleDateString('vi-VN')}` : ''}</div>`;
+    // 🖼 slider: ảnh lớn kéo / vuốt ngang (scroll-snap) + nút ‹ › + số thứ tự + dải ảnh nhỏ bên dưới
+    const ab = 'position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;background:rgba(15,23,42,.55);color:#fff;font-size:20px;font-weight:900;line-height:34px;text-align:center';
+    return `<div data-mp-slider style="position:relative;margin-top:4px">
+<div data-mp-track style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;border-radius:10px;background:#0f172a;scrollbar-width:none">${ps.map((u, i) => `<a href="${esc(mpPhotoBase(u))}=w1600" target="_blank" rel="noopener" title="Mở ảnh lớn" style="flex:0 0 100%;scroll-snap-align:center"><img src="${esc(mpPhotoBase(u))}=w900" data-i="${i}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block"></a>`).join('')}</div>
+${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};left:6px">‹</button><button data-mp="sln" title="Ảnh sau" style="${ab};right:6px">›</button>` : ''}
+<span data-mp-cnt style="position:absolute;right:8px;bottom:8px;background:rgba(15,23,42,.65);color:#fff;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800">1/${ps.length}</span></div>
+<div style="display:flex;gap:4px;overflow-x:auto;margin-top:5px;padding-bottom:2px">${ps.map((u, i) => `<img data-mp="slg" data-i="${i}" src="${esc(u)}" loading="lazy" referrerpolicy="no-referrer" style="flex:0 0 64px;height:48px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i ? 'transparent' : '#2563eb'};opacity:${i ? '.7' : '1'}">`).join('')}</div></div><div style="font-size:10.5px;color:#94a3b8;margin-top:3px">☁️ ${ps.length} ảnh đã lưu${c.photosAt ? ` · ${new Date(c.photosAt).toLocaleDateString('vi-VN')}` : ''}</div>`;
   }
   // Theo dõi khung Google Maps ~40 giây khi popup đang mở: gặp ảnh mới thì gộp vào ảnh đã lưu (tối đa 12) và lưu cloud
   async function mpWatchPhotos(id) {
@@ -622,6 +641,16 @@ ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (�
     const c = id ? mpData.places[id] : null;
     if (k === 'sel') return t.checked ? mpUi.sel.add(id) : mpUi.sel.delete(id);
     e.preventDefault();
+    if (k === 'slp' || k === 'sln' || k === 'slg') {
+      // 🖼 slider ảnh: cuộn dải ảnh lớn tới ảnh trước / sau / ảnh nhỏ vừa bấm (không vẽ lại popup)
+      const tr = root.querySelector('[data-mp-track]');
+      if (!tr) return;
+      const n = tr.children.length;
+      const cur = Math.round(tr.scrollLeft / tr.clientWidth);
+      const to = k === 'slg' ? Number(t.dataset.i) : (cur + (k === 'sln' ? 1 : -1) + n) % n;
+      tr.scrollTo({ left: to * tr.clientWidth, behavior: 'smooth' });
+      return;
+    }
     if (k === 'selall') {
       const ids = [...root.querySelectorAll('[data-mp="sel"]')].map((x) => x.dataset.id);
       const on = !ids.every((x) => mpUi.sel.has(x));
