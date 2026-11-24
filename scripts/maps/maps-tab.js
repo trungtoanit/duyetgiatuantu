@@ -958,7 +958,7 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
     }
     else if (k === 'pdf') {
       // cùng bản in với Google Maps (scripts/shared/company-pdf.js); in đúng danh sách đang lọc
-      const f = [mpUi.box === 'A' ? 'Tiềm năng thùng cao' : mpUi.box === 'B' ? 'Tiềm năng thùng vừa' : mpUi.box === 'AB' ? 'Tiềm năng thùng cao + vừa' : '', mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
+      const f = [mpUi.box === 'A' ? 'Tiềm năng thùng cao' : mpUi.box === 'B' ? 'Tiềm năng thùng vừa' : mpUi.box === 'AB' ? 'Tiềm năng thùng cao + vừa' : '', mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.tel === 'any' ? 'Có SĐT' : mpUi.tel === 'mob' ? 'Chỉ di động' : mpUi.tel === 'tel' ? 'Chỉ số bàn' : mpUi.tel === 'none' ? 'Không có SĐT' : '', mpUi.amin ? `Diện tích ≥ ${Number(mpUi.amin).toLocaleString('vi-VN')} m²` : '', mpUi.sort === 'near' ? 'Gần → xa' : mpUi.sort === 'area' ? 'Xưởng lớn → nhỏ' : mpUi.sort === 'rate' ? 'Nhiều đánh giá' : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
       dgCompanyPdf({
         title: `Danh sách công ty – ${f.length ? f.join(' · ') : 'Tất cả'}`,
         rows: mpRows().map((c) => {
@@ -966,6 +966,7 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
           return { name: e?.name || c.legalName || c.name, mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, kcn: c.kcn || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
         }),
         erpHost: ERP,
+        group: !mpUi.sort || mpUi.sort === 'name', // đang sắp gần → xa / xưởng lớn… → in đúng thứ tự đó, không gom KCN
       });
       return;
     }

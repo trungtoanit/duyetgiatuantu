@@ -1,7 +1,8 @@
 // Dùng chung: dựng + in bản PDF "Danh sách công ty" (Google Maps và tab 📍 Công ty Maps trên CRM).
 // Sửa định dạng ở ĐÂY → cả 2 nơi đổi giống nhau. Được nạp trước maps.js / panel.js (cùng world USER_SCRIPT) → hàm toàn cục.
 // rows: [{ name (tên hiển thị), mst, ind, addr, phone, kcn, erp: { id, code, staffName } | null }]
-function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre = null }) {
+// group: false → không gom theo KCN, giữ đúng thứ tự rows (vd. đang sắp Gần → xa / Xưởng lớn → nhỏ)
+function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre = null, group = true }) {
   const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   // +84 274 7303 689 → 0274 7303 689 (gọn hơn, không bị cắt cột)
   const vnPhone = (p) => String(p || '').trim().replace(/^\+?84[\s.-]*/, '0').replace(/\s+/g, ' ');
@@ -26,13 +27,19 @@ function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(c);
   }
-  const order = [...groups.entries()].sort((a, b) => (a[0] === 'Ngoài KCN') - (b[0] === 'Ngoài KCN') || b[1].length - a[1].length);
+  const order = group ? [...groups.entries()].sort((a, b) => (a[0] === 'Ngoài KCN') - (b[0] === 'Ngoài KCN') || b[1].length - a[1].length) : [['', rows]];
   const nErp = rows.filter((c) => c.erp).length;
   let stt = 0;
-  const body = order.map(([k, list2]) => `<tr class="g"><td colspan="8">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k)} · ${list2.length} công ty</td></tr>${list2.sort((a, b) => a.name.localeCompare(b.name, 'vi')).map((c) => {
+  // SĐT di động → link mở Zalo (https://zalo.me/0xxxxxxxxx: trên máy có app Zalo thì mở app, không thì Zalo web) – bấm được cả trong file PDF
+  const zaloOf = (p) => {
+    let d = String(p || '').replace(/\D/g, '');
+    if (d.startsWith('84')) d = `0${d.slice(2)}`;
+    return `https://zalo.me/${d}`;
+  };
+  const body = order.map(([k, list2]) => `${group ? `<tr class="g"><td colspan="8">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k)} · ${list2.length} công ty</td></tr>` : ''}${(group ? list2.sort((a, b) => a.name.localeCompare(b.name, 'vi')) : list2).map((c) => {
     const e = c.erp;
     const nm = c.name.toLocaleUpperCase('vi');
-    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.addr || '')}">${esc(c.addr || '')}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="zalo://conversation?phone=${String(c.phone).replace(/\D/g, '').replace(/^0/, '84')}" title="Mở app Zalo trên máy" style="color:inherit">${esc(vnPhone(c.phone))}</a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
+    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.addr || '')}">${esc(c.addr || '')}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloOf(c.phone)}" target="_blank" rel="noopener" title="Mở Zalo" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo↗</span></a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
   }).join('')}`).join('');
   const now = new Date();
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)} – ${now.toLocaleDateString('vi-VN')}</title><style>
