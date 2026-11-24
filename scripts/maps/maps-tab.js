@@ -577,7 +577,7 @@ ${linkBox}${mpDetailBox()}</div>`;
 <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 16px;background:linear-gradient(90deg,#eff6ff,#f8fafc);border-bottom:1px solid #e2e8f0">
 <div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:900;color:#0f172a">${esc(name)}</div>
 ${c.legalName && c.name !== c.legalName ? `<div style="font-size:12px;color:#64748b">Tên trên Google: ${esc(c.name)}</div>` : ''}
-<div style="font-size:12.5px;margin-top:3px">${stars}${c.ind ? ` · <span style="background:#ecfeff;color:#0e7490;border-radius:6px;padding:0 6px;font-weight:800">${esc(c.ind)}</span>` : ''}${c.cat ? ` · <span style="color:#64748b">${esc(c.cat)}</span>` : ''}</div></div>
+<div style="font-size:12.5px;margin-top:3px">${stars ? `<span data-mp="reviews" data-id="${esc(c.id)}" title="Bấm để xem đánh giá trên Google Maps" style="cursor:pointer;border-bottom:1px dotted #f59e0b">${stars}</span>` : ''}${c.ind ? ` · <span style="background:#ecfeff;color:#0e7490;border-radius:6px;padding:0 6px;font-weight:800">${esc(c.ind)}</span>` : ''}${c.cat ? ` · <span style="color:#64748b">${esc(c.cat)}</span>` : ''}</div></div>
 <span data-mp="dclose" title="Đóng (Esc)" style="cursor:pointer;color:#64748b;font-weight:900;font-size:18px">✕</span></div>
 <div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr minmax(260px,320px);gap:0">
 <div style="padding:4px 16px 14px;border-right:1px solid #f1f5f9">
@@ -585,6 +585,7 @@ ${sec('Pháp lý', row('Mã số thuế', c.mst ? `<a href="${esc(c.mstUrl || `h
 ${sec('Vị trí', row('Khu công nghiệp', c.kcn ? `<b style="color:#9a3412">🏭 ${esc(c.kcn)}</b>` : '<span style="color:#94a3b8">ngoài KCN</span>') + row('Địa chỉ', esc(c.addr || '')) + row('Khoảng cách', d != null ? `<b style="color:#0369a1">📍 ${d.toFixed(1)} km</b> từ xưởng Tuấn Tú` : ''))}
 ${sec('Quy mô', row('Diện tích xưởng', mpAreaCell(c)) + row('Tiềm năng thùng', box ? `📦 ${box}${c.boxWhy ? `<div style="font-size:11.5px;color:#64748b">${esc(c.boxWhy)}</div>` : ''}` : ''))}
 ${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)) + row('ERP', e ? `<a href="${ERP}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}` : `<button data-mp="link" data-id="${esc(c.id)}" style="cursor:pointer;border:1px solid #86efac;color:#166534;background:#f0fdf4;border-radius:7px;padding:2px 8px;font-weight:700">🔗 Kết nối ERP</button>`))}
+${c.reviews?.length || mpUi.revFor === c.id ? sec('Đánh giá', `<div data-mp-reviews>${mpReviewsHtml(c)}</div>`) : ''}
 ${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
 </div>
@@ -599,6 +600,64 @@ ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (�
   // Ảnh Google: bỏ phần cỡ ảnh sau "=" để so trùng, lưu cỡ vừa xem (800px); chỉ lấy ảnh địa điểm, bỏ ảnh đại diện người đánh giá (/a/, /a-/)
   const mpPhotoBase = (u) => String(u || '').split('=')[0];
   const mpIsPhoto = (u) => /^https:\/\/lh\d\.googleusercontent\.com\/(gps-cs-s|gps-proxy|p)\//.test(u);
+  // ⭐ Đánh giá: bấm sao → mở tab “Đánh giá” trong khung Google Maps ẩn của popup (cùng google.com), đọc tối đa 10 đánh giá
+  // (người, số sao, thời gian, nội dung) → lưu cloud (c.reviews) và hiện ở mục Đánh giá. Không đọc được → mở Google Maps tab mới.
+  function mpReviewsHtml(c) {
+    const rv = c.reviews || [];
+    if (!rv.length) return `<span style="color:#94a3b8;font-size:12px">${mpUi.revBusy === c.id ? '⏳ Đang đọc đánh giá từ Google Maps…' : 'Chưa đọc được đánh giá.'}</span>`;
+    return rv.map((r) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9;font-size:12.5px"><div><b>${esc(r.who || 'Ẩn danh')}</b> <span style="color:#f59e0b">${'★'.repeat(r.star || 0)}${'☆'.repeat(5 - (r.star || 0))}</span> <span style="color:#94a3b8;font-size:11px">${esc(r.when || '')}</span></div>${r.text ? `<div style="color:#334155;white-space:pre-wrap">${esc(r.text)}</div>` : ''}</div>`).join('') + `<div style="font-size:10.5px;color:#94a3b8;margin-top:3px">☁️ ${rv.length} đánh giá đã lưu${c.reviewsAt ? ` · ${new Date(c.reviewsAt).toLocaleDateString('vi-VN')}` : ''}</div>`;
+  }
+  async function mpReadReviews(id) {
+    const c0 = mpData.places[id];
+    mpUi.revFor = id;
+    mpUi.revBusy = id;
+    render();
+    const getDoc = () => {
+      try {
+        return root?.querySelector('[data-mp-place]')?.contentDocument || null;
+      } catch {
+        return null;
+      }
+    };
+    let out = [];
+    for (let i = 0; i < 30 && !out.length; i++) {
+      await new Promise((r) => setTimeout(r, 700));
+      const doc = getDoc();
+      if (!doc?.body) continue;
+      // mở tab Đánh giá / Reviews (1 lần)
+      if (!doc.__dgRevTab) {
+        const tab = [...doc.querySelectorAll('button[role="tab"], button')].find((b) => /^(Reviews|Đánh giá|Bài đánh giá)/i.test((b.getAttribute('aria-label') || b.innerText || '').trim()));
+        if (tab) {
+          tab.click();
+          doc.__dgRevTab = 1;
+          continue;
+        }
+      }
+      out = [...doc.querySelectorAll('div[data-review-id]')].filter((el) => el.querySelector('span[role="img"][aria-label]'))
+        .map((el) => {
+          const more = el.querySelector('button[aria-label^="See more"], button[aria-label^="Xem thêm"], button.w8nwRe');
+          if (more) more.click();
+          const st = el.querySelector('span[role="img"][aria-label]')?.getAttribute('aria-label') || '';
+          return {
+            who: (el.getAttribute('aria-label') || el.querySelector('.d4r55')?.innerText || '').trim().slice(0, 80),
+            star: Number((st.match(/(\d)/) || [])[1]) || 0,
+            when: (el.querySelector('.rsqaWe')?.innerText || '').trim().slice(0, 40),
+            text: (el.querySelector('.wiI7pd')?.innerText || '').trim().slice(0, 600),
+          };
+        })
+        .filter((r, k, a) => r.who && a.findIndex((x) => x.who === r.who && x.text === r.text) === k)
+        .slice(0, 10);
+    }
+    mpUi.revBusy = null;
+    if (out.length) {
+      const cur = mpData.places[id] || c0;
+      await mpSave({ [id]: { ...cur, reviews: out, reviewsAt: Date.now() } });
+    } else {
+      const href = c0?.href || c0?.url;
+      if (href) window.open(href, '_blank', 'noopener');
+    }
+    render();
+  }
   function mpPhotosHtml(c) {
     const ps = c?.photos || [];
     if (!ps.length) return '<span style="color:#94a3b8;font-size:12px">Chưa có ảnh – để popup mở vài giây, ảnh trong khung Google Maps bên phải sẽ tự lưu lên cloud.</span>';
@@ -753,6 +812,10 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
         alert(`Không lưu được: ${err.message || err}`);
         render();
       });
+      return;
+    }
+    if (k === 'reviews' && c) {
+      mpReadReviews(id).catch(() => {});
       return;
     }
     if (k === 'slp' || k === 'sln' || k === 'slg') {
