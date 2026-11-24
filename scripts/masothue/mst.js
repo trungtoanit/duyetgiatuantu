@@ -20,8 +20,8 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const GAP = 15e3;
 
-  if (location.hash === '#dgmst') localStorage.setItem('dgMstWorker', '1');
-  if (localStorage.getItem('dgMstWorker') !== '1') return; // tab masothue bình thường → không làm gì
+  if (location.hash === '#dgmst') sessionStorage.setItem('dgMstWorker', '1'); // chỉ tab mở bằng #dgmst mới tra ngầm (theo từng tab)
+  if (sessionStorage.getItem('dgMstWorker') !== '1') return; // tab masothue bình thường → không làm gì
 
   const bar = document.createElement('div');
   bar.setAttribute('style', 'position:fixed;left:12px;bottom:12px;z-index:2147483000;max-width:440px;padding:8px 12px;border-radius:12px;background:#4c1d95;color:#fff;font:700 13px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;box-shadow:0 10px 26px rgba(0,0,0,.3)');
@@ -32,7 +32,7 @@
   bar.addEventListener('click', (e) => {
     if (!e.target.closest('[data-off]')) return;
     e.preventDefault();
-    localStorage.removeItem('dgMstWorker');
+    sessionStorage.removeItem('dgMstWorker');
     bar.remove();
   });
   const blocked = () => /Just a moment|Attention Required|Cloudflare/i.test(document.title) || !!document.querySelector('#challenge-form, .cf-turnstile, iframe[src*="challenges.cloudflare.com"]');
@@ -77,8 +77,8 @@
 
   async function run() {
     // masothue có thể chuyển thẳng sang trang công ty (mất ?dgjob) → nhớ việc đang làm trong localStorage
-    const job = new URLSearchParams(location.search).get('dgjob') || (Date.now() - (Number(localStorage.getItem('dgMstJobAt')) || 0) < 60e3 ? localStorage.getItem('dgMstJob') : '');
-    localStorage.removeItem('dgMstJob');
+    const job = new URLSearchParams(location.search).get('dgjob') || (Date.now() - (Number(sessionStorage.getItem('dgMstJobAt')) || 0) < 60e3 ? sessionStorage.getItem('dgMstJob') : '');
+    sessionStorage.removeItem('dgMstJob');
     if (job) {
       if (blocked()) {
         await kvMerge('mstJobs', { [job]: { status: 'blocked', at: Date.now() } });
@@ -96,18 +96,31 @@
       // tra bằng MST mà masothue ra trang danh sách → mở trang công ty đúng MST đó để đọc đủ bảng thông tin (1 lần)
       const q = String(jobs[job]?.q || '');
       const hit = /^\d{10}(-\d{3})?$/.test(q) && !list[0]?.info && list.find((x) => String(x.mst).replace(/\D/g, '') === q.replace(/\D/g, '') && x.href);
-      if (hit && localStorage.getItem('dgMstHop') !== job) {
-        localStorage.setItem('dgMstHop', job);
-        localStorage.setItem('dgMstJob', job);
-        localStorage.setItem('dgMstJobAt', String(Date.now()));
+      if (hit && sessionStorage.getItem('dgMstHop') !== job) {
+        sessionStorage.setItem('dgMstHop', job);
+        sessionStorage.setItem('dgMstJob', job);
+        sessionStorage.setItem('dgMstJobAt', String(Date.now()));
         location.href = hit.href;
         return;
       }
-      await kvMerge('mstJobs', { [job]: { ...(jobs[job] || {}), status: 'done', list, doneAt: Date.now() } });
-      say(`✅ Đã tra: ${jobs[job]?.q || ''} → ${list.length} kết quả`);
+      // tra bằng MST: chỉ giữ kết quả ĐÚNG MST đó (trang khác / công ty khác → coi như không có), tránh lưu nhầm thông tin
+      const isMst = /^\d{10}(-\d{3})?$/.test(q);
+      const out = isMst ? list.filter((x) => String(x.mst).replace(/\D/g, '') === q.replace(/\D/g, '')) : list;
+      await kvMerge('mstJobs', { [job]: { ...(jobs[job] || {}), status: 'done', list: out, doneAt: Date.now() } });
+      say(`✅ Đã tra: ${jobs[job]?.q || ''} → ${out.length} kết quả`);
       localStorage.setItem('dgMstLast', String(Date.now()));
     }
+    const TAB = sessionStorage.getItem('dgMstTab') || Math.random().toString(36).slice(2);
+    sessionStorage.setItem('dgMstTab', TAB);
     for (;;) {
+      // chỉ 1 tab masothue nhận việc (khoá kv mstLock, 20 giây) – tab khác đứng chờ
+      const lk = await kvGet('mstLock').catch(() => ({}));
+      if (lk?.tab && lk.tab !== TAB && Date.now() - (lk.at || 0) < 20e3) {
+        say('💤 Tab masothue khác đang tra MST – tab này đứng chờ.');
+        await sleep(5000);
+        continue;
+      }
+      await call({ type: 'kv.set', key: 'mstLock', value: { tab: TAB, at: Date.now() } }).catch(() => {});
       await call({ type: 'kv.set', key: 'mstAlive', value: { at: Date.now() } }).catch(() => {});
       const jobs = await kvGet('mstJobs').catch(() => ({}));
       const next = Object.entries(jobs).filter(([, j]) => j?.status === 'pending').sort((a, b) => a[1].at - b[1].at)[0];
@@ -118,8 +131,8 @@
           await sleep(wait);
         }
         await kvMerge('mstJobs', { [next[0]]: { ...next[1], status: 'working', startAt: Date.now() } });
-        localStorage.setItem('dgMstJob', next[0]);
-        localStorage.setItem('dgMstJobAt', String(Date.now()));
+        sessionStorage.setItem('dgMstJob', next[0]);
+        sessionStorage.setItem('dgMstJobAt', String(Date.now()));
         location.href = `https://masothue.com/Search/?q=${encodeURIComponent(next[1].q)}&type=auto&force-search=1&dgjob=${encodeURIComponent(next[0])}`;
         return;
       }
