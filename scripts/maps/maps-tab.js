@@ -422,16 +422,56 @@ ${c.legalName && c.name !== c.legalName ? `<div style="font-size:12px;color:#647
 <span data-mp="dclose" title="Đóng (Esc)" style="cursor:pointer;color:#64748b;font-weight:900;font-size:18px">✕</span></div>
 <div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:0">
 <div style="padding:4px 16px 14px;border-right:1px solid #f1f5f9">
-${sec('Pháp lý', row('Mã số thuế', c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800">${esc(c.mst)}</a>` : '<span style="color:#94a3b8">chưa có</span>') + row('Địa chỉ pháp lý', esc(c.legalAddr || '')))}
+${sec('Pháp lý', row('Mã số thuế', c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800">${esc(c.mst)}</a>` : '<span style="color:#94a3b8">chưa có</span>') + (c.mstInfo?.length ? c.mstInfo.filter(([k]) => !/^Mã số thuế$/i.test(k)).map(([k, v]) => row(esc(k), esc(v))).join('') : '') + (c.mstInfo?.length ? '' : row('Địa chỉ pháp lý', esc(c.legalAddr || ''))) + (c.mst ? `<div style="font-size:11px;color:#94a3b8;margin-top:3px">${c.mstInfo?.length ? `🧾 masothue · ${new Date(c.mstInfoAt || c.mstAt || Date.now()).toLocaleDateString('vi-VN')} · ` : ''}<a href="#" data-mp="mstinfo" data-id="${esc(c.id)}">${c.mstInfo?.length ? 'lấy lại' : '🧾 Lấy đủ thông tin từ masothue'}</a>${mpMstMsg[c.id] ? ` · ${esc(mpMstMsg[c.id])}` : ''}</div>` : ''))}
 ${sec('Vị trí', row('Khu công nghiệp', c.kcn ? `<b style="color:#9a3412">🏭 ${esc(c.kcn)}</b>` : '<span style="color:#94a3b8">ngoài KCN</span>') + row('Địa chỉ', esc(c.addr || '')) + row('Khoảng cách', d != null ? `<b style="color:#0369a1">📍 ${d.toFixed(1)} km</b> từ xưởng Tuấn Tú` : ''))}
 ${sec('Quy mô', row('Diện tích xưởng', mpAreaCell(c)) + row('Tiềm năng thùng', box ? `📦 ${box}${c.boxWhy ? `<div style="font-size:11.5px;color:#64748b">${esc(c.boxWhy)}</div>` : ''}` : ''))}
 ${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)) + row('ERP', e ? `<a href="${ERP}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}` : `<button data-mp="link" data-id="${esc(c.id)}" style="cursor:pointer;border:1px solid #86efac;color:#166534;background:#f0fdf4;border-radius:7px;padding:2px 8px;font-weight:700">🔗 Kết nối ERP</button>`))}
+${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
 </div>
 <div style="display:grid;grid-template-rows:260px 1fr;min-height:560px;background:#f8fafc">
 ${sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;border:0;border-bottom:1px solid #e2e8f0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>'}
-${gm ? `<iframe src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps" loading="lazy" style="width:100%;height:100%;min-height:300px;border:0"></iframe>` : ''}
+${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps" loading="lazy" style="width:100%;height:100%;min-height:300px;border:0"></iframe>` : ''}
 </div></div></div></div>`;
+  }
+  // 📸 Ảnh công ty: đọc ảnh trong khung trang Google Maps của popup (cùng tên miền google.com nên đọc được), lưu đường dẫn ảnh lên cloud (c.photos)
+  const MP_PHOTO_MAX = 12;
+  // Ảnh Google: bỏ phần cỡ ảnh sau "=" để so trùng, lưu cỡ vừa xem (800px); chỉ lấy ảnh địa điểm, bỏ ảnh đại diện người đánh giá (/a/, /a-/)
+  const mpPhotoBase = (u) => String(u || '').split('=')[0];
+  const mpIsPhoto = (u) => /^https:\/\/lh\d\.googleusercontent\.com\/(gps-cs-s|gps-proxy|p)\//.test(u);
+  function mpPhotosHtml(c) {
+    const ps = c?.photos || [];
+    if (!ps.length) return '<span style="color:#94a3b8;font-size:12px">Chưa có ảnh – để popup mở vài giây, ảnh trong khung Google Maps bên phải sẽ tự lưu lên cloud.</span>';
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px">${ps.map((u) => `<a href="${esc(mpPhotoBase(u))}=w1600" target="_blank" rel="noopener" title="Mở ảnh lớn"><img src="${esc(u)}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block"></a>`).join('')}</div><div style="font-size:10.5px;color:#94a3b8;margin-top:3px">☁️ ${ps.length} ảnh đã lưu${c.photosAt ? ` · ${new Date(c.photosAt).toLocaleDateString('vi-VN')}` : ''}</div>`;
+  }
+  // Theo dõi khung Google Maps ~40 giây khi popup đang mở: gặp ảnh mới thì gộp vào ảnh đã lưu (tối đa 12) và lưu cloud
+  async function mpWatchPhotos(id) {
+    for (let i = 0; i < 27 && mpUi.detail === id && open; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const c = mpData.places[id];
+      let doc = null;
+      try { doc = root?.querySelector('[data-mp-place]')?.contentDocument; } catch {}
+      if (!c || !doc?.body) continue;
+      if ((c.photos || []).length >= MP_PHOTO_MAX) return;
+      const urls = [];
+      for (const img of doc.querySelectorAll('img')) urls.push(img.currentSrc || img.src);
+      for (const el of doc.querySelectorAll('[style*="googleusercontent"]')) {
+        const m = (el.getAttribute('style') || '').match(/url\(["']?([^"')]+)/);
+        if (m) urls.push(m[1].replace(/&quot;/g, ''));
+      }
+      const have = new Set((c.photos || []).map(mpPhotoBase));
+      const add = [];
+      for (const u of urls) {
+        if (!mpIsPhoto(u) || have.has(mpPhotoBase(u))) continue;
+        have.add(mpPhotoBase(u));
+        add.push(`${mpPhotoBase(u)}=w800-h600-k-no`);
+      }
+      if (!add.length) continue;
+      const v = { ...c, photos: [...(c.photos || []), ...add].slice(0, MP_PHOTO_MAX), photosAt: Date.now() };
+      await mpSave({ [id]: v }).catch(() => {});
+      const box = root?.querySelector('[data-mp-photos]');
+      if (box && mpUi.detail === id) box.innerHTML = mpPhotosHtml(v);
+    }
   }
   function mpLinkResults() {
     const q = mpUn(mpUi.lq).trim();
@@ -484,7 +524,11 @@ ${gm ? `<iframe src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps"
     const okName = /^(CÔNG TY|CHI NHÁNH|DOANH NGHIỆP|HỢP TÁC XÃ|CTY)\b/i.test(pickName) ? pickName.toUpperCase() : '';
     const legal = okName ? { legalName: okName, legalAddr: '' } : { legalName: '', legalAddr: '' };
     await mpSave({ [id]: { ...c, ...legal, mst: v, mstUrl: `https://masothue.com/Search/?q=${v}`, mstManual: true, mstSkip: false, mstAt: Date.now(), mstBy: meName || '' } });
-    mpMstMsg[id] = '⏳ Đang lấy tên chuẩn từ masothue…';
+    await mpMstFetch(id, v, okName);
+  }
+  // Xếp việc cho tab tra MST (masothue.com/#dgmst): lấy tên chuẩn, địa chỉ + TOÀN BỘ bảng thông tin thuế (mstInfo) của đúng MST v
+  async function mpMstFetch(id, v, okName = '') {
+    mpMstMsg[id] = '⏳ Đang lấy thông tin từ masothue…';
     render();
     const alive = await kvGet('mstAlive').catch(() => ({}));
     if (Date.now() - (alive?.at || 0) > 20e3) {
@@ -507,8 +551,8 @@ ${gm ? `<iframe src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps"
       const r = (j.list || []).find((x) => String(x.mst).replace(/\D/g, '') === v.replace(/\D/g, ''));
       if (r) {
         const cur = mpData.places[id];
-        await mpSave({ [id]: { ...cur, legalName: r.name, legalAddr: r.addr || cur.legalAddr, mstUrl: r.href || cur.mstUrl } });
-        mpMstMsg[id] = `✅ ${r.name}`;
+        await mpSave({ [id]: { ...cur, legalName: r.name, legalAddr: r.addr || cur.legalAddr, mstUrl: r.href || cur.mstUrl, ...(r.info?.length ? { mstInfo: r.info, mstInfoAt: Date.now() } : {}) } });
+        mpMstMsg[id] = `✅ ${r.name}${r.info?.length ? ` · ${r.info.length} dòng thông tin thuế` : ''}`;
       } else mpMstMsg[id] = okName ? `✅ ${okName} (tên theo kết quả Google – masothue không có đúng MST này)` : 'masothue không có kết quả đúng MST này.';
       return render();
     }
@@ -559,8 +603,15 @@ ${gm ? `<iframe src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps"
       mpUi.link = id;
       mpUi.lq = '';
     } else if (k === 'lclose') mpUi.link = null;
-    else if (k === 'detail') mpUi.detail = id;
+    else if (k === 'detail') {
+      mpUi.detail = id;
+      setTimeout(() => mpWatchPhotos(id), 800);
+    }
     else if (k === 'dclose') mpUi.detail = null;
+    else if (k === 'mstinfo' && c?.mst) {
+      mpMstFetch(id, c.mst);
+      return;
+    }
     else if (k === 'area' && c) {
       const cur = c.area > 0 ? String(c.area) : '';
       const v = prompt(`Diện tích nhà xưởng của ${c.legalName || c.name} (m²):\n(để trống = xoá số nhập tay, cho đo lại từ OpenStreetMap)`, cur);

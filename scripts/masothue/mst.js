@@ -51,7 +51,20 @@
     const mm = (document.querySelector('td[itemprop="taxID"]')?.textContent || '').trim();
     const nm = (document.querySelector('table.table-taxinfo thead th, th[itemprop="name"], h1')?.textContent || '').trim();
     const ad = (document.querySelector('td[itemprop="address"]')?.textContent || '').trim();
-    return mm && nm ? [{ name: nm.replace(/^\d[\d-]*\s*-\s*/, ''), mst: mm, addr: ad, href: location.href.split('?')[0] }] : [];
+    return mm && nm ? [{ name: nm.replace(/^\d[\d-]*\s*-\s*/, ''), mst: mm, addr: ad, href: location.href.split('?')[0], info: taxInfo() }] : [];
+  }
+  // Toàn bộ bảng thông tin trên trang công ty: [[nhãn, giá trị]] theo đúng thứ tự (Mã số thuế, Địa chỉ Thuế, Địa chỉ, Tình trạng,
+  // Người đại diện, Điện thoại, Ngày hoạt động, Quản lý bởi, Loại hình DN, Ngành nghề chính…)
+  function taxInfo() {
+    const out = [];
+    for (const tr of document.querySelectorAll('table.table-taxinfo tbody tr')) {
+      const td = tr.querySelectorAll('td');
+      if (td.length < 2) continue;
+      const k = td[0].innerText.replace(/\s+/g, ' ').trim();
+      const v = td[1].innerText.replace(/\s+/g, ' ').replace(/\s*(Ẩn thông tin|Copy|Sao chép)\s*$/i, '').trim();
+      if (k && v && out.length < 20) out.push([k.slice(0, 40), v.slice(0, 300)]);
+    }
+    return out;
   }
 
   async function run() {
@@ -72,6 +85,16 @@
       await sleep(800);
       const list = parse();
       const jobs = await kvGet('mstJobs');
+      // tra bằng MST mà masothue ra trang danh sách → mở trang công ty đúng MST đó để đọc đủ bảng thông tin (1 lần)
+      const q = String(jobs[job]?.q || '');
+      const hit = /^\d{10}(-\d{3})?$/.test(q) && !list[0]?.info && list.find((x) => String(x.mst).replace(/\D/g, '') === q.replace(/\D/g, '') && x.href);
+      if (hit && localStorage.getItem('dgMstHop') !== job) {
+        localStorage.setItem('dgMstHop', job);
+        localStorage.setItem('dgMstJob', job);
+        localStorage.setItem('dgMstJobAt', String(Date.now()));
+        location.href = hit.href;
+        return;
+      }
       await kvMerge('mstJobs', { [job]: { ...(jobs[job] || {}), status: 'done', list, doneAt: Date.now() } });
       say(`✅ Đã tra: ${jobs[job]?.q || ''} → ${list.length} kết quả`);
       localStorage.setItem('dgMstLast', String(Date.now()));
