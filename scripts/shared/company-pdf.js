@@ -31,6 +31,12 @@ function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre
   const nErp = rows.filter((c) => c.erp).length;
   let stt = 0;
   // SĐT di động → link mở Zalo (https://zalo.me/0xxxxxxxxx: trên máy có app Zalo thì mở app, không thì Zalo web) – bấm được cả trong file PDF
+  // app Zalo trên máy (PC / Mac / điện thoại): zalo://conversation?phone=84…
+  const zaloApp = (p) => {
+    let d = String(p || '').replace(/\D/g, '');
+    if (d.startsWith('0')) d = `84${d.slice(1)}`;
+    return `zalo://conversation?phone=${d}`;
+  };
   const zaloOf = (p) => {
     let d = String(p || '').replace(/\D/g, '');
     if (d.startsWith('84')) d = `0${d.slice(2)}`;
@@ -39,7 +45,7 @@ function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre
   const body = order.map(([k, list2]) => `${group ? `<tr class="g"><td colspan="8">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k)} · ${list2.length} công ty</td></tr>` : ''}${(group ? list2.sort((a, b) => a.name.localeCompare(b.name, 'vi')) : list2).map((c) => {
     const e = c.erp;
     const nm = c.name.toLocaleUpperCase('vi');
-    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.addr || '')}">${esc(c.addr || '')}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloOf(c.phone)}" target="_blank" rel="noopener" title="Mở Zalo" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo↗</span></a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
+    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.addr || '')}">${esc(c.addr || '')}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloApp(c.phone)}" title="Mở chat trong app Zalo trên máy" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo</span></a> <a href="${zaloOf(c.phone)}" target="_blank" rel="noopener" title="Mở Zalo web (khi máy chưa cài app)" style="color:#94a3b8;font-size:9px">web↗</a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
   }).join('')}`).join('');
   const now = new Date();
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)} – ${now.toLocaleDateString('vi-VN')}</title><style>
@@ -67,6 +73,15 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     const a = ev.target.closest?.('a[href]');
     if (!a) return;
     ev.preventDefault();
+    if (/^zalo:/i.test(a.getAttribute('href'))) {
+      // mở app Zalo: gọi giao thức zalo:// ngay trong trang in (không mở tab trống)
+      const f = w.document.createElement('iframe');
+      f.style.display = 'none';
+      f.src = a.getAttribute('href');
+      w.document.body.append(f);
+      setTimeout(() => f.remove(), 3000);
+      return;
+    }
     // SĐT di động → mở app Zalo (lược đồ zalo://, trang in không bị chuyển đi)
     if (/^zalo:/i.test(a.getAttribute('href') || '')) {
       w.location.href = a.getAttribute('href');
