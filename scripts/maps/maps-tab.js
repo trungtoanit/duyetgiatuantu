@@ -421,48 +421,124 @@ ${linkBox}${mpDetailBox()}</div>`;
     if (c.area === 0) return `<span style="font-size:11.5px;color:#94a3b8" title="Đã đo: OpenStreetMap chưa vẽ nhà xưởng ở vị trí này">OSM chưa vẽ</span> ${ed}`;
     return `<span style="font-size:11.5px;color:#94a3b8" title="Chờ lượt đo tự động từ OpenStreetMap (≤ 20 công ty / 30 giây khi đang mở Google Maps)">⏳ chưa đo</span> ${ed}`;
   }
-  // 📐 Bản đồ vệ tinh tự dựng (ô ảnh vệ tinh Google, cỡ cố định) + vẽ lại các phân xưởng đã đo tay (c.areaPoly) lên trên.
-  // Chỉ dùng khi công ty có nét vẽ tay; không có thì giữ khung Google Maps nhúng như cũ.
+  // 📐 Bản đồ vệ tinh tự dựng (ô ảnh vệ tinh Google) + vẽ lại các phân xưởng đã đo tay (c.areaPoly) – KÉO để di chuyển,
+  // LĂN CHUỘT / nút + − để phóng to thu nhỏ. Không có nét đo tay thì giữ khung Google Maps nhúng như cũ.
+  const PM_W = 1600;
+  const PM_H = 1000;
+  const pmPx = (la, ln, z) => {
+    const sc = 256 * 2 ** z;
+    const sn = Math.sin((la * Math.PI) / 180);
+    return [((ln + 180) / 360) * sc, (0.5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI)) * sc];
+  };
+  function pmapInner(rings, mk, z, cx, cy) {
+    const x0 = cx - PM_W / 2;
+    const y0 = cy - PM_H / 2;
+    let tiles = '';
+    for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + PM_W) / 256); tx++)
+      for (let ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + PM_H) / 256); ty++)
+        tiles += `<img src="https://mt${(tx + ty) & 3}.google.com/vt/lyrs=y&hl=vi&x=${tx}&y=${ty}&z=${z}" alt="" draggable="false" style="position:absolute;left:${Math.round(tx * 256 - x0)}px;top:${Math.round(ty * 256 - y0)}px;width:256px;height:256px;user-select:none">`;
+    const fs = Math.max(10, Math.min(16, 4 + z - 8));
+    const poly = rings.map((r, i) => {
+      const q = r.map(([a, b]) => pmPx(a, b, z)).map(([x, y]) => [x - x0, y - y0]);
+      const p2 = q.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+      const m = q.reduce((acc, [x, y]) => [acc[0] + x / q.length, acc[1] + y / q.length], [0, 0]);
+      return `<polygon points="${p2}" fill="rgba(245,158,11,.28)" stroke="#fff" stroke-width="6"/><polygon points="${p2}" fill="none" stroke="#d97706" stroke-width="3"/>${z >= 16 ? `<text x="${m[0].toFixed(0)}" y="${m[1].toFixed(0)}" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#fff" stroke="#92400e" stroke-width="3" paint-order="stroke">X${i + 1}</text>` : ''}`;
+    }).join('');
+    const m2 = mk ? pmPx(mk[0], mk[1], z) : null;
+    return `${tiles}<svg width="${PM_W}" height="${PM_H}" style="position:absolute;left:0;top:0;pointer-events:none">${poly}${m2 ? `<circle cx="${(m2[0] - x0).toFixed(1)}" cy="${(m2[1] - y0).toFixed(1)}" r="7" fill="#ef4444" stroke="#fff" stroke-width="3"/>` : ''}</svg>`;
+  }
+  function pmapRedraw(el) {
+    const rings = JSON.parse(el.dataset.rings || '[]');
+    const mk = el.dataset.mk ? el.dataset.mk.split(',').map(Number) : null;
+    const inn = el.querySelector('[data-pm-in]');
+    inn.style.transform = 'translate(-50%,-50%)';
+    inn.innerHTML = pmapInner(rings, mk, Number(el.dataset.z), Number(el.dataset.cx), Number(el.dataset.cy));
+  }
+  function pmapZoom(el, d) {
+    const z0 = Number(el.dataset.z);
+    const z = Math.max(12, Math.min(20, z0 + d));
+    if (z === z0) return;
+    const k = 2 ** (z - z0);
+    el.dataset.cx = Number(el.dataset.cx) * k;
+    el.dataset.cy = Number(el.dataset.cy) * k;
+    el.dataset.z = z;
+    pmapRedraw(el);
+  }
+  // kéo / lăn chuột / nút + − trên bản đồ (gắn 1 lần vào root của bảng)
+  function pmapWire(rootEl) {
+    if (rootEl.__pm) return;
+    rootEl.__pm = 1;
+    let drag = null;
+    rootEl.addEventListener('pointerdown', (e) => {
+      const el = e.target.closest?.('[data-mp-pmap]');
+      if (!el || e.target.closest('[data-pm]')) return;
+      drag = { el, x: e.clientX, y: e.clientY, dx: 0, dy: 0 };
+      el.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      drag.dx = e.clientX - drag.x;
+      drag.dy = e.clientY - drag.y;
+      drag.el.querySelector('[data-pm-in]').style.transform = `translate(calc(-50% + ${drag.dx}px),calc(-50% + ${drag.dy}px))`;
+    });
+    window.addEventListener('pointerup', () => {
+      if (!drag) return;
+      const { el, dx, dy } = drag;
+      drag = null;
+      el.style.cursor = 'grab';
+      el.dataset.cx = Number(el.dataset.cx) - dx;
+      el.dataset.cy = Number(el.dataset.cy) - dy;
+      pmapRedraw(el);
+    });
+    rootEl.addEventListener('wheel', (e) => {
+      const el = e.target.closest?.('[data-mp-pmap]');
+      if (!el) return;
+      e.preventDefault();
+      pmapZoom(el, e.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
+    rootEl.addEventListener('click', (e) => {
+      const b = e.target.closest?.('[data-pm]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const el = b.closest('[data-mp-pmap]');
+      if (b.dataset.pm === 'in') pmapZoom(el, 1);
+      else if (b.dataset.pm === 'out') pmapZoom(el, -1);
+      else if (b.dataset.pm === 'fit') {
+        el.dataset.z = el.dataset.z0;
+        el.dataset.cx = el.dataset.cx0;
+        el.dataset.cy = el.dataset.cy0;
+        pmapRedraw(el);
+      }
+    }, true);
+  }
   function mpPolyMap(c) {
     let rings = c.areaPoly;
     if (!Array.isArray(rings) || !rings.length) return '';
     if (typeof rings[0]?.[0] === 'number') rings = [rings]; // bản cũ: 1 đa giác
-    const pts = rings.flat().filter((p) => Array.isArray(p) && p.length === 2);
+    rings = rings.filter((r) => Array.isArray(r) && r.length >= 3);
+    const pts = rings.flat();
     if (!pts.length) return '';
-    const W = 1000;
-    const H = 640;
-    const px = (la, ln, z) => {
-      const sc = 256 * 2 ** z;
-      const sn = Math.sin((la * Math.PI) / 180);
-      return [((ln + 180) / 360) * sc, (0.5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI)) * sc];
-    };
-    // zoom lớn nhất mà các xưởng vẫn nằm gọn (chừa lề), tối đa 19
+    if (typeof root !== 'undefined' && root) pmapWire(root);
+    // zoom lớn nhất mà các xưởng nằm gọn trong khung ~900×560 (chừa lề), tối đa 19
     let z = 19;
     for (; z > 12; z--) {
-      const xs = pts.map(([a, b]) => px(a, b, z));
+      const xs = pts.map(([a, b]) => pmPx(a, b, z));
       const w = Math.max(...xs.map((x) => x[0])) - Math.min(...xs.map((x) => x[0]));
       const h = Math.max(...xs.map((x) => x[1])) - Math.min(...xs.map((x) => x[1]));
-      if (w < W * 0.7 && h < H * 0.7) break;
+      if (w < 900 * 0.75 && h < 560 * 0.75) break;
     }
-    const xs = pts.map(([a, b]) => px(a, b, z));
+    const xs = pts.map(([a, b]) => pmPx(a, b, z));
     const cx = (Math.max(...xs.map((x) => x[0])) + Math.min(...xs.map((x) => x[0]))) / 2;
     const cy = (Math.max(...xs.map((x) => x[1])) + Math.min(...xs.map((x) => x[1]))) / 2;
-    const x0 = cx - W / 2;
-    const y0 = cy - H / 2;
-    let tiles = '';
-    for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++)
-      for (let ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + H) / 256); ty++)
-        tiles += `<img src="https://mt${(tx + ty) & 3}.google.com/vt/lyrs=y&hl=vi&x=${tx}&y=${ty}&z=${z}" alt="" style="position:absolute;left:${Math.round(tx * 256 - x0)}px;top:${Math.round(ty * 256 - y0)}px;width:256px;height:256px">`;
-    const poly = rings.map((r, i) => {
-      const p2 = r.map(([a, b]) => px(a, b, z)).map(([x, y]) => `${(x - x0).toFixed(1)},${(y - y0).toFixed(1)}`).join(' ');
-      const m = r.map(([a, b]) => px(a, b, z)).reduce((acc, [x, y]) => [acc[0] + x - x0, acc[1] + y - y0], [0, 0]).map((v) => v / r.length);
-      return `<polygon points="${p2}" fill="rgba(245,158,11,.28)" stroke="#fff" stroke-width="6"/><polygon points="${p2}" fill="none" stroke="#d97706" stroke-width="3"/><text x="${m[0].toFixed(0)}" y="${m[1].toFixed(0)}" text-anchor="middle" font-size="15" font-weight="900" fill="#fff" stroke="#92400e" stroke-width="3" paint-order="stroke">X${i + 1}</text>`;
-    }).join('');
-    const mk = c.lat ? px(c.lat, c.lng, z) : null;
-    return `<div style="position:relative;overflow:hidden;min-height:560px;background:#1e293b">
-<div style="position:absolute;left:50%;top:50%;width:${W}px;height:${H}px;transform:translate(-50%,-50%)">${tiles}
-<svg width="${W}" height="${H}" style="position:absolute;left:0;top:0">${poly}${mk ? `<circle cx="${(mk[0] - x0).toFixed(1)}" cy="${(mk[1] - y0).toFixed(1)}" r="7" fill="#ef4444" stroke="#fff" stroke-width="3"/>` : ''}</svg></div>
-<div style="position:absolute;left:10px;top:10px;background:rgba(15,23,42,.85);color:#fff;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12.5px">📐 ${rings.length} phân xưởng đo tay · ${Number(c.area || 0).toLocaleString('vi-VN')} m²</div></div>`;
+    const mk = c.lat ? [c.lat, c.lng] : null;
+    const bt = 'display:block;width:34px;height:34px;border:0;background:#fff;color:#334155;font-size:20px;font-weight:900;cursor:pointer;line-height:34px';
+    return `<div data-mp-pmap data-rings="${esc(JSON.stringify(rings))}" data-mk="${mk ? mk.join(',') : ''}" data-z="${z}" data-cx="${cx}" data-cy="${cy}" data-z0="${z}" data-cx0="${cx}" data-cy0="${cy}" style="position:relative;overflow:hidden;min-height:560px;height:100%;background:#1e293b;cursor:grab;touch-action:none">
+<div data-pm-in style="position:absolute;left:50%;top:50%;width:${PM_W}px;height:${PM_H}px;transform:translate(-50%,-50%)">${pmapInner(rings, mk, z, cx, cy)}</div>
+<div style="position:absolute;left:10px;top:10px;background:rgba(15,23,42,.85);color:#fff;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12.5px;pointer-events:none">📐 ${rings.length} phân xưởng đo tay · ${Number(c.area || 0).toLocaleString('vi-VN')} m²</div>
+<div style="position:absolute;right:10px;bottom:16px;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.35)"><button data-pm="in" title="Phóng to" style="${bt};border-bottom:1px solid #e2e8f0">+</button><button data-pm="out" title="Thu nhỏ" style="${bt};border-bottom:1px solid #e2e8f0">−</button><button data-pm="fit" title="Về khung các phân xưởng" style="${bt};font-size:15px">⤢</button></div>
+<div style="position:absolute;left:10px;bottom:12px;background:rgba(255,255,255,.85);border-radius:6px;padding:1px 6px;font-size:10.5px;color:#334155;pointer-events:none">Kéo để di chuyển · lăn chuột để phóng to</div></div>`;
   }
   // Popup chi tiết công ty: thông tin pháp lý, liên hệ, KCN, diện tích, ERP + bản đồ vệ tinh + trang Google Maps (ảnh, đánh giá)
   function mpDetailBox() {
