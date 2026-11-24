@@ -531,6 +531,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   setInterval(() => loadCustom().then(() => kcnDraw()).catch(() => {}), 60e3);
   let drawPts = null; // đang vẽ: [[lat,lng]…]
   let drawName = '';
+  let drawDone = []; // 📐 các phân xưởng đã đo xong (mỗi cái 1 đa giác) – cộng dồn diện tích
   let drawFor = null; // ✏️ đo diện tích tay cho 1 công ty: { id, name } (thay vì vẽ viền KCN)
   const drawLayer = document.createElement('div');
   drawLayer.setAttribute('style', 'position:fixed;inset:0;z-index:2147482000;cursor:crosshair;display:none');
@@ -566,7 +567,9 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     drawBar.style.display = on ? 'flex' : 'none';
     if (!on) return (drawPreview.innerHTML = '');
     if (!drawLayer.isConnected) document.body.append(drawPreview, drawLayer, drawBar);
-    drawBar.innerHTML = `${drawFor ? `📐 Đo mái xưởng “${esc(drawFor.name)}”: bấm từng góc mái nhà (${drawPts.length} điểm)${drawPts.length >= 3 ? ` · <b style="color:#fde68a">${Math.round(polyArea([...drawPts, drawPts[0]])).toLocaleString('vi-VN')} m²</b>` : ''}` : `✏️ Vẽ viền “${esc(drawName)}”: bấm từng góc trên bản đồ (${drawPts.length} điểm)`} <button data-d="undo" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit">↶ Bỏ điểm</button><button data-d="ok" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;background:#22c55e;color:#fff" ${drawPts.length < 3 ? 'disabled' : ''}>✔ Xong</button><button data-d="x" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;background:#ef4444;color:#fff">✕ Huỷ</button>`;
+    const curA = drawPts.length >= 3 ? polyArea([...drawPts, drawPts[0]]) : 0;
+    const doneA = drawDone.reduce((a, r) => a + polyArea(r), 0);
+    drawBar.innerHTML = `${drawFor ? `📐 Đo mái xưởng “${esc(drawFor.name)}” – xưởng ${drawDone.length + 1}: bấm từng góc (${drawPts.length} điểm)${curA ? ` · ${Math.round(curA).toLocaleString('vi-VN')} m²` : ''}${drawDone.length ? ` · <b style="color:#fde68a">tổng ${drawDone.length + (curA ? 1 : 0)} xưởng: ${Math.round(doneA + curA).toLocaleString('vi-VN')} m²</b>` : curA ? ` · <b style="color:#fde68a">${Math.round(curA).toLocaleString('vi-VN')} m²</b>` : ''} <button data-d="next" title="Xong phân xưởng này, đo tiếp phân xưởng khác (cộng dồn)" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;background:#f59e0b;color:#fff" ${drawPts.length < 3 ? 'disabled' : ''}>➕ Xưởng tiếp</button>` : `✏️ Vẽ viền “${esc(drawName)}”: bấm từng góc trên bản đồ (${drawPts.length} điểm)`} <button data-d="undo" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit">↶ Bỏ điểm</button><button data-d="ok" style="cursor:pointer;border:0;border-radius:6px;padding:2px 10px;font:inherit;background:#22c55e;color:#fff" ${drawPts.length < 3 && !drawDone.length ? 'disabled' : ''}>✔ Xong</button><button data-d="x" style="cursor:pointer;border:0;border-radius:6px;padding:2px 8px;font:inherit;background:#ef4444;color:#fff">✕ Huỷ</button>`;
     const v = mapView();
     if (!v) return;
     const [cx, cy] = proj(v.lat, v.lng, v.z);
@@ -574,7 +577,11 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       const [x, y] = proj(la, ln, v.z);
       return [x - cx + v.r.left + v.r.width / 2, y - cy + v.r.top + v.r.height / 2];
     });
-    drawPreview.innerHTML = `<polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="rgba(34,197,94,.25)" stroke="#fff" stroke-width="7"/><polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="none" stroke="#16a34a" stroke-width="3.5"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" fill="#fff" stroke="#16a34a" stroke-width="3"/>`).join('')}`;
+ const toPx = (r) => r.map(([la, ln]) => {
+      const [x, y] = proj(la, ln, v.z);
+      return `${x - cx + v.r.left + v.r.width / 2},${y - cy + v.r.top + v.r.height / 2}`;
+    }).join(' ');
+    drawPreview.innerHTML = `${drawDone.map((r) => `<polygon points="${toPx(r)}" fill="rgba(245,158,11,.3)" stroke="#fff" stroke-width="6"/><polygon points="${toPx(r)}" fill="none" stroke="#d97706" stroke-width="3"/>`).join('')}<polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="rgba(34,197,94,.25)" stroke="#fff" stroke-width="7"/><polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="none" stroke="#16a34a" stroke-width="3.5"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" fill="#fff" stroke="#16a34a" stroke-width="3"/>`).join('')}`;
   }
   drawLayer.addEventListener('click', (e) => {
     const v = mapView();
@@ -586,26 +593,36 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
   drawBar.addEventListener('click', async (e) => {
     const k = e.target.closest('[data-d]')?.dataset.d;
     if (!k) return;
-    if (k === 'undo') drawPts.pop();
+    if (k === 'undo') {
+      if (drawPts.length) drawPts.pop();
+      else if (drawDone.length) drawPts = drawDone.pop().slice(0, -1); // quay lại sửa phân xưởng trước
+    }
+    if (k === 'next' && drawPts.length >= 3) {
+      drawDone.push([...drawPts, drawPts[0]]);
+      drawPts = [];
+    }
     if (k === 'x') {
       drawPts = null;
       drawFor = null;
+      drawDone = [];
     }
-    if (k === 'ok' && drawPts.length >= 3 && drawFor) {
-      // 📐 lưu diện tích đo tay (m²) + đa giác mái vào công ty, đồng bộ cloud; báo bảng 📋 Danh sách công ty cập nhật
-      const ring = [...drawPts, drawPts[0]].map(([a, b]) => [Number(a.toFixed(6)), Number(b.toFixed(6))]);
-      const area = Math.round(polyArea(ring));
+    if (k === 'ok' && drawFor && (drawPts.length >= 3 || drawDone.length)) {
+      // 📐 lưu TỔNG diện tích các phân xưởng đo tay (m²) + đa giác từng xưởng vào công ty, đồng bộ cloud; báo bảng 📋 cập nhật
+      const rings = [...drawDone, ...(drawPts.length >= 3 ? [[...drawPts, drawPts[0]]] : [])].map((r) => r.map(([a, b]) => [Number(a.toFixed(6)), Number(b.toFixed(6))]));
+      const ring = rings;
+      const area = Math.round(rings.reduce((a, r) => a + polyArea(r), 0));
       const all = (await kvGet(KEY).catch(() => ({}))) || {};
       const c = all[drawFor.id] || cache?.[drawFor.id];
       if (c) {
-        const v = { ...c, area, areaSrc: 'tay', areaPoly: ring, areaTry: Date.now() };
+        const v = { ...c, area, areaSrc: 'tay', areaPoly: ring, areaN: rings.length, areaTry: Date.now() };
         await kvMerge(KEY, { [drawFor.id]: v });
         if (cache) cache[drawFor.id] = v;
         window.dispatchEvent(new CustomEvent('dg:areaSaved', { detail: { id: drawFor.id, place: v } }));
-        msg = `📐 Đã lưu ${area.toLocaleString('vi-VN')} m² cho “${drawFor.name}”.`;
+        msg = `📐 Đã lưu ${area.toLocaleString('vi-VN')} m² (${rings.length} phân xưởng) cho “${drawFor.name}”.`;
       }
       drawPts = null;
       drawFor = null;
+      drawDone = [];
       sideCalcKey = '';
       draw();
     } else if (k === 'ok' && drawPts.length >= 3) {
@@ -626,6 +643,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     if (drawPts && e.key === 'Escape') {
       drawPts = null;
       drawFor = null;
+      drawDone = [];
       drawUi();
     }
   });
