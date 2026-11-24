@@ -636,6 +636,7 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
       msg = `✅ Đã lưu viền “${p.name}” (đồng bộ cho mọi máy).`;
       draw();
       kcnDraw();
+      if (confirm(`Quét luôn công ty trong “${p.name}”?`)) setTimeout(() => kcnScanStart(`c/${id}`), 300);
     }
     drawUi();
   });
@@ -686,9 +687,10 @@ ${msg ? `<div style="margin-top:5px;font-size:12px;color:#334155">${esc(msg)}</d
     el.id = 'dg-kcn-list';
     el.setAttribute('style', 'position:fixed;right:70px;top:80px;z-index:2147483000;width:min(440px,90vw);max-height:72vh;overflow:auto;background:#fff;border-radius:14px;border:2px solid #f59e0b;box-shadow:0 18px 44px rgba(15,23,42,.3);padding:10px 12px;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a');
     el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="flex:1;font-size:14.5px">🏭 ${esc(p.name)}</b><span data-x style="cursor:pointer;color:#64748b;font-weight:900">✕</span></div>
-<div style="font-size:12px;color:#475569;margin-bottom:6px"><b>${list.length}</b> công ty đã lưu nằm trong KCN${list.length ? '' : ' – bấm “🔍 Quét công ty màn hình này” khi đang xem KCN để lưu thêm'}</div>
+<div style="font-size:12px;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span><b>${list.length}</b> công ty đã lưu nằm trong KCN</span><button data-kscan style="cursor:pointer;border:0;border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(90deg,#f59e0b,#ea580c)" title="Tự đi qua từng điểm ~1 km trong viền KCN, tìm “công ty” và lưu (quét lại cả điểm đã quét)">🔍 ${list.length ? 'Quét lại' : 'Quét'} công ty trong KCN này</button></div>
 ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><div><b>${i + 1}. <a href="${esc(c.href || c.url)}" data-go="${esc(c.id)}" style="color:#1d4ed8;text-decoration:none">${esc(dispName(c))}</a></b>${erpBadge(c)}${c.cat ? ` <span style="color:#64748b;font-size:11.5px">· ${esc(c.cat)}</span>` : ''}</div><div style="font-size:12px;color:#334155">${esc(c.addr || '')}${c.phone ? ` · ${phoneHtml(c.phone)}` : ''}</div></div>`).join('')}`;
     el.querySelector('[data-x]').onclick = () => el.remove();
+    el.querySelector('[data-kscan]').onclick = () => kcnScanStart(kid);
     document.body.append(el);
   }
   function kcnDraw() {
@@ -867,7 +869,59 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     }
     return out.sort((a, b) => Math.hypot(a[1][0] - CRAWL_CENTER[0], a[1][1] - CRAWL_CENTER[1]) - Math.hypot(b[1][0] - CRAWL_CENTER[0], b[1][1] - CRAWL_CENTER[1]));
   }
-  const crawlList = () => (crawlMode === 'kcn' ? kcnStops() : crawlCells);
+  // 🔍 Quét 1 KCN (vừa vẽ tay / quét lại KCN có sẵn): điểm dừng ~1 km phủ viền KCN (zoom 16), chỉ chạy KCN đó (sessionStorage dgCrawlOnly)
+  let crawlOnly = sessionStorage.getItem('dgCrawlOnly') || '';
+  function kcnStopsFor(kid) {
+    const p = kcnData.get(kid);
+    if (!p?.rings?.length) return [];
+    const all = p.rings.flat();
+    const [s1, n1, w1, e1] = [Math.min(...all.map((x) => x[0])), Math.max(...all.map((x) => x[0])), Math.min(...all.map((x) => x[1])), Math.max(...all.map((x) => x[1]))];
+    const ST = 0.01;
+    const ny = Math.max(1, Math.round((n1 - s1) / ST));
+    const nx = Math.max(1, Math.round((e1 - w1) / ST));
+    const out = [];
+    let i = 0;
+    for (let y = 0; y < ny; y++)
+      for (let x = 0; x < nx; x++) {
+        const la = s1 + ((y + 0.5) * (n1 - s1)) / ny;
+        const ln = w1 + ((x + 0.5) * (e1 - w1)) / nx;
+        // bỏ điểm nằm ngoài viền (KCN không phải hình chữ nhật) – trừ khi viền nhỏ chỉ có 1 điểm
+        if (ny * nx > 1 && !inKcn(la, ln, p)) continue;
+        out.push([`q:${kid}:${i++}`, [Number(la.toFixed(5)), Number(ln.toFixed(5)), 16], p.name]);
+      }
+    if (!out.length) out.push([`q:${kid}:0`, [Number(((s1 + n1) / 2).toFixed(5)), Number(((w1 + e1) / 2).toFixed(5)), 16], p.name]);
+    return out;
+  }
+  async function kcnScanStart(kid) {
+    const p = kcnData.get(kid);
+    if (!p) return;
+    crawlDone = (await kvGet('mapsCrawl').catch(() => ({}))) || {};
+    // quét lại: xoá dấu "đã quét" các điểm của KCN này
+    const reset = Object.fromEntries(kcnStopsFor(kid).map(([k]) => [k, 0]));
+    Object.assign(crawlDone, reset);
+    await kvMerge('mapsCrawl', reset).catch(() => {});
+    crawlOnly = kid;
+    sessionStorage.setItem('dgCrawlOnly', kid);
+    // lưu sẵn danh sách điểm + tên (mỗi điểm tải lại trang, lúc đó viền KCN có thể chưa kịp tải lại)
+    sessionStorage.setItem('dgCrawlStops', JSON.stringify({ name: p.name, stops: kcnStopsFor(kid) }));
+    sessionStorage.removeItem('dgCrawlNext');
+    sessionStorage.removeItem('dgCrawlCell');
+    crawlMode = 'kcn';
+    crawlOn = true;
+    localStorage.setItem('dgMapsCrawl', '1');
+    localStorage.setItem('dgMapsCrawlMode', 'kcn');
+    msg = `🔍 Bắt đầu quét công ty trong “${p.name}” (${kcnStopsFor(kid).length} điểm) – để tab này mở.`;
+    document.getElementById('dg-kcn-list')?.remove();
+    draw();
+  }
+  const onlyStops = () => {
+    try {
+      return JSON.parse(sessionStorage.getItem('dgCrawlStops') || 'null')?.stops || kcnStopsFor(crawlOnly);
+    } catch {
+      return kcnStopsFor(crawlOnly);
+    }
+  };
+  const crawlList = () => (crawlOnly ? onlyStops() : crawlMode === 'kcn' ? kcnStops() : crawlCells);
   const crawlLeft = () => crawlList().filter(([k]) => !(crawlDone?.[k] && Date.now() - crawlDone[k] < 30 * 86400e3));
   const kcnProgress = () => {
     const st = kcnStops();
@@ -926,6 +980,21 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
         await kcnIndexLoad();
       }
       const left = crawlLeft();
+      if (!left.length && crawlOnly) {
+        let nm = kcnData.get(crawlOnly)?.name || 'KCN';
+        try {
+          nm = JSON.parse(sessionStorage.getItem('dgCrawlStops') || 'null')?.name || nm;
+        } catch {}
+        sessionStorage.removeItem('dgCrawlStops');
+        crawlOnly = '';
+        sessionStorage.removeItem('dgCrawlOnly');
+        crawlOn = false;
+        localStorage.setItem('dgMapsCrawl', '0');
+        msg = `✅ Đã quét xong công ty trong “${nm}”.`;
+        draw();
+        sideCalcKey = '';
+        return;
+      }
       if (!left.length) {
         crawlOn = false;
         localStorage.setItem('dgMapsCrawl', '0');
