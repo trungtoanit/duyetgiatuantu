@@ -59,7 +59,7 @@ button{font:inherit}`;
       root.querySelector('[data-close]').addEventListener('click', hide);
       root.querySelector('.ov').addEventListener('mousedown', (e) => e.target.classList?.contains('ov') && hide());
       // phím gõ trong bảng không lọt ra Google Maps (phím tắt của Maps)
-      for (const t of ['keydown', 'keyup', 'keypress', 'wheel']) root.addEventListener(t, (e) => { if (t === 'keydown' && e.key === 'Escape' && !mpUi.link) hide(); e.stopPropagation(); });
+      for (const t of ['keydown', 'keyup', 'keypress', 'wheel']) root.addEventListener(t, (e) => { if (t === 'keydown' && e.key === 'Escape') { if (mpUi.detail) { mpUi.detail = null; render(); } else if (!mpUi.link) hide(); } e.stopPropagation(); });
     }
     if (!wrap.isConnected) document.body.append(wrap);
     wrap.style.display = '';
@@ -84,7 +84,7 @@ button{font:inherit}`;
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { tel: '', amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
+  const mpUi = { tel: '', amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, detail: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -300,9 +300,10 @@ button{font:inherit}`;
       return `<tr style="border-top:1px solid #f1f5f9;${e ? 'background:#f0fdf4' : ''}">
 <td style="padding:4px 6px"><input type="checkbox" data-mp="sel" data-id="${esc(c.id)}" ${mpUi.sel.has(c.id) ? 'checked' : ''}></td>
 <td style="padding:4px 6px;color:#94a3b8;text-align:right">${stt0 + i + 1}</td>
-<td style="padding:4px 6px;max-width:300px"><b>${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${c.rate ? ` <span title="Đánh giá Google Maps: ${c.rate} sao · ${c.rateN || 0} lượt" style="color:#b45309;font-size:11.5px;font-weight:800;white-space:nowrap">⭐ ${String(c.rate).replace('.', ',')}${c.rateN ? ` <span style="color:#94a3b8;font-weight:600">(${Number(c.rateN).toLocaleString('vi-VN')})</span>` : ''}</span>` : ''}${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
+<td style="padding:4px 6px;max-width:300px"><b data-mp="detail" data-id="${esc(c.id)}" title="Xem chi tiết công ty" style="cursor:pointer;color:#1e3a8a;text-decoration:underline dotted #93c5fd">${esc((e?.name || c.legalName || c.name).toLocaleUpperCase('vi'))}</b>${c.rate ? ` <span title="Đánh giá Google Maps: ${c.rate} sao · ${c.rateN || 0} lượt" style="color:#b45309;font-size:11.5px;font-weight:800;white-space:nowrap">⭐ ${String(c.rate).replace('.', ',')}${c.rateN ? ` <span style="color:#94a3b8;font-weight:600">(${Number(c.rateN).toLocaleString('vi-VN')})</span>` : ''}</span>` : ''}${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div style="font-size:11px;color:#64748b">Google: ${esc(c.name)}</div>` : ''}</td>
 <td style="padding:4px 6px;white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''} <a href="#" data-mp="mst" data-id="${esc(c.id)}" title="Sửa MST / lấy lại tên chuẩn từ masothue" style="text-decoration:none;font-size:11px">✎</a>` : `<button data-mp="mst" data-id="${esc(c.id)}" title="Nhập MST (vd. tìm trên Google / masothue) → lấy tên + địa chỉ chuẩn từ masothue, lưu cloud" style="${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff">🧾 Chuẩn hoá MST</button>`}${mpMstMsg[c.id] ? `<div style="font-size:10.5px;color:#7c3aed;white-space:normal">${esc(mpMstMsg[c.id])}</div>` : ''}</td>
-<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}${c.area > 0 ? `<div title="Diện tích mái nhà xưởng (OpenStreetMap) – gần đúng" style="font-weight:900;color:${c.area >= 5000 ? '#b45309' : '#64748b'}">📐 ${c.area.toLocaleString('vi-VN')} m²</div>` : ''}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
+<td style="padding:4px 6px;font-size:12px">${esc(c.ind || '')}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
+<td style="padding:4px 6px;white-space:nowrap">${mpAreaCell(c)}</td>
 <td style="padding:4px 6px;font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
 <td style="padding:4px 6px;font-size:12px;max-width:260px;color:#475569">${mpDist(c) != null ? `<b style="color:#0369a1;white-space:nowrap" title="Khoảng cách đường chim bay từ xưởng Tuấn Tú">📍 ${mpDist(c).toFixed(1)} km</b> · ` : ''}${esc(c.legalAddr || c.addr || '')}</td>
 <td style="padding:4px 6px;white-space:nowrap;font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)}</td>
@@ -311,7 +312,7 @@ button{font:inherit}`;
     }).join('');
     const linkBox = mpUi.link ? (() => {
       const c = mpData.places[mpUi.link];
-      return `<div data-mp-modal style="position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.4);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px">
+      return `<div data-mp-modal style="position:fixed;inset:0;z-index:70;background:rgba(15,23,42,.4);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px">
 <div style="background:#fff;border-radius:12px;box-shadow:0 18px 44px rgba(15,23,42,.35);width:min(560px,100%);padding:12px 14px">
 <div style="display:flex;align-items:center;margin-bottom:6px"><b style="flex:1">🔗 Kết nối “${esc(c?.legalName || c?.name || '')}” với khách hàng ERP</b><span data-mp="lclose" style="cursor:pointer;color:#64748b;font-weight:900">✕</span></div>
 <input class="gt-edit" data-mp-lq placeholder="Gõ tên / mã KH / SĐT khách hàng ERP…" value="${esc(mpUi.lq)}" style="width:100%;box-sizing:border-box;font:inherit;padding:6px 8px;border-radius:8px;border:1px solid #93c5fd">
@@ -367,8 +368,8 @@ ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color
 <div class="muted" style="margin-bottom:4px">${rows.length.toLocaleString('vi-VN')} công ty khớp · trang ${mpUi.page + 1}/${pages}</div>
 <style>.mp-tb tbody tr{transition:background .12s}.mp-tb tbody tr:hover td{background:#e0f2fe!important}.mp-tb tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #0284c7}</style>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table class="mp-tb" style="width:100%;border-collapse:collapse;font-size:12.5px">
-<thead><tr style="background:#f8fafc;text-align:left"><th style="padding:5px 6px"><input type="checkbox" data-mp="selall"></th><th style="padding:5px 6px">STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
-<tbody>${tr || '<tr><td colspan="10" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
+<thead><tr style="background:#f8fafc;text-align:left"><th style="padding:5px 6px"><input type="checkbox" data-mp="selall"></th><th style="padding:5px 6px">STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th title="Diện tích mái nhà xưởng – đo từ OpenStreetMap (gần đúng) hoặc nhập tay">Diện tích xưởng</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
+<tbody>${tr || '<tr><td colspan="11" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
 <div style="position:sticky;bottom:0;z-index:5;display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:8px;padding:8px 0;background:rgba(255,255,255,.96);border-top:1px solid #e2e8f0;box-shadow:0 -6px 14px rgba(15,23,42,.06)">${(() => {
       // phân trang: « Đầu · ‹ Trước · các số trang quanh trang hiện tại · Sau › · Cuối » · ô chọn trang
       const cur = mpUi.page;
@@ -385,7 +386,52 @@ ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color
       out += `<select data-mp-f="page" style="${sel};margin-left:6px">${Array.from({ length: pages }, (_, x) => `<option value="${x}" ${x === cur ? 'selected' : ''}>Trang ${x + 1}/${pages}</option>`).join('')}</select>`;
       return out;
     })()}</div>
-${linkBox}</div>`;
+${linkBox}${mpDetailBox()}</div>`;
+  }
+  // 📐 Ô diện tích xưởng: số m² (đo OSM / nhập tay), "chưa đo" (đang chờ lượt đo), "OSM chưa vẽ" (đo rồi mà không có nhà) – ✎ để nhập tay
+  function mpAreaCell(c) {
+    const ed = `<a href="#" data-mp="area" data-id="${esc(c.id)}" title="Nhập / sửa diện tích tay" style="text-decoration:none;font-size:11px">✎</a>`;
+    if (c.area > 0) {
+      const big = c.area >= 5000;
+      const src = c.areaSrc === 'tay' ? '✋ nhập tay' : c.areaSrc === 'osm-near' ? 'OSM · nhà gần nhất' : 'OSM';
+      return `<span title="Diện tích mái nhà xưởng – ${src} (gần đúng)" style="display:inline-block;padding:1px 8px;border-radius:7px;background:${big ? '#fef3c7' : '#f1f5f9'};border:1px solid ${big ? '#f59e0b' : '#e2e8f0'};color:${big ? '#92400e' : '#334155'};font-size:12.5px;font-weight:900">📐 ${c.area.toLocaleString('vi-VN')} m²</span> ${ed}<div style="font-size:10.5px;color:#94a3b8">${src}</div>`;
+    }
+    if (c.area === 0) return `<span style="font-size:11.5px;color:#94a3b8" title="Đã đo: OpenStreetMap chưa vẽ nhà xưởng ở vị trí này">OSM chưa vẽ</span> ${ed}`;
+    return `<span style="font-size:11.5px;color:#94a3b8" title="Chờ lượt đo tự động từ OpenStreetMap (≤ 20 công ty / 30 giây khi đang mở Google Maps)">⏳ chưa đo</span> ${ed}`;
+  }
+  // Popup chi tiết công ty: thông tin pháp lý, liên hệ, KCN, diện tích, ERP + bản đồ vệ tinh + trang Google Maps (ảnh, đánh giá)
+  function mpDetailBox() {
+    const c = mpUi.detail && mpData.places[mpUi.detail];
+    if (!c) return '';
+    const e = mpErp(c);
+    const name = (e?.name || c.legalName || c.name).toLocaleUpperCase('vi');
+    const d = mpDist(c);
+    const row = (k, v) => (v ? `<div style="display:grid;grid-template-columns:118px 1fr;gap:8px;padding:5px 0;border-top:1px solid #f1f5f9"><span style="color:#64748b;font-size:12px;font-weight:700">${k}</span><span style="font-size:13px">${v}</span></div>` : '');
+    const sec = (t, body) => (body ? `<div style="margin-top:10px"><div style="font-size:11px;font-weight:900;letter-spacing:.06em;color:#1d4ed8;text-transform:uppercase;margin-bottom:2px">${t}</div>${body}</div>` : '');
+    const stars = c.rate ? `<span style="color:#f59e0b;letter-spacing:1px">${'★'.repeat(Math.round(c.rate))}${'☆'.repeat(5 - Math.round(c.rate))}</span> <b>${String(c.rate).replace('.', ',')}</b> <span style="color:#64748b">· ${Number(c.rateN || 0).toLocaleString('vi-VN')} đánh giá</span>` : '<span style="color:#94a3b8">Chưa có đánh giá</span>';
+    const box = c.box === 'A' ? '<b style="color:#15803d">cao</b>' : c.box === 'B' ? '<b style="color:#b45309">vừa</b>' : c.box ? 'thấp' : '';
+    const ll = c.lat && c.lng ? `${c.lat},${c.lng}` : '';
+    const gm = c.href || c.url;
+    const sat = ll ? `https://www.google.com/maps?q=${ll}&t=k&z=17&hl=vi&output=embed` : '';
+    return `<div data-mp-modal style="position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto">
+<div style="background:#fff;border-radius:14px;box-shadow:0 18px 44px rgba(15,23,42,.35);width:min(1100px,100%);overflow:hidden">
+<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 16px;background:linear-gradient(90deg,#eff6ff,#f8fafc);border-bottom:1px solid #e2e8f0">
+<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:900;color:#0f172a">${esc(name)}</div>
+${c.legalName && c.name !== c.legalName ? `<div style="font-size:12px;color:#64748b">Tên trên Google: ${esc(c.name)}</div>` : ''}
+<div style="font-size:12.5px;margin-top:3px">${stars}${c.ind ? ` · <span style="background:#ecfeff;color:#0e7490;border-radius:6px;padding:0 6px;font-weight:800">${esc(c.ind)}</span>` : ''}${c.cat ? ` · <span style="color:#64748b">${esc(c.cat)}</span>` : ''}</div></div>
+<span data-mp="dclose" title="Đóng (Esc)" style="cursor:pointer;color:#64748b;font-weight:900;font-size:18px">✕</span></div>
+<div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:0">
+<div style="padding:4px 16px 14px;border-right:1px solid #f1f5f9">
+${sec('Pháp lý', row('Mã số thuế', c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800">${esc(c.mst)}</a>` : '<span style="color:#94a3b8">chưa có</span>') + row('Địa chỉ pháp lý', esc(c.legalAddr || '')))}
+${sec('Vị trí', row('Khu công nghiệp', c.kcn ? `<b style="color:#9a3412">🏭 ${esc(c.kcn)}</b>` : '<span style="color:#94a3b8">ngoài KCN</span>') + row('Địa chỉ', esc(c.addr || '')) + row('Khoảng cách', d != null ? `<b style="color:#0369a1">📍 ${d.toFixed(1)} km</b> từ xưởng Tuấn Tú` : ''))}
+${sec('Quy mô', row('Diện tích xưởng', mpAreaCell(c)) + row('Tiềm năng thùng', box ? `📦 ${box}${c.boxWhy ? `<div style="font-size:11.5px;color:#64748b">${esc(c.boxWhy)}</div>` : ''}` : ''))}
+${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)) + row('ERP', e ? `<a href="${ERP}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}` : `<button data-mp="link" data-id="${esc(c.id)}" style="cursor:pointer;border:1px solid #86efac;color:#166534;background:#f0fdf4;border-radius:7px;padding:2px 8px;font-weight:700">🔗 Kết nối ERP</button>`))}
+<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
+</div>
+<div style="display:grid;grid-template-rows:260px 1fr;min-height:560px;background:#f8fafc">
+${sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;border:0;border-bottom:1px solid #e2e8f0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>'}
+${gm ? `<iframe src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps" loading="lazy" style="width:100%;height:100%;min-height:300px;border:0"></iframe>` : ''}
+</div></div></div></div>`;
   }
   function mpLinkResults() {
     const q = mpUn(mpUi.lq).trim();
@@ -513,6 +559,15 @@ ${linkBox}</div>`;
       mpUi.link = id;
       mpUi.lq = '';
     } else if (k === 'lclose') mpUi.link = null;
+    else if (k === 'detail') mpUi.detail = id;
+    else if (k === 'dclose') mpUi.detail = null;
+    else if (k === 'area' && c) {
+      const cur = c.area > 0 ? String(c.area) : '';
+      const v = prompt(`Diện tích nhà xưởng của ${c.legalName || c.name} (m²):\n(để trống = xoá số nhập tay, cho đo lại từ OpenStreetMap)`, cur);
+      if (v == null) return;
+      const n = Math.round(Number(String(v).replace(/[^\d]/g, '')));
+      await mpSave({ [id]: n > 0 ? { ...c, area: n, areaSrc: 'tay', areaTry: Date.now() } : { ...c, area: null, areaSrc: '', areaTry: 0 } });
+    }
     else if (k === 'pick') {
       const pc = mpData.places[mpUi.link];
       if (pc) await mpSave({ [mpUi.link]: { ...pc, erpId: t.dataset.cid, erpNo: false, erpLinkAt: Date.now(), erpLinkBy: meName || '' } });
