@@ -388,7 +388,7 @@ ${opt('', 'Ngoài KCN')}${PROV_ORDER.filter((pv) => byP.has(pv)).map((pv) => `<d
 ${mpUi.sel.size ? `<button data-mp="bulk" style="${b};color:#b91c1c;border-color:#fecaca">${mpUi.show === 'on' ? `🗑 Xoá ${mpUi.sel.size} đã chọn` : `↩ Khôi phục ${mpUi.sel.size} đã chọn`}</button>` : ''}
 </div>
 <div class="muted" style="margin-bottom:4px">${rows.length.toLocaleString('vi-VN')} công ty khớp · trang ${mpUi.page + 1}/${pages}</div>
-<style>.mp-tb tbody tr{transition:background .12s}.mp-tb tbody tr:hover td{background:#e0f2fe!important}.mp-tb tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #0284c7}</style>
+<style>.mp-tb tbody tr{transition:background .12s}.mp-tb tbody tr:hover td{background:#e0f2fe!important}[data-near-row]:hover{background:#f8fafc}[data-near-row] [data-mp="ndel"]:hover{color:#dc2626!important}.mp-tb tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #0284c7}</style>
 <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px"><table class="mp-tb" style="width:100%;border-collapse:collapse;font-size:12.5px">
 <thead><tr style="background:#f8fafc;text-align:left"><th style="padding:5px 6px"><input type="checkbox" data-mp="selall"></th><th style="padding:5px 6px">STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th title="Diện tích mái nhà xưởng – đo từ OpenStreetMap (gần đúng) hoặc nhập tay">Diện tích xưởng</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
 <tbody>${tr || '<tr><td colspan="11" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
@@ -554,7 +554,7 @@ ${linkBox}${mpDetailBox()}</div>`;
     const rows = list.map(([d, o], i) => {
       const e = mpErp(o);
       // giống dòng công ty ở panel phải Google Maps: tên, ⭐, MST, ERP, 📦 thùng, 📐 diện tích, 🏷 ngành; dòng MST; khoảng cách · địa chỉ · SĐT
-      return `<div style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12.5px;line-height:1.45${e ? ';background:#f0fdf4' : ''}"><span style="color:#94a3b8;font-weight:800;font-size:11px">${i + 1}.</span> <b data-mp="detail" data-id="${esc(o.id)}" style="cursor:pointer;color:#0f172a">${esc((e?.name || o.legalName || o.name).toLocaleUpperCase('vi'))}</b>${tag(T.rateTag, o)}${tag(T.mstIcon, o)}${e ? ` <span style="display:inline-block;padding:0 6px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-size:10.5px;font-weight:900">✅ ERP${e.code ? ` · ${esc(e.code)}` : ''}</span>` : ''}${tag(T.boxTag, o)}${tag(T.areaTag, o)}${tag(T.indTag, o)}${o.mst ? `<div style="font-size:11px"><a href="${esc(o.mstUrl || `https://masothue.com/Search/?q=${o.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(o.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b"><b style="color:#0369a1">📍 ${d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(1)} km`}</b>${o.addr ? ` · ${esc(o.addr)}` : ''}${o.phone && !e ? ` · ${typeof T.phoneHtml === 'function' ? T.phoneHtml(o.phone) : esc(o.phone)}` : ''}</div></div>`;
+      return `<div data-near-row style="position:relative;padding:6px 28px 6px 10px;border-top:1px solid #f1f5f9;font-size:12.5px;line-height:1.45${e ? ';background:#f0fdf4' : ''}"><span data-mp="ndel" data-id="${esc(o.id)}" title="Xoá công ty này (ẩn khỏi danh sách và Google Maps, không quét lại – khôi phục ở mục Đã xoá)" style="position:absolute;right:8px;top:6px;cursor:pointer;color:#cbd5e1;font-weight:900;font-size:14px">✕</span><span style="color:#94a3b8;font-weight:800;font-size:11px">${i + 1}.</span> <b data-mp="detail" data-id="${esc(o.id)}" style="cursor:pointer;color:#0f172a">${esc((e?.name || o.legalName || o.name).toLocaleUpperCase('vi'))}</b>${tag(T.rateTag, o)}${tag(T.mstIcon, o)}${e ? ` <span style="display:inline-block;padding:0 6px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-size:10.5px;font-weight:900">✅ ERP${e.code ? ` · ${esc(e.code)}` : ''}</span>` : ''}${tag(T.boxTag, o)}${tag(T.areaTag, o)}${tag(T.indTag, o)}${o.mst ? `<div style="font-size:11px"><a href="${esc(o.mstUrl || `https://masothue.com/Search/?q=${o.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800;text-decoration:none">🧾 MST ${esc(o.mst)}</a></div>` : ''}<div style="font-size:11.5px;color:#64748b"><b style="color:#0369a1">📍 ${d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(1)} km`}</b>${o.addr ? ` · ${esc(o.addr)}` : ''}${o.phone && !e ? ` · ${typeof T.phoneHtml === 'function' ? T.phoneHtml(o.phone) : esc(o.phone)}` : ''}</div></div>`;
     }).join('');
     return `<div style="overflow:auto;flex:1;background:#fff"><div style="position:sticky;top:0;z-index:1;padding:7px 10px;background:#eff6ff;font-weight:900;color:#1e3a8a;font-size:13px;border-bottom:1px solid #dbeafe">🏭 Công ty gần đấy <span style="font-weight:600;color:#64748b;font-size:11.5px">· ${list.length} công ty trong 5 km</span></div>${rows || '<div style="padding:12px;color:#94a3b8;font-size:12.5px">Chưa có công ty nào đã lưu trong 5 km.</div>'}</div>`;
   }
@@ -736,6 +736,25 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
     const c = id ? mpData.places[id] : null;
     if (k === 'sel') return t.checked ? mpUi.sel.add(id) : mpUi.sel.delete(id);
     e.preventDefault();
+    if (k === 'ndel' && c) {
+      // 🏭 cột Công ty gần đấy: xoá (ẩn) ngay – dòng biến mất, lưu cloud + bản máy chạy ngầm
+      const row = t.closest('[data-near-row]');
+      if (row) {
+        row.style.transition = 'opacity .15s';
+        row.style.opacity = '0';
+        setTimeout(() => row.remove(), 150);
+      }
+      const v = { ...c, hidden: true, hiddenAt: Date.now() };
+      mpData.places[id] = v;
+      mpIdbSave();
+      kvMerge('mapsPlaces', { [id]: v }).catch((err) => {
+        mpData.places[id] = c;
+        mpIdbSave();
+        alert(`Không lưu được: ${err.message || err}`);
+        render();
+      });
+      return;
+    }
     if (k === 'slp' || k === 'sln' || k === 'slg') {
       // 🖼 slider ảnh: cuộn dải ảnh lớn tới ảnh trước / sau / ảnh nhỏ vừa bấm (không vẽ lại popup)
       const tr = root.querySelector('[data-mp-track]');
