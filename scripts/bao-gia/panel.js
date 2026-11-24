@@ -1237,8 +1237,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
   // ☁️ Đồng bộ TOÀN BỘ danh sách khách hàng lên cloud: mở /khach-hang trong khung ẩn (chỉ đọc), bấm "trang sau" tới hết
   // (~156 trang × 100 khách); hook.js đọc từng trang CRM tự tải → kv customersAll. Chỉ 1 tab chạy (khoá dgCustSyncLock).
   const custSyncSt = { running: false, page: 0, pages: 0, msg: '' };
-  async function custSyncAll(onStep = () => {}) {
+  async function custSyncAll(onStep = () => {}, from = 0) {
     if (custSyncSt.running) return;
+    custSyncSt.stop = false;
     const lock = Number(lsGet('dgCustSyncLock')) || 0;
     if (Date.now() - lock < 90e3) throw new Error('Đang đồng bộ ở tab khác.');
     custSyncSt.running = true;
@@ -1274,7 +1275,10 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       // lần trước dừng giữa chừng (tab tải lại / đóng) trong 1 ngày → nhảy thẳng tới trang đang dở bằng ô "Go to" của CRM
       let start = 2;
       try {
-        const rs = JSON.parse(lsGet('dgCustSyncResume') || 'null');
+        // bắt đầu từ trang người dùng chọn (from), không thì trang dở lần trước (trong 1 ngày)
+        const rs0 = JSON.parse(lsGet('dgCustSyncResume') || 'null');
+        const rs = from > 1 ? { page: from - 1, at: Date.now() } : rs0;
+        if (from > 1 && from - 1 === 1) rs.page = 0; // từ trang 2 = chạy bình thường
         if (rs && Date.now() - rs.at < 86400e3 && rs.page > 2 && (!custSyncSt.pages || rs.page <= custSyncSt.pages)) {
           const jump = f.contentDocument.querySelector('.ant-pagination-options-quick-jumper input');
           if (jump) {
@@ -1288,6 +1292,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
         }
       } catch {}
       for (let page = start; !custSyncSt.pages || page <= custSyncSt.pages; page++) {
+        if (custSyncSt.stop) throw new Error(`Đã dừng ở trang ${page - 1} – bấm đồng bộ để chạy tiếp`);
         lsSet('dgCustSyncResume', JSON.stringify({ page: page - 1, at: Date.now() }));
         custSyncSt.page = page;
         lsSet('dgCustSyncLock', String(Date.now()));
@@ -1326,10 +1331,25 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       b.setAttribute('style', 'display:inline-flex;align-items:center;gap:8px;margin-left:14px;vertical-align:middle;font:600 12.5px/1.3 -apple-system,"Segoe UI",Roboto,Arial,sans-serif');
       h.style.display = 'inline-block';
       h.after(b);
-      b.addEventListener('click', (e) => {
-        if (!e.target.closest('[data-cs]') || custSyncSt.running) return;
+      b.addEventListener('click', async (e) => {
+        if (!e.target.closest('[data-cs]')) return;
+        if (custSyncSt.running) {
+          custSyncSt.stop = true; // đang chạy → bấm lần nữa để dừng
+          custSyncSt.msg = '⏹ Đang dừng…';
+          return injectCustSyncBtn();
+        }
+        // hỏi trang bắt đầu: gợi ý theo số khách đã có trên cloud (100 khách / trang)
+        const have = Object.keys((await kvGet('customersAll').catch(() => ({}))) || {}).length;
+        let rs = null;
+        try {
+          rs = JSON.parse(lsGet('dgCustSyncResume') || 'null');
+        } catch {}
+        const sug = rs?.page > 1 && Date.now() - rs.at < 86400e3 ? rs.page + 1 : Math.max(1, Math.floor(have / 100) + 1);
+        const v = prompt(`Đồng bộ khách hàng từ trang nào? (đang có ${have.toLocaleString('vi-VN')} khách trên cloud, 100 khách / trang)`, String(sug));
+        if (v == null) return;
+        const from = Math.max(1, Math.round(Number(String(v).replace(/\D/g, '')) || 1));
         custSyncSt.msg = '';
-        custSyncAll(() => injectCustSyncBtn()).catch((err) => {
+        custSyncAll(() => injectCustSyncBtn(), from).catch((err) => {
           custSyncSt.msg = `⚠️ ${err.message || err}`;
           injectCustSyncBtn();
         });
@@ -1340,7 +1360,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const n = Object.keys(all || {}).length;
     const done = (await kvGet('custSyncDone').catch(() => ({})))?.last || {};
     const pct = custSyncSt.pages ? Math.round((custSyncSt.page / custSyncSt.pages) * 100) : 0;
-    const html = `<button data-cs="go" ${custSyncSt.running ? 'disabled' : ''} style="cursor:pointer;border:0;border-radius:8px;padding:5px 12px;font:inherit;font-weight:800;color:#fff;background:${custSyncSt.running ? '#94a3b8' : 'linear-gradient(90deg,#0ea5e9,#2563eb)'}">${custSyncSt.running ? `⏳ Đang đồng bộ trang ${custSyncSt.page}${custSyncSt.pages ? `/${custSyncSt.pages} (${pct}%)` : ''}…` : '☁️ Đồng bộ khách hàng lên cloud'}</button><span style="color:#475569">☁️ <b>${n.toLocaleString('vi-VN')}</b> khách trên cloud${done?.at ? ` · lần đủ gần nhất ${new Date(done.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}` : ''}</span>${custSyncSt.msg ? `<span style="color:${/⚠️/.test(custSyncSt.msg) ? '#dc2626' : '#15803d'}">${esc(custSyncSt.msg)}</span>` : ''}`;
+    const html = `<button data-cs="go" title="${custSyncSt.running ? 'Bấm để dừng' : 'Bấm để chọn trang bắt đầu rồi đồng bộ'}" style="cursor:pointer;border:0;border-radius:8px;padding:5px 12px;font:inherit;font-weight:800;color:#fff;background:${custSyncSt.running ? '#64748b' : 'linear-gradient(90deg,#0ea5e9,#2563eb)'}">${custSyncSt.running ? `⏹ Dừng · ⏳ trang ${custSyncSt.page}${custSyncSt.pages ? `/${custSyncSt.pages} (${pct}%)` : ''}…` : '☁️ Đồng bộ khách hàng lên cloud'}</button><span style="color:#475569">☁️ <b>${n.toLocaleString('vi-VN')}</b> khách trên cloud${done?.at ? ` · lần đủ gần nhất ${new Date(done.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}` : ''}</span>${custSyncSt.msg ? `<span style="color:${/⚠️/.test(custSyncSt.msg) ? '#dc2626' : '#15803d'}">${esc(custSyncSt.msg)}</span>` : ''}`;
     if (b.dataset.h !== html) {
       b.dataset.h = html;
       b.innerHTML = html;
