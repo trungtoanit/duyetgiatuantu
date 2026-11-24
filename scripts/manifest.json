@@ -1,5 +1,5 @@
 {
-  "version": "1.2.827",
+  "version": "1.2.828",
   "scripts": [
     {
       "id": "bao-gia-hook",
@@ -191,6 +191,7 @@
     "kcnOsm",
     "mapsCrawl",
     "kcnIndex",
-    "mapsTabUi"
+    "mapsTabUi",
+    "geoCache"
   ]
 }

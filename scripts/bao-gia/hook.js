@@ -570,7 +570,7 @@
       emit('deliveryGeo', {
         id: d.id,
         distance: d.distance,
-        stops: d.deliveryDetails.map((x) => ({ code: x.misaOrder?.code || '', name: x.misaOrder?.customerName || x.name || '', lat: Number(x.lat) || 0, lng: Number(x.lng) || 0, address: x.address || '', distance: x.distance })),
+        stops: d.deliveryDetails.map((x) => ({ code: x.misaOrder?.code || '', name: x.misaOrder?.customerName || x.name || '', lat: Number(x.lat) || 0, lng: Number(x.lng) || 0, address: x.address || x.misaOrder?.opportunity?.deliveryAddress || x.inventory?.receiverAddress || x.misaOrder?.ownerCustomer?.deliveryAddress || x.misaOrder?.deliveryAddress || '', distance: x.distance })),
       });
       return;
     }

@@ -1360,12 +1360,43 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     const me = Object.values(pl).find((c) => c?.lat && /tu[aấ]n\s*t[uú]/i.test(`${c.name} ${c.legalName || ''}`) && /48\/13|b[iì]nh ph[uư][oớ]c b/i.test(`${c.addr || ''} ${c.legalAddr || ''}`));
     return (dlHome = me ? [me.lat, me.lng] : [10.9446, 106.7373]);
   }
+  // Điểm giao không có toạ độ trên CRM (lat = 0) → tìm toạ độ theo địa chỉ (OpenStreetMap Nominatim): thử cả địa chỉ, rồi bỏ dần
+  // phần đầu (số nhà, đường…) tới mức phường / huyện. Lưu kv geoCache (đồng bộ). Kết quả theo địa chỉ chỉ gần đúng (≈).
+  async function dlGeocode(addr) {
+    const key = String(addr || '').trim().toLowerCase();
+    if (!key) return null;
+    const cache = (await kvGet('geoCache').catch(() => ({}))) || {};
+    if (cache[key]) return cache[key].lat ? cache[key] : null;
+    const parts = String(addr).split(',').map((x) => x.trim()).filter((x) => x && !/^vi[eệ]t\s*nam$/i.test(x));
+    let hit = null;
+    for (let i = 0; i < parts.length - 1 && !hit; i++) {
+      const q = parts.slice(i).join(', ');
+      const r = await call({ type: 'http', url: `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=vn&accept-language=vi&q=${encodeURIComponent(q)}` }).catch(() => null);
+      try {
+        const j = r?.ok ? JSON.parse(r.text) : [];
+        if (j[0]) hit = { lat: Number(j[0].lat), lng: Number(j[0].lon), q, lv: i };
+      } catch {}
+      await sleep(1100); // Nominatim: ≤ 1 truy vấn / giây
+    }
+    await kvMerge('geoCache', { [key]: hit || { lat: 0, at: Date.now() } }).catch(() => {});
+    return hit;
+  }
   async function dlKmRun(id) {
     const g = dlGeo[id];
     if (!g || dlKm[id]?.busy) return;
-    const pts = g.stops.filter((x) => x.lat && x.lng);
-    if (!pts.length) return;
     dlKm[id] = { busy: true };
+    dlKmPaint();
+    // CRM có toạ độ → dùng; không có → tìm theo địa chỉ (đánh dấu ≈)
+    for (const x of g.stops) {
+      if (x.lat && x.lng) continue;
+      const h = await dlGeocode(x.address);
+      if (h) Object.assign(x, { lat: h.lat, lng: h.lng, approx: true });
+    }
+    const pts = g.stops.filter((x) => x.lat && x.lng);
+    if (!pts.length) {
+      dlKm[id] = { err: 'Không có toạ độ điểm giao (CRM chưa có, tìm theo địa chỉ không ra)' };
+      return dlKmPaint();
+    }
     try {
       const [la, ln] = await dlHomeAt();
       const osrm = async (coords) => {
@@ -1378,9 +1409,9 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       const chain = [[la, ln], ...pts.map((p) => [p.lat, p.lng])];
       const one = pts.length > 1 ? await osrm(chain) : each[0];
       const back = await osrm([[pts[pts.length - 1].lat, pts[pts.length - 1].lng], [la, ln]]);
-      dlKm[id] = { each: Object.fromEntries(pts.map((p, i) => [p.code, each[i]])), one, round: one != null && back != null ? one + back : null };
+      dlKm[id] = { each: Object.fromEntries(pts.map((p, i) => [p.code, each[i]])), approx: Object.fromEntries(pts.map((p) => [p.code, !!p.approx])), anyApprox: pts.some((p) => p.approx), missing: g.stops.length - pts.length, one, round: one != null && back != null ? one + back : null };
     } catch {
-      dlKm[id] = { err: true };
+      dlKm[id] = { err: 'Máy chủ tính đường (OSRM) lỗi – mở lại chuyến để thử lại' };
     }
     dlKmPaint();
   }
@@ -1389,7 +1420,23 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     if (!m) return;
     const id = Number((m.innerText.match(/chuyến\s*#\s*([\d.]+)/i) || [])[1]?.replace(/\./g, ''));
     const k = dlKm[id];
-    if (!k || k.busy || k.err) return;
+    // modal của antd dùng lại khung cũ → xoá nhãn / dòng tổng của chuyến khác còn sót
+    m.querySelectorAll('.dg-dlkm, .dg-dlkm-total').forEach((el) => el.dataset.trip !== String(id) && el.remove());
+    if (!k) return;
+    if (k.busy || k.err) {
+      const bar0 = m.querySelector('.delivery-modal__kpi-bar');
+      if (!bar0) return;
+      let t0 = bar0.querySelector('.dg-dlkm-total');
+      if (!t0) {
+        t0 = document.createElement('div');
+        t0.className = 'dg-dlkm-total';
+        t0.dataset.trip = String(id);
+        t0.setAttribute('style', 'margin-top:6px;font-size:12.5px;color:#64748b;font-weight:700;width:100%');
+        bar0.append(t0);
+      }
+      t0.textContent = k.busy ? '⏳ Đang tính km đường bộ thực tế…' : `⚠️ ${k.err}`;
+      return;
+    }
     // từng điểm giao: badge cạnh địa chỉ
     for (const card of m.querySelectorAll('.delivery-modal__order-card')) {
       const code = (card.innerText.match(/DH\d+/) || [])[0];
@@ -1400,20 +1447,27 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
       if (!b) {
         b = document.createElement('span');
         b.className = 'dg-dlkm';
+        b.dataset.trip = String(id);
         b.setAttribute('style', 'margin-left:8px;padding:1px 8px;border-radius:7px;background:#ccfbf1;color:#0f766e;font-weight:800;font-size:12px;white-space:nowrap');
         ad.after(b);
       }
-      b.textContent = `🛣 ${km.toFixed(1)} km thực tế từ Tuấn Tú`;
-      b.title = 'Đường bộ (OpenStreetMap) từ xưởng Tuấn Tú tới điểm giao này';
+      b.textContent = `🛣 ${k.approx?.[code] ? '≈ ' : ''}${km.toFixed(1)} km thực tế từ Tuấn Tú`;
+      b.title = k.approx?.[code] ? 'CRM chưa có toạ độ điểm giao – toạ độ tìm theo địa chỉ (gần đúng, có thể chỉ tới mức phường)' : 'Đường bộ (OpenStreetMap) từ xưởng Tuấn Tú tới toạ độ điểm giao trên CRM';
     }
     // tổng chuyến: cạnh ô "Km thực tế"
     const inp = m.querySelector('.delivery-modal__kpi-bar input.delivery-modal__fee-input');
     const bar = m.querySelector('.delivery-modal__kpi-bar');
     if (!bar) return;
     let t = bar.querySelector('.dg-dlkm-total');
+    if (t && !t.querySelector('[data-fill]') && !t.dataset.ok) {
+      t.remove();
+      t = null;
+    }
     if (!t) {
       t = document.createElement('div');
       t.className = 'dg-dlkm-total';
+      t.dataset.trip = String(id);
+      t.dataset.ok = '1';
       t.setAttribute('style', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#0f766e;font-weight:700;width:100%');
       bar.append(t);
       t.addEventListener('click', (e) => {
@@ -1430,7 +1484,7 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
     const f = (x) => (x == null ? '–' : x.toFixed(1));
     const bt = 'cursor:pointer;border:1px solid #5eead4;background:#f0fdfa;color:#0f766e;border-radius:7px;padding:1px 8px;font:inherit;font-size:12px;font-weight:800';
-    t.innerHTML = `🛣 Km thực tế (đường bộ, OpenStreetMap): 1 chiều <b>${f(k.one)} km</b> · khứ hồi <b>${f(k.round)} km</b>${inp ? ` <button type="button" data-fill="${f(k.one)}" style="${bt}" title="Điền vào ô Km thực tế (chưa lưu – bấm Lưu của CRM)">↳ Điền 1 chiều</button><button type="button" data-fill="${f(k.round)}" style="${bt}" title="Điền vào ô Km thực tế (chưa lưu – bấm Lưu của CRM)">↳ Điền khứ hồi</button>` : ''}`;
+    t.innerHTML = `🛣 Km thực tế (đường bộ, OpenStreetMap): 1 chiều <b>${k.anyApprox ? '≈ ' : ''}${f(k.one)} km</b> · khứ hồi <b>${k.anyApprox ? '≈ ' : ''}${f(k.round)} km</b>${k.anyApprox ? ' <span style="color:#b45309;font-weight:600" title="Có điểm giao CRM chưa có toạ độ – tìm theo địa chỉ, gần đúng">(≈ toạ độ theo địa chỉ)</span>' : ''}${k.missing ? ` <span style="color:#dc2626">· ${k.missing} điểm không xác định được vị trí</span>` : ''}${inp ? ` <button type="button" data-fill="${f(k.one)}" style="${bt}" title="Điền vào ô Km thực tế (chưa lưu – bấm Lưu của CRM)">↳ Điền 1 chiều</button><button type="button" data-fill="${f(k.round)}" style="${bt}" title="Điền vào ô Km thực tế (chưa lưu – bấm Lưu của CRM)">↳ Điền khứ hồi</button>` : ''}`;
   }
   if (IS_TOP) setInterval(() => /^\/delivery\//.test(location.pathname) && dlKmPaint(), 1500);
 
