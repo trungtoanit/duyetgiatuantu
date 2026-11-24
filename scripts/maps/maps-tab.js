@@ -584,7 +584,7 @@ ${c.legalName && c.name !== c.legalName ? `<div style="font-size:12px;color:#647
 ${sec('Pháp lý', row('Mã số thuế', c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800">${esc(c.mst)}</a>` : '<span style="color:#94a3b8">chưa có</span>') + (c.mstInfo?.length ? c.mstInfo.filter(([k]) => !/^Mã số thuế$/i.test(k)).map(([k, v]) => row(esc(k), esc(v))).join('') : '') + (c.mstInfo?.length ? '' : row('Địa chỉ pháp lý', esc(c.legalAddr || ''))) + (c.mst ? `<div style="font-size:11px;color:#94a3b8;margin-top:3px">${c.mstInfo?.length ? `🧾 masothue · ${new Date(c.mstInfoAt || c.mstAt || Date.now()).toLocaleDateString('vi-VN')} · ` : ''}<a href="#" data-mp="mstinfo" data-id="${esc(c.id)}">${c.mstInfo?.length ? 'lấy lại' : '🧾 Lấy đủ thông tin từ masothue'}</a>${mpMstMsg[c.id] ? ` · ${esc(mpMstMsg[c.id])}` : ''}</div>` : ''))}
 ${sec('Vị trí', row('Khu công nghiệp', c.kcn ? `<b style="color:#9a3412">🏭 ${esc(c.kcn)}</b>` : '<span style="color:#94a3b8">ngoài KCN</span>') + row('Địa chỉ', esc(c.addr || '')) + row('Khoảng cách', d != null ? `<b style="color:#0369a1">📍 ${d.toFixed(1)} km</b> từ xưởng Tuấn Tú` : ''))}
 ${sec('Quy mô', row('Diện tích xưởng', mpAreaCell(c)) + row('Tiềm năng thùng', box ? `📦 ${box}${c.boxWhy ? `<div style="font-size:11.5px;color:#64748b">${esc(c.boxWhy)}</div>` : ''}` : ''))}
-${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)) + row('ERP', e ? `<a href="${ERP}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}` : `<button data-mp="link" data-id="${esc(c.id)}" style="cursor:pointer;border:1px solid #86efac;color:#166534;background:#f0fdf4;border-radius:7px;padding:2px 8px;font-weight:700">🔗 Kết nối ERP</button>`))}
+${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)) + row('Website', c.web ? `<a href="${esc(c.web)}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:700;word-break:break-all">${esc(c.web.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>` : '<span style="color:#94a3b8">chưa có (đọc từ Google Maps khi mở popup)</span>') + (c.web ? row('SĐT trên web', mpUi.webBusy === c.id ? '<span style="color:#94a3b8">⏳ Đang quét website…</span>' : c.webPhones?.length ? (e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : c.webPhones.map((x) => mpPhone(x.p)).join('<br>')) + `<div style="font-size:10.5px;color:#94a3b8">${c.webPages || 0} trang đã quét · <a href="#" data-mp="webscan" data-id="${esc(c.id)}">quét lại</a></div>` : c.webScanAt ? `<span style="color:#94a3b8">không thấy SĐT</span> · <a href="#" data-mp="webscan" data-id="${esc(c.id)}" style="font-size:11px">quét lại</a>` : `<a href="#" data-mp="webscan" data-id="${esc(c.id)}">🔎 Quét SĐT trên website</a>`) : '') + row('ERP', e ? `<a href="${ERP}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}` : `<button data-mp="link" data-id="${esc(c.id)}" style="cursor:pointer;border:1px solid #86efac;color:#166534;background:#f0fdf4;border-radius:7px;padding:2px 8px;font-weight:700">🔗 Kết nối ERP</button>`))}
 ${c.reviews?.length || mpUi.revFor === c.id ? sec('Đánh giá', `<div data-mp-reviews>${mpReviewsHtml(c)}</div>`) : ''}
 ${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
@@ -714,6 +714,60 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
 <div style="display:flex;gap:4px;overflow-x:auto;margin-top:5px;padding-bottom:2px">${ps.map((u, i) => `<img data-mp="slg" data-i="${i}" src="${esc(u)}" loading="lazy" referrerpolicy="no-referrer" style="flex:0 0 64px;height:48px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i ? 'transparent' : '#2563eb'};opacity:${i ? '.7' : '1'}">`).join('')}</div><div style="font-size:10.5px;color:#94a3b8;margin-top:3px">☁️ ${ps.length} ảnh đã lưu${c.photosAt ? ` · ${new Date(c.photosAt).toLocaleDateString('vi-VN')}` : ''}</div>`;
   }
   // Theo dõi khung Google Maps ~40 giây khi popup đang mở: gặp ảnh mới thì gộp vào ảnh đã lưu (tối đa 12) và lưu cloud
+  // 🌐 Quét SĐT trên website công ty (qua background – không CORS): trang chủ + tối đa 3 trang liên hệ / giới thiệu cùng tên miền.
+  // Lấy số trong link tel:, chữ trên trang (định dạng VN: 0… / +84…), chuẩn hoá, bỏ trùng → c.webPhones [{ p, mob }], lưu cloud.
+  function mpPhonesIn(html) {
+    const out = new Set();
+    const add = (raw) => {
+      let d = String(raw || '').replace(/\D/g, '');
+      if (d.startsWith('840')) d = d.slice(2);
+      else if (d.startsWith('84')) d = `0${d.slice(2)}`;
+      if (/^0[35789]\d{8}$/.test(d) || /^02\d{9}$/.test(d) || /^1[89]00\d{4,6}$/.test(d)) out.add(d);
+    };
+    for (const m of html.matchAll(/href=["']tel:([^"']+)/gi)) add(m[1]);
+    const txt = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/g, ' ');
+    for (const m of txt.matchAll(/(?<![\d])(?:\+?84|0)[\s.\-()]*(?:\d[\s.\-()]*){8,10}(?![\d])/g)) add(m[0]);
+    for (const m of txt.matchAll(/(?<![\d])1[89]00[\s.\-]*\d{2,3}[\s.\-]*\d{2,3}(?![\d])/g)) add(m[0]);
+    return out;
+  }
+  async function mpWebScan(id) {
+    const c = mpData.places[id];
+    if (!c?.web || mpUi.webBusy === id) return;
+    mpUi.webBusy = id;
+    if (mpUi.detail === id) render();
+    const found = new Set();
+    const pages = [];
+    try {
+      const base = new URL(c.web);
+      const get = async (u) => {
+        const r = await call({ type: 'http', url: u }).catch(() => null);
+        return r?.ok ? String(r.text || '').slice(0, 800000) : '';
+      };
+      const home = await get(base.href);
+      if (home) {
+        pages.push(base.href);
+        mpPhonesIn(home).forEach((x) => found.add(x));
+        const links = [...home.matchAll(/href=["']([^"'#]+)["']/gi)].map((m) => {
+          try {
+            return new URL(m[1], base).href;
+          } catch {
+            return '';
+          }
+        }).filter((u) => u && new URL(u).hostname.replace(/^www\./, '') === base.hostname.replace(/^www\./, '') && /lien-?he|contact|lienhe|gioi-?thieu|about|ve-chung-toi/i.test(u));
+        for (const u of [...new Set(links)].slice(0, 3)) {
+          const h = await get(u);
+          if (!h) continue;
+          pages.push(u);
+          mpPhonesIn(h).forEach((x) => found.add(x));
+        }
+      }
+    } catch {}
+    const cur = mpData.places[id];
+    const list = [...found].map((p) => ({ p, mob: /^0[35789]\d{8}$/.test(p) })).sort((a, b) => b.mob - a.mob).slice(0, 20);
+    await mpSave({ [id]: { ...cur, webPhones: list, webPages: pages.length, webScanAt: Date.now() } });
+    mpUi.webBusy = null;
+    if (mpUi.detail === id) render();
+  }
   async function mpWatchPhotos(id) {
     for (let i = 0; i < 27 && mpUi.detail === id && open; i++) {
       await new Promise((r) => setTimeout(r, 1500));
@@ -721,7 +775,14 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
       let doc = null;
       try { doc = root?.querySelector('[data-mp-place]')?.contentDocument; } catch {}
       if (!c || !doc?.body) continue;
-      if ((c.photos || []).length >= MP_PHOTO_MAX) return;
+      // 🌐 website trên trang Google Maps của công ty → lưu c.web, rồi quét SĐT trên website (1 lần)
+      const w0 = doc.querySelector('a[data-item-id="authority"]')?.href || '';
+      if (w0 && w0 !== c.web && /^https?:/i.test(w0)) {
+        await mpSave({ [id]: { ...c, web: w0 } });
+        if (!mpData.places[id].webScanAt) mpWebScan(id).catch(() => {});
+        if (mpUi.detail === id) render();
+      } else if (c.web && !c.webScanAt && !mpUi.webBusy) mpWebScan(id).catch(() => {});
+      if ((mpData.places[id]?.photos || []).length >= MP_PHOTO_MAX) continue;
       const urls = [];
       for (const img of doc.querySelectorAll('img')) urls.push(img.currentSrc || img.src);
       for (const el of doc.querySelectorAll('[style*="googleusercontent"]')) {
@@ -856,6 +917,10 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
         alert(`Không lưu được: ${err.message || err}`);
         render();
       });
+      return;
+    }
+    if (k === 'webscan' && c) {
+      mpWebScan(id).catch(() => {});
       return;
     }
     if (k === 'revai' && c) {
