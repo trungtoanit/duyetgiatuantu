@@ -429,9 +429,9 @@ ${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn
 ${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
 </div>
-<div style="display:grid;grid-template-rows:260px 1fr;min-height:560px;background:#f8fafc">
-${sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;border:0;border-bottom:1px solid #e2e8f0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>'}
-${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh và đánh giá trên Google Maps" loading="lazy" style="width:100%;height:100%;min-height:300px;border:0"></iframe>` : ''}
+<div style="position:relative;display:grid;grid-template-rows:1fr;min-height:560px;background:#f8fafc">
+${sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:560px;border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>'}
+${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (ẩn – chỉ để đọc ảnh)" aria-hidden="true" tabindex="-1" style="position:absolute;left:-10000px;top:0;width:1100px;height:800px;border:0;visibility:hidden;pointer-events:none"></iframe>` : ''}
 </div></div></div></div>`;
   }
   // 📸 Ảnh công ty: đọc ảnh trong khung trang Google Maps của popup (cùng tên miền google.com nên đọc được), lưu đường dẫn ảnh lên cloud (c.photos)
