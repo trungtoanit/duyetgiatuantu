@@ -351,6 +351,11 @@
     m?.offVer !== OFF_VER ||
     (!!q?.amount && (!m?.amountAt || Math.abs(m.amountAt - q.amount) / q.amount > 0.005));
   async function save({ kind, data }) {
+    if (kind === 'deliveryGeo') {
+      dlGeo[data.id] = data;
+      dlKmRun(data.id).catch(() => {});
+      return;
+    }
     if (kind === 'customersAll') {
       // ☁️ Danh sách khách hàng: lưu theo id (kv customersAll – đồng bộ cloud), ghi tiến độ đồng bộ (custSync)
       const now = Date.now();
@@ -1342,6 +1347,92 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     }
   }
   if (IS_TOP) setInterval(() => injectCustSyncBtn().catch(() => {}), 2000);
+
+  // ---------- 🛣 Giao hàng: km đường bộ THỰC TẾ từ xưởng Tuấn Tú tới từng điểm giao (OSRM – OpenStreetMap) ----------
+  // Toạ độ điểm giao lấy từ chính dữ liệu chuyến (hook đọc GET /delivery/<id>). Mỗi điểm: km đi thẳng từ Tuấn Tú; cả chuyến:
+  // Tuấn Tú → điểm 1 → điểm 2 … (1 chiều) và cộng đường về (khứ hồi). Chỉ hiển thị + nút điền ô “Km thực tế” (không tự lưu).
+  const dlGeo = {};
+  const dlKm = {};
+  let dlHome = null;
+  async function dlHomeAt() {
+    if (dlHome) return dlHome;
+    const pl = (await kvGet('mapsPlaces').catch(() => ({}))) || {};
+    const me = Object.values(pl).find((c) => c?.lat && /tu[aấ]n\s*t[uú]/i.test(`${c.name} ${c.legalName || ''}`) && /48\/13|b[iì]nh ph[uư][oớ]c b/i.test(`${c.addr || ''} ${c.legalAddr || ''}`));
+    return (dlHome = me ? [me.lat, me.lng] : [10.9446, 106.7373]);
+  }
+  async function dlKmRun(id) {
+    const g = dlGeo[id];
+    if (!g || dlKm[id]?.busy) return;
+    const pts = g.stops.filter((x) => x.lat && x.lng);
+    if (!pts.length) return;
+    dlKm[id] = { busy: true };
+    try {
+      const [la, ln] = await dlHomeAt();
+      const osrm = async (coords) => {
+        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords.map(([a, b]) => `${b},${a}`).join(';')}?overview=false`);
+        const j = await r.json();
+        return j.routes?.[0] ? j.routes[0].distance / 1000 : null;
+      };
+      const each = [];
+      for (const p of pts) each.push(await osrm([[la, ln], [p.lat, p.lng]]));
+      const chain = [[la, ln], ...pts.map((p) => [p.lat, p.lng])];
+      const one = pts.length > 1 ? await osrm(chain) : each[0];
+      const back = await osrm([[pts[pts.length - 1].lat, pts[pts.length - 1].lng], [la, ln]]);
+      dlKm[id] = { each: Object.fromEntries(pts.map((p, i) => [p.code, each[i]])), one, round: one != null && back != null ? one + back : null };
+    } catch {
+      dlKm[id] = { err: true };
+    }
+    dlKmPaint();
+  }
+  function dlKmPaint() {
+    const m = [...document.querySelectorAll('.ant-modal-wrap')].find((x) => getComputedStyle(x).display !== 'none' && x.querySelector('.delivery-modal'));
+    if (!m) return;
+    const id = Number((m.innerText.match(/chuyến\s*#\s*([\d.]+)/i) || [])[1]?.replace(/\./g, ''));
+    const k = dlKm[id];
+    if (!k || k.busy || k.err) return;
+    // từng điểm giao: badge cạnh địa chỉ
+    for (const card of m.querySelectorAll('.delivery-modal__order-card')) {
+      const code = (card.innerText.match(/DH\d+/) || [])[0];
+      const km = code && k.each[code];
+      const ad = card.querySelector('.delivery-modal__order-address');
+      if (!ad || km == null) continue;
+      let b = ad.parentElement.querySelector('.dg-dlkm');
+      if (!b) {
+        b = document.createElement('span');
+        b.className = 'dg-dlkm';
+        b.setAttribute('style', 'margin-left:8px;padding:1px 8px;border-radius:7px;background:#ccfbf1;color:#0f766e;font-weight:800;font-size:12px;white-space:nowrap');
+        ad.after(b);
+      }
+      b.textContent = `🛣 ${km.toFixed(1)} km thực tế từ Tuấn Tú`;
+      b.title = 'Đường bộ (OpenStreetMap) từ xưởng Tuấn Tú tới điểm giao này';
+    }
+    // tổng chuyến: cạnh ô "Km thực tế"
+    const inp = m.querySelector('.delivery-modal__kpi-bar input.delivery-modal__fee-input');
+    const bar = m.querySelector('.delivery-modal__kpi-bar');
+    if (!bar) return;
+    let t = bar.querySelector('.dg-dlkm-total');
+    if (!t) {
+      t = document.createElement('div');
+      t.className = 'dg-dlkm-total';
+      t.setAttribute('style', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#0f766e;font-weight:700;width:100%');
+      bar.append(t);
+      t.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-fill]');
+        const box = m.querySelector('.delivery-modal__kpi-bar input.delivery-modal__fee-input');
+        if (!btn || !box) return;
+        e.preventDefault();
+        const v = btn.dataset.fill;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(box, v);
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        box.focus();
+      });
+    }
+    const f = (x) => (x == null ? '–' : x.toFixed(1));
+    const bt = 'cursor:pointer;border:1px solid #5eead4;background:#f0fdfa;color:#0f766e;border-radius:7px;padding:1px 8px;font:inherit;font-size:12px;font-weight:800';
+    t.innerHTML = `🛣 Km thực tế (đường bộ, OpenStreetMap): 1 chiều <b>${f(k.one)} km</b> · khứ hồi <b>${f(k.round)} km</b>${inp ? ` <button type="button" data-fill="${f(k.one)}" style="${bt}" title="Điền vào ô Km thực tế (chưa lưu – bấm Lưu của CRM)">↳ Điền 1 chiều</button><button type="button" data-fill="${f(k.round)}" style="${bt}" title="Điền vào ô Km thực tế (chưa lưu – bấm Lưu của CRM)">↳ Điền khứ hồi</button>` : ''}`;
+  }
+  if (IS_TOP) setInterval(() => /^\/delivery\//.test(location.pathname) && dlKmPaint(), 1500);
 
   // Đọc trang Đơn hàng Misa (/misa-order/list) trong khung ẩn: trang 1, 2, 3… tới khi gặp đơn cũ hơn ~6 tháng (hoặc hết trang)
   async function collectMisaOrders(maxPages = 40) {

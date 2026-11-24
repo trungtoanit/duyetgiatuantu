@@ -565,6 +565,15 @@
       } catch {}
       return;
     }
+    // Chi tiết 1 chuyến giao (/delivery): GET /v1/admin/delivery/<id> → toạ độ từng điểm giao (lat/lng) để panel tính km đường bộ thực tế
+    if (/\/v1\/admin\/delivery\/\d+(\?|$)/.test(url) && Array.isArray(d.deliveryDetails)) {
+      emit('deliveryGeo', {
+        id: d.id,
+        distance: d.distance,
+        stops: d.deliveryDetails.map((x) => ({ code: x.misaOrder?.code || '', name: x.misaOrder?.customerName || x.name || '', lat: Number(x.lat) || 0, lng: Number(x.lng) || 0, address: x.address || '', distance: x.distance })),
+      });
+      return;
+    }
     // Danh sách khách hàng (trang /khach-hang): GET /v1/admin/customer?page=&limit= → rút gọn từng khách, gửi panel.js lưu kv customersAll (đồng bộ cloud)
     if (/\/v1\/admin\/customer\?/.test(url) && Array.isArray(d.customers)) {
       const page = Number(url.match(/[?&]page=(\d+)/)?.[1] || 1);
