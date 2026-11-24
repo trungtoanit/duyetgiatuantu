@@ -1268,7 +1268,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
     const sec = Math.round((Date.now() - mstSt.at) / 1000);
     const ph = Date.now() < mstPause && mstSt.phase !== 'blocked' ? `⏸ Tạm nghỉ (masothue lỗi / bận) – thử lại sau ${Math.ceil((mstPause - Date.now()) / 60e3)} phút`
       : { search: `🔎 Đang tra masothue: <b>${esc(mstSt.name)}</b> (${sec}s)`, tab: `⏳ Đã gửi tab masothue: <b>${esc(mstSt.name)}</b> – chờ tới lượt (${sec}s)`, tabwork: `🔎 Tab masothue đang tra: <b>${esc(mstSt.name)}</b> (${sec}s)`, blocked: '⚠️ masothue cần xác minh (Cloudflare) – mở tab masothue để tự xác minh', notab: `🧾 Chưa có tab tra MST – bấm <a href="https://masothue.com/#dgmst" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:800">Mở tab tra MST</a>`, wait: '⏱ Chờ 15 giây rồi tra công ty kế tiếp…', done: '✅ Đã tra hết các công ty đang có', idle: '⏱ Chuẩn bị tra MST…' }[mstSt.phase] || '';
-    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div><div style="color:#15803d">📦 Tiềm năng thùng: ${all.filter((x) => x.box).length}/${all.length} đã chấm · <b>${all.filter((x) => x.box === 'A').length} cao</b> · ${all.filter((x) => x.box === 'B').length} vừa${boxSt.phase === 'run' ? ` · 🤖 AI đang chấm ${boxSt.n} công ty…` : boxSt.last ? ` · ${esc(boxSt.last)}` : ''}</div><div style="color:#92400e">📐 Diện tích xưởng: ${all.filter((x) => x.area != null).length}/${all.length} đã đo · <b>${all.filter((x) => x.area >= 5000).length} xưởng ≥ 5.000 m²</b>${areaSt.phase === 'run' ? ` · 🗺 đang đo ${areaSt.n} công ty…` : areaSt.last ? ` · ${esc(areaSt.last)}` : ''}</div>`;
+    mstBar.innerHTML = `<div style="display:flex;align-items:center;gap:6px"><b>🧾 MST</b><span style="flex:1;height:6px;background:#ede9fe;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:#7c3aed"></span></span><span>${done} có · ${skip} không rõ · còn ${left}</span></div><div>${ph}</div>${mstSt.last ? `<div style="color:#64748b">${esc(mstSt.last)}</div>` : ''}<div style="color:#0f766e;border-top:1px dashed #e9d5ff;margin-top:3px;padding-top:3px">🏷 Ngành: ${all.filter((x) => x.ind).length}/${all.length} đã gắn${indSt.phase === 'run' ? ` · 🤖 AI đang gắn ${indSt.n} công ty…` : indSt.last ? ` · ${esc(indSt.last)}` : ''}</div><div style="color:#15803d">📦 Tiềm năng thùng: ${all.filter((x) => x.box).length}/${all.length} đã chấm · <b>${all.filter((x) => x.box === 'A').length} cao</b> · ${all.filter((x) => x.box === 'B').length} vừa${boxSt.phase === 'run' ? ` · 🤖 AI đang chấm ${boxSt.n} công ty…` : boxSt.last ? ` · ${esc(boxSt.last)}` : ''}</div><div style="color:#92400e">📐 Diện tích xưởng: ${all.filter((x) => x.area != null).length}/${all.length} đã đo · <b>${all.filter((x) => x.area >= 5000).length} xưởng ≥ 5.000 m²</b>${areaSt.phase === 'run' ? ` · 🗺 đang đo ${areaSt.n} công ty…` : areaSt.last ? ` · ${esc(areaSt.last)}` : ''}</div><div style="color:#0f766e">🛣 Đường đi: ${all.filter((x) => x.route?.km).length}/${all.length} đã tính${routeBusy ? ' · đang tính…' : routeSt.last ? ` · ${esc(routeSt.last)}` : ''}</div>`;
   }
   setInterval(mstBarDraw, 1000);
 
@@ -1403,6 +1403,45 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   const BOX_LB = { A: '📦 Thùng: cao', B: '📦 Thùng: vừa', C: '📦 Thùng: thấp' };
   const BOX_COL = { A: '#15803d', B: '#b45309', C: '#94a3b8' };
   const boxTag = (c) => (c.box && c.box !== 'C' ? ` <span title="AI đánh giá khả năng dùng thùng carton / thùng offset số lượng lớn${c.boxWhy ? `: ${esc(c.boxWhy)}` : ''}" style="display:inline-block;padding:0 6px;border-radius:6px;background:${BOX_COL[c.box]}1a;border:1px solid ${BOX_COL[c.box]}66;color:${BOX_COL[c.box]};font-size:10.5px;font-weight:900;white-space:nowrap">${BOX_LB[c.box]}</span>` : '');
+  // 🛣 Cập nhật đường đi NGẦM cho mọi công ty: mỗi 40 giây 1 lô 60 công ty chưa có c.route → 1 truy vấn OSRM table (xưởng Tuấn Tú
+  // → các công ty, đường bộ): km + phút xe tải (+30%), lưu cloud. Lỗi / máy chủ bận → nghỉ 5 phút.
+  const routeSt = { n: 0, last: '' };
+  let routeBusy = false;
+  let routePause = 0;
+  async function routeTick() {
+    if (routeBusy || Date.now() < routePause || !cache) return;
+    const todo = Object.values(cache).filter((x) => x?.lat && x.lng && !isRealEstate(x) && !x.route?.km && !(x.routeTry && Date.now() - x.routeTry < 7 * 86400e3)).slice(0, 60);
+    if (!todo.length) return;
+    routeBusy = true;
+    try {
+      const [la, ln] = homeAt();
+      const coords = [`${ln},${la}`, ...todo.map((c) => `${c.lng},${c.lat}`)].join(';');
+      const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance,duration`);
+      const j = res.ok ? await res.json().catch(() => null) : null;
+      if (!j?.distances?.[0]) {
+        routePause = Date.now() + 5 * 60e3;
+        return;
+      }
+      const patch = {};
+      todo.forEach((c, i) => {
+        const dm = j.distances[0][i + 1];
+        const ds = j.durations?.[0]?.[i + 1];
+        const v = dm != null && dm > 0 ? { ...c, route: { km: dm / 1000, min: ((ds || 0) / 60) * 1.3, at: Date.now() } } : { ...c, routeTry: Date.now() };
+        cache[c.id] = v;
+        patch[c.id] = v;
+      });
+      await kvMerge(KEY, patch);
+      routeSt.n += todo.length;
+      routeSt.last = `🛣 Đã tính đường đi ${todo.length} công ty`;
+      sideCalcKey = '';
+    } catch {
+      routePause = Date.now() + 5 * 60e3;
+    } finally {
+      routeBusy = false;
+    }
+  }
+  setTimeout(() => routeTick().catch(() => {}), 15e3);
+  setInterval(() => routeTick().catch(() => {}), 40e3);
   // dùng chung nhãn với bảng 📋 Danh sách công ty (maps-tab.js – cùng world): cột 🏭 Công ty gần đấy hiện y như panel phải
   window.dgTags = { rateTag, mstIcon, indTag, areaTag, boxTag, phoneHtml, aiAsk };
   let boxPause = 0;
