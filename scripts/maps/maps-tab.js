@@ -262,6 +262,22 @@ button{font:inherit}`;
     const me = Object.values(mpData?.places || {}).find((c) => c?.lat && /tu[aấ]n\s*t[uú]/i.test(`${c.name} ${c.legalName || ''}`) && /48\/13|b[iì]nh ph[uư][oớ]c b/i.test(`${c.addr || ''} ${c.legalAddr || ''}`));
     return (mpHome = me ? [me.lat, me.lng] : [10.9446, 106.7373]);
   }
+  // 🛣 Đường đi bằng đường bộ Tuấn Tú → công ty (OSRM, máy chủ OpenStreetMap công khai): km + phút (ước thêm 30% cho xe tải), lưu cloud c.route
+  async function mpRoute(id) {
+    const c = mpData.places[id];
+    if (!c?.lat) return;
+    const [la, ln] = mpHomeAt();
+    mpUi.routeBusy = id;
+    if (mpUi.detail === id) render();
+    try {
+      const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${ln},${la};${c.lng},${c.lat}?overview=false`);
+      const j = await r.json();
+      const rt = j.routes?.[0];
+      if (rt) await mpSave({ [id]: { ...mpData.places[id], route: { km: rt.distance / 1000, min: (rt.duration / 60) * 1.3, at: Date.now() } } });
+    } catch {}
+    mpUi.routeBusy = null;
+    if (mpUi.detail === id) render();
+  }
   function mpDist(c) {
     if (!c?.lat || !c?.lng) return null;
     const [la, ln] = mpHomeAt();
@@ -582,7 +598,7 @@ ${c.legalName && c.name !== c.legalName ? `<div style="font-size:12px;color:#647
 <div style="display:grid;grid-template-columns:minmax(300px,380px) 1fr minmax(260px,320px);gap:0">
 <div style="padding:4px 16px 14px;border-right:1px solid #f1f5f9">
 ${sec('Pháp lý', row('Mã số thuế', c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:800">${esc(c.mst)}</a>` : '<span style="color:#94a3b8">chưa có</span>') + (c.mstInfo?.length ? c.mstInfo.filter(([k]) => !/^Mã số thuế$/i.test(k)).map(([k, v]) => row(esc(k), esc(v))).join('') : '') + (c.mstInfo?.length ? '' : row('Địa chỉ pháp lý', esc(c.legalAddr || ''))) + (c.mst ? `<div style="font-size:11px;color:#94a3b8;margin-top:3px">${c.mstInfo?.length ? `🧾 masothue · ${new Date(c.mstInfoAt || c.mstAt || Date.now()).toLocaleDateString('vi-VN')} · ` : ''}<a href="#" data-mp="mstinfo" data-id="${esc(c.id)}">${c.mstInfo?.length ? 'lấy lại' : '🧾 Lấy đủ thông tin từ masothue'}</a>${mpMstMsg[c.id] ? ` · ${esc(mpMstMsg[c.id])}` : ''}</div>` : ''))}
-${sec('Vị trí', row('Khu công nghiệp', c.kcn ? `<b style="color:#9a3412">🏭 ${esc(c.kcn)}</b>` : '<span style="color:#94a3b8">ngoài KCN</span>') + row('Địa chỉ', esc(c.addr || '')) + row('Khoảng cách', d != null ? `<b style="color:#0369a1">📍 ${d.toFixed(1)} km</b> từ xưởng Tuấn Tú` : ''))}
+${sec('Vị trí', row('Khu công nghiệp', c.kcn ? `<b style="color:#9a3412">🏭 ${esc(c.kcn)}</b>` : '<span style="color:#94a3b8">ngoài KCN</span>') + row('Địa chỉ', esc(c.addr || '')) + row('Khoảng cách', d != null ? `<b style="color:#0369a1">📍 ${d.toFixed(1)} km</b> đường chim bay từ xưởng Tuấn Tú` : '') + (c.lat ? row('Đường đi', `${c.route?.km ? `<b style="color:#0f766e">🛣 ${c.route.km.toFixed(1)} km</b> · ~${Math.round(c.route.min)} phút xe tải` : mpUi.routeBusy === c.id ? '<span style="color:#94a3b8">⏳ Đang tính đường đi…</span>' : '<span style="color:#94a3b8">chưa tính</span>'} <a href="#" data-mp="route" data-id="${esc(c.id)}" style="font-size:11.5px;font-weight:800">${mpUi.route === c.id ? '🗺 Về bản đồ' : '🛣 Xem đường đi'}</a>`) : ''))}
 ${sec('Quy mô', row('Diện tích xưởng', mpAreaCell(c)) + row('Tiềm năng thùng', box ? `📦 ${box}${c.boxWhy ? `<div style="font-size:11.5px;color:#64748b">${esc(c.boxWhy)}</div>` : ''}` : ''))}
 ${sec('Liên hệ', row('Điện thoại', e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : mpPhone(c.phone)) + row('Website', c.web ? `<a href="${esc(c.web)}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:700;word-break:break-all">${esc(c.web.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>` : '<span style="color:#94a3b8">chưa có (đọc từ Google Maps khi mở popup)</span>') + (c.web ? row('SĐT trên web', mpUi.webBusy === c.id ? '<span style="color:#94a3b8">⏳ Đang quét website…</span>' : c.webPhones?.length ? (e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : c.webPhones.map((x) => mpPhone(x.p)).join('<br>')) + `<div style="font-size:10.5px;color:#94a3b8">${c.webPages || 0} trang đã quét · <a href="#" data-mp="webscan" data-id="${esc(c.id)}">quét lại</a></div>` : c.webScanAt ? `<span style="color:#94a3b8">không thấy SĐT</span> · <a href="#" data-mp="webscan" data-id="${esc(c.id)}" style="font-size:11px">quét lại</a>` : `<a href="#" data-mp="webscan" data-id="${esc(c.id)}">🔎 Quét SĐT trên website</a>`) : '') + row('ERP', e ? `<a href="${ERP}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? ` · NVKD ${esc(e.staff.name)}` : ''}` : `<button data-mp="link" data-id="${esc(c.id)}" style="cursor:pointer;border:1px solid #86efac;color:#166534;background:#f0fdf4;border-radius:7px;padding:2px 8px;font-weight:700">🔗 Kết nối ERP</button>`))}
 ${c.reviews?.length || mpUi.revFor === c.id ? sec('Đánh giá', `<div data-mp-reviews>${mpReviewsHtml(c)}</div>`) : ''}
@@ -590,7 +606,7 @@ ${sec('Hình ảnh', `<div data-mp-photos>${mpPhotosHtml(c)}</div>`)}
 <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${gm ? `<a href="${esc(gm)}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🗺 Mở trên Google Maps</a>` : ''}${ll ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener" style="text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-weight:800;font-size:12.5px">🚗 Chỉ đường</a>` : ''}</div>
 </div>
 <div style="position:relative;display:grid;grid-template-rows:1fr;min-height:max(560px,calc(96vh - 120px));background:#f8fafc">
-${mpPolyMap(c) || (sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:max(560px,calc(96vh - 120px));border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>')}
+${mpUi.route === c.id && c.lat ? `<iframe src="https://www.google.com/maps?saddr=${mpHomeAt().join(',')}&daddr=${c.lat},${c.lng}&dirflg=d&hl=vi&output=embed" title="Đường đi từ Tuấn Tú" style="width:100%;height:100%;min-height:max(560px,calc(96vh - 120px));border:0"></iframe>` : ''}${mpUi.route === c.id && c.lat ? '' : mpPolyMap(c) || (sat ? `<iframe src="${esc(sat)}" title="Bản đồ vệ tinh" loading="lazy" style="width:100%;height:100%;min-height:max(560px,calc(96vh - 120px));border:0"></iframe>` : '<div style="display:grid;place-items:center;color:#94a3b8">Chưa có toạ độ</div>')}
 ${gm ? `<iframe data-mp-place src="${esc(gm)}" title="Ảnh trên Google Maps (ẩn – chỉ để đọc ảnh)" aria-hidden="true" tabindex="-1" style="position:absolute;left:-10000px;top:0;width:1100px;height:800px;border:0;visibility:hidden;pointer-events:none"></iframe>` : ''}
 </div>
 <div style="display:flex;flex-direction:column;min-height:0;max-height:calc(96vh - 120px);border-left:1px solid #e2e8f0">${mpNearHtml(c)}</div></div></div></div>`;
@@ -919,6 +935,12 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
       });
       return;
     }
+    if (k === 'route' && c) {
+      mpUi.route = mpUi.route === id ? null : id;
+      if (!c.route?.km) mpRoute(id).catch(() => {});
+      render();
+      return;
+    }
     if (k === 'webscan' && c) {
       mpWebScan(id).catch(() => {});
       return;
@@ -976,7 +998,9 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
     } else if (k === 'lclose') mpUi.link = null;
     else if (k === 'detail') {
       mpUi.detail = id;
+      mpUi.route = null;
       setTimeout(() => mpWatchPhotos(id), 800);
+      if (c?.lat && !c.route?.km) mpRoute(id).catch(() => {});
     }
     else if (k === 'dclose') mpUi.detail = null;
     else if (k === 'mstinfo' && c?.mst) {
