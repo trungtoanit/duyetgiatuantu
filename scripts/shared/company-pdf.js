@@ -45,7 +45,7 @@ function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre
   const body = order.map(([k, list2]) => `${group ? `<tr class="g"><td colspan="8">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k)} · ${list2.length} công ty</td></tr>` : ''}${(group ? list2.sort((a, b) => a.name.localeCompare(b.name, 'vi')) : list2).map((c) => {
     const e = c.erp;
     const nm = c.name.toLocaleUpperCase('vi');
-    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.addr || '')}">${esc(c.addr || '')}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloOf(c.phone)}" data-app="${zaloApp(c.phone)}" target="_blank" rel="noopener" title="Mở Zalo" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo</span></a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
+    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.addr || '')}">${esc(c.addr || '')}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloApp(c.phone)}" data-app="${zaloApp(c.phone)}" title="Mở chat trong app Zalo trên máy" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo</span></a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
   }).join('')}`).join('');
   const now = new Date();
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)} – ${now.toLocaleDateString('vi-VN')}</title><style>
@@ -74,7 +74,7 @@ thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body
     if (!a) return;
     ev.preventDefault();
     if (a.dataset.app) {
-      // trên trang in: mở thẳng app Zalo (zalo://…) ngay trong trang. Trong file PDF link là https://zalo.me/… (PDF chỉ giữ link http)
+      // trên trang in: mở thẳng app Zalo (zalo://…) ngay trong trang. File PDF (Chrome lưu) giữ nguyên link zalo:// → bấm mở app Zalo (app Zalo PC nhận zalo://conversation?phone=…)
       const f = w.document.createElement('iframe');
       f.style.display = 'none';
       f.src = a.dataset.app;
