@@ -344,7 +344,7 @@ end $$;
 drop trigger if exists dg_web_items_log on public.dg_items;
 create trigger dg_web_items_log after update on public.dg_items for each row execute function public.dg_web_items_log();
 
--- xem nhật ký: admin xem tất cả, người khác chỉ xem của mình
+-- xem nhật ký: CHỈ admin
 create or replace function public.dg_web_log_list(p_from timestamptz default now() - interval '7 days', p_email text default null, p_action text default null, p_limit int default 500)
 returns table (at timestamptz, email text, name text, action text, target_id text, target_name text, detail jsonb)
 language plpgsql stable security definer set search_path = public as $$
@@ -352,7 +352,7 @@ declare
   v_role text := public.dg_web_role();
   v_me text := lower(coalesce(auth.jwt() ->> 'email', ''));
 begin
-  if v_role is null then raise exception 'Tài khoản chưa được cấp quyền'; end if;
+  if v_role is distinct from 'admin' then raise exception 'Chỉ admin mới xem được nhật ký'; end if;
   return query select l.at, l.email, l.name, l.action, l.target_id, l.target_name, l.detail from public.dg_web_log l
     where l.tenant = public.dg_web_tenant() and l.at >= coalesce(p_from, '1970-01-01')
       and (case when v_role = 'admin' then p_email is null or l.email = lower(p_email) else l.email = v_me end)

@@ -63,6 +63,8 @@
       return loginView('Tài khoản này chưa được cấp quyền xem. Liên hệ admin.');
     }
     S.role = role;
+    if (role === 'admin') count60();
+    else if (S.view === 'log') S.view = 'all';
     if (role === 'admin') sb.rpc('dg_web_list').then(({ data }) => { users = data || users; render(); }, () => {});
     const meInfo = (await sb.rpc('dg_web_me')).data || {};
     S.tenant = meInfo.tenant || (await sb.rpc('dg_web_tenant')).data || 'tuantu';
@@ -648,7 +650,7 @@ ${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' 
     const all = Object.values(items);
     return `<nav class="side">${VIEWS.map(([k, label, f]) => `<a href="#" data-a="view" data-v="${k}" class="${S.view === k ? 'on' : ''}">${label}<span>${store.mapsPlaces ? all.filter(f).length.toLocaleString('vi-VN') : ''}</span></a>`).join('')}
 <a href="#" data-a="view" data-v="history" class="${S.view === 'history' ? 'on' : ''}">📜 Lịch sử cuộc gọi<span>${all.reduce((n, c) => n + (c?.tele?.calls?.length || 0), 0) || ''}</span></a>
-<a href="#" data-a="view" data-v="log" class="${S.view === 'log' ? 'on' : ''}">🕘 Nhật ký${S.role === 'admin' ? '' : ' của tôi'}<span></span></a>
+${S.role === 'admin' ? `<a href="#" data-a="view" data-v="log" class="${S.view === 'log' ? 'on' : ''}" title="Số thao tác trong 60 phút gần nhất">🕘 Nhật ký<span>${LG.n60 != null ? `${LG.n60.toLocaleString('vi-VN')} / 60′` : ''}</span></a>` : ''}
 ${S.role === 'admin' ? staffHtml(all) : ''}
 <div class="muted" style="padding:10px 12px;font-size:11.5px;line-height:1.5">📞 Bấm <b>Nhận gọi</b> ở dòng công ty để nhận khách telesale. Gọi xong bấm <b>☎ Ghi cuộc gọi</b>.</div></nav>`;
   }
@@ -712,7 +714,17 @@ ${S.role === 'admin' ? staffHtml(all) : ''}
 ${list.map(card).join('') || '<div class="muted" style="padding:4px">Chưa có nhân viên.</div>'}</div>`;
   }
   // ---------- 🕘 Nhật ký hoạt động ----------
-  const LG = { days: '1', who: '', action: '', rows: null, err: '' };
+  const LG = { days: '1', who: '', action: '', rows: null, err: '', n60: null };
+  // (admin) đếm thao tác trong 60 phút gần nhất – cập nhật mỗi phút
+  async function count60() {
+    if (S.role !== 'admin' || !S.user) return;
+    const { data } = await sb.rpc('dg_web_log_list', { p_from: new Date(Date.now() - 36e5).toISOString(), p_email: null, p_action: null, p_limit: 2000 });
+    if (!data) return;
+    LG.n60 = data.length;
+    const el = document.querySelector('nav.side a[data-v="log"] span');
+    if (el) el.textContent = `${LG.n60.toLocaleString('vi-VN')} / 60′`;
+  }
+  setInterval(count60, 60e3);
   async function loadLog() {
     LG.rows = null;
     render();
@@ -720,6 +732,7 @@ ${list.map(card).join('') || '<div class="muted" style="padding:4px">Chưa có n
     const { data, error } = await sb.rpc('dg_web_log_list', { p_from: from, p_email: LG.who || null, p_action: LG.action || null, p_limit: 2000 });
     LG.err = error ? error.message : '';
     LG.rows = data || [];
+    count60();
     render();
   }
   const LOG_ACTIONS = ['đăng nhập', 'đăng xuất', 'xem công ty', 'nhận khách', 'trả khách', 'thu hồi khách', 'ghi cuộc gọi', 'xoá công ty', 'khôi phục công ty', 'kết nối ERP', 'bỏ kết nối ERP', 'nhập MST', 'sửa diện tích', 'sửa công ty', 'in PDF', 'tải lại dữ liệu', 'tạo tài khoản', 'đổi quyền', 'đổi tên hiển thị', 'đặt lại mật khẩu', 'đổi mật khẩu', 'xoá tài khoản'];
@@ -739,7 +752,7 @@ ${list.map(card).join('') || '<div class="muted" style="padding:4px">Chưa có n
   function logHtml() {
     const sel = (k, opts) => `<select class="f" data-lg="${k}">${opts}</select>`;
     const rows = LG.rows;
-    return `<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b style="font-size:15px">🕘 Nhật ký hoạt động${S.role === 'admin' ? '' : ' của tôi'}</b><span class="muted">${rows ? `${rows.length.toLocaleString('vi-VN')} thao tác` : '⏳ Đang tải…'}</span><span style="flex:1"></span>
+    return `<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b style="font-size:15px">🕘 Nhật ký hoạt động</b>${LG.n60 != null ? `<span class="muted">· ${LG.n60} thao tác trong 60 phút gần nhất</span>` : ''}<span class="muted">${rows ? `${rows.length.toLocaleString('vi-VN')} thao tác` : '⏳ Đang tải…'}</span><span style="flex:1"></span>
 ${sel('days', [['1', 'Hôm nay'], ['7', '7 ngày'], ['30', '30 ngày'], ['', 'Tất cả']].map(([v, l]) => `<option value="${v}" ${LG.days === v ? 'selected' : ''}>${l}</option>`).join(''))}
 ${S.role === 'admin' ? sel('who', `<option value="">Người: tất cả</option>${(users || []).map((u) => `<option value="${esc(u.email)}" ${LG.who === u.email ? 'selected' : ''}>${esc(u.name || showLogin(u.email))}</option>`).join('')}`) : ''}
 ${sel('action', `<option value="">Thao tác: tất cả</option>${LOG_ACTIONS.map((a) => `<option ${LG.action === a ? 'selected' : ''}>${a}</option>`).join('')}`)}
