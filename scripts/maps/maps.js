@@ -1122,6 +1122,19 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   }
   erpLoad().catch(() => {});
   setInterval(() => erpLoad().catch(() => {}), 60e3);
+  // SĐT Maps khác mọi SĐT của khách trên ERP (phone / deliveryPhone / zalo) → coi là số mới, được hiện (khách ERP vẫn ẩn số trùng)
+  const dgPhNorm = (p) => {
+    let d = String(p || '').replace(/\D/g, '');
+    if (d.startsWith('84')) d = `0${d.slice(2)}`;
+    else if (d && !d.startsWith('0') && d.length === 9) d = `0${d}`;
+    return d;
+  };
+  const dgPhoneNew = (c, e) => {
+    const me = dgPhNorm(c?.phone);
+    if (!e || me.length < 8) return false;
+    const erp = [e.phone, e.deliveryPhone, e.zalo].flatMap((x) => String(x || '').split(/[,;/|\n]|\s-\s|\s{2,}/)).map(dgPhNorm).filter((x) => x.length >= 8);
+    return !erp.includes(me);
+  };
   const erpOf = (c) => {
     if (!erpIdx || !c) return null;
     if (c.erpNo) return null; // đã bỏ kết nối ở tab 📍 Công ty Maps (ERP)
@@ -1576,7 +1589,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   function exportPdf(list, title, pre = null) {
     const rows = (list || []).filter((c) => c?.name && !isRealEstate(c)).map((c) => {
       const e = erpOf(c);
-      return { name: dispName(c), mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, km: c.route?.km || null, kcn: c.kcn || kcnOf(c) || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
+      return { name: dispName(c), mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, km: c.route?.km || null, kcn: c.kcn || kcnOf(c) || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '', phoneNew: dgPhoneNew(c, e) } : null };
     });
     dgCompanyPdf({ title, rows, erpHost: ERP_HOST, pre });
   }
