@@ -37,15 +37,17 @@ function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre
     if (d.startsWith('0')) d = `84${d.slice(1)}`;
     return `zalo://conversation?phone=${d}`;
   };
+  // “Khu công nghiệp …” → “KCN …”, “Cụm công nghiệp …” → “CCN …” (cho gọn cột)
+  const kcnShort = (t) => String(t || '').replace(/^\s*khu\s+c[oô]ng\s+nghi[eệ]p\s*/i, 'KCN ').replace(/^\s*c[uụ]m\s+c[oô]ng\s+nghi[eệ]p\s*/i, 'CCN ').replace(/^\s*c[uụ]m\s+cn\s*/i, 'CCN ').replace(/^\s*khu\s+cn\s*/i, 'KCN ');
   const zaloOf = (p) => {
     let d = String(p || '').replace(/\D/g, '');
     if (d.startsWith('84')) d = `0${d.slice(2)}`;
     return `https://zalo.me/${d}`;
   };
-  const body = order.map(([k, list2]) => `${group ? `<tr class="g"><td colspan="9">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k)} · ${list2.length} công ty</td></tr>` : ''}${(group ? list2.sort((a, b) => a.name.localeCompare(b.name, 'vi')) : list2).map((c) => {
+  const body = order.map(([k, list2]) => `${group ? `<tr class="g"><td colspan="9">${k === 'Ngoài KCN' ? '📍' : '🏭'} ${esc(k === 'Ngoài KCN' ? k : kcnShort(k))} · ${list2.length} công ty</td></tr>` : ''}${(group ? list2.sort((a, b) => a.name.localeCompare(b.name, 'vi')) : list2).map((c) => {
     const e = c.erp;
     const nm = c.name.toLocaleUpperCase('vi');
-    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.kcn || c.addr || '')}">${c.kcn ? `<span style="color:#9a3412;font-weight:700">🏭 ${esc(c.kcn)}</span>` : esc(c.addr || '')}</td><td class="km">${c.km ? `${Number(c.km).toFixed(1)} km` : ''}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloApp(c.phone)}" data-app="${zaloApp(c.phone)}" title="Mở chat trong app Zalo trên máy" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo</span></a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
+    return `<tr${e ? ' class="erp"' : ''}><td class="c">${++stt}</td><td title="${esc(c.name)}">${e ? `<a href="${erpHost}/khach-hang/view/${e.id}?dgNoPanel=1" target="_blank" rel="noopener"><b>${esc(nm)}</b> ↗</a>` : `<b>${esc(nm)}</b>`}</td><td>${esc(c.mst || '')}</td><td title="${esc(c.ind || '')}">${esc(c.ind || '')}</td><td title="${esc(c.kcn || c.addr || '')}">${c.kcn ? `<span style="color:#9a3412;font-weight:700">${esc(kcnShort(c.kcn))}</span>` : esc(c.addr || '')}</td><td class="km">${c.km ? `${Number(c.km).toFixed(1)} km` : ''}</td>${e ? '<td colspan="2"><span class="m">– khách ERP (ẩn SĐT)</span></td>' : isMobileNo(c.phone) ? `<td class="mob"><a href="${zaloApp(c.phone)}" data-app="${zaloApp(c.phone)}" title="Mở chat trong app Zalo trên máy" style="color:inherit">${esc(vnPhone(c.phone))} <span style="color:#0068ff;font-size:9.5px;font-weight:800">Zalo</span></a></td><td></td>` : `<td></td><td class="tel">${esc(vnPhone(c.phone))}</td>`}<td title="${e ? esc(`${e.staffName || ''} ${e.code || ''}`) : ''}">${e ? `<b>✅ ${esc(e.staffName ? nvkdShort(e.staffName) : 'Chưa gán NVKD')}</b> <span class="m">${esc(e.code || '')}</span>` : ''}</td></tr>`;
   }).join('')}`).join('');
   const now = new Date();
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)} – ${now.toLocaleDateString('vi-VN')}</title><style>
@@ -53,7 +55,7 @@ function dgCompanyPdf({ title, rows, erpHost = 'https://sale.tuantu.com.vn', pre
 h1{font-size:17px;margin:0 0 2px;color:#1e3a8a}.sub{color:#475569;margin-bottom:8px}
 table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#1e3a8a;color:#fff;text-align:left;padding:5px 6px;font-size:10.5px;white-space:nowrap;overflow:hidden}
 td{border-bottom:1px solid #e2e8f0;padding:3px 6px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-col.c1{width:44px}col.c2{width:27%}col.c3{width:84px}col.c4{width:10%}col.c5{width:auto}col.c5k{width:62px}td.km{text-align:right;color:#0f766e;font-weight:800;text-overflow:clip;font-variant-numeric:tabular-nums}col.c6{width:104px}col.c6b{width:112px}td.mob,td.tel{text-overflow:clip;font-variant-numeric:tabular-nums;padding-left:4px;padding-right:4px}col.c7{width:12%}td.mob{color:#15803d;font-weight:800}td.tel{color:#64748b}
+col.c1{width:44px}col.c2{width:24%}col.c3{width:84px}col.c4{width:9%}col.c5{width:auto;min-width:150px}col.c5k{width:62px}td.km{text-align:right;color:#0f766e;font-weight:800;text-overflow:clip;font-variant-numeric:tabular-nums}col.c6{width:104px}col.c6b{width:112px}td.mob,td.tel{text-overflow:clip;font-variant-numeric:tabular-nums;padding-left:4px;padding-right:4px}col.c7{width:11%}td.mob{color:#15803d;font-weight:800}td.tel{color:#64748b}
 tr.g td{background:#fff7ed;color:#9a3412;font-weight:800;padding:4px 6px;border-top:2px solid #fdba74;white-space:nowrap}tr.erp td{background:#f0fdf4}.c{text-align:center;color:#64748b;text-overflow:clip!important;padding-left:2px!important;padding-right:2px!important}a{color:#15803d;text-decoration:none}a:hover{text-decoration:underline}.m{color:#64748b;font-size:10px}
 thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body>
 <h1>CÔNG TY CỔ PHẦN BAO BÌ GIẤY TUẤN TÚ – ${esc(title)}</h1>
