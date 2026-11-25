@@ -59,6 +59,7 @@
       return loginView('Tài khoản này chưa được cấp quyền xem. Liên hệ admin.');
     }
     S.role = role;
+    S.tenant = (await sb.rpc('dg_web_tenant')).data || 'tuantu';
     render();
     mountMapsTab();
   }
@@ -117,9 +118,9 @@
   let saveT = 0;
   async function savePlaces(patch) {
     if (!canEdit()) throw new Error('Tài khoản của bạn chỉ có quyền xem – không sửa được.');
-    const rows = Object.entries(patch).filter(([, v]) => v != null).map(([id, data]) => ({ ns: 'mapsPlaces', id: String(id), data }));
+    const rows = Object.entries(patch).filter(([, v]) => v != null).map(([id, data]) => ({ tenant: S.tenant, ns: 'mapsPlaces', id: String(id), data }));
     for (let i = 0; i < rows.length; i += 200) {
-      const { error } = await sb.from('dg_items').upsert(rows.slice(i, i + 200), { onConflict: 'ns,id' });
+      const { error } = await sb.from('dg_items').upsert(rows.slice(i, i + 200), { onConflict: 'tenant,ns,id' }); // khoá chính (tenant, ns, id)
       if (error) throw new Error(`Không lưu được: ${error.message}`);
     }
     if (store.mapsPlaces) {
@@ -211,11 +212,31 @@
   // ---------- 📞 Telesale: mỗi người nhận khách để gọi (c.tele = { by, byName, at, calls: [{ at, by, byName, note }] }) ----------
   // Thanh trái: Tất cả / Khách của tôi / Khách chưa gọi → trang web đưa cho bảng đúng phần công ty đó (bảng vẫn lọc / tìm như thường).
   const me = () => S.user?.email || '';
+  const endToday = () => new Date(new Date().setHours(23, 59, 59, 999)).getTime();
   const VIEWS = [
     ['all', '📋 Tất cả', () => true],
     ['mine', '👤 Khách của tôi', (c) => c?.tele?.by === me()],
     ['uncalled', '📞 Khách chưa gọi', (c) => !c?.tele?.calls?.length && (!c?.tele?.by || c.tele.by === me())],
+    ['callback', '⏰ Cần gọi lại', (c) => c?.tele?.by === me() && c.tele.next && c.tele.next <= endToday()],
   ];
+  // Kết quả mỗi lần gọi
+  const RESULTS = [
+    ['noans', '📵 Không nghe máy', '#64748b'],
+    ['busy', '⛔ Thuê bao / sai số', '#94a3b8'],
+    ['callback', '⏰ Hẹn gọi lại', '#b45309'],
+    ['interest', '👍 Quan tâm', '#15803d'],
+    ['quote', '📄 Gửi báo giá', '#1d4ed8'],
+    ['sample', '📦 Gửi mẫu / khảo sát', '#7c3aed'],
+    ['win', '🎉 Chốt đơn', '#16a34a'],
+    ['noneed', '👎 Không có nhu cầu', '#b91c1c'],
+    ['hassup', '🏭 Đã có nhà cung cấp', '#9a3412'],
+    ['other', '📝 Khác', '#475569'],
+  ];
+  const resOf = (k) => RESULTS.find((x) => x[0] === k) || null;
+  const resTag = (k) => {
+    const x = resOf(k);
+    return x ? `<span style="display:inline-block;padding:0 6px;border-radius:6px;border:1px solid ${x[2]}55;background:${x[2]}14;color:${x[2]};font-weight:800;white-space:nowrap">${x[1]}</span>` : '';
+  };
   function viewOf(items) {
     const f = VIEWS.find((v) => v[0] === S.view)?.[2];
     if (!f || S.view === 'all') return items;
@@ -233,7 +254,7 @@
     if (!t.by) h += ed ? `<button data-tele="claim" data-id="${esc(c.id)}" style="${b};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">📞 Nhận gọi</button>` : '<span style="color:#94a3b8">chưa ai nhận</span>';
     else if (mine) h += `<span style="display:inline-block;padding:0 6px;border-radius:6px;background:#dbeafe;color:#1e40af;font-weight:900">👤 Khách của tôi</span> ${ed ? `<button data-tele="call" data-id="${esc(c.id)}" style="${b};border-color:#86efac;background:#f0fdf4;color:#166534">☎ Ghi cuộc gọi</button><button data-tele="drop" data-id="${esc(c.id)}" style="${b};color:#64748b">↩ Trả khách</button>` : ''}`;
     else h += `<span style="display:inline-block;padding:0 6px;border-radius:6px;background:#f1f5f9;color:#475569;font-weight:800">👤 ${esc(t.byName || showLogin(t.by))} đang gọi</span>${S.role === 'admin' ? ` <button data-tele="drop" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">↩ Thu hồi</button>` : ''}`;
-    if (last) h += `<div style="color:#475569;margin-top:2px" title="${esc(calls.map((x) => `${fmtT(x.at)} · ${x.byName || ''}: ${x.note || ''}`).join('\n'))}">📞 ${calls.length} lần · ${esc(fmtT(last.at))}${last.note ? ` · ${esc(last.note)}` : ''}</div>`;
+    if (last) h += `<div data-tele="call" data-id="${esc(c.id)}" style="cursor:pointer;color:#475569;margin-top:2px" title="Xem lịch sử cuộc gọi">📜 ${calls.length} lần gọi · ${esc(fmtT(last.at))} ${resTag(last.res)}${last.note ? ` <span style="color:#64748b">${esc(last.note.slice(0, 60))}</span>` : ''}${t.next && t.by ? ` <b style="color:${t.next <= endToday() ? '#b91c1c' : '#b45309'}">⏰ ${esc(fmtT(t.next))}</b>` : ''}</div>`;
     return `<div data-tele-box="${esc(c.id)}" style="margin-top:3px;font-size:11.5px;line-height:1.5">${h}</div>`;
   }
   // gắn ô telesale vào cột tên mỗi dòng của bảng (bảng vẽ lại thì gắn lại)
@@ -288,9 +309,7 @@
       }
       tele = { ...t, by: me(), byName: who(), at: Date.now() };
     } else if (k === 'call') {
-      const note = prompt(`☎ Kết quả cuộc gọi “${c.legalName || c.name}”:\n(vd. không nghe máy · hẹn gọi lại · gửi báo giá · không có nhu cầu…)`);
-      if (note === null) return;
-      tele = { ...t, by: t.by || me(), byName: t.byName || who(), calls: [...(t.calls || []), { at: Date.now(), by: me(), byName: who(), note: note.trim() }] };
+      return openCall(id, c);
     } else if (k === 'drop') {
       if (!confirm(t.by === me() ? 'Trả khách này (người khác nhận gọi được)?' : `Thu hồi khách của ${t.byName || showLogin(t.by)}?`)) return;
       tele = { ...t, by: null, byName: null, droppedAt: Date.now(), droppedBy: who() };
@@ -303,11 +322,145 @@
     render();
   }
   function setView(v) {
+    const was = S.view;
     S.view = v;
     try { localStorage.setItem('dgWeb:view', v); } catch {}
     render();
+    if (v === 'history') return hideMaps();
+    mountMapsTab();
     // bảo bảng tải lại (đọc lại phần công ty của mục vừa chọn)
-    document.getElementById('dg-maps-tab')?.shadowRoot?.querySelector('[data-mp="reload"]')?.click();
+    if (was !== v) document.getElementById('dg-maps-tab')?.shadowRoot?.querySelector('[data-mp="reload"]')?.click();
+  }
+
+  // ---------- ☎ khung ghi cuộc gọi + lịch sử cuộc gọi của 1 công ty ----------
+  const CB = { id: null, res: '' };
+  function phonesOf(c) {
+    const out = [];
+    const add = (p) => {
+      let d = String(p || '').replace(/\D/g, '');
+      if (d.startsWith('84')) d = `0${d.slice(2)}`;
+      if (d && !out.includes(d)) out.push(d);
+    };
+    add(c.phone);
+    (c.webPhones || []).forEach((x) => add(x.p));
+    return out;
+  }
+  const phoneLink = (d) => /^0[35789]\d{8}$/.test(d)
+    ? `<a href="tel:${d}" style="font-weight:900;color:#15803d;text-decoration:none">📱 ${d}</a> <a href="${/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? `https://zalo.me/${d}" target="_blank` : `zalo://conversation?phone=84${d.slice(1)}`}" style="font-size:11px;color:#0068ff;font-weight:800">Zalo ↗</a>`
+    : `<a href="tel:${d}" style="font-weight:800;color:#475569;text-decoration:none">☎ ${d}</a>`;
+  function openCall(id, fresh) {
+    const items = store.mapsPlaces.items;
+    if (fresh && items[id]) Object.assign(items[id], { tele: fresh.tele });
+    CB.id = id;
+    CB.res = '';
+    drawCall();
+  }
+  function drawCall() {
+    let box = document.getElementById('dg-call');
+    if (!CB.id) return box?.remove();
+    const c = store.mapsPlaces.items[CB.id];
+    if (!c) return;
+    const t = c.tele || {};
+    const calls = [...(t.calls || [])].reverse();
+    const other = t.by && t.by !== me();
+    const can = canEdit() && (!other || S.role === 'admin');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'dg-call';
+      document.body.append(box);
+      box.addEventListener('click', callClick);
+    }
+    const nm = (c.legalName || c.name || '').toLocaleUpperCase('vi');
+    box.innerHTML = `<div class="cb-bg" data-cb="close"></div><div class="cb card">
+<div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><b style="font-size:16px;color:#1e3a8a">☎ ${esc(nm)}</b>
+<div class="muted">${esc(c.legalAddr || c.addr || '')}${c.kcn ? ` · 🏭 ${esc(c.kcn)}` : ''}${c.ind ? ` · ${esc(c.ind)}` : ''}</div></div><a href="#" data-cb="close" style="font-size:20px;text-decoration:none;color:#64748b;font-weight:900">✕</a></div>
+<div style="margin:8px 0;display:flex;gap:12px;flex-wrap:wrap">${phonesOf(c).map(phoneLink).join('') || '<span class="muted">Chưa có SĐT</span>'}</div>
+<div class="muted" style="margin-bottom:8px">${t.by ? `👤 ${other ? `<b>${esc(t.byName || showLogin(t.by))}</b> đang gọi khách này` : '<b>Khách của tôi</b>'} (nhận ${esc(fmtT(t.at))})` : 'Chưa ai nhận – ghi cuộc gọi là tự nhận khách này'}</div>
+${can ? `<div class="cb-form"><div style="font-weight:800;margin-bottom:4px">Kết quả lần gọi này</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">${RESULTS.map(([k, l, col]) => `<button data-cb="res" data-r="${k}" class="btn" style="${CB.res === k ? `background:${col};border-color:${col};color:#fff` : `color:${col};border-color:${col}66`}">${l}</button>`).join('')}</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+<label class="muted">Người nghe máy<br><input class="f" id="cb-who" placeholder="vd. chị Lan – thu mua" style="width:220px"></label>
+<label class="muted">⏰ Hẹn gọi lại lúc${CB.res === 'callback' ? ' <b style="color:#b91c1c">*</b>' : ''}<br><input class="f" id="cb-next" type="datetime-local"></label></div>
+<label class="muted" style="display:block;margin-top:6px">Ghi chú<br><textarea class="f" id="cb-note" rows="3" style="width:100%" placeholder="Nội dung trao đổi: nhu cầu thùng, số lượng, giá, hẹn gửi mẫu…"></textarea></label>
+<div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn pri" data-cb="save" style="padding:5px 16px">💾 Lưu cuộc gọi</button><span id="cb-msg" class="muted"></span></div></div>` : `<div class="muted" style="padding:6px 0">${other ? 'Khách của người khác – chỉ xem lịch sử.' : 'Tài khoản chỉ xem – không ghi cuộc gọi được.'}</div>`}
+<div style="font-weight:900;margin:12px 0 4px">📜 Lịch sử cuộc gọi (${calls.length})</div>
+${calls.length ? `<div class="tbl" style="max-height:38vh"><table><thead><tr><th>Thời gian</th><th>Người gọi</th><th>Kết quả</th><th>Người nghe</th><th>Ghi chú</th><th>Hẹn lại</th></tr></thead><tbody>${calls.map((x) => `<tr><td style="white-space:nowrap">${esc(fmtT(x.at))}</td><td>${esc(x.byName || showLogin(x.by))}</td><td>${resTag(x.res) || '<span class="muted">—</span>'}</td><td>${esc(x.contact || '')}</td><td style="white-space:pre-wrap">${esc(x.note || '')}</td><td style="white-space:nowrap">${x.next ? `⏰ ${esc(fmtT(x.next))}` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted">Chưa gọi lần nào.</div>'}
+</div>`;
+  }
+  async function callClick(e) {
+    const t = e.target.closest('[data-cb]');
+    if (!t) return;
+    e.preventDefault();
+    const k = t.dataset.cb;
+    if (k === 'close') {
+      CB.id = null;
+      return drawCall();
+    }
+    if (k === 'res') {
+      // giữ chữ đang gõ khi vẽ lại
+      const keep = { who: document.getElementById('cb-who')?.value, next: document.getElementById('cb-next')?.value, note: document.getElementById('cb-note')?.value };
+      CB.res = t.dataset.r;
+      drawCall();
+      document.getElementById('cb-who').value = keep.who || '';
+      document.getElementById('cb-next').value = keep.next || '';
+      document.getElementById('cb-note').value = keep.note || '';
+      if (CB.res === 'callback' && !keep.next) document.getElementById('cb-next').focus();
+      return;
+    }
+    if (k === 'save') {
+      const msg = document.getElementById('cb-msg');
+      const next = document.getElementById('cb-next').value ? new Date(document.getElementById('cb-next').value).getTime() : null;
+      const note = document.getElementById('cb-note').value.trim();
+      const contact = document.getElementById('cb-who').value.trim();
+      if (!CB.res) return (msg.textContent = '⚠️ Chọn kết quả cuộc gọi.');
+      if (CB.res === 'callback' && !next) return (msg.textContent = '⚠️ Chọn ngày giờ hẹn gọi lại.');
+      t.disabled = true;
+      msg.textContent = '⏳ Đang lưu…';
+      try {
+        const id = CB.id;
+        const { data, error } = await sb.from('dg_items').select('data').eq('ns', 'mapsPlaces').eq('id', id).maybeSingle();
+        if (error) throw new Error(error.message);
+        const c = data?.data || store.mapsPlaces.items[id];
+        const t0 = c.tele || {};
+        if (t0.by && t0.by !== me() && S.role !== 'admin') throw new Error(`${t0.byName || showLogin(t0.by)} đã nhận khách này rồi.`);
+        const call = { at: Date.now(), by: me(), byName: who(), res: CB.res, contact, note, next };
+        const tele = { ...t0, by: t0.by || me(), byName: t0.byName || who(), at: t0.at || Date.now(), calls: [...(t0.calls || []), call], last: CB.res, lastAt: call.at, next };
+        await savePlaces({ [id]: { ...c, tele } });
+        const items = store.mapsPlaces.items;
+        if (items[id]) Object.assign(items[id], { tele });
+        CB.res = '';
+        drawCall();
+        decorate();
+        render();
+      } catch (err) {
+        t.disabled = false;
+        msg.textContent = `⚠️ ${err.message || err}`;
+      }
+    }
+  }
+
+  // ---------- 📜 trang Lịch sử cuộc gọi (tất cả công ty) ----------
+  const HS = { who: '', res: '', days: '7', q: '' };
+  function historyHtml() {
+    if (!store.mapsPlaces) return '<div class="card muted">⏳ Đang tải dữ liệu…</div>';
+    const all = [];
+    for (const c of Object.values(store.mapsPlaces.items)) for (const x of c?.tele?.calls || []) all.push({ c, x });
+    const names = [...new Set(all.map((r) => r.x.byName || showLogin(r.x.by)))].sort((a, b) => a.localeCompare(b, 'vi'));
+    const from = HS.days ? Date.now() - Number(HS.days) * 864e5 : 0;
+    const un = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+    const q = un(HS.q);
+    const rows = all.filter((r) => r.x.at >= from && (!HS.who || (HS.who === '__me' ? r.x.by === me() : (r.x.byName || showLogin(r.x.by)) === HS.who)) && (!HS.res || r.x.res === HS.res) && (!q || un(`${r.c.legalName || ''} ${r.c.name} ${r.x.note || ''} ${r.x.contact || ''}`).includes(q))).sort((a, b) => b.x.at - a.x.at);
+    const cnt = {};
+    for (const r of rows) cnt[r.x.res || ''] = (cnt[r.x.res || ''] || 0) + 1;
+    return `<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b style="font-size:15px">📜 Lịch sử cuộc gọi</b><span class="muted">${rows.length.toLocaleString('vi-VN')} cuộc gọi</span><span style="flex:1"></span>
+<input class="f" data-h="q" placeholder="🔍 Tìm công ty, ghi chú…" value="${esc(HS.q)}" style="min-width:200px">
+<select class="f" data-h="days"><option value="1" ${HS.days === '1' ? 'selected' : ''}>Hôm nay</option><option value="7" ${HS.days === '7' ? 'selected' : ''}>7 ngày</option><option value="30" ${HS.days === '30' ? 'selected' : ''}>30 ngày</option><option value="" ${!HS.days ? 'selected' : ''}>Tất cả</option></select>
+<select class="f" data-h="who"><option value="">Người gọi: tất cả</option><option value="__me" ${HS.who === '__me' ? 'selected' : ''}>Tôi</option>${names.map((n) => `<option ${HS.who === n ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+<select class="f" data-h="res"><option value="">Kết quả: tất cả</option>${RESULTS.map(([k, l]) => `<option value="${k}" ${HS.res === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${RESULTS.filter(([k]) => cnt[k]).map(([k]) => `${resTag(k)} <b>${cnt[k]}</b>`).join(' &nbsp; ')}</div>
+<div class="tbl"><table><thead><tr><th>Thời gian</th><th>Người gọi</th><th>Công ty</th><th>Kết quả</th><th>Người nghe</th><th>Ghi chú</th><th>Hẹn lại</th></tr></thead><tbody>
+${rows.slice(0, 500).map(({ c, x }) => `<tr><td style="white-space:nowrap">${esc(fmtT(x.at))}</td><td>${esc(x.byName || showLogin(x.by))}</td><td><a href="#" data-a="hopen" data-id="${esc(c.id)}" style="font-weight:800">${esc((c.legalName || c.name).toLocaleUpperCase('vi'))}</a></td><td>${resTag(x.res)}</td><td>${esc(x.contact || '')}</td><td style="white-space:pre-wrap;max-width:420px">${esc(x.note || '')}</td><td style="white-space:nowrap">${x.next ? `⏰ ${esc(fmtT(x.next))}` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:14px">Chưa có cuộc gọi nào.</td></tr>'}
+</tbody></table></div>${rows.length > 500 ? '<div class="muted">Hiện 500 cuộc gọi mới nhất – lọc thêm để xem cũ hơn.</div>' : ''}</div>`;
   }
 
   // hiện bảng thành trang danh sách (không phải popup): bỏ nền mờ, viền thẻ, thanh tiêu đề ✕ của bảng.
@@ -325,6 +478,10 @@
   let mapsLoaded = false;
   async function mountMapsTab() {
     if (S.tab !== 'list') return;
+    if (S.view === 'history') {
+      pull('mapsPlaces').then(render).catch(() => {});
+      return hideMaps();
+    }
     if (mapsLoaded) return showMaps();
     mapsLoaded = true;
     try { indexedDB.deleteDatabase('dgMapsTab'); } catch {} // bản lưu riêng của bảng → luôn đọc qua kho Supabase ở trên (có kéo phần mới)
@@ -372,12 +529,13 @@
 <button data-a="tab" data-t="list" class="${S.tab === 'list' ? 'on' : ''}">📋 Công ty</button>${S.role === 'admin' ? `<button data-a="tab" data-t="users" class="${S.tab === 'users' ? 'on' : ''}">👥 Tài khoản</button>` : ''}
 <span id="dg-status" style="font-size:12px;opacity:.85"></span><span class="sp"></span><span style="font-size:12px;opacity:.9">👤 ${esc(who())} · ${ROLE_TXT[S.role] || S.role}</span>
 <button data-a="pw">🔑 Đổi mật khẩu</button><button data-a="out">Đăng xuất</button></div>
-${S.tab === 'list' ? sideHtml() : ''}<div class="wrap">${S.tab === 'users' && S.role === 'admin' ? usersHtml() : '<div class="card muted" style="text-align:center;padding:30px">Bảng công ty đã đóng. <button class="btn pri" data-a="tab" data-t="list">📋 Mở danh sách công ty</button></div>'}</div>`;
+${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' : ''}">${S.tab === 'list' && S.view === 'history' ? historyHtml() : S.tab === 'users' && S.role === 'admin' ? usersHtml() : '<div class="card muted" style="text-align:center;padding:30px">Bảng công ty đã đóng. <button class="btn pri" data-a="tab" data-t="list">📋 Mở danh sách công ty</button></div>'}</div>`;
   }
   function sideHtml() {
     const items = store.mapsPlaces?.items || {};
     const all = Object.values(items);
     return `<nav class="side">${VIEWS.map(([k, label, f]) => `<a href="#" data-a="view" data-v="${k}" class="${S.view === k ? 'on' : ''}">${label}<span>${store.mapsPlaces ? all.filter(f).length.toLocaleString('vi-VN') : ''}</span></a>`).join('')}
+<a href="#" data-a="view" data-v="history" class="${S.view === 'history' ? 'on' : ''}">📜 Lịch sử cuộc gọi<span>${all.reduce((n, c) => n + (c?.tele?.calls?.length || 0), 0) || ''}</span></a>
 <div class="muted" style="padding:10px 12px;font-size:11.5px;line-height:1.5">📞 Bấm <b>Nhận gọi</b> ở dòng công ty để nhận khách telesale. Gọi xong bấm <b>☎ Ghi cuộc gọi</b>.</div></nav>`;
   }
   let users = null;
@@ -446,6 +604,7 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
       return;
     }
     if (a === 'view') return setView(t.dataset.v);
+    if (a === 'hopen') return openCall(t.dataset.id);
     if (a === 'upw') {
       const p = prompt(`Mật khẩu mới cho ${showLogin(t.dataset.e)} (≥ 6 ký tự):`, genPw());
       if (!p) return;
@@ -478,8 +637,24 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
     m2.style.color = '#15803d';
     m2.textContent = `✅ Đã tạo – tên đăng nhập: ${showLogin(data)} · mật khẩu: ${pw}`;
   });
+  app.addEventListener('input', (e) => {
+    if (e.target.dataset.h !== 'q') return;
+    HS.q = e.target.value;
+    clearTimeout(HS.t);
+    HS.t = setTimeout(() => {
+      const pos = e.target.selectionStart;
+      render();
+      const i = app.querySelector('[data-h="q"]');
+      i?.focus();
+      i?.setSelectionRange(pos, pos);
+    }, 300);
+  });
   app.addEventListener('change', async (e) => {
     const el = e.target;
+    if (el.dataset.h && el.dataset.h !== 'q') {
+      HS[el.dataset.h] = el.value;
+      return render();
+    }
     if (!el.dataset.role) return;
     const u = users?.find((x) => x.email === el.dataset.role);
     const { error } = await sb.rpc('dg_web_update', { p_email: el.dataset.role, p_role: el.value, p_name: u?.name || null });

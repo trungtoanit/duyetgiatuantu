@@ -145,6 +145,50 @@ begin
   end loop;
 end $$;
 
+-- ---- Nhiều công ty (tenant): bảng dg_items có cột tenant (khoá chính tenant, ns, id) ----
+-- Mỗi tài khoản web thuộc 1 tenant (mặc định 'tuantu'); chỉ đọc / ghi dữ liệu đúng tenant đó.
+alter table public.dg_web_users add column if not exists tenant text not null default 'tuantu';
+create or replace function public.dg_web_tenant() returns text
+language sql stable security definer set search_path = public as $$
+  select tenant from public.dg_web_users where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+$$;
+revoke all on function public.dg_web_tenant() from public;
+grant execute on function public.dg_web_tenant() to authenticated;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'dg_items' and column_name = 'tenant') then
+    execute 'drop policy if exists dg_web_read on public.dg_items';
+    execute $p$create policy dg_web_read on public.dg_items for select to authenticated
+      using (ns in ('mapsPlaces', 'customersAll') and public.dg_web_role() is not null and tenant = public.dg_web_tenant())$p$;
+    execute 'drop policy if exists dg_web_ins on public.dg_items';
+    execute $p$create policy dg_web_ins on public.dg_items for insert to authenticated
+      with check (ns = 'mapsPlaces' and public.dg_web_role() in ('editor', 'admin') and tenant = public.dg_web_tenant())$p$;
+    execute 'drop policy if exists dg_web_upd on public.dg_items';
+    execute $p$create policy dg_web_upd on public.dg_items for update to authenticated
+      using (ns = 'mapsPlaces' and public.dg_web_role() in ('editor', 'admin') and tenant = public.dg_web_tenant())
+      with check (ns = 'mapsPlaces' and public.dg_web_role() in ('editor', 'admin') and tenant = public.dg_web_tenant())$p$;
+  end if;
+end $$;
+-- tài khoản admin tạo ra thuộc cùng tenant với admin; danh sách tài khoản chỉ hiện cùng tenant
+create or replace function public.dg_web_add(p_login text, p_password text, p_role text default 'viewer', p_name text default null)
+returns text language plpgsql security definer set search_path = public as $$
+declare v text;
+begin
+  perform public.dg_web_need_admin();
+  v := public.dg_web_create_internal(p_login, p_password, p_role, p_name, auth.jwt() ->> 'email');
+  update public.dg_web_users set tenant = public.dg_web_tenant() where email = v;
+  return v;
+end $$;
+create or replace function public.dg_web_list()
+returns table (email text, role text, name text, created_at timestamptz, created_by text, last_sign_in_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.dg_web_need_admin();
+  return query select w.email, w.role, w.name, w.created_at, w.created_by, u.last_sign_in_at
+    from public.dg_web_users w left join auth.users u on u.email = w.email
+    where w.tenant = public.dg_web_tenant() order by w.created_at;
+end $$;
+
 -- ================== TÀI KHOẢN ADMIN ĐẦU TIÊN ==================
 -- Sửa 'admin' (tên đăng nhập) và 'DoiMatKhauNay' (mật khẩu ≥ 6 ký tự) rồi bôi đen riêng dòng dưới → Run.
 -- select public.dg_web_create_internal('admin', 'DoiMatKhauNay', 'admin', 'Quản trị');
