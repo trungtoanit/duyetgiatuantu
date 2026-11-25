@@ -619,13 +619,30 @@ ${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' 
 ${S.role === 'admin' ? staffHtml(all) : ''}
 <div class="muted" style="padding:10px 12px;font-size:11.5px;line-height:1.5">📞 Bấm <b>Nhận gọi</b> ở dòng công ty để nhận khách telesale. Gọi xong bấm <b>☎ Ghi cuộc gọi</b>.</div></nav>`;
   }
-  // 👥 (admin) mỗi nhân viên đang giữ bao nhiêu khách, gọi hôm nay, quá hẹn gọi lại – bấm tên → bảng chỉ hiện khách của người đó
+  // 👥 (admin) mỗi nhân viên: khách đang giữ, gọi hôm nay, nhận mới hôm nay, quá hẹn – so với NGÀY LÀM VIỆC liền trước (bỏ Chủ nhật).
+  // Bấm thẻ → bảng chỉ hiện khách của người đó.
+  const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+  function prevWorkday(t) {
+    const d = new Date(t);
+    d.setHours(0, 0, 0, 0);
+    do d.setDate(d.getDate() - 1); while (d.getDay() === 0); // bỏ Chủ nhật
+    return d.getTime();
+  }
+  const delta = (a, b) => {
+    const d = a - b;
+    if (!d) return '<span style="color:#94a3b8;font-weight:700">=</span>';
+    return `<span style="color:${d > 0 ? '#16a34a' : '#dc2626'};font-weight:900">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`;
+  };
   function staffHtml(all) {
     if (!store.mapsPlaces) return '';
     const day0 = new Date().setHours(0, 0, 0, 0);
+    const p0 = prevWorkday(day0);
+    const p1 = p0 + 864e5;
+    const pLabel = `${DOW[new Date(p0).getDay()]} ${new Date(p0).getDate()}/${new Date(p0).getMonth() + 1}`;
     const st = new Map();
     const get = (em, nm) => {
-      if (!st.has(em)) st.set(em, { em, nm: nm || showLogin(em), n: 0, today: 0, late: 0, calls: 0 });
+      if (!em) return { n: 0, today: 0, prev: 0, newT: 0, newP: 0, late: 0 };
+      if (!st.has(em)) st.set(em, { em, nm: nm || showLogin(em), n: 0, today: 0, prev: 0, newT: 0, newP: 0, late: 0 });
       const o = st.get(em);
       if (nm && o.nm === showLogin(em)) o.nm = nm;
       return o;
@@ -638,17 +655,28 @@ ${S.role === 'admin' ? staffHtml(all) : ''}
         const o = get(t.by, t.byName);
         o.n++;
         if (t.next && t.next <= endToday()) o.late++;
+        if (t.at >= day0) o.newT++;
+        else if (t.at >= p0 && t.at < p1) o.newP++;
       }
       for (const x of t.calls || []) {
         const o = get(x.by, x.byName);
-        o.calls++;
         if (x.at >= day0) o.today++;
+        else if (x.at >= p0 && x.at < p1) o.prev++;
       }
     }
-    const list = [...st.values()].sort((a, b) => b.n - a.n || b.today - a.today || a.nm.localeCompare(b.nm, 'vi'));
-    return `<div style="margin:10px 8px 0;padding-top:8px;border-top:1px solid #e2e8f0"><div style="font-size:11px;font-weight:900;letter-spacing:.05em;color:#1d4ed8;text-transform:uppercase;padding:0 4px 4px">👥 Nhân viên đang liên hệ</div>
-${list.map((o) => `<a href="#" data-a="view" data-v="by:${esc(o.em)}" class="${S.view === `by:${o.em}` ? 'on' : ''}" style="display:block;margin:2px 0;padding:6px 8px" title="Bấm để xem các khách ${esc(o.nm)} đang giữ"><div style="display:flex;justify-content:space-between;gap:4px"><span style="color:inherit;font-weight:800;font-size:12.5px">${esc(o.nm)}</span><span>${o.n.toLocaleString('vi-VN')} khách</span></div>
-<div style="font-size:11px;font-weight:600;opacity:.85">📞 hôm nay ${o.today} · tổng ${o.calls}${o.late ? ` · <b style="color:#dc2626">⏰ ${o.late} quá hẹn</b>` : ''}</div></a>`).join('') || '<div class="muted" style="padding:4px">Chưa ai nhận khách.</div>'}</div>`;
+    const list = [...st.values()].sort((a, b) => b.today - a.today || b.n - a.n || a.nm.localeCompare(b.nm, 'vi'));
+    const sum = list.reduce((s, o) => ({ n: s.n + o.n, today: s.today + o.today, prev: s.prev + o.prev, late: s.late + o.late }), { n: 0, today: 0, prev: 0, late: 0 });
+    const COLORS = ['#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#db2777', '#65a30d', '#ca8a04'];
+    const ini = (nm) => (String(nm).trim().split(/\s+/).pop() || '?').charAt(0).toUpperCase();
+    const card = (o, i) => {
+      const on = S.view === `by:${o.em}`;
+      return `<a href="#" data-a="view" data-v="by:${esc(o.em)}" class="stf${on ? ' on' : ''}" title="Bấm để xem các khách ${esc(o.nm)} đang giữ">
+<div class="stf-h"><span class="stf-av" style="background:${COLORS[i % COLORS.length]}">${esc(ini(o.nm))}</span><span class="stf-nm">${esc(o.nm)}</span>${o.late ? `<span class="stf-late" title="Khách quá hẹn gọi lại">⏰${o.late}</span>` : ''}</div>
+<div class="stf-g"><div><b>${o.n}</b><small>khách</small></div><div><b>${o.today}</b> ${delta(o.today, o.prev)}<small>gọi h.nay</small></div><div><b>${o.newT}</b> ${delta(o.newT, o.newP)}<small>nhận mới</small></div></div></a>`;
+    };
+    return `<div class="stf-box"><div class="stf-t">👥 Nhân viên</div>
+<div class="stf-sum">📞 Hôm nay <b>${sum.today}</b> cuộc ${delta(sum.today, sum.prev)} <span>so với ${pLabel} (${sum.prev})</span><br>👤 Đang giữ <b>${sum.n}</b> khách${sum.late ? ` · <b style="color:#dc2626">⏰ ${sum.late} quá hẹn</b>` : ''}</div>
+${list.map(card).join('') || '<div class="muted" style="padding:4px">Chưa có nhân viên.</div>'}</div>`;
   }
   // ---------- 🕘 Nhật ký hoạt động ----------
   const LG = { days: '1', who: '', action: '', rows: null, err: '' };
