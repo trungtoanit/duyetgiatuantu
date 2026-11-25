@@ -259,10 +259,30 @@
   }
   // gắn ô telesale vào cột tên mỗi dòng của bảng (bảng vẽ lại thì gắn lại)
   let decoT = 0;
-  function decorate() {
+  function decorate(force = false) {
     const root = document.getElementById('dg-maps-tab')?.shadowRoot;
     const items = store.mapsPlaces?.items;
     if (!root || !items) return;
+    // 📞 mục Telesale trong khung chi tiết công ty (cột trái, trước mục Hình ảnh)
+    const dm = root.querySelector('[data-mp-modal] [data-mp="reviews"][data-id]');
+    if (dm) {
+      const id = dm.dataset.id;
+      const old = root.querySelector('[data-cb-scope]');
+      if (force || !old || old.dataset.cbScope !== id) {
+        if (CB.id !== id) {
+          CB.id = id;
+          CB.res = '';
+          CB.form = {};
+          CB.msg = '';
+        }
+        const html = callPanelHtml(id);
+        if (old) old.outerHTML = html;
+        else {
+          const ph = root.querySelector('[data-mp-modal] [data-mp-photos]')?.parentElement;
+          if (ph) ph.insertAdjacentHTML('beforebegin', html);
+        }
+      }
+    }
     for (const el of root.querySelectorAll('tr b[data-mp="detail"][data-id]')) {
       const td = el.closest('td');
       const c = items[el.dataset.id];
@@ -283,13 +303,8 @@
       clearTimeout(decoT);
       decoT = setTimeout(decorate, 30);
     }).observe(root, { childList: true, subtree: true });
-    root.addEventListener('click', (e) => {
-      const t = e.target.closest?.('[data-tele]');
-      if (!t) return;
-      e.preventDefault();
-      e.stopPropagation();
-      teleAct(t.dataset.tele, t.dataset.id).catch((err) => alert(err.message || err));
-    });
+    root.addEventListener('click', teleClick, true);
+    root.addEventListener('input', cbInput, true);
     decorate();
   }
   async function teleAct(k, id) {
@@ -318,6 +333,7 @@
     await savePlaces({ [id]: v });
     // bảng đang giữ đúng object trong kho → cập nhật tại chỗ để bảng / lần lưu sau của bảng không ghi đè mất
     if (items[id] && items[id] !== v) Object.assign(items[id], { tele });
+    if (CB.id === id) redrawCall();
     decorate();
     render();
   }
@@ -332,8 +348,9 @@
     if (was !== v) document.getElementById('dg-maps-tab')?.shadowRoot?.querySelector('[data-mp="reload"]')?.click();
   }
 
-  // ---------- ☎ khung ghi cuộc gọi + lịch sử cuộc gọi của 1 công ty ----------
-  const CB = { id: null, res: '' };
+  // ---------- ☎ Telesale trong khung chi tiết công ty (bấm tên / ☎ Ghi cuộc gọi): nhận khách, ghi kết quả từng lần gọi, lịch sử ----------
+  // Trang 📜 Lịch sử cuộc gọi (bảng công ty đang ẩn) thì mở cùng nội dung trong 1 khung riêng.
+  const CB = { id: null, res: '', form: {}, box: false };
   function phonesOf(c) {
     const out = [];
     const add = (p) => {
@@ -348,94 +365,146 @@
   const phoneLink = (d) => /^0[35789]\d{8}$/.test(d)
     ? `<a href="tel:${d}" style="font-weight:900;color:#15803d;text-decoration:none">📱 ${d}</a> <a href="${/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? `https://zalo.me/${d}" target="_blank` : `zalo://conversation?phone=84${d.slice(1)}`}" style="font-size:11px;color:#0068ff;font-weight:800">Zalo ↗</a>`
     : `<a href="tel:${d}" style="font-weight:800;color:#475569;text-decoration:none">☎ ${d}</a>`;
+  // mở khung chi tiết của bảng (có mục 📞 Telesale) – bảng đang ẩn thì mở khung riêng
   function openCall(id, fresh) {
     const items = store.mapsPlaces.items;
     if (fresh && items[id]) Object.assign(items[id], { tele: fresh.tele });
+    if (CB.id !== id) {
+      CB.res = '';
+      CB.form = {};
+    }
     CB.id = id;
-    CB.res = '';
-    drawCall();
+    const root = document.getElementById('dg-maps-tab')?.shadowRoot;
+    const nameEl = S.view !== 'history' && root?.querySelector(`b[data-mp="detail"][data-id="${CSS.escape(id)}"]`);
+    if (nameEl) {
+      CB.box = false;
+      nameEl.click();
+      setTimeout(() => decorate(true), 80);
+      return;
+    }
+    CB.box = true;
+    drawBox();
   }
-  function drawCall() {
-    let box = document.getElementById('dg-call');
-    if (!CB.id) return box?.remove();
-    const c = store.mapsPlaces.items[CB.id];
-    if (!c) return;
+  const fieldStyle = 'font:inherit;font-size:12.5px;padding:5px 7px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;width:100%;box-sizing:border-box';
+  function callPanelHtml(id) {
+    const c = store.mapsPlaces?.items[id];
+    if (!c) return '';
     const t = c.tele || {};
     const calls = [...(t.calls || [])].reverse();
     const other = t.by && t.by !== me();
     const can = canEdit() && (!other || S.role === 'admin');
+    const btn = 'cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 8px;font:inherit;font-size:12px;font-weight:800';
+    const f = CB.id === id ? CB.form : {};
+    const res = CB.id === id ? CB.res : '';
+    return `<div data-cb-scope="${esc(id)}" style="margin-top:12px;padding:10px;border:2px solid #bfdbfe;border-radius:10px;background:#f8fbff">
+<div style="font-size:11px;font-weight:900;letter-spacing:.06em;color:#1d4ed8;text-transform:uppercase;margin-bottom:4px">📞 Telesale</div>
+<div style="font-size:12.5px;margin-bottom:6px">${t.by ? `👤 ${other ? `<b>${esc(t.byName || showLogin(t.by))}</b> đang gọi khách này` : '<b style="color:#1e40af">Khách của tôi</b>'} <span style="color:#64748b">(nhận ${esc(fmtT(t.at))})</span>` : '<span style="color:#64748b">Chưa ai nhận</span>'}
+${!t.by && canEdit() ? ` <button data-tele="claim" data-id="${esc(id)}" style="${btn};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">📞 Nhận gọi</button>` : ''}${t.by && (t.by === me() || S.role === 'admin') && canEdit() ? ` <button data-tele="drop" data-id="${esc(id)}" style="${btn};color:#64748b">↩ ${t.by === me() ? 'Trả khách' : 'Thu hồi'}</button>` : ''}
+${t.next && t.by ? `<div style="margin-top:3px;font-weight:800;color:${t.next <= endToday() ? '#b91c1c' : '#b45309'}">⏰ Hẹn gọi lại: ${esc(fmtT(t.next))}</div>` : ''}</div>
+${can ? `<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">Kết quả lần gọi này</div>
+<div style="display:flex;flex-wrap:wrap;gap:5px">${RESULTS.map(([k, l, col]) => `<button data-cb="res" data-r="${k}" style="${btn};${res === k ? `background:${col};border-color:${col};color:#fff` : `color:${col};border-color:${col}66`}">${l}</button>`).join('')}</div>
+<label style="display:block;margin-top:6px;font-size:12px;color:#64748b">Người nghe máy<input data-cbf="who" value="${esc(f.who || '')}" placeholder="vd. chị Lan – thu mua" style="${fieldStyle}"></label>
+<label style="display:block;margin-top:6px;font-size:12px;color:#64748b">⏰ Hẹn gọi lại lúc${res === 'callback' ? ' <b style="color:#b91c1c">*</b>' : ''}<input data-cbf="next" type="datetime-local" value="${esc(f.next || '')}" style="${fieldStyle}"></label>
+<label style="display:block;margin-top:6px;font-size:12px;color:#64748b">Ghi chú<textarea data-cbf="note" rows="3" placeholder="Nội dung trao đổi: nhu cầu thùng, số lượng, giá, hẹn gửi mẫu…" style="${fieldStyle}">${esc(f.note || '')}</textarea></label>
+<div style="margin-top:6px;display:flex;gap:8px;align-items:center"><button data-cb="save" style="${btn};background:#2563eb;border-color:#2563eb;color:#fff;padding:5px 14px">💾 Lưu cuộc gọi</button><span data-cb-msg style="font-size:12px;color:#b91c1c">${esc(CB.id === id ? CB.msg || '' : '')}</span></div>
+${!t.by ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px">Lưu cuộc gọi là tự nhận khách này.</div>' : ''}` : `<div style="font-size:12px;color:#94a3b8">${other ? 'Khách của người khác – chỉ xem lịch sử.' : 'Tài khoản chỉ xem – không ghi cuộc gọi được.'}</div>`}
+<div style="font-weight:900;font-size:12.5px;margin:10px 0 4px">📜 Lịch sử cuộc gọi (${calls.length})</div>
+${calls.length ? calls.map((x) => `<div style="padding:5px 0;border-top:1px solid #e2e8f0;font-size:12px"><div><b>${esc(fmtT(x.at))}</b> · ${esc(x.byName || showLogin(x.by))} ${resTag(x.res)}</div>${x.contact ? `<div style="color:#475569">👤 ${esc(x.contact)}</div>` : ''}${x.note ? `<div style="white-space:pre-wrap">${esc(x.note)}</div>` : ''}${x.next ? `<div style="color:#b45309">⏰ hẹn ${esc(fmtT(x.next))}</div>` : ''}</div>`).join('') : '<div style="font-size:12px;color:#94a3b8">Chưa gọi lần nào.</div>'}
+</div>`;
+  }
+  // khung riêng (trang 📜 Lịch sử cuộc gọi)
+  function drawBox() {
+    let box = document.getElementById('dg-call');
+    if (!CB.box || !CB.id) return box?.remove();
+    const c = store.mapsPlaces.items[CB.id];
+    if (!c) return;
     if (!box) {
       box = document.createElement('div');
       box.id = 'dg-call';
       document.body.append(box);
-      box.addEventListener('click', callClick);
+      box.addEventListener('click', (e) => {
+        if (e.target.closest('[data-cbclose]')) {
+          e.preventDefault();
+          CB.box = false;
+          CB.id = null;
+          return drawBox();
+        }
+        teleClick(e);
+      });
+      box.addEventListener('input', cbInput);
     }
-    const nm = (c.legalName || c.name || '').toLocaleUpperCase('vi');
-    box.innerHTML = `<div class="cb-bg" data-cb="close"></div><div class="cb card">
-<div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><b style="font-size:16px;color:#1e3a8a">☎ ${esc(nm)}</b>
-<div class="muted">${esc(c.legalAddr || c.addr || '')}${c.kcn ? ` · 🏭 ${esc(c.kcn)}` : ''}${c.ind ? ` · ${esc(c.ind)}` : ''}</div></div><a href="#" data-cb="close" style="font-size:20px;text-decoration:none;color:#64748b;font-weight:900">✕</a></div>
-<div style="margin:8px 0;display:flex;gap:12px;flex-wrap:wrap">${phonesOf(c).map(phoneLink).join('') || '<span class="muted">Chưa có SĐT</span>'}</div>
-<div class="muted" style="margin-bottom:8px">${t.by ? `👤 ${other ? `<b>${esc(t.byName || showLogin(t.by))}</b> đang gọi khách này` : '<b>Khách của tôi</b>'} (nhận ${esc(fmtT(t.at))})` : 'Chưa ai nhận – ghi cuộc gọi là tự nhận khách này'}</div>
-${can ? `<div class="cb-form"><div style="font-weight:800;margin-bottom:4px">Kết quả lần gọi này</div>
-<div style="display:flex;flex-wrap:wrap;gap:6px">${RESULTS.map(([k, l, col]) => `<button data-cb="res" data-r="${k}" class="btn" style="${CB.res === k ? `background:${col};border-color:${col};color:#fff` : `color:${col};border-color:${col}66`}">${l}</button>`).join('')}</div>
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-<label class="muted">Người nghe máy<br><input class="f" id="cb-who" placeholder="vd. chị Lan – thu mua" style="width:220px"></label>
-<label class="muted">⏰ Hẹn gọi lại lúc${CB.res === 'callback' ? ' <b style="color:#b91c1c">*</b>' : ''}<br><input class="f" id="cb-next" type="datetime-local"></label></div>
-<label class="muted" style="display:block;margin-top:6px">Ghi chú<br><textarea class="f" id="cb-note" rows="3" style="width:100%" placeholder="Nội dung trao đổi: nhu cầu thùng, số lượng, giá, hẹn gửi mẫu…"></textarea></label>
-<div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn pri" data-cb="save" style="padding:5px 16px">💾 Lưu cuộc gọi</button><span id="cb-msg" class="muted"></span></div></div>` : `<div class="muted" style="padding:6px 0">${other ? 'Khách của người khác – chỉ xem lịch sử.' : 'Tài khoản chỉ xem – không ghi cuộc gọi được.'}</div>`}
-<div style="font-weight:900;margin:12px 0 4px">📜 Lịch sử cuộc gọi (${calls.length})</div>
-${calls.length ? `<div class="tbl" style="max-height:38vh"><table><thead><tr><th>Thời gian</th><th>Người gọi</th><th>Kết quả</th><th>Người nghe</th><th>Ghi chú</th><th>Hẹn lại</th></tr></thead><tbody>${calls.map((x) => `<tr><td style="white-space:nowrap">${esc(fmtT(x.at))}</td><td>${esc(x.byName || showLogin(x.by))}</td><td>${resTag(x.res) || '<span class="muted">—</span>'}</td><td>${esc(x.contact || '')}</td><td style="white-space:pre-wrap">${esc(x.note || '')}</td><td style="white-space:nowrap">${x.next ? `⏰ ${esc(fmtT(x.next))}` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted">Chưa gọi lần nào.</div>'}
-</div>`;
+    box.innerHTML = `<div class="cb-bg" data-cbclose></div><div class="cb card">
+<div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><b style="font-size:16px;color:#1e3a8a">${esc((c.legalName || c.name || '').toLocaleUpperCase('vi'))}</b>
+<div class="muted">${esc(c.legalAddr || c.addr || '')}${c.kcn ? ` · 🏭 ${esc(c.kcn)}` : ''}${c.ind ? ` · ${esc(c.ind)}` : ''}</div>
+<div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">${phonesOf(c).map(phoneLink).join('') || '<span class="muted">Chưa có SĐT</span>'}</div></div>
+<a href="#" data-cbclose style="font-size:20px;text-decoration:none;color:#64748b;font-weight:900">✕</a></div>${callPanelHtml(CB.id)}</div>`;
   }
-  async function callClick(e) {
-    const t = e.target.closest('[data-cb]');
-    if (!t) return;
+  // vẽ lại mục Telesale ở nơi đang mở (khung chi tiết của bảng hoặc khung riêng)
+  function redrawCall() {
+    if (CB.box) return drawBox();
+    decorate(true);
+  }
+  function cbInput(e) {
+    const k = e.target.dataset?.cbf;
+    if (!k) return;
+    const id = e.target.closest('[data-cb-scope]')?.dataset.cbScope;
+    if (CB.id !== id) {
+      CB.id = id;
+      CB.res = '';
+      CB.form = {};
+    }
+    CB.form[k] = e.target.value;
+  }
+  // bấm trong mục Telesale / ô telesale ở dòng bảng
+  function teleClick(e) {
+    const t = e.target.closest?.('[data-tele],[data-cb]');
+    if (!t) return false;
     e.preventDefault();
-    const k = t.dataset.cb;
-    if (k === 'close') {
-      CB.id = null;
-      return drawCall();
+    e.stopPropagation();
+    if (t.dataset.tele) {
+      teleAct(t.dataset.tele, t.dataset.id).catch((err) => alert(err.message || err));
+      return true;
     }
-    if (k === 'res') {
-      // giữ chữ đang gõ khi vẽ lại
-      const keep = { who: document.getElementById('cb-who')?.value, next: document.getElementById('cb-next')?.value, note: document.getElementById('cb-note')?.value };
+    const id = t.closest('[data-cb-scope]')?.dataset.cbScope;
+    if (!id) return true;
+    if (CB.id !== id) {
+      CB.id = id;
+      CB.form = {};
+    }
+    if (t.dataset.cb === 'res') {
       CB.res = t.dataset.r;
-      drawCall();
-      document.getElementById('cb-who').value = keep.who || '';
-      document.getElementById('cb-next').value = keep.next || '';
-      document.getElementById('cb-note').value = keep.note || '';
-      if (CB.res === 'callback' && !keep.next) document.getElementById('cb-next').focus();
-      return;
-    }
-    if (k === 'save') {
-      const msg = document.getElementById('cb-msg');
-      const next = document.getElementById('cb-next').value ? new Date(document.getElementById('cb-next').value).getTime() : null;
-      const note = document.getElementById('cb-note').value.trim();
-      const contact = document.getElementById('cb-who').value.trim();
-      if (!CB.res) return (msg.textContent = '⚠️ Chọn kết quả cuộc gọi.');
-      if (CB.res === 'callback' && !next) return (msg.textContent = '⚠️ Chọn ngày giờ hẹn gọi lại.');
-      t.disabled = true;
-      msg.textContent = '⏳ Đang lưu…';
-      try {
-        const id = CB.id;
-        const { data, error } = await sb.from('dg_items').select('data').eq('ns', 'mapsPlaces').eq('id', id).maybeSingle();
-        if (error) throw new Error(error.message);
-        const c = data?.data || store.mapsPlaces.items[id];
-        const t0 = c.tele || {};
-        if (t0.by && t0.by !== me() && S.role !== 'admin') throw new Error(`${t0.byName || showLogin(t0.by)} đã nhận khách này rồi.`);
-        const call = { at: Date.now(), by: me(), byName: who(), res: CB.res, contact, note, next };
-        const tele = { ...t0, by: t0.by || me(), byName: t0.byName || who(), at: t0.at || Date.now(), calls: [...(t0.calls || []), call], last: CB.res, lastAt: call.at, next };
-        await savePlaces({ [id]: { ...c, tele } });
-        const items = store.mapsPlaces.items;
-        if (items[id]) Object.assign(items[id], { tele });
-        CB.res = '';
-        drawCall();
-        decorate();
-        render();
-      } catch (err) {
-        t.disabled = false;
-        msg.textContent = `⚠️ ${err.message || err}`;
-      }
+      CB.msg = '';
+      redrawCall();
+    } else if (t.dataset.cb === 'save') saveCall(id, t);
+    return true;
+  }
+  async function saveCall(id, btn) {
+    const f = CB.form;
+    const next = f.next ? new Date(f.next).getTime() : null;
+    CB.msg = !CB.res ? '⚠️ Chọn kết quả cuộc gọi.' : CB.res === 'callback' && !next ? '⚠️ Chọn ngày giờ hẹn gọi lại.' : '';
+    if (CB.msg) return redrawCall();
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang lưu…';
+    try {
+      const { data, error } = await sb.from('dg_items').select('data').eq('ns', 'mapsPlaces').eq('id', id).maybeSingle();
+      if (error) throw new Error(error.message);
+      const c = data?.data || store.mapsPlaces.items[id];
+      const t0 = c.tele || {};
+      if (t0.by && t0.by !== me() && S.role !== 'admin') throw new Error(`${t0.byName || showLogin(t0.by)} đã nhận khách này rồi.`);
+      const call = { at: Date.now(), by: me(), byName: who(), res: CB.res, contact: (f.who || '').trim(), note: (f.note || '').trim(), next };
+      const tele = { ...t0, by: t0.by || me(), byName: t0.byName || who(), at: t0.at || Date.now(), calls: [...(t0.calls || []), call], last: CB.res, lastAt: call.at, next };
+      await savePlaces({ [id]: { ...c, tele } });
+      const items = store.mapsPlaces.items;
+      if (items[id]) Object.assign(items[id], { tele });
+      CB.res = '';
+      CB.form = {};
+      CB.msg = '';
+      redrawCall();
+      decorate();
+      render();
+    } catch (err) {
+      CB.msg = `⚠️ ${err.message || err}`;
+      redrawCall();
     }
   }
 
