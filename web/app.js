@@ -22,6 +22,9 @@
   try { S.view = localStorage.getItem('dgWeb:view') || 'all'; } catch {}
   const canEdit = () => S.role === 'admin' || S.role === 'editor';
   const who = () => S.name || S.user?.user_metadata?.name || showLogin(S.user?.email);
+  // 🕘 ghi nhật ký thao tác trình duyệt (thay đổi dữ liệu thì máy chủ tự ghi)
+  const logAdd = (action, id = null, name = null, detail = null) => sb.rpc('dg_web_log_add', { p_action: action, p_target_id: id, p_target_name: name, p_detail: detail }).then(() => {}, () => {});
+  const isPage = (v) => v === 'history' || v === 'log'; // trang riêng (ẩn bảng công ty)
 
   // ---------- đăng nhập ----------
   function loginView(msg = '') {
@@ -45,7 +48,8 @@
         document.getElementById('le').textContent = /invalid/i.test(error.message) ? 'Sai tên đăng nhập hoặc mật khẩu.' : error.message;
         return;
       }
-      start();
+      await start();
+      logAdd('đăng nhập');
     });
   }
   async function start() {
@@ -59,6 +63,7 @@
       return loginView('Tài khoản này chưa được cấp quyền xem. Liên hệ admin.');
     }
     S.role = role;
+    if (role === 'admin') sb.rpc('dg_web_list').then(({ data }) => { users = data || users; render(); }, () => {});
     const meInfo = (await sb.rpc('dg_web_me')).data || {};
     S.tenant = meInfo.tenant || (await sb.rpc('dg_web_tenant')).data || 'tuantu';
     S.name = meInfo.name || '';
@@ -240,6 +245,10 @@
     return x ? `<span style="display:inline-block;padding:0 6px;border-radius:6px;border:1px solid ${x[2]}55;background:${x[2]}14;color:${x[2]};font-weight:800;white-space:nowrap">${x[1]}</span>` : '';
   };
   function viewOf(items) {
+    if (S.view.startsWith('by:')) {
+      const em = S.view.slice(3);
+      return Object.fromEntries(Object.entries(items).filter(([, c]) => c?.tele?.by === em));
+    }
     const f = VIEWS.find((v) => v[0] === S.view)?.[2];
     if (!f || S.view === 'all') return items;
     return Object.fromEntries(Object.entries(items).filter(([, c]) => f(c)));
@@ -336,7 +345,10 @@
     S.view = v;
     try { localStorage.setItem('dgWeb:view', v); } catch {}
     render();
-    if (v === 'history') return hideMaps();
+    if (isPage(v)) {
+      if (v === 'log') loadLog();
+      return hideMaps();
+    }
     mountMapsTab();
     // bảo bảng tải lại (đọc lại phần công ty của mục vừa chọn)
     if (was !== v) document.getElementById('dg-maps-tab')?.shadowRoot?.querySelector('[data-mp="reload"]')?.click();
@@ -369,7 +381,7 @@
     }
     CB.id = id;
     const root = document.getElementById('dg-maps-tab')?.shadowRoot;
-    const nameEl = S.view !== 'history' && root?.querySelector(`b[data-mp="detail"][data-id="${CSS.escape(id)}"]`);
+    const nameEl = !isPage(S.view) && root?.querySelector(`b[data-mp="detail"][data-id="${CSS.escape(id)}"]`);
     if (nameEl) {
       CB.box = false;
       nameEl.click();
@@ -450,7 +462,19 @@ ${calls.length ? calls.map((x) => `<div style="padding:5px 0;border-top:1px soli
     CB.form[k] = e.target.value;
   }
   // bấm trong mục Telesale / ô telesale ở dòng bảng
+  const seen = {};
   function teleClick(e) {
+    // 🕘 nhật ký: xem chi tiết công ty (1 lần / 10 phút / công ty), in PDF, tải lại dữ liệu
+    const mp = e.target.closest?.('[data-mp]');
+    if (mp) {
+      const k = mp.dataset.mp;
+      const c = mp.dataset.id && store.mapsPlaces?.items[mp.dataset.id];
+      if (k === 'detail' && c && Date.now() - (seen[c.id] || 0) > 6e5) {
+        seen[c.id] = Date.now();
+        logAdd('xem công ty', String(c.id), c.legalName || c.name);
+      } else if (k === 'pdf') logAdd('in PDF', null, null, { title: (mp.textContent || '').trim() });
+      else if (k === 'reload' && e.isTrusted) logAdd('tải lại dữ liệu');
+    }
     const t = e.target.closest?.('[data-tele],[data-cb]');
     if (!t) return false;
     e.preventDefault();
@@ -532,8 +556,9 @@ ${rows.slice(0, 500).map(({ c, x }) => `<tr><td style="white-space:nowrap">${esc
   let mapsLoaded = false;
   async function mountMapsTab() {
     if (S.tab !== 'list') return;
-    if (S.view === 'history') {
+    if (isPage(S.view)) {
       pull('mapsPlaces').then(render).catch(() => {});
+      if (S.view === 'log') loadLog();
       return hideMaps();
     }
     if (mapsLoaded) return showMaps();
@@ -583,14 +608,84 @@ ${rows.slice(0, 500).map(({ c, x }) => `<tr><td style="white-space:nowrap">${esc
 <button data-a="tab" data-t="list" class="${S.tab === 'list' ? 'on' : ''}">📋 Công ty</button>${S.role === 'admin' ? `<button data-a="tab" data-t="users" class="${S.tab === 'users' ? 'on' : ''}">👥 Tài khoản</button>` : ''}
 <span id="dg-status" style="font-size:12px;opacity:.85"></span><span class="sp"></span><span style="font-size:12px;opacity:.9">👤 ${esc(who())} · ${ROLE_TXT[S.role] || S.role}</span>
 <button data-a="pw">🔑 Đổi mật khẩu</button><button data-a="out">Đăng xuất</button></div>
-${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' : ''}">${S.tab === 'list' && S.view === 'history' ? historyHtml() : S.tab === 'users' && S.role === 'admin' ? usersHtml() : '<div class="card muted" style="text-align:center;padding:30px">Bảng công ty đã đóng. <button class="btn pri" data-a="tab" data-t="list">📋 Mở danh sách công ty</button></div>'}</div>`;
+${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' : ''}">${S.tab === 'list' && S.view === 'history' ? historyHtml() : S.tab === 'list' && S.view === 'log' ? logHtml() : S.tab === 'users' && S.role === 'admin' ? usersHtml() : '<div class="card muted" style="text-align:center;padding:30px">Bảng công ty đã đóng. <button class="btn pri" data-a="tab" data-t="list">📋 Mở danh sách công ty</button></div>'}</div>`;
   }
   function sideHtml() {
     const items = store.mapsPlaces?.items || {};
     const all = Object.values(items);
     return `<nav class="side">${VIEWS.map(([k, label, f]) => `<a href="#" data-a="view" data-v="${k}" class="${S.view === k ? 'on' : ''}">${label}<span>${store.mapsPlaces ? all.filter(f).length.toLocaleString('vi-VN') : ''}</span></a>`).join('')}
 <a href="#" data-a="view" data-v="history" class="${S.view === 'history' ? 'on' : ''}">📜 Lịch sử cuộc gọi<span>${all.reduce((n, c) => n + (c?.tele?.calls?.length || 0), 0) || ''}</span></a>
+<a href="#" data-a="view" data-v="log" class="${S.view === 'log' ? 'on' : ''}">🕘 Nhật ký${S.role === 'admin' ? '' : ' của tôi'}<span></span></a>
+${S.role === 'admin' ? staffHtml(all) : ''}
 <div class="muted" style="padding:10px 12px;font-size:11.5px;line-height:1.5">📞 Bấm <b>Nhận gọi</b> ở dòng công ty để nhận khách telesale. Gọi xong bấm <b>☎ Ghi cuộc gọi</b>.</div></nav>`;
+  }
+  // 👥 (admin) mỗi nhân viên đang giữ bao nhiêu khách, gọi hôm nay, quá hẹn gọi lại – bấm tên → bảng chỉ hiện khách của người đó
+  function staffHtml(all) {
+    if (!store.mapsPlaces) return '';
+    const day0 = new Date().setHours(0, 0, 0, 0);
+    const st = new Map();
+    const get = (em, nm) => {
+      if (!st.has(em)) st.set(em, { em, nm: nm || showLogin(em), n: 0, today: 0, late: 0, calls: 0 });
+      const o = st.get(em);
+      if (nm && o.nm === showLogin(em)) o.nm = nm;
+      return o;
+    };
+    for (const u of users || []) get(u.email, u.name);
+    for (const c of all) {
+      const t = c?.tele;
+      if (!t) continue;
+      if (t.by) {
+        const o = get(t.by, t.byName);
+        o.n++;
+        if (t.next && t.next <= endToday()) o.late++;
+      }
+      for (const x of t.calls || []) {
+        const o = get(x.by, x.byName);
+        o.calls++;
+        if (x.at >= day0) o.today++;
+      }
+    }
+    const list = [...st.values()].sort((a, b) => b.n - a.n || b.today - a.today || a.nm.localeCompare(b.nm, 'vi'));
+    return `<div style="margin:10px 8px 0;padding-top:8px;border-top:1px solid #e2e8f0"><div style="font-size:11px;font-weight:900;letter-spacing:.05em;color:#1d4ed8;text-transform:uppercase;padding:0 4px 4px">👥 Nhân viên đang liên hệ</div>
+${list.map((o) => `<a href="#" data-a="view" data-v="by:${esc(o.em)}" class="${S.view === `by:${o.em}` ? 'on' : ''}" style="display:block;margin:2px 0;padding:6px 8px" title="Bấm để xem các khách ${esc(o.nm)} đang giữ"><div style="display:flex;justify-content:space-between;gap:4px"><span style="color:inherit;font-weight:800;font-size:12.5px">${esc(o.nm)}</span><span>${o.n.toLocaleString('vi-VN')} khách</span></div>
+<div style="font-size:11px;font-weight:600;opacity:.85">📞 hôm nay ${o.today} · tổng ${o.calls}${o.late ? ` · <b style="color:#dc2626">⏰ ${o.late} quá hẹn</b>` : ''}</div></a>`).join('') || '<div class="muted" style="padding:4px">Chưa ai nhận khách.</div>'}</div>`;
+  }
+  // ---------- 🕘 Nhật ký hoạt động ----------
+  const LG = { days: '1', who: '', action: '', rows: null, err: '' };
+  async function loadLog() {
+    LG.rows = null;
+    render();
+    const from = LG.days ? new Date(Date.now() - Number(LG.days) * 864e5).toISOString() : null;
+    const { data, error } = await sb.rpc('dg_web_log_list', { p_from: from, p_email: LG.who || null, p_action: LG.action || null, p_limit: 2000 });
+    LG.err = error ? error.message : '';
+    LG.rows = data || [];
+    render();
+  }
+  const LOG_ACTIONS = ['đăng nhập', 'đăng xuất', 'xem công ty', 'nhận khách', 'trả khách', 'thu hồi khách', 'ghi cuộc gọi', 'xoá công ty', 'khôi phục công ty', 'kết nối ERP', 'bỏ kết nối ERP', 'nhập MST', 'sửa diện tích', 'sửa công ty', 'in PDF', 'tải lại dữ liệu', 'tạo tài khoản', 'đổi quyền', 'đổi tên hiển thị', 'đặt lại mật khẩu', 'đổi mật khẩu', 'xoá tài khoản'];
+  function logDetail(r) {
+    const d = r.detail || {};
+    if (r.action === 'ghi cuộc gọi') return `${resTag(d.res)}${d.contact ? ` 👤 ${esc(d.contact)}` : ''}${d.note ? ` · ${esc(d.note)}` : ''}${d.next ? ` · ⏰ ${esc(fmtT(d.next))}` : ''}`;
+    if (r.action === 'thu hồi khách') return `của ${esc(d.cua || '')}`;
+    if (r.action === 'nhập MST') return `${esc(d.cu || '—')} → <b>${esc(d.mst || '')}</b>`;
+    if (r.action === 'sửa diện tích') return `${esc(d.cu ?? '—')} → <b>${esc(d.area ?? '')}</b> m²`;
+    if (r.action === 'đổi quyền') return `${esc(ROLE_TXT[d.cu] || d.cu || '')} → <b>${esc(ROLE_TXT[d.moi] || d.moi || '')}</b>`;
+    if (r.action === 'đổi tên hiển thị') return `${esc(d.cu || '—')} → <b>${esc(d.moi || '')}</b>`;
+    if (r.action === 'sửa công ty') return `<span class="muted">${esc((d.fields || []).join(', '))}</span>`;
+    if (r.action === 'tạo tài khoản') return esc(ROLE_TXT[d.role] || d.role || '');
+    if (r.action === 'in PDF') return esc(d.title || '');
+    return '';
+  }
+  function logHtml() {
+    const sel = (k, opts) => `<select class="f" data-lg="${k}">${opts}</select>`;
+    const rows = LG.rows;
+    return `<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b style="font-size:15px">🕘 Nhật ký hoạt động${S.role === 'admin' ? '' : ' của tôi'}</b><span class="muted">${rows ? `${rows.length.toLocaleString('vi-VN')} thao tác` : '⏳ Đang tải…'}</span><span style="flex:1"></span>
+${sel('days', [['1', 'Hôm nay'], ['7', '7 ngày'], ['30', '30 ngày'], ['', 'Tất cả']].map(([v, l]) => `<option value="${v}" ${LG.days === v ? 'selected' : ''}>${l}</option>`).join(''))}
+${S.role === 'admin' ? sel('who', `<option value="">Người: tất cả</option>${(users || []).map((u) => `<option value="${esc(u.email)}" ${LG.who === u.email ? 'selected' : ''}>${esc(u.name || showLogin(u.email))}</option>`).join('')}`) : ''}
+${sel('action', `<option value="">Thao tác: tất cả</option>${LOG_ACTIONS.map((a) => `<option ${LG.action === a ? 'selected' : ''}>${a}</option>`).join('')}`)}
+<button class="btn" data-a="logreload">⟳</button></div>${LG.err ? `<div class="err">⚠️ ${esc(LG.err)}</div>` : ''}
+<div class="tbl"><table><thead><tr><th>Thời gian</th><th>Người</th><th>Thao tác</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead><tbody>
+${(rows || []).map((r) => `<tr><td style="white-space:nowrap">${esc(new Date(r.at).toLocaleString('vi-VN'))}</td><td>${esc(r.name || showLogin(r.email))}</td><td style="white-space:nowrap;font-weight:800">${esc(r.action)}</td><td>${r.target_id && store.mapsPlaces?.items[r.target_id] ? `<a href="#" data-a="hopen" data-id="${esc(r.target_id)}" style="font-weight:700">${esc((r.target_name || '').toLocaleUpperCase('vi'))}</a>` : esc(r.target_name || (r.target_id ? showLogin(r.target_id) : ''))}</td><td>${logDetail(r)}</td></tr>`).join('') || (rows ? '<tr><td colspan="5" class="muted" style="text-align:center;padding:14px">Chưa có thao tác nào.</td></tr>' : '')}
+</tbody></table></div></div>`;
   }
   let users = null;
   let usersErr = '';
@@ -636,6 +731,7 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td><input cla
     e.preventDefault();
     const a = t.dataset.a;
     if (a === 'out') {
+      await logAdd('đăng xuất');
       await sb.auth.signOut();
       S.user = null;
       users = null;
@@ -645,6 +741,7 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td><input cla
       const p = prompt('Mật khẩu mới (≥ 6 ký tự):');
       if (!p) return;
       const { error } = await sb.auth.updateUser({ password: p });
+      if (!error) logAdd('đổi mật khẩu');
       return alert(error ? `Không đổi được: ${error.message}` : '✅ Đã đổi mật khẩu.');
     }
     if (a === 'tab') {
@@ -658,6 +755,7 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td><input cla
       return;
     }
     if (a === 'view') return setView(t.dataset.v);
+    if (a === 'logreload') return loadLog();
     if (a === 'hopen') return openCall(t.dataset.id);
     if (a === 'upw') {
       const p = prompt(`Mật khẩu mới cho ${showLogin(t.dataset.e)} (≥ 6 ký tự):`, genPw());
@@ -715,6 +813,10 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td><input cla
       if (error) alert(`Lỗi: ${error.message}`);
       if (el.dataset.uname === S.user.email) S.name = el.value.trim();
       return loadUsers();
+    }
+    if (el.dataset.lg) {
+      LG[el.dataset.lg] = el.value;
+      return loadLog();
     }
     if (el.dataset.h && el.dataset.h !== 'q') {
       HS[el.dataset.h] = el.value;
