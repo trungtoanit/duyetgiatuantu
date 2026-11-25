@@ -3,7 +3,8 @@
 -- Sau đó tạo tài khoản admin đầu tiên bằng lệnh ở CUỐI file (sửa tên đăng nhập + mật khẩu rồi chạy riêng dòng đó).
 --
 -- Bảo mật:
---  • Chỉ người có tài khoản trong dg_web_users mới đọc được, và CHỈ đọc mapsPlaces + customersAll (không sửa / xoá được gì).
+--  • Chỉ người có tài khoản trong dg_web_users mới đọc được, và CHỈ đọc mapsPlaces + customersAll.
+--  • Quyền: viewer = chỉ xem · editor = xem + sửa công ty Maps · admin = editor + quản lý tài khoản.
 --  • Báo giá, đơn hàng… vẫn chỉ extension (mật khẩu nhóm) đọc được như cũ.
 --  • Tài khoản do admin tạo trên trang web (không cần email thật – gõ tên đăng nhập là đủ).
 --  • Nên TẮT tự đăng ký: Authentication → Sign In / Providers → tắt "Allow new users to sign up".
@@ -13,12 +14,15 @@ create extension if not exists pgcrypto with schema extensions;
 -- Danh sách tài khoản được phép xem trang web
 create table if not exists public.dg_web_users (
   email text primary key,              -- tên đăng nhập không có @ → lưu dạng ten@tuantu.local
-  role text not null default 'viewer' check (role in ('viewer', 'admin')),
+  role text not null default 'viewer' check (role in ('viewer', 'editor', 'admin')),
   name text,
   created_at timestamptz not null default now(),
   created_by text
 );
 alter table public.dg_web_users enable row level security;
+-- quyền ✏️ editor (xem + sửa) – thêm cho bảng tạo từ bản cũ
+alter table public.dg_web_users drop constraint if exists dg_web_users_role_check;
+alter table public.dg_web_users add constraint dg_web_users_role_check check (role in ('viewer', 'editor', 'admin'));
 revoke all on public.dg_web_users from anon, authenticated;
 
 -- Quyền của người đang đăng nhập: 'admin' | 'viewer' | null (không có quyền)
@@ -36,6 +40,17 @@ drop policy if exists dg_web_read on public.dg_items;
 create policy dg_web_read on public.dg_items for select to authenticated
   using (ns in ('mapsPlaces', 'customersAll') and public.dg_web_role() is not null);
 
+-- ✏️ editor / admin: sửa công ty Maps (xoá / khôi phục, kết nối ERP, MST) – giống bảng 📋 trên Google Maps.
+-- Chỉ ghi được loại mapsPlaces; không xoá hẳn dòng nào (xoá = đánh dấu hidden, khôi phục được).
+grant insert, update on public.dg_items to authenticated;
+drop policy if exists dg_web_ins on public.dg_items;
+create policy dg_web_ins on public.dg_items for insert to authenticated
+  with check (ns = 'mapsPlaces' and public.dg_web_role() in ('editor', 'admin'));
+drop policy if exists dg_web_upd on public.dg_items;
+create policy dg_web_upd on public.dg_items for update to authenticated
+  using (ns = 'mapsPlaces' and public.dg_web_role() in ('editor', 'admin'))
+  with check (ns = 'mapsPlaces' and public.dg_web_role() in ('editor', 'admin'));
+
 -- ---- Tạo tài khoản (nội bộ – chỉ gọi từ SQL Editor hoặc qua hàm admin bên dưới) ----
 create or replace function public.dg_web_create_internal(p_login text, p_password text, p_role text default 'viewer', p_name text default null, p_by text default null)
 returns text language plpgsql security definer set search_path = public, extensions as $$
@@ -46,7 +61,7 @@ begin
   if v_email = '' then raise exception 'Thiếu tên đăng nhập'; end if;
   if position('@' in v_email) = 0 then v_email := v_email || '@tuantu.local'; end if;
   if length(coalesce(p_password, '')) < 6 then raise exception 'Mật khẩu tối thiểu 6 ký tự'; end if;
-  if p_role not in ('viewer', 'admin') then raise exception 'Quyền không hợp lệ'; end if;
+  if p_role not in ('viewer', 'editor', 'admin') then raise exception 'Quyền không hợp lệ'; end if;
   select id into v_uid from auth.users where email = v_email;
   if v_uid is null then
     v_uid := gen_random_uuid();
@@ -107,7 +122,7 @@ create or replace function public.dg_web_update(p_email text, p_role text, p_nam
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.dg_web_need_admin();
-  if p_role not in ('viewer', 'admin') then raise exception 'Quyền không hợp lệ'; end if;
+  if p_role not in ('viewer', 'editor', 'admin') then raise exception 'Quyền không hợp lệ'; end if;
   if lower(p_email) = lower(auth.jwt() ->> 'email') and p_role <> 'admin' then raise exception 'Không tự bỏ quyền admin của chính mình'; end if;
   update public.dg_web_users set role = p_role, name = p_name where email = lower(p_email);
 end $$;

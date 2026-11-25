@@ -23,13 +23,15 @@
   const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'dgWebAuth' } });
 
   const S = { user: null, role: null, tab: 'list', data: null, loading: '', err: '' };
-  const UI = { sort: 'name', q: '', erp: '', box: '', ind: '', page: 0, kcns: new Set(), kcnOpen: false, kq: '' };
+  const UI = { sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, kcns: new Set(), kcnOpen: false, kq: '', sel: new Set(), link: null, lq: '' };
+  const canEdit = () => S.role === 'admin' || S.role === 'editor';
+  const ROLE_TXT = { viewer: '👁 Chỉ xem', editor: '✏️ Xem + sửa', admin: '🛡 Admin' };
   try {
     const v = JSON.parse(localStorage.getItem('dgWebUi') || 'null');
-    if (v) Object.assign(UI, { sort: v.sort || 'name', q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', page: Number(v.page) || 0, kcns: new Set(v.kcns || []) });
+    if (v) Object.assign(UI, { sort: v.sort || 'name', q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', page: Number(v.page) || 0, kcns: new Set(v.kcns || []) });
   } catch {}
   const persist = () => {
-    try { localStorage.setItem('dgWebUi', JSON.stringify({ ...UI, kcns: [...UI.kcns], kcnOpen: false })); } catch {}
+    try { localStorage.setItem('dgWebUi', JSON.stringify({ sort: UI.sort, q: UI.q, erp: UI.erp, box: UI.box, ind: UI.ind, show: UI.show, page: UI.page, kcns: [...UI.kcns] })); } catch {}
   };
 
   // ---------- đăng nhập ----------
@@ -137,9 +139,22 @@
       const k = key(c.name);
       if (k) byName.set(k, c);
     }
-    S.data = { at: raw.at, places: raw.places?.items || {}, byId, byName };
+    S.raw = raw;
+    S.data = { at: raw.at, places: raw.places?.items || {}, byId, byName, custs: [...byId.values()] };
     home = null;
   }
+
+  // ✏️ Lưu thay đổi công ty (editor / admin): ghi thẳng dg_items (ns mapsPlaces) – extension trên các máy tự kéo về
+  let idbT = 0;
+  async function save(patch) {
+    if (!canEdit()) throw new Error('Tài khoản chỉ có quyền xem.');
+    for (const [id, v] of Object.entries(patch)) S.data.places[id] = v;
+    const { error } = await sb.from('dg_items').upsert(Object.entries(patch).map(([id, data]) => ({ ns: 'mapsPlaces', id: String(id), data })), { onConflict: 'ns,id' });
+    if (error) throw new Error(`Không lưu được: ${error.message}`);
+    clearTimeout(idbT);
+    idbT = setTimeout(() => S.raw && idbSet('data', S.raw).catch(() => {}), 800);
+  }
+  const who = () => S.user?.user_metadata?.name || showLogin(S.user?.email);
 
   // ---------- bộ lọc (giống scripts/maps/maps-tab.js) ----------
   const PROV_ORDER = ['Bình Dương', 'TP.HCM', 'Đồng Nai', 'Long An', 'Bà Rịa – Vũng Tàu', 'Bình Phước', 'Tây Ninh', 'Khác'];
@@ -204,7 +219,8 @@
   function rows() {
     const q = un(UI.q).trim();
     return Object.values(S.data.places).filter((c) => {
-      if (!c?.name || off(c)) return false;
+      if (!c?.name) return false;
+      if (UI.show === 'on' ? off(c) : !off(c)) return false;
       const e = erpOf(c);
       if (UI.erp === 'in' && !e) return false;
       if (UI.erp === 'out' && e) return false;
@@ -228,11 +244,14 @@
     return `<a href="tel:${d}" title="Số bàn – bấm để gọi" style="color:#64748b;text-decoration:none;white-space:nowrap">☎ ${show}</a>`;
   }
 
+  // bỏ ký tự icon Google (vùng riêng U+E000–F8FF, hiện thành ô vuông) và gạch / chấm đầu tên
+  const clean = (t) => String(t || '').replace(/[\uE000-\uF8FF]/g, '').replace(/^[\s,·•\-–]+/, '').trim();
+
   // ---------- giao diện ----------
   function shell(inner) {
     return `<div class="top"><b>📍 Danh sách công ty – Tuấn Tú</b>
 ${S.role === 'admin' ? `<button data-a="tab" data-t="list" class="${S.tab === 'list' ? 'on' : ''}">📋 Công ty</button><button data-a="tab" data-t="users" class="${S.tab === 'users' ? 'on' : ''}">👥 Tài khoản</button>` : ''}
-<span class="sp"></span><span style="font-size:12px;opacity:.9">👤 ${esc(S.user.user_metadata?.name || showLogin(S.user.email))}${S.role === 'admin' ? ' · admin' : ''}</span>
+<span class="sp"></span><span style="font-size:12px;opacity:.9">👤 ${esc(S.user.user_metadata?.name || showLogin(S.user.email))}${S.role === 'admin' ? ' · admin' : S.role === 'editor' ? ' · ✏️ sửa' : ' · 👁 chỉ xem'}</span>
 <button data-a="pw">🔑 Đổi mật khẩu</button><button data-a="out">Đăng xuất</button></div><div class="wrap">${inner}</div>`;
   }
   function render() {
@@ -259,24 +278,29 @@ ${S.role === 'admin' ? `<button data-a="tab" data-t="list" class="${S.tab === 'l
     const pages = Math.max(1, Math.ceil(list.length / PER));
     UI.page = Math.min(UI.page, pages - 1);
     const view = list.slice(UI.page * PER, UI.page * PER + PER);
-    const all = Object.values(S.data.places).filter((c) => c?.name && !off(c));
+    const all0 = Object.values(S.data.places).filter((c) => c?.name);
+    const all = all0.filter((c) => !off(c));
+    const nOff = all0.length - all.length;
     const inds = [...new Set(all.map((c) => c.ind || '—'))].sort((a, b) => a.localeCompare(b, 'vi'));
     const nErp = all.filter((c) => erpOf(c)).length;
     const s0 = UI.page * PER;
     const tr = view.map((c, i) => {
       const e = erpOf(c);
-      const nm = (e?.name || c.legalName || c.name).toLocaleUpperCase('vi');
+      const nm = clean(e?.name || c.legalName || c.name).toLocaleUpperCase('vi');
+      const ed = canEdit();
+      const manual = !!c.erpId && !c.erpNo;
+      const b = 'class="btn" style="font-size:11.5px;padding:1px 7px';
       const d = dist(c);
       return `<tr style="${e ? 'background:#f0fdf4' : ''}">
-<td style="color:#94a3b8;text-align:right">${s0 + i + 1}</td>
+${ed ? `<td><input type="checkbox" data-sel="${esc(c.id)}" ${UI.sel.has(c.id) ? 'checked' : ''}></td>` : ''}<td style="color:#94a3b8;text-align:right">${s0 + i + 1}</td>
 <td style="min-width:220px;max-width:340px"><b>${esc(nm)}</b>${c.rate ? ` <span title="Google Maps: ${c.rate} sao · ${c.rateN || 0} lượt" style="color:#b45309;font-size:11.5px;font-weight:800;white-space:nowrap">⭐ ${String(c.rate).replace('.', ',')}${c.rateN ? ` <span style="color:#94a3b8;font-weight:600">(${Number(c.rateN).toLocaleString('vi-VN')})</span>` : ''}</span>` : ''}${(e?.name || c.legalName) && (e?.name || c.legalName) !== c.name ? `<div class="muted" style="font-size:11px">Google: ${esc(c.name)}</div>` : ''}</td>
-<td style="white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>` : ''}</td>
+<td style="white-space:nowrap">${c.mst ? `<a href="${esc(c.mstUrl || `https://masothue.com/Search/?q=${c.mst}`)}" target="_blank" rel="noopener" style="color:#7c3aed">${esc(c.mst)}</a>${c.mstManual ? ' <span title="MST nhập tay" style="font-size:10px;color:#7c3aed">✋</span>' : ''}${ed ? ` <a href="#" data-a="mst" data-id="${esc(c.id)}" title="Sửa MST / tên chuẩn" style="text-decoration:none;font-size:11px">✎</a>` : ''}` : ed ? `<button ${b};border-color:#c4b5fd;color:#6d28d9;background:#f5f3ff" data-a="mst" data-id="${esc(c.id)}" title="Mở Google tìm MST → nhập MST + tên chuẩn">🧾 Nhập MST</button>` : ''}</td>
 <td style="font-size:12px">${esc(c.ind || '')}${c.box === 'A' || c.box === 'B' ? `<div title="${esc(c.boxWhy || '')}" style="font-size:11px;font-weight:800;color:${c.box === 'A' ? '#15803d' : '#b45309'}">📦 Thùng: ${c.box === 'A' ? 'cao' : 'vừa'}</div>` : ''}</td>
 <td style="font-size:12px;color:#9a3412">${esc(c.kcn || '')}</td>
-<td style="font-size:12px;min-width:200px;max-width:320px;color:#475569">${d != null ? `<b style="color:#0369a1;white-space:nowrap" title="Đường chim bay từ xưởng Tuấn Tú">📍 ${d.toFixed(1)} km</b> · ` : ''}${esc(c.legalAddr || c.addr || '')}</td>
+<td style="font-size:12px;min-width:200px;max-width:320px;color:#475569">${d != null ? `<b style="color:#0369a1;white-space:nowrap" title="Đường chim bay từ xưởng Tuấn Tú">📍 ${d.toFixed(1)} km</b> · ` : ''}${esc(clean(c.legalAddr || c.addr))}</td>
 <td style="font-size:12px">${e ? '<span style="color:#94a3b8">ẩn (khách ERP)</span>' : phoneHtml(c.phone)}</td>
-<td style="white-space:nowrap">${e ? `<a href="${ERP}/khach-hang/view/${esc(e.id)}" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? `<div class="muted" style="font-size:11px">NVKD ${esc(e.staff.name)}</div>` : ''}` : '<span class="muted">chưa có</span>'}</td>
-<td>${c.href || c.url ? `<a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a>` : ''}</td></tr>`;
+<td style="white-space:nowrap">${e ? `<a href="${ERP}/khach-hang/view/${esc(e.id)}" target="_blank" rel="noopener" style="color:#15803d;font-weight:800">✅ ${esc(e.code || e.name)}</a>${e.staff?.name ? `<div class="muted" style="font-size:11px">NVKD ${esc(e.staff.name)}</div>` : ''}${ed ? `<div class="muted" style="font-size:11px">${manual ? '🔗 kết nối tay' : 'tự khớp tên'} · <a href="#" data-a="unlink" data-id="${esc(c.id)}" style="color:#b91c1c">bỏ kết nối</a></div>` : ''}` : ed ? `<button ${b};border-color:#86efac;color:#166534;background:#f0fdf4" data-a="link" data-id="${esc(c.id)}">🔗 Kết nối ERP</button>${c.erpNo ? '<div class="muted" style="font-size:11px">đã bỏ kết nối</div>' : ''}` : '<span class="muted">chưa có</span>'}</td>
+<td style="white-space:nowrap">${c.href || c.url ? `<a href="${esc(c.href || c.url)}" target="_blank" rel="noopener" title="Mở trên Google Maps" style="text-decoration:none">🗺</a>` : ''} ${!ed ? '' : c.hidden ? `<button ${b}" data-a="restore" data-id="${esc(c.id)}">↩ Khôi phục</button>` : dropWhy(c) ? `<span class="muted" style="font-size:11px" title="Bị bộ lọc loại tự động (giống Google Maps)">🚫 ${esc(dropWhy(c))}</span>` : `<button ${b};color:#b91c1c;border-color:#fecaca" data-a="del" data-id="${esc(c.id)}">🗑 Xoá</button>`}</td></tr>`;
     }).join('');
     const kcnPop = UI.kcnOpen ? (() => {
       const cnt = new Map();
@@ -326,11 +350,36 @@ ${S.err ? `<div class="err">⚠️ ${esc(S.err)}</div>` : ''}
 <select class="f" data-f="ind" style="max-width:220px"><option value="">Ngành: tất cả</option>${inds.map((x) => `<option value="${esc(x)}" ${UI.ind === x ? 'selected' : ''}>${x === '—' ? 'Chưa gắn ngành' : esc(x)}</option>`).join('')}</select>
 <span style="position:relative"><button class="f" data-a="kcn" style="cursor:pointer;font-weight:700;${UI.kcns.size ? 'border-color:#f59e0b;background:#fff7ed;color:#9a3412' : ''}">🏭 KCN: ${UI.kcns.size ? `${UI.kcns.size} đã chọn` : 'tất cả'} ▾</button>${kcnPop}</span>
 <select class="f" data-f="sort"><option value="name">↕ Theo KCN, tên</option><option value="near" ${UI.sort === 'near' ? 'selected' : ''}>📍 Gần → xa</option><option value="rate" ${UI.sort === 'rate' ? 'selected' : ''}>⭐ Nhiều đánh giá</option></select>
+<select class="f" data-f="show"><option value="on">Đang dùng</option><option value="off" ${UI.show === 'off' ? 'selected' : ''}>🗑 Đã xoá / bị loại (${nOff.toLocaleString('vi-VN')})</option></select>
+${canEdit() && UI.sel.size ? `<button class="btn red" data-a="bulk">${UI.show === 'on' ? `🗑 Xoá ${UI.sel.size} đã chọn` : `↩ Khôi phục ${UI.sel.size} đã chọn`}</button>` : ''}
 </div>
 <div class="muted" style="margin-bottom:4px">${list.length.toLocaleString('vi-VN')} công ty khớp · trang ${cur + 1}/${pages}</div>
-<div class="tbl"><table><thead><tr><th>STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
-<tbody>${tr || '<tr><td colspan="9" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>'}</tbody></table></div>
-<div class="pg">${pg}</div></div>`;
+<div class="tbl"><table><thead><tr>${canEdit() ? '<th><input type="checkbox" data-a="selall" title="Chọn cả trang"></th>' : ''}<th>STT</th><th>Tên công ty</th><th>MST</th><th>Ngành</th><th>KCN</th><th>Địa chỉ</th><th>SĐT</th><th>ERP</th><th></th></tr></thead>
+<tbody>${tr || `<tr><td colspan="${canEdit() ? 10 : 9}" style="padding:14px;text-align:center;color:#94a3b8">Không có công ty nào.</td></tr>`}</tbody></table></div>
+<div class="pg">${pg}</div></div>${linkBox()}`;
+  }
+  // 🔗 hộp kết nối công ty với khách hàng ERP (tìm trong customersAll)
+  function linkBox() {
+    if (!UI.link) return '';
+    const c = S.data.places[UI.link];
+    return `<div data-modal style="position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.4);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px">
+<div class="card" style="width:min(560px,100%)"><div style="display:flex;align-items:center;margin-bottom:6px"><b style="flex:1">🔗 Kết nối “${esc(clean(c?.legalName || c?.name))}” với khách hàng ERP</b><a href="#" data-a="lclose" style="text-decoration:none;color:#64748b;font-weight:900">✕</a></div>
+<input class="f" data-lq placeholder="Gõ tên / mã KH / SĐT khách hàng ERP…" value="${esc(UI.lq)}" style="width:100%;padding:6px 8px">
+<div data-lres style="margin-top:6px;max-height:50vh;overflow:auto">${linkResults()}</div>
+<div class="muted" style="margin-top:6px">${S.data.custs.length.toLocaleString('vi-VN')} khách ERP đã đồng bộ.</div></div></div>`;
+  }
+  function linkResults() {
+    const q = un(UI.lq).trim();
+    const qd = UI.lq.replace(/\D/g, '');
+    const item = (x) => `<div data-a="pick" data-cid="${esc(String(x.id))}" style="cursor:pointer;padding:6px 8px;border-radius:8px;border:1px solid #e2e8f0;margin-top:4px"><b>${esc(x.name)}</b> <span style="color:#15803d;font-weight:800">${esc(x.code || '')}</span><div class="muted">${esc(x.address || '')}${x.staff?.name ? ` · NVKD ${esc(x.staff.name)}` : ''}</div></div>`;
+    if (!q) {
+      const c = S.data.places[UI.link];
+      const words = un(c?.legalName || c?.name).replace(/\b(cong ty|tnhh|co phan|mtv|viet nam|chi nhanh|company|limited|co|ltd)\b/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+      const sc = words.length ? S.data.custs.map((x) => ({ x, s: words.filter((w) => un(x.name).includes(w)).length })).filter((r) => r.s > 0).sort((a, b) => b.s - a.s).slice(0, 8) : [];
+      return sc.length ? `<div class="muted">Gợi ý theo tên:</div>${sc.map((r) => item(r.x)).join('')}` : '<div class="muted">Gõ để tìm khách hàng ERP.</div>';
+    }
+    const list = S.data.custs.filter((x) => un(`${x.name} ${x.code}`).includes(q) || (qd.length >= 6 && String(x.phone || '').replace(/\D/g, '').includes(qd))).slice(0, 12);
+    return list.length ? list.map(item).join('') : '<div class="muted">Không tìm thấy khách hàng ERP.</div>';
   }
 
   // ---------- 👥 quản lý tài khoản (admin) ----------
@@ -353,14 +402,14 @@ ${S.err ? `<div class="err">⚠️ ${esc(S.err)}</div>` : ''}
 <label class="muted">Tên đăng nhập (hoặc email)<br><input class="f" name="u" required placeholder="vd. thanh.kd" style="width:200px"></label>
 <label class="muted">Họ tên<br><input class="f" name="n" placeholder="vd. Nguyễn Văn Thành" style="width:200px"></label>
 <label class="muted">Mật khẩu (≥ 6 ký tự)<br><input class="f" name="p" required minlength="6" style="width:160px" value="${esc(genPw())}"></label>
-<label class="muted">Quyền<br><select class="f" name="r"><option value="viewer">👁 Chỉ xem</option><option value="admin">🛡 Admin (xem + quản lý tài khoản)</option></select></label>
+<label class="muted">Quyền<br><select class="f" name="r"><option value="editor">✏️ Xem + sửa (xoá, kết nối ERP, MST)</option><option value="viewer">👁 Chỉ xem</option><option value="admin">🛡 Admin (sửa + quản lý tài khoản)</option></select></label>
 <button class="btn pri" style="padding:5px 14px">Tạo</button></form>
 <div class="muted" style="margin-top:6px">Gửi cho người dùng: link trang này + tên đăng nhập + mật khẩu. Họ có thể tự đổi mật khẩu sau khi đăng nhập (🔑).</div>
 <div id="um" style="margin-top:6px;font-weight:700"></div></div>
 <div class="card"><b style="font-size:15px">👥 Tài khoản (${users.length})</b>${usersErr ? `<div class="err">⚠️ ${esc(usersErr)}</div>` : ''}
 <div class="tbl" style="margin-top:8px"><table><thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Quyền</th><th>Tạo lúc</th><th>Đăng nhập gần nhất</th><th></th></tr></thead><tbody>
 ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.name || '')}</td>
-<td><select class="f" data-role="${esc(u.email)}" ${u.email === S.user.email ? 'disabled' : ''}><option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>👁 Chỉ xem</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>🛡 Admin</option></select></td>
+<td><select class="f" data-role="${esc(u.email)}" ${u.email === S.user.email ? 'disabled' : ''}>${Object.entries(ROLE_TXT).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
 <td class="muted">${fmt(u.created_at)}${u.created_by ? `<br>bởi ${esc(showLogin(u.created_by))}` : ''}</td><td class="muted">${fmt(u.last_sign_in_at)}</td>
 <td style="white-space:nowrap"><button class="btn" data-a="upw" data-e="${esc(u.email)}">🔑 Đặt lại mật khẩu</button> ${u.email === S.user.email ? '<span class="muted">(bạn)</span>' : `<button class="btn red" data-a="udel" data-e="${esc(u.email)}">🗑 Xoá</button>`}</td></tr>`).join('')}
 </tbody></table></div></div>`;
@@ -373,8 +422,14 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
 
   // ---------- sự kiện ----------
   app.addEventListener('click', async (e) => {
+    const sx = e.target.closest('[data-sel]');
+    if (sx) return sx.checked ? UI.sel.add(sx.dataset.sel) : UI.sel.delete(sx.dataset.sel), render();
     const t = e.target.closest('[data-a]');
     if (!t) {
+      if (e.target.matches?.('[data-modal]')) {
+        UI.link = null;
+        return render();
+      }
       if (UI.kcnOpen && !e.target.closest('[data-kpop]')) {
         UI.kcnOpen = false;
         render();
@@ -402,6 +457,67 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
       return render();
     }
     if (a === 'reload') return loadData(true);
+    const id = t.dataset.id;
+    const c = id ? S.data?.places[id] : null;
+    try {
+      if (a === 'selall') {
+        const ids = [...app.querySelectorAll('[data-sel]')].map((x) => x.dataset.sel);
+        const on = !ids.every((x) => UI.sel.has(x));
+        ids.forEach((x) => (on ? UI.sel.add(x) : UI.sel.delete(x)));
+        return render();
+      }
+      if ((a === 'del' || a === 'restore') && c) {
+        UI.sel.delete(id);
+        const p = save({ [id]: a === 'del' ? { ...c, hidden: true, hiddenAt: Date.now(), hiddenBy: who() } : { ...c, hidden: false } });
+        render();
+        return await p;
+      }
+      if (a === 'bulk') {
+        const hide = UI.show === 'on';
+        if (hide && !confirm(`Xoá ${UI.sel.size} công ty khỏi danh sách? (Google Maps cũng ẩn, không quét lại – khôi phục được ở “Đã xoá”)`)) return;
+        const patch = Object.fromEntries([...UI.sel].filter((x) => S.data.places[x]).map((x) => [x, { ...S.data.places[x], hidden: hide, ...(hide ? { hiddenAt: Date.now(), hiddenBy: who() } : {}) }]));
+        UI.sel.clear();
+        await save(patch);
+        return render();
+      }
+      if (a === 'link' && c) {
+        UI.link = id;
+        UI.lq = '';
+        render();
+        return app.querySelector('[data-lq]')?.focus();
+      }
+      if (a === 'lclose') {
+        UI.link = null;
+        return render();
+      }
+      if (a === 'pick') {
+        const pid = UI.link;
+        const pc = S.data.places[pid];
+        UI.link = null;
+        if (pc) await save({ [pid]: { ...pc, erpId: t.dataset.cid, erpNo: false, erpLinkAt: Date.now(), erpLinkBy: who() } });
+        return render();
+      }
+      if (a === 'unlink' && c) {
+        if (!confirm('Bỏ kết nối công ty này với khách hàng ERP?')) return;
+        await save({ [id]: { ...c, erpId: null, erpNo: true, erpLinkAt: Date.now(), erpLinkBy: who() } });
+        return render();
+      }
+      if (a === 'mst' && c) {
+        // web không có extension → mở Google tìm MST, người dùng nhập MST (+ tên chuẩn nếu có)
+        const nm = clean(c.legalName || c.name);
+        if (!c.mst) window.open(`https://www.google.com/search?q=${encodeURIComponent(`${nm} mã số thuế`)}`, '_blank');
+        const v = (prompt(`MST của “${nm}” (10 số, chi nhánh: 10 số-3 số):`, c.mst || '') || '').replace(/[^\d-]/g, '');
+        if (!v) return;
+        if (!/^\d{10}(-\d{3})?$/.test(v)) return alert('MST phải là 10 số (chi nhánh: 10 số-3 số).');
+        const ln = prompt('Tên chuẩn (theo masothue / giấy phép) – để trống nếu chưa biết:', c.mst === v ? c.legalName || '' : '');
+        if (ln === null) return;
+        await save({ [id]: { ...c, mst: v, mstUrl: `https://masothue.com/Search/?q=${v}`, mstManual: true, mstSkip: false, mstAt: Date.now(), mstBy: who(), ...(ln.trim() ? { legalName: ln.trim().toUpperCase() } : c.mst !== v ? { legalName: '', legalAddr: '' } : {}) } });
+        return render();
+      }
+    } catch (err) {
+      alert(err.message || err);
+      return loadData(false);
+    }
     if (a === 'pg') UI.page = Math.max(0, Number(t.dataset.p) || 0);
     else if (a === 'kcn') {
       UI.kcnOpen = !UI.kcnOpen;
@@ -468,6 +584,10 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
         persist();
         render();
       }, 300);
+    } else if (e.target.matches('[data-lq]')) {
+      UI.lq = e.target.value;
+      const box = app.querySelector('[data-lres]');
+      if (box) box.innerHTML = linkResults();
     } else if (e.target.matches('[data-kq]')) {
       UI.kq = e.target.value;
       const q = un(UI.kq);
@@ -482,6 +602,7 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
     } else if (el.dataset.f) {
       UI[el.dataset.f] = el.value;
       UI.page = 0;
+      UI.sel.clear();
     } else if (el.dataset.role) {
       const u = users?.find((x) => x.email === el.dataset.role);
       const { error } = await sb.rpc('dg_web_update', { p_email: el.dataset.role, p_role: el.value, p_name: u?.name || null });
