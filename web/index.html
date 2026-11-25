@@ -39,6 +39,9 @@ tbody tr:hover td{background:#e0f2fe!important}
 .pop{position:absolute;left:0;top:calc(100% + 4px);z-index:40;width:min(380px,90vw);max-height:60vh;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.22);padding:6px}
 .pop label{display:flex;gap:6px;align-items:center;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}
 .pg{display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:8px}
+/* bảng 📋 của extension (scripts/maps/maps-tab.js): nằm dưới thanh trên cùng, ẩn nút mở nổi */
+#dg-maps-tab{position:fixed;left:0;right:0;bottom:0;top:46px;transform:translateZ(0);z-index:10}
+#dg-maps-tab-btn{display:none!important}
 @media (max-width:760px){
   .wrap{padding:8px}
   .hide-sm{display:none}
@@ -48,9 +51,9 @@ tbody tr:hover td{background:#e0f2fe!important}
 </head>
 <body>
 <div id="app"><div class="wrap muted">⏳ Đang tải…</div></div>
-<script src="config.js?v=2"></script>
+<script src="config.js?v=3"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="../scripts/shared/company-pdf.js?v=2"></script>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

@@ -201,7 +201,7 @@ nên cần giới hạn quyền ghi repo.
 
 ## 🌐 Trang web Danh sách công ty (`web/`)
 
-Trang xem danh sách công ty Google Maps cho người không cài extension – đăng nhập bằng tài khoản admin cấp, chỉ xem.
+Trang danh sách công ty Google Maps cho người không cài extension – đăng nhập bằng tài khoản admin cấp. Trang chạy NGUYÊN bảng `scripts/maps/maps-tab.js` (giả lập phần extension → đọc / ghi Supabase), nên bảng bên Google Maps thêm gì thì web có ngay. Quyền: 👁 chỉ xem · ✏️ xem + sửa · 🛡 admin.
 
 1. Supabase → SQL Editor: chạy `supabase/web-users.sql`, rồi chạy dòng tạo admin đầu tiên ở cuối file.
 2. Supabase → Authentication → Sign In / Providers: tắt **Allow new users to sign up**.
