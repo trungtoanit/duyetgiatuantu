@@ -258,10 +258,6 @@
     const root = host?.shadowRoot;
     if (!root || root.__tele) return;
     root.__tele = 1;
-    // hiện bảng thành trang danh sách (không phải popup): bỏ nền mờ, viền thẻ, thanh tiêu đề ✕ của bảng
-    const st = document.createElement('style');
-    st.textContent = '.ov{position:absolute!important;inset:0!important;background:#f1f5f9!important;padding:0!important}.card{max-width:none!important;border-radius:0!important;box-shadow:none!important}.card>.top{display:none!important}';
-    root.append(st);
     new MutationObserver(() => {
       clearTimeout(decoT);
       decoT = setTimeout(decorate, 30);
@@ -313,6 +309,17 @@
     // bảo bảng tải lại (đọc lại phần công ty của mục vừa chọn)
     document.getElementById('dg-maps-tab')?.shadowRoot?.querySelector('[data-mp="reload"]')?.click();
   }
+
+  // hiện bảng thành trang danh sách (không phải popup): bỏ nền mờ, viền thẻ, thanh tiêu đề ✕ của bảng.
+  // Gắn ngay lúc bảng tạo shadow DOM (adoptedStyleSheets không bị innerHTML của bảng xoá) → không chớp popup.
+  const pageCss = new CSSStyleSheet();
+  pageCss.replaceSync('.ov{position:absolute!important;inset:0!important;background:#f1f5f9!important;padding:0!important}.card{max-width:none!important;border-radius:0!important;box-shadow:none!important}.card>.top{display:none!important}');
+  const attach0 = Element.prototype.attachShadow;
+  Element.prototype.attachShadow = function (o) {
+    const r = attach0.call(this, o);
+    if (this.id === 'dg-maps-tab') r.adoptedStyleSheets = [...r.adoptedStyleSheets, pageCss];
+    return r;
+  };
 
   // nạp bảng của extension (đúng phiên bản scripts trên GitHub) rồi mở luôn
   let mapsLoaded = false;
