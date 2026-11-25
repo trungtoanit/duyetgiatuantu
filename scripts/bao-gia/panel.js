@@ -20809,7 +20809,7 @@ ${msg.khen ? `<div style="margin:16px 30px 0;padding:12px 16px;border-radius:14p
         </div>`;
     }
 
-    if (perm.side) renderSide(quotes[qid], qid, current, handoverBox(handovers, quotes), handovers.length);
+    if (perm.side) renderSide(quotes[qid], qid, current, '', 0); // 🔁 bỏ giao diện Bàn giao khách hàng trong thẻ bên phải
     else renderSide(null, null); // không có quyền xem thẻ báo giá → ẩn thẻ
     if (!isOpen()) return;
     const editing = root.activeElement?.classList;
