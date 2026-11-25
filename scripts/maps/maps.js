@@ -1576,7 +1576,7 @@ ${list.map((c, i) => `<div style="padding:6px 0;border-top:1px solid #f1f5f9"><d
   function exportPdf(list, title, pre = null) {
     const rows = (list || []).filter((c) => c?.name && !isRealEstate(c)).map((c) => {
       const e = erpOf(c);
-      return { name: dispName(c), mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, kcn: c.kcn || kcnOf(c) || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
+      return { name: dispName(c), mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, km: c.route?.km || null, kcn: c.kcn || kcnOf(c) || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
     });
     dgCompanyPdf({ title, rows, erpHost: ERP_HOST, pre });
   }

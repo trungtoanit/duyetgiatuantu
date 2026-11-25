@@ -1053,7 +1053,7 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
         title: `Danh sách công ty – ${f.length ? f.join(' · ') : 'Tất cả'}`,
         rows: mpRows().map((c) => {
           const e = mpErp(c);
-          return { name: e?.name || c.legalName || c.name, mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, kcn: c.kcn || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
+          return { name: e?.name || c.legalName || c.name, mst: c.mst, ind: c.ind, addr: c.legalAddr || c.addr, phone: c.phone, km: c.route?.km || null, kcn: c.kcn || '', erp: e ? { id: e.id, code: e.code, staffName: e.staff?.name || '' } : null };
         }),
         erpHost: ERP,
         group: !mpUi.sort || mpUi.sort === 'name', // đang sắp gần → xa / xưởng lớn… → in đúng thứ tự đó, không gom KCN
