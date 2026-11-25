@@ -166,7 +166,17 @@
       if (key === 'mstPick') return mst.pick;
       if (key === 'mstJobs') return mst.jobs;
       if (key === 'mstAlive') return { at: Date.now() };
-      return lsGet(key) || {};
+      const v = lsGet(key) || {};
+      // 📍 trang web: bảng mặc định sắp Gần → xa (1 lần cho mỗi người; đổi lại trong ô sắp xếp thì giữ lựa chọn đó)
+      if (key === 'mapsTabUi') {
+        const k = who().normalize('NFC').trim().toLowerCase() || 'me';
+        if (!lsGet(`nearDefault:${k}`)) {
+          v[k] = { ...(v[k] || {}), sort: 'near', page: 0 };
+          lsSet(key, v);
+          lsSet(`nearDefault:${k}`, 1);
+        }
+      }
+      return v;
     },
     'kv.merge': async ({ key, patch }) => {
       if (key === 'mapsPlaces') return savePlaces(patch);
@@ -254,6 +264,29 @@
     return Object.fromEntries(Object.entries(items).filter(([, c]) => f(c)));
   }
   const fmtT = (t) => (t ? new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '');
+  // ⏱ thời gian đã qua: vừa xong · 5 phút trước · 2 giờ trước · hôm qua 14:30 · 3 ngày trước · 12/11 (rê chuột xem giờ đầy đủ; tự cập nhật mỗi phút)
+  function agoText(t) {
+    const ms = typeof t === 'number' ? t : Date.parse(t);
+    if (!ms) return '';
+    const s = (Date.now() - ms) / 1000;
+    if (s < 60) return 'vừa xong';
+    if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
+    const d0 = new Date().setHours(0, 0, 0, 0);
+    const hm = new Date(ms).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    if (ms >= d0) return `${Math.floor(s / 3600)} giờ trước`;
+    if (ms >= d0 - 864e5) return `hôm qua ${hm}`;
+    const days = Math.ceil((d0 - ms) / 864e5);
+    if (days <= 7) return `${days} ngày trước`;
+    return new Date(ms).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) + ` ${hm}`;
+  }
+  const ago = (t) => {
+    const ms = typeof t === 'number' ? t : Date.parse(t);
+    return ms ? `<span data-ago="${ms}" title="${esc(new Date(ms).toLocaleString('vi-VN'))}">${agoText(ms)}</span>` : '';
+  };
+  setInterval(() => {
+    const roots = [document, document.getElementById('dg-maps-tab')?.shadowRoot].filter(Boolean);
+    for (const rt of roots) for (const el of rt.querySelectorAll('[data-ago]')) el.textContent = agoText(Number(el.dataset.ago));
+  }, 60e3);
   function teleHtml(c) {
     const t = c?.tele || {};
     const mine = t.by && t.by === me();
@@ -265,7 +298,7 @@
     if (!t.by) h += ed ? `<button data-tele="claim" data-id="${esc(c.id)}" style="${b};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">📞 Nhận gọi</button>` : '<span style="color:#94a3b8">chưa ai nhận</span>';
     else if (mine) h += `<span style="display:inline-block;padding:0 6px;border-radius:6px;background:#dbeafe;color:#1e40af;font-weight:900">👤 Khách của tôi</span> ${ed ? `<button data-tele="call" data-id="${esc(c.id)}" style="${b};border-color:#86efac;background:#f0fdf4;color:#166534">☎ Ghi cuộc gọi</button><button data-tele="drop" data-id="${esc(c.id)}" style="${b};color:#64748b">↩ Trả khách</button>` : ''}`;
     else h += `<span style="display:inline-block;padding:0 6px;border-radius:6px;background:#f1f5f9;color:#475569;font-weight:800">👤 ${esc(t.byName || showLogin(t.by))} đang gọi</span>${S.role === 'admin' ? ` <button data-tele="drop" data-id="${esc(c.id)}" style="${b};color:#b91c1c;border-color:#fecaca">↩ Thu hồi</button>` : ''}`;
-    if (last) h += `<div data-tele="call" data-id="${esc(c.id)}" style="cursor:pointer;color:#475569;margin-top:2px" title="Xem lịch sử cuộc gọi">📜 ${calls.length} lần gọi · ${esc(fmtT(last.at))} ${resTag(last.res)}${last.note ? ` <span style="color:#64748b">${esc(last.note.slice(0, 60))}</span>` : ''}${t.next && t.by ? ` <b style="color:${t.next <= endToday() ? '#b91c1c' : '#b45309'}">⏰ ${esc(fmtT(t.next))}</b>` : ''}</div>`;
+    if (last) h += `<div data-tele="call" data-id="${esc(c.id)}" style="cursor:pointer;color:#475569;margin-top:2px" title="Xem lịch sử cuộc gọi">📜 ${calls.length} lần gọi · ${ago(last.at)} ${resTag(last.res)}${last.note ? ` <span style="color:#64748b">${esc(last.note.slice(0, 60))}</span>` : ''}${t.next && t.by ? ` <b style="color:${t.next <= endToday() ? '#b91c1c' : '#b45309'}">⏰ ${esc(fmtT(t.next))}</b>` : ''}</div>`;
     return `<div data-tele-box="${esc(c.id)}" style="margin-top:3px;font-size:11.5px;line-height:1.5">${h}</div>`;
   }
   // gắn ô telesale vào cột tên mỗi dòng của bảng (bảng vẽ lại thì gắn lại)
@@ -404,7 +437,7 @@
     const res = CB.id === id ? CB.res : '';
     return `<div data-cb-scope="${esc(id)}" style="margin-top:12px;padding:10px;border:2px solid #bfdbfe;border-radius:10px;background:#f8fbff">
 <div style="font-size:11px;font-weight:900;letter-spacing:.06em;color:#1d4ed8;text-transform:uppercase;margin-bottom:4px">📞 Telesale</div>
-<div style="font-size:12.5px;margin-bottom:6px">${t.by ? `👤 ${other ? `<b>${esc(t.byName || showLogin(t.by))}</b> đang gọi khách này` : '<b style="color:#1e40af">Khách của tôi</b>'} <span style="color:#64748b">(nhận ${esc(fmtT(t.at))})</span>` : '<span style="color:#64748b">Chưa ai nhận</span>'}
+<div style="font-size:12.5px;margin-bottom:6px">${t.by ? `👤 ${other ? `<b>${esc(t.byName || showLogin(t.by))}</b> đang gọi khách này` : '<b style="color:#1e40af">Khách của tôi</b>'} <span style="color:#64748b">(nhận ${ago(t.at)})</span>` : '<span style="color:#64748b">Chưa ai nhận</span>'}
 ${!t.by && S.role ? ` <button data-tele="claim" data-id="${esc(id)}" style="${btn};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">📞 Nhận gọi</button>` : ''}${t.by && (t.by === me() || S.role === 'admin') ? ` <button data-tele="drop" data-id="${esc(id)}" style="${btn};color:#64748b">↩ ${t.by === me() ? 'Trả khách' : 'Thu hồi'}</button>` : ''}
 ${t.next && t.by ? `<div style="margin-top:3px;font-weight:800;color:${t.next <= endToday() ? '#b91c1c' : '#b45309'}">⏰ Hẹn gọi lại: ${esc(fmtT(t.next))}</div>` : ''}</div>
 ${can ? `<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">Kết quả lần gọi này</div>
@@ -415,7 +448,7 @@ ${can ? `<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">Kết q
 <div style="margin-top:6px;display:flex;gap:8px;align-items:center"><button data-cb="save" style="${btn};background:#2563eb;border-color:#2563eb;color:#fff;padding:5px 14px">💾 Lưu cuộc gọi</button><span data-cb-msg style="font-size:12px;color:#b91c1c">${esc(CB.id === id ? CB.msg || '' : '')}</span></div>
 ${!t.by ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px">Lưu cuộc gọi là tự nhận khách này.</div>' : ''}` : `<div style="font-size:12px;color:#94a3b8">${other ? 'Khách của người khác – chỉ xem lịch sử.' : 'Tài khoản chỉ xem – không ghi cuộc gọi được.'}</div>`}
 <div style="font-weight:900;font-size:12.5px;margin:10px 0 4px">📜 Lịch sử cuộc gọi (${calls.length})</div>
-${calls.length ? calls.map((x) => `<div style="padding:5px 0;border-top:1px solid #e2e8f0;font-size:12px"><div><b>${esc(fmtT(x.at))}</b> · ${esc(x.byName || showLogin(x.by))} ${resTag(x.res)}</div>${x.contact ? `<div style="color:#475569">👤 ${esc(x.contact)}</div>` : ''}${x.note ? `<div style="white-space:pre-wrap">${esc(x.note)}</div>` : ''}${x.next ? `<div style="color:#b45309">⏰ hẹn ${esc(fmtT(x.next))}</div>` : ''}</div>`).join('') : '<div style="font-size:12px;color:#94a3b8">Chưa gọi lần nào.</div>'}
+${calls.length ? calls.map((x) => `<div style="padding:5px 0;border-top:1px solid #e2e8f0;font-size:12px"><div><b>${ago(x.at)}</b> · ${esc(x.byName || showLogin(x.by))} ${resTag(x.res)}</div>${x.contact ? `<div style="color:#475569">👤 ${esc(x.contact)}</div>` : ''}${x.note ? `<div style="white-space:pre-wrap">${esc(x.note)}</div>` : ''}${x.next ? `<div style="color:#b45309">⏰ hẹn ${esc(fmtT(x.next))}</div>` : ''}</div>`).join('') : '<div style="font-size:12px;color:#94a3b8">Chưa gọi lần nào.</div>'}
 </div>`;
   }
   // khung riêng (trang 📜 Lịch sử cuộc gọi)
@@ -537,7 +570,7 @@ ${calls.length ? calls.map((x) => `<div style="padding:5px 0;border-top:1px soli
 <select class="f" data-h="res"><option value="">Kết quả: tất cả</option>${RESULTS.map(([k, l]) => `<option value="${k}" ${HS.res === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${RESULTS.filter(([k]) => cnt[k]).map(([k]) => `${resTag(k)} <b>${cnt[k]}</b>`).join(' &nbsp; ')}</div>
 <div class="tbl"><table><thead><tr><th>Thời gian</th><th>Người gọi</th><th>Công ty</th><th>Kết quả</th><th>Người nghe</th><th>Ghi chú</th><th>Hẹn lại</th></tr></thead><tbody>
-${rows.slice(0, 500).map(({ c, x }) => `<tr><td style="white-space:nowrap">${esc(fmtT(x.at))}</td><td>${esc(x.byName || showLogin(x.by))}</td><td><a href="#" data-a="hopen" data-id="${esc(c.id)}" style="font-weight:800">${esc((c.legalName || c.name).toLocaleUpperCase('vi'))}</a></td><td>${resTag(x.res)}</td><td>${esc(x.contact || '')}</td><td style="white-space:pre-wrap;max-width:420px">${esc(x.note || '')}</td><td style="white-space:nowrap">${x.next ? `⏰ ${esc(fmtT(x.next))}` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:14px">Chưa có cuộc gọi nào.</td></tr>'}
+${rows.slice(0, 500).map(({ c, x }) => `<tr><td style="white-space:nowrap">${ago(x.at)}</td><td>${esc(x.byName || showLogin(x.by))}</td><td><a href="#" data-a="hopen" data-id="${esc(c.id)}" style="font-weight:800">${esc((c.legalName || c.name).toLocaleUpperCase('vi'))}</a></td><td>${resTag(x.res)}</td><td>${esc(x.contact || '')}</td><td style="white-space:pre-wrap;max-width:420px">${esc(x.note || '')}</td><td style="white-space:nowrap">${x.next ? `⏰ ${esc(fmtT(x.next))}` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:14px">Chưa có cuộc gọi nào.</td></tr>'}
 </tbody></table></div>${rows.length > 500 ? '<div class="muted">Hiện 500 cuộc gọi mới nhất – lọc thêm để xem cũ hơn.</div>' : ''}</div>`;
   }
 
@@ -712,7 +745,7 @@ ${S.role === 'admin' ? sel('who', `<option value="">Người: tất cả</option
 ${sel('action', `<option value="">Thao tác: tất cả</option>${LOG_ACTIONS.map((a) => `<option ${LG.action === a ? 'selected' : ''}>${a}</option>`).join('')}`)}
 <button class="btn" data-a="logreload">⟳</button></div>${LG.err ? `<div class="err">⚠️ ${esc(LG.err)}</div>` : ''}
 <div class="tbl"><table><thead><tr><th>Thời gian</th><th>Người</th><th>Thao tác</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead><tbody>
-${(rows || []).map((r) => `<tr><td style="white-space:nowrap">${esc(new Date(r.at).toLocaleString('vi-VN'))}</td><td>${esc(r.name || showLogin(r.email))}</td><td style="white-space:nowrap;font-weight:800">${esc(r.action)}</td><td>${r.target_id && store.mapsPlaces?.items[r.target_id] ? `<a href="#" data-a="hopen" data-id="${esc(r.target_id)}" style="font-weight:700">${esc((r.target_name || '').toLocaleUpperCase('vi'))}</a>` : esc(r.target_name || (r.target_id ? showLogin(r.target_id) : ''))}</td><td>${logDetail(r)}</td></tr>`).join('') || (rows ? '<tr><td colspan="5" class="muted" style="text-align:center;padding:14px">Chưa có thao tác nào.</td></tr>' : '')}
+${(rows || []).map((r) => `<tr><td style="white-space:nowrap">${ago(r.at)}</td><td>${esc(r.name || showLogin(r.email))}</td><td style="white-space:nowrap;font-weight:800">${esc(r.action)}</td><td>${r.target_id && store.mapsPlaces?.items[r.target_id] ? `<a href="#" data-a="hopen" data-id="${esc(r.target_id)}" style="font-weight:700">${esc((r.target_name || '').toLocaleUpperCase('vi'))}</a>` : esc(r.target_name || (r.target_id ? showLogin(r.target_id) : ''))}</td><td>${logDetail(r)}</td></tr>`).join('') || (rows ? '<tr><td colspan="5" class="muted" style="text-align:center;padding:14px">Chưa có thao tác nào.</td></tr>' : '')}
 </tbody></table></div></div>`;
   }
   let users = null;
