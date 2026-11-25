@@ -21,7 +21,7 @@
   const S = { user: null, role: null, tab: 'list', view: 'all' };
   try { S.view = localStorage.getItem('dgWeb:view') || 'all'; } catch {}
   const canEdit = () => S.role === 'admin' || S.role === 'editor';
-  const who = () => S.user?.user_metadata?.name || showLogin(S.user?.email);
+  const who = () => S.name || S.user?.user_metadata?.name || showLogin(S.user?.email);
 
   // ---------- đăng nhập ----------
   function loginView(msg = '') {
@@ -59,7 +59,9 @@
       return loginView('Tài khoản này chưa được cấp quyền xem. Liên hệ admin.');
     }
     S.role = role;
-    S.tenant = (await sb.rpc('dg_web_tenant')).data || 'tuantu';
+    const meInfo = (await sb.rpc('dg_web_me')).data || {};
+    S.tenant = meInfo.tenant || (await sb.rpc('dg_web_tenant')).data || 'tuantu';
+    S.name = meInfo.name || '';
     render();
     mountMapsTab();
   }
@@ -615,7 +617,7 @@ ${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' 
 <div id="um" style="margin-top:6px;font-weight:700"></div></div>
 <div class="card"><b style="font-size:15px">👥 Tài khoản (${users.length})</b>${usersErr ? `<div class="err">⚠️ ${esc(usersErr)}</div>` : ''}
 <div class="tbl" style="margin-top:8px"><table><thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Quyền</th><th>Tạo lúc</th><th>Đăng nhập gần nhất</th><th></th></tr></thead><tbody>
-${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.name || '')}</td>
+${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td><input class="f" data-uname="${esc(u.email)}" value="${esc(u.name || '')}" placeholder="Nhập họ tên…" title="Tên hiển thị (người gọi, người nhận khách…) – sửa xong bấm ra ngoài / Enter là lưu" style="width:220px"></td>
 <td><select class="f" data-role="${esc(u.email)}" ${u.email === S.user.email ? 'disabled' : ''}>${Object.entries(ROLE_TXT).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
 <td class="muted">${fmt(u.created_at)}${u.created_by ? `<br>bởi ${esc(showLogin(u.created_by))}` : ''}</td><td class="muted">${fmt(u.last_sign_in_at)}</td>
 <td style="white-space:nowrap"><button class="btn" data-a="upw" data-e="${esc(u.email)}">🔑 Đặt lại mật khẩu</button> ${u.email === S.user.email ? '<span class="muted">(bạn)</span>' : `<button class="btn red" data-a="udel" data-e="${esc(u.email)}">🗑 Xoá</button>`}</td></tr>`).join('')}
@@ -701,8 +703,19 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td>${esc(u.na
       i?.setSelectionRange(pos, pos);
     }, 300);
   });
+  app.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.dataset?.uname) e.target.blur();
+  });
   app.addEventListener('change', async (e) => {
     const el = e.target;
+    if (el.dataset.uname) {
+      const u = users?.find((x) => x.email === el.dataset.uname);
+      el.disabled = true;
+      const { error } = await sb.rpc('dg_web_update', { p_email: el.dataset.uname, p_role: u?.role || 'viewer', p_name: el.value.trim() });
+      if (error) alert(`Lỗi: ${error.message}`);
+      if (el.dataset.uname === S.user.email) S.name = el.value.trim();
+      return loadUsers();
+    }
     if (el.dataset.h && el.dataset.h !== 'q') {
       HS[el.dataset.h] = el.value;
       return render();

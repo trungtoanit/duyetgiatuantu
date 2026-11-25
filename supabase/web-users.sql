@@ -231,6 +231,26 @@ end $$;
 revoke all on function public.dg_web_tele(text, text, text, jsonb) from public, anon;
 grant execute on function public.dg_web_tele(text, text, text, jsonb) to authenticated;
 
+-- ---- Tên hiển thị: admin sửa ở 👥 Tài khoản (dg_web_update) → trang web đọc qua dg_web_me ----
+create or replace function public.dg_web_me() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('role', role, 'tenant', tenant, 'name', name) from public.dg_web_users
+  where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+$$;
+revoke all on function public.dg_web_me() from public, anon;
+grant execute on function public.dg_web_me() to authenticated;
+create or replace function public.dg_web_update(p_email text, p_role text, p_name text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform public.dg_web_need_admin();
+  if p_role not in ('viewer', 'editor', 'admin') then raise exception 'Quyền không hợp lệ'; end if;
+  if lower(p_email) = lower(auth.jwt() ->> 'email') and p_role <> 'admin' then raise exception 'Không tự bỏ quyền admin của chính mình'; end if;
+  update public.dg_web_users set role = p_role, name = nullif(trim(p_name), '')
+    where email = lower(p_email) and tenant = public.dg_web_tenant();
+  update auth.users set raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('name', coalesce(trim(p_name), ''))
+    where email = lower(p_email);
+end $$;
+
 -- ================== TÀI KHOẢN ADMIN ĐẦU TIÊN ==================
 -- Sửa 'admin' (tên đăng nhập) và 'DoiMatKhauNay' (mật khẩu ≥ 6 ký tự) rồi bôi đen riêng dòng dưới → Run.
 -- select public.dg_web_create_internal('admin', 'DoiMatKhauNay', 'admin', 'Quản trị');
