@@ -246,7 +246,7 @@
   function teleHtml(c) {
     const t = c?.tele || {};
     const mine = t.by && t.by === me();
-    const ed = canEdit();
+    const ed = !!S.role; // telesale: mọi tài khoản
     const b = 'cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:1px 7px;font:inherit;font-size:11.5px;font-weight:800;margin:2px 4px 0 0';
     const calls = t.calls || [];
     const last = calls[calls.length - 1];
@@ -307,35 +307,27 @@
     root.addEventListener('input', cbInput, true);
     decorate();
   }
-  async function teleAct(k, id) {
-    const items = store.mapsPlaces.items;
-    // đọc bản mới nhất trên máy chủ (người khác có thể vừa nhận khách này)
-    const { data, error } = await sb.from('dg_items').select('data').eq('ns', 'mapsPlaces').eq('id', id).maybeSingle();
+  // 📞 nhận / trả / ghi cuộc gọi: qua hàm dg_web_tele trên máy chủ (mọi tài khoản dùng được, kiểm tra người nhận trước)
+  async function teleRpc(id, action, call = null) {
+    const { data, error } = await sb.rpc('dg_web_tele', { p_id: String(id), p_action: action, p_name: who(), p_call: call });
     if (error) throw new Error(error.message);
-    const c = data?.data || items[id];
-    if (!c) return;
-    const t = c.tele || {};
-    let tele = null;
-    if (k === 'claim') {
-      if (t.by && t.by !== me()) {
-        Object.assign(items[id] || {}, { tele: t });
-        decorate();
-        throw new Error(`${t.byName || showLogin(t.by)} đã nhận khách này rồi.`);
-      }
-      tele = { ...t, by: me(), byName: who(), at: Date.now() };
-    } else if (k === 'call') {
-      return openCall(id, c);
-    } else if (k === 'drop') {
-      if (!confirm(t.by === me() ? 'Trả khách này (người khác nhận gọi được)?' : `Thu hồi khách của ${t.byName || showLogin(t.by)}?`)) return;
-      tele = { ...t, by: null, byName: null, droppedAt: Date.now(), droppedBy: who() };
-    } else return;
-    const v = { ...c, tele };
-    await savePlaces({ [id]: v });
-    // bảng đang giữ đúng object trong kho → cập nhật tại chỗ để bảng / lần lưu sau của bảng không ghi đè mất
-    if (items[id] && items[id] !== v) Object.assign(items[id], { tele });
-    if (CB.id === id) redrawCall();
-    decorate();
-    render();
+    const items = store.mapsPlaces.items;
+    // bảng đang giữ đúng object trong kho → cập nhật tại chỗ (bảng lưu lần sau không ghi đè mất phần telesale)
+    if (items[id]) Object.assign(items[id], { tele: data?.tele });
+    else items[id] = data;
+    return data;
+  }
+  async function teleAct(k, id) {
+    if (k === 'call') return openCall(id);
+    const t = store.mapsPlaces.items[id]?.tele || {};
+    if (k === 'drop' && !confirm(t.by === me() ? 'Trả khách này (người khác nhận gọi được)?' : `Thu hồi khách của ${t.byName || showLogin(t.by)}?`)) return;
+    try {
+      await teleRpc(id, k);
+    } finally {
+      if (CB.id === id) redrawCall();
+      decorate();
+      render();
+    }
   }
   function setView(v) {
     const was = S.view;
@@ -392,14 +384,14 @@
     const t = c.tele || {};
     const calls = [...(t.calls || [])].reverse();
     const other = t.by && t.by !== me();
-    const can = canEdit() && (!other || S.role === 'admin');
+    const can = !!S.role && (!other || S.role === 'admin');
     const btn = 'cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 8px;font:inherit;font-size:12px;font-weight:800';
     const f = CB.id === id ? CB.form : {};
     const res = CB.id === id ? CB.res : '';
     return `<div data-cb-scope="${esc(id)}" style="margin-top:12px;padding:10px;border:2px solid #bfdbfe;border-radius:10px;background:#f8fbff">
 <div style="font-size:11px;font-weight:900;letter-spacing:.06em;color:#1d4ed8;text-transform:uppercase;margin-bottom:4px">📞 Telesale</div>
 <div style="font-size:12.5px;margin-bottom:6px">${t.by ? `👤 ${other ? `<b>${esc(t.byName || showLogin(t.by))}</b> đang gọi khách này` : '<b style="color:#1e40af">Khách của tôi</b>'} <span style="color:#64748b">(nhận ${esc(fmtT(t.at))})</span>` : '<span style="color:#64748b">Chưa ai nhận</span>'}
-${!t.by && canEdit() ? ` <button data-tele="claim" data-id="${esc(id)}" style="${btn};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">📞 Nhận gọi</button>` : ''}${t.by && (t.by === me() || S.role === 'admin') && canEdit() ? ` <button data-tele="drop" data-id="${esc(id)}" style="${btn};color:#64748b">↩ ${t.by === me() ? 'Trả khách' : 'Thu hồi'}</button>` : ''}
+${!t.by && S.role ? ` <button data-tele="claim" data-id="${esc(id)}" style="${btn};border-color:#93c5fd;background:#eff6ff;color:#1d4ed8">📞 Nhận gọi</button>` : ''}${t.by && (t.by === me() || S.role === 'admin') ? ` <button data-tele="drop" data-id="${esc(id)}" style="${btn};color:#64748b">↩ ${t.by === me() ? 'Trả khách' : 'Thu hồi'}</button>` : ''}
 ${t.next && t.by ? `<div style="margin-top:3px;font-weight:800;color:${t.next <= endToday() ? '#b91c1c' : '#b45309'}">⏰ Hẹn gọi lại: ${esc(fmtT(t.next))}</div>` : ''}</div>
 ${can ? `<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">Kết quả lần gọi này</div>
 <div style="display:flex;flex-wrap:wrap;gap:5px">${RESULTS.map(([k, l, col]) => `<button data-cb="res" data-r="${k}" style="${btn};${res === k ? `background:${col};border-color:${col};color:#fff` : `color:${col};border-color:${col}66`}">${l}</button>`).join('')}</div>
@@ -486,16 +478,7 @@ ${calls.length ? calls.map((x) => `<div style="padding:5px 0;border-top:1px soli
     btn.disabled = true;
     btn.textContent = '⏳ Đang lưu…';
     try {
-      const { data, error } = await sb.from('dg_items').select('data').eq('ns', 'mapsPlaces').eq('id', id).maybeSingle();
-      if (error) throw new Error(error.message);
-      const c = data?.data || store.mapsPlaces.items[id];
-      const t0 = c.tele || {};
-      if (t0.by && t0.by !== me() && S.role !== 'admin') throw new Error(`${t0.byName || showLogin(t0.by)} đã nhận khách này rồi.`);
-      const call = { at: Date.now(), by: me(), byName: who(), res: CB.res, contact: (f.who || '').trim(), note: (f.note || '').trim(), next };
-      const tele = { ...t0, by: t0.by || me(), byName: t0.byName || who(), at: t0.at || Date.now(), calls: [...(t0.calls || []), call], last: CB.res, lastAt: call.at, next };
-      await savePlaces({ [id]: { ...c, tele } });
-      const items = store.mapsPlaces.items;
-      if (items[id]) Object.assign(items[id], { tele });
+      await teleRpc(id, 'call', { res: CB.res, contact: (f.who || '').trim(), note: (f.note || '').trim(), next });
       CB.res = '';
       CB.form = {};
       CB.msg = '';

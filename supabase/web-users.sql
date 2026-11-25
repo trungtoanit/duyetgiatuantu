@@ -189,6 +189,48 @@ begin
     where w.tenant = public.dg_web_tenant() order by w.created_at;
 end $$;
 
+-- ---- 📞 Telesale: MỌI tài khoản web (kể cả 👁 chỉ xem) nhận khách / ghi cuộc gọi – chỉ sửa phần data.tele của công ty ----
+-- Kiểm tra trên máy chủ (khoá dòng): khách đã có người khác nhận thì không nhận / ghi được (trừ admin).
+create or replace function public.dg_web_tele(p_id text, p_action text, p_name text default null, p_call jsonb default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_role text := public.dg_web_role();
+  v_ten text := public.dg_web_tenant();
+  v_me text := lower(coalesce(auth.jwt() ->> 'email', ''));
+  v_now bigint := (extract(epoch from now()) * 1000)::bigint;
+  v_data jsonb;
+  t jsonb;
+  v_by text;
+begin
+  if v_role is null then raise exception 'Tài khoản chưa được cấp quyền'; end if;
+  select data into v_data from public.dg_items where tenant = v_ten and ns = 'mapsPlaces' and id = p_id for update;
+  if v_data is null then raise exception 'Không tìm thấy công ty'; end if;
+  t := coalesce(v_data -> 'tele', '{}'::jsonb);
+  v_by := nullif(t ->> 'by', '');
+  if p_action = 'claim' then
+    if v_by is not null and v_by <> v_me then raise exception '% đã nhận khách này rồi', coalesce(t ->> 'byName', v_by); end if;
+    t := t || jsonb_build_object('by', v_me, 'byName', p_name, 'at', v_now);
+  elsif p_action = 'drop' then
+    if v_by is not null and v_by <> v_me and v_role <> 'admin' then raise exception 'Chỉ người nhận hoặc admin mới trả / thu hồi được'; end if;
+    t := t || jsonb_build_object('by', null, 'byName', null, 'droppedAt', v_now, 'droppedBy', p_name);
+  elsif p_action = 'call' then
+    if v_by is not null and v_by <> v_me and v_role <> 'admin' then raise exception '% đã nhận khách này rồi', coalesce(t ->> 'byName', v_by); end if;
+    if p_call is null or coalesce(p_call ->> 'res', '') = '' then raise exception 'Thiếu kết quả cuộc gọi'; end if;
+    p_call := p_call || jsonb_build_object('at', v_now, 'by', v_me, 'byName', p_name);
+    t := t || jsonb_build_object(
+      'by', coalesce(v_by, v_me), 'byName', coalesce(t ->> 'byName', p_name), 'at', coalesce(t -> 'at', to_jsonb(v_now)),
+      'calls', coalesce(t -> 'calls', '[]'::jsonb) || jsonb_build_array(p_call),
+      'last', p_call -> 'res', 'lastAt', v_now, 'next', p_call -> 'next');
+  else
+    raise exception 'Thao tác không hợp lệ';
+  end if;
+  v_data := jsonb_set(v_data, '{tele}', t);
+  update public.dg_items set data = v_data where tenant = v_ten and ns = 'mapsPlaces' and id = p_id;
+  return v_data;
+end $$;
+revoke all on function public.dg_web_tele(text, text, text, jsonb) from public, anon;
+grant execute on function public.dg_web_tele(text, text, text, jsonb) to authenticated;
+
 -- ================== TÀI KHOẢN ADMIN ĐẦU TIÊN ==================
 -- Sửa 'admin' (tên đăng nhập) và 'DoiMatKhauNay' (mật khẩu ≥ 6 ký tự) rồi bôi đen riêng dòng dưới → Run.
 -- select public.dg_web_create_internal('admin', 'DoiMatKhauNay', 'admin', 'Quản trị');
