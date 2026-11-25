@@ -13508,7 +13508,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     // Thử giá: ô "Giá" sửa được (chỉ tính thử trên thẻ, không lưu vào báo giá) → tính lại %, thành tiền, chênh lệch
     const sim = nvlCol && od?.sheet;
     const simV = state.offSim?.[q.code] || {};
-    const offRows = offs.map(([key, x]) => {
+    const offRows = offs.map(([key, x], oi) => {
       const qty = numOf(x.qty);
       const p0 = numOf(x.price);
       const canSim = sim && x.nvlTotal > 0 && qty && p0;
@@ -13518,7 +13518,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       const priceTd = canSim
         ? `<td><input class="osim${pv !== p0 ? ' chg' : ''}" inputmode="numeric" data-code="${esc(q.code)}" data-key="${esc(key)}" data-qty="${qty}" data-nvl="${x.nvlTotal}" data-orig="${p0}" value="${pv.toLocaleString('vi-VN')}" title="Sửa giá 1 thùng để thử – giá gốc ${money(p0)}"></td>`
         : `<td>${esc(x.price || '')}</td>`;
-      return `<tr class="osim-r"${canSim ? '' : ` data-tt="${p0 * qty}" data-nvl="${x.nvlTotal || 0}"`}><td>Offset · ${esc(x.spec || key)}</td><td>${esc(x.qty || '')}</td>${priceTd}${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}${nvlCol ? `<td class="num"><span class="osim-tt">${tt ? money(tt) : '–'}</span></td>` : ''}<td class="num"><b class="osim-pct ${pct != null ? pctCls(pct) : ''}">${pct ?? '–'}${pct != null ? '%' : ''}</b></td></tr>`;
+      return `<tr class="osim-r"${canSim ? '' : ` data-tt="${p0 * qty}" data-nvl="${x.nvlTotal || 0}"`}><td><span style="display:inline-block;min-width:18px;color:#94a3b8;font-weight:800">${oi + 1}.</span>Offset · ${esc(x.spec || key)}</td><td>${esc(x.qty || '')}</td>${priceTd}${nvlCol ? `<td class="num">${x.nvlTotal ? `${money(Math.round(x.nvlTotal))}${x.nvlUnit ? `<small class="nvl-u">${money(x.nvlUnit)}/thùng</small>` : ''}` : '–'}</td>` : ''}${nvlCol ? `<td class="num"><span class="osim-tt">${tt ? money(tt) : '–'}</span></td>` : ''}<td class="num"><b class="osim-pct ${pct != null ? pctCls(pct) : ''}">${pct ?? '–'}${pct != null ? '%' : ''}</b></td></tr>`;
     }).join('') +
       (od ? offsetSteps(q, od, nvlCol) : '');
     const fxRows = fx
