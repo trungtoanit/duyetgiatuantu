@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Danh sách công ty – Tuấn Tú</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--pri:#1d4ed8;--pri2:#eff6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+a{color:var(--pri)}
+button,input,select{font:inherit}
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;background:#1e3a8a;color:#fff}
+.top b{font-size:15px}
+.top .sp{flex:1}
+.top button{cursor:pointer;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:4px 10px;font-weight:700}
+.top button.on{background:#fff;color:#1e3a8a}
+.wrap{max-width:1600px;margin:0 auto;padding:12px 16px}
+.card{background:var(--card);border-radius:12px;box-shadow:0 2px 10px rgba(15,23,42,.08);padding:12px 14px}
+.muted{color:var(--mut);font-size:12px}
+.login{max-width:360px;margin:12vh auto 0}
+.login h1{font-size:18px;margin:0 0 4px;color:#1e3a8a}
+.login label{display:block;margin-top:10px;font-weight:700;font-size:12.5px}
+.login input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;margin-top:3px}
+.btn{cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:3px 9px;font-size:12.5px;font-weight:700}
+.btn.pri{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn.red{color:#b91c1c;border-color:#fecaca}
+.btn:disabled{opacity:.5;cursor:default}
+.f{font-size:12.5px;padding:4px 7px;border-radius:7px;border:1px solid #cbd5e1;background:#fff}
+.err{color:#b91c1c;margin-top:8px;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:#f8fafc;text-align:left;padding:6px;white-space:nowrap;position:sticky;top:0}
+td{padding:5px 6px;border-top:1px solid #f1f5f9;vertical-align:top}
+tbody tr:hover td{background:#e0f2fe!important}
+.tbl{overflow:auto;border:1px solid var(--line);border-radius:8px;max-height:calc(100vh - 230px)}
+.pop{position:absolute;left:0;top:calc(100% + 4px);z-index:40;width:min(380px,90vw);max-height:60vh;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.22);padding:6px}
+.pop label{display:flex;gap:6px;align-items:center;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}
+.pg{display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:8px}
+@media (max-width:760px){
+  .wrap{padding:8px}
+  .hide-sm{display:none}
+  .tbl{max-height:none}
+}
+</style>
+</head>
+<body>
+<div id="app"><div class="wrap muted">⏳ Đang tải…</div></div>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="../scripts/shared/company-pdf.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

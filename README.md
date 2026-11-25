@@ -198,3 +198,13 @@ Repo public kiểm tra qua trang commits.atom nên không bị giới hạn này
 Extension tải code từ xa nên không đưa lên Chrome Web Store được. Chỉ dùng nội bộ bằng
 Load unpacked. Ai có quyền push vào repo thì code của người đó sẽ chạy trên mọi máy đã cài,
 nên cần giới hạn quyền ghi repo.
+
+## 🌐 Trang web Danh sách công ty (`web/`)
+
+Trang xem danh sách công ty Google Maps cho người không cài extension – đăng nhập bằng tài khoản admin cấp, chỉ xem.
+
+1. Supabase → SQL Editor: chạy `supabase/web-users.sql`, rồi chạy dòng tạo admin đầu tiên ở cuối file.
+2. Supabase → Authentication → Sign In / Providers: tắt **Allow new users to sign up**.
+3. Điền `supabaseUrl` + publishable key trong `web/config.js`.
+4. GitHub → Settings → Pages: Deploy from branch `main` / `(root)` → trang ở `https://trungtoanit.github.io/duyetgiatuantu/web/`.
+5. Đăng nhập bằng admin → tab 👥 Tài khoản để tạo tài khoản cho người khác.
