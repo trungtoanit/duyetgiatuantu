@@ -6107,9 +6107,30 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const mMiss = mList.filter((o) => !(o.bg && byCode[o.bg] && !(Number(byCode[o.bg].amount) > 0))).length - mDn;
     const names = list.map((x) => `${x.dh || ''}${x.bg ? ` · ${x.bg}` : ''} · ${money(x.total || 0)}`).join('\n');
     const big = (v) => (Math.abs(v) >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ` : trM(v));
-    const tile = (ic, lab, val, fg, bg, bd, tip) =>
+    const tile = (ic, lab, val, fg, bg, bd, tip, sub = '') =>
       `<div title="${esc(tip)}" style="display:grid;gap:0;min-width:90px;padding:4px 10px;border-radius:12px;background:${bg};border:1.5px solid ${bd};box-shadow:0 2px 8px rgba(15,23,42,.06);line-height:1.25">
-        <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b></div>`;
+        <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${ic} ${lab}</span><b style="font-size:18px;font-weight:900;color:${fg};white-space:nowrap;font-variant-numeric:tabular-nums">${val}</b>${sub}</div>`;
+    // Doanh thu ngày tách Flexo / Offset: tổng tiền mỗi đơn chia theo tỷ lệ tiền dòng Flexo / Offset / Khác trong báo giá
+    // (kindTotals đọc từ bảng Hàng hóa; chưa đọc → kindShare; báo giá chỉ 1 loại → cả đơn). Không có báo giá → "chưa rõ".
+    const kRev = { flexo: 0, offset: 0, other: 0, unk: 0 };
+    for (const x of list) {
+      const tot = x.total || 0;
+      const q = x.q;
+      const kt = kindTotalsOf(q);
+      const ks = kt && kt.flexo + kt.offset + kt.other > 0 ? kt : q?.kindShare && Object.values(q.kindShare).some((v) => v > 0) ? q.kindShare : null;
+      if (ks) {
+        const sm = (ks.flexo || 0) + (ks.offset || 0) + (ks.other || 0);
+        for (const kk of ['flexo', 'offset', 'other']) kRev[kk] += (tot * (ks[kk] || 0)) / sm;
+        continue;
+      }
+      const kinds = q?.kinds || (q?.offset ? ['offset'] : []);
+      if (kinds.length === 1 && kRev[kinds[0]] != null) kRev[kinds[0]] += tot;
+      else kRev.unk += tot;
+    }
+    const revSub = (() => {
+      const it = [['Flexo', kRev.flexo, '#2563eb'], ['Offset', kRev.offset, '#9333ea'], ['Khác', kRev.other, '#64748b'], ['Chưa rõ', kRev.unk, '#94a3b8']].filter((x, i) => i < 2 || x[1] >= 1);
+      return `<span style="display:flex;gap:8px;flex-wrap:wrap;font-size:11.5px;font-weight:800;white-space:nowrap">${it.map(([n, v, c]) => `<span style="color:${c}">${n} ${big(Math.round(v))}</span>`).join('')}</span>`;
+    })();
     const kd = state.kpiDay || 0;
     const dLab = kd === 0 ? 'Hôm nay' : kd === 1 ? 'Hôm qua' : new Date(vn0 + 7 * 3600e3).toLocaleDateString('vi-VN', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit' });
     const nb = (dir, dis, t) => `<button data-dg-kd="${dir}" ${dis ? 'disabled' : ''} title="${t}" style="all:unset;cursor:${dis ? 'default' : 'pointer'};display:grid;place-items:center;width:28px;height:28px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:${dis ? '#cbd5e1' : '#334155'};font-weight:900;font-size:15px">${dir > 0 ? '‹' : '›'}</button>`;
@@ -6118,7 +6139,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
     const html =
       `<div style="display:flex;align-items:center;gap:6px">${nb(1, kd >= 60, 'Ngày trước')}<div style="display:grid;text-align:center;min-width:78px;line-height:1.2"><b style="font-size:13px;color:#0f172a">${esc(dLab)}</b>${kd ? `<a data-dg-kd="0" style="font-size:11px;color:#2563eb;cursor:pointer">↩ hôm nay</a>` : '<span style="font-size:11px;color:#94a3b8">ngày lên đơn</span>'}</div>${nb(-1, kd <= 0, 'Ngày sau')}</div>` +
       tile('📄', kd === 0 ? 'Đơn hôm nay' : 'Số đơn', (k.n || 0).toLocaleString('vi-VN'), '#1d4ed8', '#eff6ff', '#bfdbfe', `Số đơn hàng lên hôm nay${names ? `:\n${names}` : ''}`) +
-      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}${crmDay != null ? `\nDoanh số theo CRM (Dashboard): ${money(crmDay)}${Math.abs(crmDay - (k.sum || 0)) > Math.max(1e5, Math.abs(crmDay) * 0.005) ? ' – đang lệch, extension tự đọc lại Danh sách đơn' : ' – khớp'}` : ''}`) +
+      tile('💰', 'Doanh thu', big(k.sum || 0), '#047857', '#ecfdf5', '#a7f3d0', `Doanh thu các đơn lên hôm nay (cột Tổng tiền – Danh sách đơn): ${money(k.sum || 0)}\n• Flexo: ${money(Math.round(kRev.flexo))}\n• Offset: ${money(Math.round(kRev.offset))}${kRev.other >= 1 ? `\n• Khác: ${money(Math.round(kRev.other))}` : ''}${kRev.unk >= 1 ? `\n• Chưa rõ loại (chưa đọc được báo giá): ${money(Math.round(kRev.unk))}` : ''}\n(đơn có cả Flexo lẫn Offset: chia theo tỷ lệ tiền từng dòng trong báo giá)${crmDay != null ? `\nDoanh số theo CRM (Dashboard): ${money(crmDay)}${Math.abs(crmDay - (k.sum || 0)) > Math.max(1e5, Math.abs(crmDay) * 0.005) ? ' – đang lệch, extension tự đọc lại Danh sách đơn' : ' – khớp'}` : ''}`, revSub) +
       // Tổng chênh lệch ngày + còn thiếu so với mục tiêu ngày (4,5 tỷ chênh lệch/tháng ÷ số ngày công của tháng, trừ Chủ nhật)
       (() => {
         const y = mvn.getUTCFullYear();
