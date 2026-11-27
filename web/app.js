@@ -822,7 +822,7 @@ ${list.map(card).join('') || '<div class="muted" style="padding:4px">Chưa có n
     for (let t = R.from; t < R.to; t += 864e5) if (new Date(t).getDay() !== 0) days.push(new Date(t).setHours(0, 0, 0, 0));
     const perDay = days.map((d) => [...cur.values()].reduce((n, o) => n + (o.perDay[d] || 0), 0));
     const mx = Math.max(1, ...perDay);
-    const chart = days.length > 1 ? `<div class="card" style="margin-top:10px"><b>📈 Cuộc gọi mỗi ngày làm việc (cả nhóm)</b><div class="ds-ch">${days.map((d, i) => `<div class="ds-col" title="${DOW[new Date(d).getDay()]} ${new Date(d).toLocaleDateString('vi-VN')}: ${perDay[i]} cuộc gọi"><span>${perDay[i] || ''}</span><i style="height:${Math.round((perDay[i] / mx) * 100)}%"></i><small>${new Date(d).getDate()}/${new Date(d).getMonth() + 1}</small></div>`).join('')}</div></div>` : '';
+    const chart = days.length > 1 ? `<div class="card" style="margin-top:10px"><b>📈 Cuộc gọi mỗi ngày làm việc (cả nhóm)</b><div class="ds-ch">${days.map((d, i) => `<div class="ds-col" title="${DOW[new Date(d).getDay()]} ${new Date(d).toLocaleDateString('vi-VN')}: ${perDay[i]} cuộc gọi"><div class="ds-bar"><span>${perDay[i] || ''}</span><i style="height:${Math.round((perDay[i] / mx) * 100)}%"></i></div><small>${DOW[new Date(d).getDay()]}<br>${new Date(d).getDate()}/${new Date(d).getMonth() + 1}</small></div>`).join('')}</div></div>` : '';
     const bar = (o) => {
       const n = o.calls || 1;
       return `<div class="ds-res">${RESULTS.filter(([k]) => o.res[k]).map(([k, l, c]) => `<i style="width:${(o.res[k] / n) * 100}%;background:${c}" title="${l}: ${o.res[k]} (${pctS(o.res[k], n)})"></i>`).join('')}</div>`;
