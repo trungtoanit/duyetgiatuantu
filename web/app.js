@@ -24,7 +24,7 @@
   const who = () => S.name || S.user?.user_metadata?.name || showLogin(S.user?.email);
   // 🕘 ghi nhật ký thao tác trình duyệt (thay đổi dữ liệu thì máy chủ tự ghi)
   const logAdd = (action, id = null, name = null, detail = null) => sb.rpc('dg_web_log_add', { p_action: action, p_target_id: id, p_target_name: name, p_detail: detail }).then(() => {}, () => {});
-  const isPage = (v) => v === 'history' || v === 'log'; // trang riêng (ẩn bảng công ty)
+  const isPage = (v) => v === 'history' || v === 'log' || v === 'dash'; // trang riêng (ẩn bảng công ty)
 
   // ---------- đăng nhập ----------
   function loginView(msg = '') {
@@ -64,7 +64,7 @@
     }
     S.role = role;
     if (role === 'admin') count60();
-    else if (S.view === 'log') S.view = 'all';
+    else if (S.view === 'log' || S.view === 'dash') S.view = 'all';
     if (role === 'admin') sb.rpc('dg_web_list').then(({ data }) => { users = data || users; render(); }, () => {});
     const meInfo = (await sb.rpc('dg_web_me')).data || {};
     S.tenant = meInfo.tenant || (await sb.rpc('dg_web_tenant')).data || 'tuantu';
@@ -643,13 +643,14 @@ ${rows.slice(0, 500).map(({ c, x }) => `<tr><td style="white-space:nowrap">${ago
 <button data-a="tab" data-t="list" class="${S.tab === 'list' ? 'on' : ''}">📋 Công ty</button>${S.role === 'admin' ? `<button data-a="tab" data-t="users" class="${S.tab === 'users' ? 'on' : ''}">👥 Tài khoản</button>` : ''}
 <span id="dg-status" style="font-size:12px;opacity:.85"></span><span class="sp"></span><span style="font-size:12px;opacity:.9">👤 ${esc(who())} · ${ROLE_TXT[S.role] || S.role}</span>
 <button data-a="pw">🔑 Đổi mật khẩu</button><button data-a="out">Đăng xuất</button></div>
-${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' : ''}">${S.tab === 'list' && S.view === 'history' ? historyHtml() : S.tab === 'list' && S.view === 'log' ? logHtml() : S.tab === 'users' && S.role === 'admin' ? usersHtml() : '<div class="card muted" style="text-align:center;padding:30px">Bảng công ty đã đóng. <button class="btn pri" data-a="tab" data-t="list">📋 Mở danh sách công ty</button></div>'}</div>`;
+${S.tab === 'list' ? sideHtml() : ''}<div class="wrap${S.tab === 'list' ? ' wl' : ''}">${S.tab === 'list' && S.view === 'history' ? historyHtml() : S.tab === 'list' && S.view === 'log' ? logHtml() : S.tab === 'list' && S.view === 'dash' && S.role === 'admin' ? dashHtml() : S.tab === 'users' && S.role === 'admin' ? usersHtml() : '<div class="card muted" style="text-align:center;padding:30px">Bảng công ty đã đóng. <button class="btn pri" data-a="tab" data-t="list">📋 Mở danh sách công ty</button></div>'}</div>`;
   }
   function sideHtml() {
     const items = store.mapsPlaces?.items || {};
     const all = Object.values(items);
     return `<nav class="side">${VIEWS.map(([k, label, f]) => `<a href="#" data-a="view" data-v="${k}" class="${S.view === k ? 'on' : ''}">${label}<span>${store.mapsPlaces ? all.filter(f).length.toLocaleString('vi-VN') : ''}</span></a>`).join('')}
 <a href="#" data-a="view" data-v="history" class="${S.view === 'history' ? 'on' : ''}">📜 Lịch sử cuộc gọi<span>${all.reduce((n, c) => n + (c?.tele?.calls?.length || 0), 0) || ''}</span></a>
+${S.role === 'admin' ? `<a href="#" data-a="view" data-v="dash" class="${S.view === 'dash' ? 'on' : ''}" title="Đánh giá khả năng thực thi của nhân viên">📊 Dashboard<span></span></a>` : ''}
 ${S.role === 'admin' ? `<a href="#" data-a="view" data-v="log" class="${S.view === 'log' ? 'on' : ''}" title="Số thao tác trong 60 phút gần nhất">🕘 Nhật ký<span>${LG.n60 != null ? `${LG.n60.toLocaleString('vi-VN')} / 60′` : ''}</span></a>` : ''}
 ${S.role === 'admin' ? staffHtml(all) : ''}
 <div class="muted" style="padding:10px 12px;font-size:11.5px;line-height:1.5">📞 Bấm <b>Nhận gọi</b> ở dòng công ty để nhận khách telesale. Gọi xong bấm <b>☎ Ghi cuộc gọi</b>.</div></nav>`;
@@ -712,6 +713,149 @@ ${S.role === 'admin' ? staffHtml(all) : ''}
     return `<div class="stf-box"><div class="stf-t">👥 Nhân viên</div>
 <div class="stf-sum">📞 Hôm nay <b>${sum.today}</b> cuộc ${delta(sum.today, sum.prev)} <span>so với ${pLabel} (${sum.prev})</span><br>👤 Đang giữ <b>${sum.n}</b> khách${sum.late ? ` · <b style="color:#dc2626">⏰ ${sum.late} quá hẹn</b>` : ''}</div>
 ${list.map(card).join('') || '<div class="muted" style="padding:4px">Chưa có nhân viên.</div>'}</div>`;
+  }
+  // ---------- 📊 Dashboard (admin): đánh giá khả năng thực thi của từng nhân viên telesale ----------
+  // Số liệu lấy từ lịch sử gọi (c.tele.calls) + khách đang giữ. So với kỳ liền trước cùng độ dài (ngày làm việc, bỏ Chủ nhật).
+  const DS = { per: '6', target: 40 };
+  try { DS.target = Number(localStorage.getItem('dgWeb:target')) || 40; } catch {}
+  const POS = ['interest', 'quote', 'sample', 'win']; // kết quả tích cực
+  const DEAD = ['noans', 'busy']; // không liên lạc được
+  // n ngày làm việc (bỏ CN) tính lùi từ hôm nay → [from, to)
+  function dashRange(per) {
+    const day0 = new Date().setHours(0, 0, 0, 0);
+    const to = day0 + 864e5;
+    if (per === 'month') {
+      const d = new Date(day0);
+      const from = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      const pf = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
+      return { from, to, pFrom: pf, pTo: pf + (to - from), label: 'tháng này', pLabel: 'cùng kỳ tháng trước' };
+    }
+    const n = Number(per) || 1;
+    let from = day0;
+    for (let i = 1; i < n; i++) from = prevWorkday(from);
+    let pTo = prevWorkday(from) + 864e5;
+    let pFrom = pTo - 864e5;
+    for (let i = 1; i < n; i++) pFrom = prevWorkday(pFrom);
+    const f = (t) => `${DOW[new Date(t).getDay()]} ${new Date(t).getDate()}/${new Date(t).getMonth() + 1}`;
+    return { from, to, pFrom, pTo, label: n === 1 ? 'hôm nay' : `${n} ngày làm việc`, pLabel: n === 1 ? f(pFrom) : `${f(pFrom)} – ${f(pTo - 864e5)}` };
+  }
+  const workdays = (from, to) => {
+    let n = 0;
+    for (let t = from; t < Math.min(to, endToday()); t += 864e5) if (new Date(t).getDay() !== 0) n++;
+    return Math.max(1, n);
+  };
+  function dashStats(all, from, to) {
+    const st = new Map();
+    const get = (em, nm) => {
+      if (!st.has(em)) st.set(em, { em, nm: nm || showLogin(em), calls: 0, uniq: new Set(), days: new Set(), res: {}, pos: 0, dead: 0, win: 0, quote: 0, cbDue: 0, cbOk: 0, newC: 0, held: 0, late: 0, stale: 0, perDay: {} });
+      const o = st.get(em);
+      if (nm && o.nm === showLogin(em)) o.nm = nm;
+      return o;
+    };
+    for (const u of users || []) get(u.email, u.name);
+    const now = Date.now();
+    for (const c of all) {
+      const t = c?.tele;
+      if (!t) continue;
+      const calls = [...(t.calls || [])].sort((a, b) => a.at - b.at);
+      calls.forEach((x, i) => {
+        if (!x.by) return;
+        const o = get(x.by, x.byName);
+        if (x.at >= from && x.at < to) {
+          o.calls++;
+          o.uniq.add(c.id);
+          const dk = new Date(x.at).setHours(0, 0, 0, 0);
+          o.days.add(dk);
+          o.perDay[dk] = (o.perDay[dk] || 0) + 1;
+          o.res[x.res || 'other'] = (o.res[x.res || 'other'] || 0) + 1;
+          if (POS.includes(x.res)) o.pos++;
+          if (DEAD.includes(x.res)) o.dead++;
+          if (x.res === 'win') o.win++;
+          if (x.res === 'quote') o.quote++;
+        }
+        // hẹn gọi lại đến hạn trong kỳ: có gọi lại trước hạn + 1 ngày không?
+        if (x.next && x.next >= from && x.next < Math.min(to, now)) {
+          o.cbDue++;
+          const nx = calls[i + 1];
+          if (nx && nx.at <= x.next + 864e5) o.cbOk++;
+        }
+      });
+      if (t.by) {
+        const o = get(t.by, t.byName);
+        o.held++;
+        if (t.at >= from && t.at < to) o.newC++;
+        if (t.next && t.next < now) o.late++;
+        const last = calls.length ? calls[calls.length - 1].at : 0;
+        if (!t.next && now - Math.max(last, t.at || 0) > 3 * 864e5) o.stale++; // giữ > 3 ngày không gọi, không hẹn
+      }
+    }
+    return st;
+  }
+  // điểm 0–100: năng suất 35 · liên lạc được 15 · tích cực 25 · gọi lại đúng hẹn 15 · không bỏ sót khách 10
+  function dashScore(o, wd) {
+    const avg = o.calls / wd;
+    const vol = Math.min(1, avg / (DS.target || 40));
+    const conn = o.calls ? 1 - o.dead / o.calls : 0;
+    const pos = o.calls ? Math.min(1, o.pos / o.calls / 0.3) : 0;
+    const cb = o.cbDue ? o.cbOk / o.cbDue : o.calls ? 1 : 0;
+    const back = o.held ? 1 - Math.min(1, (o.late + o.stale) / o.held) : o.calls ? 1 : 0;
+    const parts = { vol: vol * 35, conn: conn * 15, pos: pos * 25, cb: cb * 15, back: back * 10 };
+    return { score: Math.round(Object.values(parts).reduce((a, b) => a + b, 0)), parts, avg };
+  }
+  const grade = (s) => (s >= 80 ? ['A', 'Tốt', '#15803d'] : s >= 65 ? ['B', 'Khá', '#1d4ed8'] : s >= 50 ? ['C', 'Trung bình', '#b45309'] : ['D', 'Cần cải thiện', '#b91c1c']);
+  const pctS = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '–');
+  function dashHtml() {
+    if (!store.mapsPlaces) return '<div class="card muted">⏳ Đang tải dữ liệu…</div>';
+    const all = Object.values(store.mapsPlaces.items);
+    const R = dashRange(DS.per);
+    const wd = workdays(R.from, R.to);
+    const pwd = workdays(R.pFrom, R.pTo);
+    const cur = dashStats(all, R.from, R.to);
+    const prv = dashStats(all, R.pFrom, R.pTo);
+    const rows = [...cur.values()].map((o) => ({ o, s: dashScore(o, wd), p: prv.get(o.em), ps: prv.get(o.em) ? dashScore(prv.get(o.em), pwd) : null })).filter((r) => r.o.calls || r.o.held || r.p?.calls).sort((a, b) => b.s.score - a.s.score || b.o.calls - a.o.calls);
+    const tot = (m, k) => [...m.values()].reduce((n, o) => n + (typeof o[k] === 'object' ? o[k].size : o[k]), 0);
+    const T = { calls: tot(cur, 'calls'), pos: tot(cur, 'pos'), dead: tot(cur, 'dead'), win: tot(cur, 'win'), quote: tot(cur, 'quote'), newC: tot(cur, 'newC'), late: tot(cur, 'late'), stale: tot(cur, 'stale'), cbDue: tot(cur, 'cbDue'), cbOk: tot(cur, 'cbOk') };
+    const P = { calls: tot(prv, 'calls'), pos: tot(prv, 'pos'), win: tot(prv, 'win'), quote: tot(prv, 'quote'), newC: tot(prv, 'newC') };
+    const tile = (lbl, v, d, sub = '') => `<div class="ds-tile"><small>${lbl}</small><b>${v}</b>${d != null ? ` ${delta(...d)}` : ''}${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}</div>`;
+    // biểu đồ cuộc gọi mỗi ngày (cả nhóm)
+    const days = [];
+    for (let t = R.from; t < R.to; t += 864e5) if (new Date(t).getDay() !== 0) days.push(new Date(t).setHours(0, 0, 0, 0));
+    const perDay = days.map((d) => [...cur.values()].reduce((n, o) => n + (o.perDay[d] || 0), 0));
+    const mx = Math.max(1, ...perDay);
+    const chart = days.length > 1 ? `<div class="card" style="margin-top:10px"><b>📈 Cuộc gọi mỗi ngày làm việc (cả nhóm)</b><div class="ds-ch">${days.map((d, i) => `<div class="ds-col" title="${DOW[new Date(d).getDay()]} ${new Date(d).toLocaleDateString('vi-VN')}: ${perDay[i]} cuộc gọi"><span>${perDay[i] || ''}</span><i style="height:${Math.round((perDay[i] / mx) * 100)}%"></i><small>${new Date(d).getDate()}/${new Date(d).getMonth() + 1}</small></div>`).join('')}</div></div>` : '';
+    const bar = (o) => {
+      const n = o.calls || 1;
+      return `<div class="ds-res">${RESULTS.filter(([k]) => o.res[k]).map(([k, l, c]) => `<i style="width:${(o.res[k] / n) * 100}%;background:${c}" title="${l}: ${o.res[k]} (${pctS(o.res[k], n)})"></i>`).join('')}</div>`;
+    };
+    const tr = ({ o, s, p, ps }, i) => {
+      const [g, gl, gc] = grade(s.score);
+      const tips = [];
+      if (s.parts.vol < 20) tips.push(`gọi ít (TB ${s.avg.toFixed(1)}/ngày, chỉ tiêu ${DS.target})`);
+      if (o.calls >= 5 && o.dead / o.calls > 0.5) tips.push('nhiều cuộc không liên lạc được – xem lại giờ gọi / số điện thoại');
+      if (o.calls >= 5 && o.pos / o.calls < 0.1) tips.push('tỉ lệ tích cực thấp – cần luyện kịch bản');
+      if (o.cbDue && o.cbOk / o.cbDue < 0.7) tips.push(`gọi lại trễ hẹn ${o.cbDue - o.cbOk} lần`);
+      if (o.late) tips.push(`${o.late} khách quá hẹn chưa gọi`);
+      if (o.stale) tips.push(`${o.stale} khách giữ > 3 ngày không gọi`);
+      return `<tr><td style="text-align:center;font-weight:900;color:#64748b">${i + 1}</td>
+<td><a href="#" data-a="view" data-v="by:${esc(o.em)}" style="font-weight:900">${esc(o.nm)}</a><div class="muted" style="font-size:11px">đang giữ ${o.held} khách · nhận mới ${o.newC}</div></td>
+<td style="min-width:130px"><div style="display:flex;align-items:center;gap:6px"><span class="ds-g" style="background:${gc}">${g}</span><b style="font-size:16px">${s.score}</b>${ps ? delta(s.score, ps.score) : ''}</div><div class="ds-sc"><i style="width:${s.score}%;background:${gc}"></i></div><small style="color:${gc};font-weight:800">${gl}</small></td>
+<td style="text-align:right"><b>${o.calls}</b> ${p ? delta(o.calls, p.calls) : ''}<div class="muted" style="font-size:11px">${s.avg.toFixed(1)}/ngày · ${o.uniq.size} cty · ${o.days.size}/${wd} ngày</div></td>
+<td style="text-align:right">${pctS(o.calls - o.dead, o.calls)}</td>
+<td style="text-align:right">${pctS(o.pos, o.calls)}<div class="muted" style="font-size:11px">${o.pos} cuộc</div></td>
+<td style="text-align:right">${o.quote ? `📄 ${o.quote}` : ''} ${o.win ? `<b style="color:#16a34a">🎉 ${o.win}</b>` : ''}${!o.quote && !o.win ? '–' : ''}</td>
+<td style="text-align:right">${o.cbDue ? `${pctS(o.cbOk, o.cbDue)}<div class="muted" style="font-size:11px">${o.cbOk}/${o.cbDue}</div>` : '–'}</td>
+<td style="text-align:right">${o.late ? `<b style="color:#dc2626">⏰ ${o.late}</b>` : ''} ${o.stale ? `<b style="color:#b45309">💤 ${o.stale}</b>` : ''}${!o.late && !o.stale ? '<span style="color:#16a34a">✓</span>' : ''}</td>
+<td style="min-width:140px">${o.calls ? bar(o) : '<span class="muted">chưa gọi</span>'}</td>
+<td style="font-size:11.5px;color:#9a3412;max-width:260px">${tips.length ? tips.map((x) => `• ${esc(x)}`).join('<br>') : '<span style="color:#15803d">👍 Ổn</span>'}</td></tr>`;
+    };
+    return `<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><b style="font-size:15px">📊 Dashboard – đánh giá thực thi nhân viên</b><span class="muted">${esc(R.label)} · so với ${esc(R.pLabel)}</span><span style="flex:1"></span>
+<select class="f" data-ds="per">${[['1', 'Hôm nay'], ['3', '3 ngày làm việc'], ['6', '6 ngày (1 tuần)'], ['12', '12 ngày (2 tuần)'], ['month', 'Tháng này']].map(([v, l]) => `<option value="${v}" ${DS.per === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+<label class="muted" title="Số cuộc gọi mỗi ngày làm việc để đạt điểm năng suất tối đa">Chỉ tiêu <input class="f" data-ds="target" type="number" min="1" value="${DS.target}" style="width:60px"> cuộc/ngày</label></div>
+<div class="ds-tiles">${tile('📞 Cuộc gọi', T.calls, [T.calls, P.calls], `TB ${(T.calls / wd).toFixed(1)}/ngày`)}${tile('✅ Liên lạc được', pctS(T.calls - T.dead, T.calls), null, `${T.calls - T.dead} cuộc`)}${tile('👍 Tích cực', T.pos, [T.pos, P.pos], `${pctS(T.pos, T.calls)} số cuộc`)}${tile('📄 Gửi báo giá', T.quote, [T.quote, P.quote])}${tile('🎉 Chốt đơn', T.win, [T.win, P.win])}${tile('👤 Nhận khách mới', T.newC, [T.newC, P.newC])}${tile('⏰ Gọi lại đúng hẹn', pctS(T.cbOk, T.cbDue), null, T.cbDue ? `${T.cbOk}/${T.cbDue} lần hẹn` : 'chưa có hẹn')}${tile('⚠️ Khách bị bỏ sót', T.late + T.stale, null, `${T.late} quá hẹn · ${T.stale} > 3 ngày`)}</div></div>
+<div class="card" style="margin-top:10px"><b>🏆 Xếp hạng nhân viên</b> <span class="muted">– điểm 0–100: năng suất 35 · liên lạc được 15 · tỉ lệ tích cực 25 (≥ 30% là tối đa) · gọi lại đúng hẹn 15 · không bỏ sót khách 10 · ▲▼ so với ${esc(R.pLabel)}</span>
+<div class="tbl" style="margin-top:8px"><table><thead><tr><th>#</th><th>Nhân viên</th><th>Điểm</th><th style="text-align:right">Cuộc gọi</th><th style="text-align:right">Liên lạc được</th><th style="text-align:right">Tích cực</th><th style="text-align:right">Báo giá / chốt</th><th style="text-align:right">Gọi lại đúng hẹn</th><th style="text-align:right">Bỏ sót</th><th>Kết quả gọi</th><th>Cần chú ý</th></tr></thead><tbody>
+${rows.map(tr).join('') || '<tr><td colspan="11" class="muted" style="text-align:center;padding:16px">Chưa có dữ liệu cuộc gọi trong kỳ này.</td></tr>'}</tbody></table></div>
+<div class="muted" style="margin-top:6px;font-size:11.5px">Kết quả gọi: ${RESULTS.map(([, l, c]) => `<span style="white-space:nowrap"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};margin-right:3px"></i>${l}</span>`).join(' · ')} · 💤 giữ khách &gt; 3 ngày không gọi, không hẹn.</div></div>${chart}`;
   }
   // ---------- 🕘 Nhật ký hoạt động ----------
   const LG = { days: '1', who: '', action: '', rows: null, err: '', n60: null };
@@ -887,6 +1031,11 @@ ${users.map((u) => `<tr><td><b>${esc(showLogin(u.email))}</b></td><td><input cla
       if (error) alert(`Lỗi: ${error.message}`);
       if (el.dataset.uname === S.user.email) S.name = el.value.trim();
       return loadUsers();
+    }
+    if (el.dataset.ds) {
+      DS[el.dataset.ds] = el.dataset.ds === 'target' ? Math.max(1, Number(el.value) || 40) : el.value;
+      if (el.dataset.ds === 'target') try { localStorage.setItem('dgWeb:target', DS.target); } catch {}
+      return render();
     }
     if (el.dataset.lg) {
       LG[el.dataset.lg] = el.value;
