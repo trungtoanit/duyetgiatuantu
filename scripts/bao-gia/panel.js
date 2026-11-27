@@ -6128,7 +6128,7 @@ ${R} .ant-table-tbody > tr > td .ant-input, ${R} .ant-table-tbody > tr > td .ant
       else kRev.unk += tot;
     }
     const revSub = (() => {
-      const it = [['Flexo', kRev.flexo, '#2563eb'], ['Offset', kRev.offset, '#9333ea'], ['Khác', kRev.other, '#64748b'], ['Chưa rõ', kRev.unk, '#94a3b8']].filter((x, i) => i < 2 || x[1] >= 1);
+      const it = [['F', kRev.flexo, '#2563eb'], ['O', kRev.offset, '#9333ea'], ['Khác', kRev.other, '#64748b'], ['Chưa rõ', kRev.unk, '#94a3b8']].filter((x, i) => i < 2 || x[1] >= 1);
       return `<span style="display:flex;gap:8px;flex-wrap:wrap;font-size:11.5px;font-weight:800;white-space:nowrap">${it.map(([n, v, c]) => `<span style="color:${c}">${n} ${big(Math.round(v))}</span>`).join('')}</span>`;
     })();
     const kd = state.kpiDay || 0;
