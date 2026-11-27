@@ -16277,9 +16277,12 @@ Quy tắc:
       ic.title = info.state === 'q' ? `😡 Kế toán giận: chưa rẻ nhất nhóm ${info.code} sóng ${info.w}: có ${info.list.length} giấy rẻ hơn – bấm để xem` : info.state === 'ok' ? `Rẻ nhất nhóm ${info.code} sóng ${info.w} (${info.peers.length + 1} giấy) – bấm để xem so sánh` : `Chỉ có 1 giấy trong nhóm ${info.code} sóng ${info.w} – nên hỏi thêm NCC khác`;
       ic.setAttribute('style', `cursor:pointer;margin-left:4px;font-size:${info.state === 'solo' ? 13 : 14}px;display:inline-block;${info.state === 'q' ? 'vertical-align:middle;line-height:0;animation:dgGtqShake 1.4s ease-in-out infinite;transform-origin:50% 90%' : info.state === 'solo' ? 'color:#d97706;font-weight:800' : ''}`);
       if (!document.getElementById('dg-gtq-css2')) document.head.insertAdjacentHTML('beforeend', '<style id="dg-gtq-css2">@keyframes dgGtqPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}@keyframes dgGtqShake{0%,55%,100%{transform:rotate(0) scale(1)}60%{transform:rotate(-12deg) scale(1.15)}68%{transform:rotate(12deg) scale(1.15)}76%{transform:rotate(-9deg) scale(1.1)}84%{transform:rotate(9deg) scale(1.1)}92%{transform:rotate(-3deg)}}.dg-gtq .ga-steam path{fill:none;stroke:#94a3b8;stroke-width:5;stroke-linecap:round}@media (prefers-reduced-motion:reduce){.dg-gtq{animation:none!important}}</style>');
+      // chặn mọi sự kiện chuột của icon → ô Kết cấu giấy của CRM không mở hộp Chọn giấy tấm khi bấm icon
+      for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'dblclick']) ic.addEventListener(ev, (e) => { e.stopPropagation(); if (ev !== 'pointerdown' && ev !== 'mousedown') e.preventDefault(); });
       ic.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         const cur = gtQCheaper(ic.dataset.id);
         if (cur) gtQPopup(ic, cur);
       });
