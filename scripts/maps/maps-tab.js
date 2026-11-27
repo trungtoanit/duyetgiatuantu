@@ -84,7 +84,7 @@ button{font:inherit}`;
   // ---------- 📍 Tab "Công ty Maps": quản lý danh sách công ty quét từ Google Maps (kv mapsPlaces – đồng bộ cloud) ----------
   // Tìm / lọc, xoá (ẩn – Maps cũng ẩn, không quét lại) hoặc khôi phục, KẾT NỐI tay với khách hàng ERP (kv customersAll) / bỏ kết nối.
   // Kết nối tay lưu erpId (ưu tiên hơn so tên tự động), bỏ kết nối lưu erpNo – script Google Maps đọc cùng dữ liệu.
-  const mpUi = { tel: '', amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', show: 'on', page: 0, sel: new Set(), link: null, detail: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
+  const mpUi = { tel: '', amin: '', sort: 'name', q: '', erp: '', box: '', ind: '', prov: '', show: 'on', page: 0, sel: new Set(), link: null, detail: null, lq: '', kcns: new Set(), kcnOpen: false, kq: '' }; // kcns: KCN đang lọc ('' = ngoài KCN)
   let mpData = null;
   const mpKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
   const mpUn = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -190,6 +190,29 @@ button{font:inherit}`;
     if (lat >= 10.88 && lng >= 106.7) return 'Bình Dương';
     return 'TP.HCM';
   }
+  // 📍 Tỉnh của 1 công ty (ranh giới cũ – 7 tỉnh): theo chữ trong địa chỉ / KCN, không có thì theo toạ độ. Không ghi vào dữ liệu (chỉ nhớ tạm).
+  const mpProvMemo = new WeakMap();
+  const MP_PROV_NAME = [
+    ['Bình Dương', /binh duong/g],
+    ['TP.HCM', /ho chi minh|\bhcm\b|sai gon|\btp\.? ?hcm/g],
+    ['Đồng Nai', /dong nai/g],
+    ['Long An', /(?:tinh|,|^)\s*long an\b/g],
+    ['Bà Rịa – Vũng Tàu', /vung tau|ba ria/g],
+    ['Bình Phước', /binh phuoc(?! [ab]\b)(?!,? (?:an phu|thuan an))/g],
+    ['Tây Ninh', /tay ninh/g],
+  ];
+  const mpProv = (c) => {
+    let v = mpProvMemo.get(c);
+    if (v) return v;
+    // 1) tên tỉnh ghi rõ trong địa chỉ (lấy chữ xuất hiện SAU CÙNG – thường là tỉnh) · 2) toạ độ · 3) quận / huyện / KCN quen
+    const u = provUn(`${c.addr || ''} | ${c.legalAddr || ''}`);
+    let best = -1;
+    for (const [pv, re] of MP_PROV_NAME) for (const m of u.matchAll(re)) if (m.index > best) [best, v] = [m.index, pv];
+    if (!v && c.lat != null && c.lng != null) v = provOf('', Number(c.lat), Number(c.lng));
+    if (!v) v = provOf(`${u} | ${c.kcn || ''}`, null, null);
+    mpProvMemo.set(c, v);
+    return v;
+  };
   // Bộ lọc loại GIỐNG script Google Maps (scripts/maps/maps.js – isRealEstate): trả lý do bị loại, '' = giữ.
   // Sửa danh sách loại thì sửa cả 2 nơi.
   const MP_RE = /b[aấâ]t\s*đ[oộô]ng\s*s[aả]n|\bb[đd]s\b|đ[iị]a\s*[oố]c|real\s*estate|realt(y|or)|propert(y|ies)|\bland\b|nh[aà]\s*đ[aấ]t|môi giới nhà/i;
@@ -251,6 +274,7 @@ button{font:inherit}`;
       if (mpUi.erp === 'out' && e) return false;
       if (mpUi.box && !mpUi.box.includes(c.box || '-')) return false; // 📦 AI: khả năng dùng thùng carton / offset số lượng lớn
       if (mpUi.ind && (c.ind || '—') !== mpUi.ind) return false;
+      if (mpUi.prov && mpProv(c) !== mpUi.prov) return false;
       if (mpUi.kcns.size && !mpUi.kcns.has(c.kcn || '')) return false;
       if (mpUi.amin && !((c.area || 0) >= Number(mpUi.amin))) return false;
       if (mpUi.tel) {
@@ -304,14 +328,14 @@ button{font:inherit}`;
   const mpPersist = () => {
     clearTimeout(mpUiT);
     mpUiT = setTimeout(() => {
-      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, show: mpUi.show, sort: mpUi.sort, amin: mpUi.amin, tel: mpUi.tel, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
+      kvMerge('mapsTabUi', { [norm(meName || 'me')]: { q: mpUi.q, erp: mpUi.erp, box: mpUi.box, ind: mpUi.ind, prov: mpUi.prov, show: mpUi.show, sort: mpUi.sort, amin: mpUi.amin, tel: mpUi.tel, page: mpUi.page, kcns: [...mpUi.kcns], at: Date.now() } }).catch(() => {});
     }, 800);
   };
   async function mapsTab() {
     if (!mpUiLoaded) {
       mpUiLoaded = true;
       const v = (await kvGet('mapsTabUi').catch(() => ({})))?.[norm(meName || 'me')];
-      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', show: v.show || 'on', sort: v.sort || 'name', amin: v.amin || '', tel: v.tel || '', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
+      if (v) Object.assign(mpUi, { q: v.q || '', erp: v.erp || '', box: v.box || '', ind: v.ind || '', prov: v.prov || '', show: v.show || 'on', sort: v.sort || 'name', amin: v.amin || '', tel: v.tel || '', page: Number(v.page) || 0, kcns: new Set(Array.isArray(v.kcns) ? v.kcns : []) });
     }
     await mpLoad();
     if (root && !root.__mp) {
@@ -380,6 +404,11 @@ button{font:inherit}`;
 <select data-mp-f="box" title="AI đánh giá khả năng dùng thùng carton / thùng offset số lượng lớn" style="${sel};${mpUi.box ? 'border-color:#16a34a;background:#dcfce7;color:#166534;font-weight:700' : ''}"><option value="">📦 Tiềm năng thùng: tất cả</option><option value="A" ${mpUi.box === 'A' ? 'selected' : ''}>📦 Chỉ tiềm năng cao (${all.filter((c) => !mpOff(c) && c.box === 'A').length})</option><option value="B" ${mpUi.box === 'B' ? 'selected' : ''}>📦 Chỉ tiềm năng vừa (${all.filter((c) => !mpOff(c) && c.box === 'B').length})</option><option value="AB" ${mpUi.box === 'AB' ? 'selected' : ''}>📦 Cao + vừa (${all.filter((c) => !mpOff(c) && (c.box === 'A' || c.box === 'B')).length})</option></select>
 <select data-mp-f="erp" style="${sel}"><option value="">ERP: tất cả</option><option value="in" ${mpUi.erp === 'in' ? 'selected' : ''}>✅ Đã kết nối ERP</option><option value="out" ${mpUi.erp === 'out' ? 'selected' : ''}>Chưa kết nối ERP</option></select>
 <select data-mp-f="ind" style="${sel};max-width:220px"><option value="">Ngành: tất cả</option>${inds.map((x) => `<option value="${esc(x)}" ${mpUi.ind === x ? 'selected' : ''}>${x === '—' ? 'Chưa gắn ngành' : esc(x)}</option>`).join('')}</select>
+${(() => {
+      const pc = new Map();
+      for (const c of all) if (c?.name && !mpOff(c)) pc.set(mpProv(c), (pc.get(mpProv(c)) || 0) + 1);
+      return `<select data-mp-f="prov" title="Lọc theo tỉnh / thành (ranh giới cũ) – đoán theo địa chỉ, KCN, toạ độ" style="${sel};${mpUi.prov ? 'border-color:#2563eb;background:#eff6ff;color:#1e3a8a;font-weight:700' : ''}"><option value="">📍 Tỉnh: tất cả</option>${PROV_ORDER.filter((pv) => pc.has(pv) || mpUi.prov === pv).map((pv) => `<option value="${esc(pv)}" ${mpUi.prov === pv ? 'selected' : ''}>📍 ${esc(pv === 'Khác' ? 'Chưa rõ tỉnh' : pv)} (${(pc.get(pv) || 0).toLocaleString('vi-VN')})</option>`).join('')}</select>`;
+    })()}
 <span style="position:relative"><button data-mp="kcnbtn" style="${sel};cursor:pointer;font-weight:700;${mpUi.kcns.size ? 'border-color:#f59e0b;background:#fff7ed;color:#9a3412' : ''}">🏭 KCN: ${mpUi.kcns.size ? `${mpUi.kcns.size} đã chọn` : 'tất cả'} ▾</button>${mpUi.kcnOpen ? (() => {
       const cnt = new Map();
       for (const c of all) if (!mpOff(c)) cnt.set(c.kcn || '', (cnt.get(c.kcn || '') || 0) + 1);
@@ -1061,7 +1090,7 @@ ${ps.length > 1 ? `<button data-mp="slp" title="Ảnh trước" style="${ab};lef
     }
     else if (k === 'pdf') {
       // cùng bản in với Google Maps (scripts/shared/company-pdf.js); in đúng danh sách đang lọc
-      const f = [mpUi.box === 'A' ? 'Tiềm năng thùng cao' : mpUi.box === 'B' ? 'Tiềm năng thùng vừa' : mpUi.box === 'AB' ? 'Tiềm năng thùng cao + vừa' : '', mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.tel === 'any' ? 'Có SĐT' : mpUi.tel === 'mob' ? 'Chỉ di động' : mpUi.tel === 'tel' ? 'Chỉ số bàn' : mpUi.tel === 'none' ? 'Không có SĐT' : '', mpUi.amin ? `Diện tích ≥ ${Number(mpUi.amin).toLocaleString('vi-VN')} m²` : '', mpUi.sort === 'near' ? 'Gần → xa' : mpUi.sort === 'area' ? 'Xưởng lớn → nhỏ' : mpUi.sort === 'rate' ? 'Nhiều đánh giá' : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
+      const f = [mpUi.box === 'A' ? 'Tiềm năng thùng cao' : mpUi.box === 'B' ? 'Tiềm năng thùng vừa' : mpUi.box === 'AB' ? 'Tiềm năng thùng cao + vừa' : '', mpUi.erp === 'in' ? 'Đã có ERP' : mpUi.erp === 'out' ? 'Chưa có ERP' : '', mpUi.ind && mpUi.ind !== '—' ? mpUi.ind : mpUi.ind ? 'Chưa gắn ngành' : '', mpUi.prov ? mpUi.prov : '', mpUi.kcns.size ? `${mpUi.kcns.size} KCN` : '', mpUi.tel === 'any' ? 'Có SĐT' : mpUi.tel === 'mob' ? 'Chỉ di động' : mpUi.tel === 'tel' ? 'Chỉ số bàn' : mpUi.tel === 'none' ? 'Không có SĐT' : '', mpUi.amin ? `Diện tích ≥ ${Number(mpUi.amin).toLocaleString('vi-VN')} m²` : '', mpUi.sort === 'near' ? 'Gần → xa' : mpUi.sort === 'area' ? 'Xưởng lớn → nhỏ' : mpUi.sort === 'rate' ? 'Nhiều đánh giá' : '', mpUi.q ? `tìm “${mpUi.q}”` : '', mpUi.show === 'off' ? 'Đã xoá' : ''].filter(Boolean);
       dgCompanyPdf({
         title: `Danh sách công ty – ${f.length ? f.join(' · ') : 'Tất cả'}`,
         rows: mpRows().map((c) => {
