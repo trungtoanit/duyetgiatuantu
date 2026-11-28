@@ -4638,6 +4638,141 @@ Chỉ trả về JSON array, không giải thích, không markdown. Mẫu: [{"nh
     anchor.after(b);
   }
   if (IS_TOP) setInterval(() => injectAutoOffset(), 2000);
+
+  // ---------- 🆓 Miễn khuôn toàn bộ: từng dòng Offset → bấm số lượng → "Tính giá offset" → ô "Tiền khuôn" = 1 → Lưu;
+  // xong hết bấm "Cập nhật" lưu báo giá (hỏi xác nhận trước khi chạy) ----------
+  async function freeDieOffset(btn) {
+    const LAB = '🆓 Miễn khuôn';
+    const pt = productTable();
+    if (!pt) return (btn.textContent = '⚠️ Không thấy bảng hàng hóa');
+    const rows = [...pt.t.querySelectorAll('.ant-table-tbody tr')].filter((tr) => !tr.classList.contains('ant-table-measure-row') && /offset/i.test(tr.innerText || ''));
+    if (!rows.length) {
+      btn.textContent = '✓ Không có dòng Offset';
+      return setTimeout(() => (btn.textContent = LAB), 3000);
+    }
+    if (!confirm(`Miễn khuôn ${rows.length} dòng Offset: đặt "Tiền khuôn" = 1 cho từng dòng, Lưu, rồi bấm "Cập nhật" lưu báo giá?`)) return;
+    const closeModal = async (modal) => {
+      ([...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Đóng') || modal.querySelector('.ant-modal-close'))?.click();
+      await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 4000, 200);
+      await sleep(400);
+    };
+    // ô nhập ngay sau nhãn "Tiền khuôn" (cùng ô form)
+    const dieInput = (modal) => {
+      const lbl = [...modal.querySelectorAll('label, span, div')].find((e) => !e.children.length && /^Tiền khuôn$/i.test((e.textContent || '').trim()));
+      if (!lbl) return null;
+      let box = lbl.parentElement;
+      for (let k = 0; k < 5 && box && box !== modal; k++, box = box.parentElement) {
+        const inp = [...box.querySelectorAll('input:not([type="checkbox"]):not([type="radio"])')].find((x) => lbl.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (inp) return inp;
+      }
+      return null;
+    };
+    const setVal = (inp, v) => {
+      inp.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, v);
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      inp.blur();
+      inp.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    };
+    const num = (v) => Number(String(v || '').replace(/[^\d]/g, '')) || 0;
+    let ok = 0;
+    let skip = 0;
+    const why = [];
+    for (const [i, tr] of rows.entries()) {
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: mở…`;
+      const qCell = tr.cells[pt.iQty]?.querySelector('button, a') ? tr.cells[pt.iQty] : [...tr.cells].find((td) => td.querySelector('button, a') && /^\s*[\d.]+\s*$/.test(td.innerText || ''));
+      const qb = qCell?.querySelector('button, a') || tr.cells[pt.iQty]?.querySelector('span');
+      if (!qb) {
+        skip++;
+        why.push(`dòng ${i + 1}: không bấm được số lượng`);
+        continue;
+      }
+      qb.click();
+      const modal = await waitFor(() => visModalsTop().find((m) => /Tính giá offset/i.test(m.innerText)), 8000, 200);
+      if (!modal) {
+        skip++;
+        why.push(`dòng ${i + 1}: không mở được hộp tính giá`);
+        continue;
+      }
+      await sleep(1200);
+      const inp = await waitFor(() => dieInput(modal), 4000, 200);
+      if (!inp) {
+        skip++;
+        why.push(`dòng ${i + 1}: không thấy ô Tiền khuôn`);
+        await closeModal(modal);
+        continue;
+      }
+      if (num(inp.value) !== 1) {
+        btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: tiền khuôn → 1…`;
+        for (let t = 0; t < 3 && num(inp.value) !== 1; t++) {
+          setVal(inp, '1');
+          await sleep(700);
+        }
+        if (num(inp.value) !== 1) {
+          skip++;
+          why.push(`dòng ${i + 1}: CRM không nhận số 1`);
+          await closeModal(modal);
+          continue;
+        }
+        await sleep(900); // chờ CRM tính lại tổng giá
+      }
+      const save = [...modal.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Lưu');
+      if (!save) {
+        skip++;
+        why.push(`dòng ${i + 1}: không thấy nút Lưu`);
+        await closeModal(modal);
+        continue;
+      }
+      btn.textContent = `⏳ Dòng ${i + 1}/${rows.length}: lưu…`;
+      save.click();
+      const closed = await waitFor(() => !modal.isConnected || getComputedStyle(modal).display === 'none', 10000, 200);
+      if (closed) ok++;
+      else {
+        skip++;
+        why.push(`dòng ${i + 1}: lưu không đóng hộp`);
+      }
+      await sleep(700);
+    }
+    if (ok) {
+      btn.textContent = '⏳ Lưu báo giá (Cập nhật)…';
+      const upd = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Cập nhật' && !b.closest('.ant-modal-wrap'));
+      if (upd) {
+        upd.click();
+        await confirmIfAsked();
+        await waitFor(() => document.querySelector('.ant-message-success, .ant-notification-notice-success'), 8000, 250);
+      }
+    }
+    btn.textContent = `✅ Miễn khuôn ${ok}/${rows.length} dòng Offset${skip ? ` (bỏ qua ${skip})` : ''}${ok ? ' · đã lưu' : ''}`;
+    btn.title = why.length ? why.join('\n') : btn.title;
+    setTimeout(() => (btn.textContent = LAB), 8000);
+  }
+  function injectFreeDie() {
+    if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-free-die')) return;
+    const anchor = document.querySelector('.dg-auto-offset');
+    if (!anchor) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ant-btn dg-free-die';
+    b.textContent = '🆓 Miễn khuôn';
+    b.title = 'Miễn khuôn toàn bộ: từng dòng Offset → bấm số lượng → "Tiền khuôn" = 1 → Lưu; xong hết bấm "Cập nhật" lưu báo giá';
+    b.setAttribute('style', 'margin-left:8px;height:32px;padding:0 14px;border-radius:6px;font-weight:700;cursor:pointer;color:#fff;border:0;background:linear-gradient(90deg,#059669,#0d9488);');
+    b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (b.dataset.busy) return;
+      b.dataset.busy = '1';
+      try {
+        await freeDieOffset(b);
+      } catch (err) {
+        b.textContent = `⚠️ ${err.message}`;
+      } finally {
+        delete b.dataset.busy;
+      }
+    });
+    anchor.after(b);
+  }
+  if (IS_TOP) setInterval(() => injectFreeDie(), 2000);
   function injectPaperReload() {
     if (!IS_TOP || !currentQuoteId() || document.querySelector('.dg-paper-reload')) return;
     const off = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Offset' && b.closest('.ant-btn, button'));
